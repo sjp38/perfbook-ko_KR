@@ -1,4 +1,4 @@
-perfbook-ko_kr
+perfbook-ko_KR
 ==============
 
 This is a git repository for Korean translation of Paul E. McKenney's book, "Is
