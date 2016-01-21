@@ -30,7 +30,7 @@ All discussions be done via e-mails.
 For the purpose, we use a Google Groups.
 You can join or see discussions via it.
 Address of the group is as below:
-https://groups.google.com/d/forum/perfbook-ko_kr
+- https://groups.google.com/d/forum/perfbook-ko_kr
 
 To understand discussion process of Linux, see documents below:
 - https://www.kernel.org/doc/Documentation/SubmittingPatches
