@@ -19,13 +19,14 @@ references this repository:
 Usage
 =====
 
-To build the translated book from source of this repository, you can just type
-`make` from your command prompt.  The command will give you the book in PDF
-format.  However, there are complex prerequisites.  Refer to FAQ.txt for
-detail.  The final PDF file will be published in future. For now, however,
-there is no money and time to publish it to offline or online.  If you need PDF
-now and cannot get the build environment, try to send an request email to
-translation author.
+The source is in tex format; It is hard to read.
+Just typing `make` from your linux commandline will give you the complete book
+in PDF format.  However, the build requires few prerequisites. The
+prerequisites may be complex to someone.  For the reason, the final PDF file
+will be published to online of offline in future.  It's just a plan for now
+because there is no money, no time to buy printer or host a server.  If you
+need PDF version now and cannot get the build environment, try to send an
+request email to translation author.
 
 
 License
