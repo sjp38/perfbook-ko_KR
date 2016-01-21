@@ -1,7 +1,7 @@
 perfbook-ko_kr
 ==============
 
-This is a git repository for Korean translation of Paul Mckenny's book, "Is
+This is a git repository for Korean translation of Paul E. McKenney's book, "Is
 Parallel Programming Hard, And, If So, What Can You Do About It?".
 You can access the original book and its source from the address below:
 - https://www.kernel.org/pub/linux/kernel/people/paulmck/perfbook/perfbook.html
@@ -9,15 +9,15 @@ You can access the original book and its source from the address below:
 The translation is just for fun.
 If things goes luckily, however, the translation may help Korean programmers to
 understand the parallel programming well.
-Also, the translation is official and Paul Mckenny, the original author, also
-knows and announces it:
+Also, the translation is official; Paul E. McKenney, the original author, also
+references this repository:
 - https://goo.gl/b8gqMS
 
 
 License
 =======
 
-This work follows the license of Paul Mckenny's original one.
+This work follows the license of Paul E. McKenney's original one.
 You can use it almost freely.
 However, please check the license again.
 
