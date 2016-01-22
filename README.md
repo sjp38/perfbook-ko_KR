@@ -55,6 +55,15 @@ To understand discussion process of Linux in detail, refer to documents below:
 - http://dry-kiss.blogspot.kr/2012/10/blog-post.html
 
 
+Signed-Off-by
+-------------
+
+For every patches, you should add a `Signed-off-by` line.
+It means you agree about legal issues of the patch as described at `HOWTO.txt`
+file.
+For detail, refer to the `HOWTO.txt` file in this repository, please.
+
+
 Author
 ======
 
