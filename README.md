@@ -55,7 +55,7 @@ To understand discussion process of Linux in detail, refer to documents below:
 - http://dry-kiss.blogspot.kr/2012/10/blog-post.html
 
 
-Signed-Off-by
+Signed-off-by
 -------------
 
 For every patches, you should add a `Signed-off-by` line.
