@@ -1301,82 +1301,145 @@ Section~\ref{sec:intro:Parallel Programming Goals} 에서 본것과 같이, 병�
 \subsection{Performance Optimization}
 \label{sec:intro:Performance Optimization}
 
-Up through the early 2000s, CPU performance was doubling every 18 months.
-In such an environment, it is often much more important to create new
-functionality than to do careful performance optimization.
-Now that Moore's Law is ``only'' increasing transistor density instead
-of increasing both transistor density and per-transistor performance,
-it might be a good time to rethink the importance of performance
-optimization.
-After all, new hardware generations no longer bring significant
-single-threaded performance improvements.
-Furthermore, many performance optimizations can also conserve energy.
+2000년대 초까지, CPU 성능은 매 18개월마다 두배씩 빨라졌습니다.
+그런 환경에서는 조심스럽게 성능을 개선하는 것보다 새로운 기능을 추가하는 것이
+대부분의 경우 중요합니다.
+무어의 법칙은 트랜지스터 집적도와 트랜지스터당 성능을 높이는 게 아니라,
+``단지'' 트랜지스터 집적도만을 올리기 때문에 지금은 성능 최적화의 중요성에 대해
+다시 생각해볼 좋은 기회입니다.
+무엇보다, 새로운 하드웨어들은 더이상 대단한 싱글 쓰레드 성능 향상을 가져오지
+않습니다.
+더우기, 많은 성능 최적화는 에너지 소모를 줄입니다.
 
-From this viewpoint, parallel programming is but another performance
-optimization, albeit one that is becoming much more attractive
-as parallel systems become cheaper and more readily available.
-However, it is wise to keep in mind that the speedup available from
-parallelism is limited to roughly the number of CPUs.
-In contrast, the speedup available from traditional single-threaded
-software optimizations can be much larger.
-For example, replacing a long linked list with either a hash table
-or a search tree can improve performance by many orders of magnitude.
-This highly optimized single-threaded program might run much
-faster than its unoptimized parallel counterpart, making parallelization
-unnecessary.
-Of course, a highly optimized parallel program would be even better,
-give or take the added development effort required.
+%Up through the early 2000s, CPU performance was doubling every 18 months.
+%In such an environment, it is often much more important to create new
+%functionality than to do careful performance optimization.
+%Now that Moore's Law is ``only'' increasing transistor density instead
+%of increasing both transistor density and per-transistor performance,
+%it might be a good time to rethink the importance of performance
+%optimization.
+%After all, new hardware generations no longer bring significant
+%single-threaded performance improvements.
+%Furthermore, many performance optimizations can also conserve energy.
 
-Furthermore, different programs might have different performance
-bottlenecks.
-For example, if your program spends most of its time
-waiting on data from your disk drive,
-using multiple CPUs will probably just increase the time wasted waiting
-for the disks.
-In fact, if the program was reading from a single large file laid out
-sequentially on a rotating disk, parallelizing your program might
-well make it a lot slower due to the added seek overhead.
-You should instead optimize the data layout so that
-the file can be smaller (thus faster to read), split the file into chunks
-which can be accessed in parallel from different drives, 
-cache frequently accessed data in main memory,
-or, if possible,
-reduce the amount of data that must be read.
+이런 관점에서, 병렬 시스템이 점점 싸고 시장에 많이 나올수록 더욱더 매력적인
+성능 개선 방법이 되고 있습니다.
+하지만, 병렬성을 활용해 얻을 수 있는 성능 향상 정도는 대략적으로 보면, CPU 수에
+제한됨을 기억하고 있는게 현명할 것입니다.
+반면, 전통적인 싱글 쓰레드 소프트웨어 최적화에서의 최적화 기법을 통한 성능
+향상은 그보다 훨씬 클 수 있습니다.
+예를 들어, 긴 링크드 리스트를 해쉬 테이블이나 서치 트리로 교체하는 것은
+수십수백배 성능을 향상시킬 수 있습니다.
+이 고도로 최적화된 싱글쓰레드 프로그램은 최적화 되지 않은 병렬 프로그램에 비해
+훨씬 빠를 것이고, 병렬성은 필요치 않을 것입니다.
+물론, 고도로 최적화된 병렬 프로그램은 추가적인 개발과정의 노력이 필요하겠지만
+최적화된 싱글쓰레드 프로그램보다도 나은 성능을 보일테죠.
+
+%From this viewpoint, parallel programming is but another performance
+%optimization, albeit one that is becoming much more attractive
+%as parallel systems become cheaper and more readily available.
+%However, it is wise to keep in mind that the speedup available from
+%parallelism is limited to roughly the number of CPUs.
+%In contrast, the speedup available from traditional single-threaded
+%software optimizations can be much larger.
+%For example, replacing a long linked list with either a hash table
+%or a search tree can improve performance by many orders of magnitude.
+%This highly optimized single-threaded program might run much
+%faster than its unoptimized parallel counterpart, making parallelization
+%unnecessary.
+%Of course, a highly optimized parallel program would be even better,
+%give or take the added development effort required.
+
+더욱이, 서로 다른 프로그램들은 서로 다른 성능 병목지점을 가질 겁니다.
+예를 들어, 당신의 프로그램이 대부분의 시간을 디스크 드라이브로부터 읽어들이는
+데이터가 도착하기를 기다리고 있다면, 여러 CPU 를 사용하는 것은 그저
+디스크로부터 데이터를 기다리는 시간을 증가시키기만 할수도 있습니다.
+실제로, 프로그램이 하드디스크처럼 회전하는 디스크에 시퀀셜하게 씌여져 있는
+하나의 큰 파일을 읽으려 할 때, 그 프로그램을 병렬화 하면 추가된 탐색 오버헤드
+때문에 프로그램이 더 느려질 수 있습니다.
+그보다는 데이터 배치를 그 파일이 더 작아질 수 있도록 (그래서 더 빨리 읽어들일
+수 있도록) 하고, 그 파일을 병렬적으로 다른 드라이브에서 접근할 수 있도록, 여러
+조각으로 나누거나, 자주 접근되는 데이터를 메인 메모리에 캐쉬해 놓거나, 만약
+가능하다면, 읽어야 하는 데이터의 양 자체를 줄여야 합니다.
+
+%Furthermore, different programs might have different performance
+%bottlenecks.
+%For example, if your program spends most of its time
+%waiting on data from your disk drive,
+%using multiple CPUs will probably just increase the time wasted waiting
+%for the disks.
+%In fact, if the program was reading from a single large file laid out
+%sequentially on a rotating disk, parallelizing your program might
+%well make it a lot slower due to the added seek overhead.
+%You should instead optimize the data layout so that
+%the file can be smaller (thus faster to read), split the file into chunks
+%which can be accessed in parallel from different drives, 
+%cache frequently accessed data in main memory,
+%or, if possible,
+%reduce the amount of data that must be read.
 
 \QuickQuiz{}
-	What other bottlenecks might prevent additional CPUs from
-	providing additional performance?
+	어떤 다른 병목지점들이 CPU 를 추가해도 성능을 개선되지 않게 할 수
+	있을까요?
+
+%	What other bottlenecks might prevent additional CPUs from
+%	providing additional performance?
 \QuickQuizAnswer{
-	There are any number of potential bottlenecks:
+	잠재적 병목지점이 얼마든지 있습니다:
+%	There are any number of potential bottlenecks:
 	\begin{enumerate}
-	\item	Main memory.  If a single thread consumes all available
-		memory, additional threads will simply page themselves
-		silly.
-	\item	Cache.  If a single thread's cache footprint completely
-		fills any shared CPU cache(s), then adding more threads
-		will simply thrash those affected caches.
-	\item	Memory bandwidth.  If a single thread consumes all available
-		memory bandwidth, additional threads will simply
-		result in additional queuing on the system interconnect.
-	\item	I/O bandwidth.  If a single thread is I/O bound,
-		adding more threads will simply result in them all
-		waiting in line for the affected I/O resource.
+	\item	메인 메모리. 싱글 쓰레드가 모든 가용한 메모리를 사용하고
+		있다면, 추가된 쓰레드는 단순히 멍청하게 자신을 페이지 아웃
+		시키겠죠.
+	\item	캐쉬. 싱글 쓰레드의 캐쉬 사용량이 모든 공유 CPU 캐쉬(들)을 꽉
+		채운다면, 쓰레드를 추가하는 것은 그저 영향받는 캐쉬들을 쓰래쉬
+		하기만 할겁니다.
+	\item	메모리 밴드위쓰. 싱글 쓰레드가 모든 메몰 밴드위쓰를 소모한다면,
+		추가된 쓰레드들은 그저 메모리로의 시스템 접점에 줄을 서 있을
+		겁니다.
+	\item	I/O 밴드위쓰. 싱글쓰레드가 I/O 에 바운드 되어 있다면,
+		쓰레드들을 추가하는 것은 그저 그들 모두 관련된 I/O 자원에 줄을
+		서서 기다리고만 있게 될겁니다.
+%	\item	Main memory.  If a single thread consumes all available
+%		memory, additional threads will simply page themselves
+%		silly.
+%	\item	Cache.  If a single thread's cache footprint completely
+%		fills any shared CPU cache(s), then adding more threads
+%		will simply thrash those affected caches.
+%	\item	Memory bandwidth.  If a single thread consumes all available
+%		memory bandwidth, additional threads will simply
+%		result in additional queuing on the system interconnect.
+%	\item	I/O bandwidth.  If a single thread is I/O bound,
+%		adding more threads will simply result in them all
+%		waiting in line for the affected I/O resource.
 	\end{enumerate}
 
-	Specific hardware systems might have any number of additional
-	bottlenecks.
-	The fact is that every resource which is shared between
-	multiple CPUs or threads is a potential bottleneck.
+	특정 하드웨어 시스템들은 추가적인 병목지점을 얼마든지 가지고 있을 수
+	있습니다.
+	다만 분명한 건 여러 CPU 들이나 쓰레드들 간에 공유되고 있는 자원은
+	잠재적 병목지점입니다.
+
+%	Specific hardware systems might have any number of additional
+%	bottlenecks.
+%	The fact is that every resource which is shared between
+%	multiple CPUs or threads is a potential bottleneck.
 } \QuickQuizEnd
 
-Parallelism can be a powerful optimization technique, but
-it is not the only such technique, nor is it appropriate for all
-situations.
-Of course, the easier it is to parallelize your program, the
-more attractive parallelization becomes as an optimization.
-Parallelization has a reputation of being quite difficult,
-which leads to the question ``exactly what makes parallel
-programming so difficult?''
+병렬성은 효과적인 최적화 기술이 될 수 있지만, 유일한 것도 아니고 모든 상황에
+맞는 것도 아닙니다.
+물론, 당신의 프로그램을 병렬화 하기가 쉬울수록 최적화 방법으로 병렬화가 더
+매력적인 선택일 겁니다.
+병렬화는 매우 어렵다는 평판을 얻어왔고, 이로 인해 ``정확히 뭐가 병렬
+프로그래밍을 그렇게 어렵게 하지?'' 라는 질문이 나옵니다.
+
+%Parallelism can be a powerful optimization technique, but
+%it is not the only such technique, nor is it appropriate for all
+%situations.
+%Of course, the easier it is to parallelize your program, the
+%more attractive parallelization becomes as an optimization.
+%Parallelization has a reputation of being quite difficult,
+%which leads to the question ``exactly what makes parallel
+%programming so difficult?''
 
 \section{What Makes Parallel Programming Hard?}
 \label{sec:intro:What Makes Parallel Programming Hard?}
