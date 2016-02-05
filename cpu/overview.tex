@@ -49,6 +49,16 @@ These changes are described in the following sections.
 \ContributedBy{Figure}{fig:cpu:CPUs Old and New}{Melissa Broussard}
 \end{figure}
 
+1980년대 초, 인스트럭션을 가져오고, 디코드하고, 실행하는 대부분의 마이크로
+프로세서는 일반적으로 다음 인스트럭션을 가져오기 전에 인스트럭션 하나를 실행
+완료하는데 \emph{최소} 3 클락 사이클을 소모했습니다.
+대조적으로, 1990년대 후반에서 2000년대 초반의 CPU 는 CPU 로의 인스트럭션 전달
+흐름을 내부적으로 조절하는데 깊은 ``파이프라인'' 을 사용해 많은 인스트럭션들을
+동시에 수행할 수 있습니다.
+이러한 근래의 하드웨어의 기능들은 Figure~\ref{fig:cpu:CPUs Old and New} 에
+보여진 것처럼 성능을 대폭 향상시킬 수 있습니다.
+
+\iffalse
 In the early 1980s, the typical microprocessor fetched an instruction,
 decoded it, and executed it, typically taking \emph{at least} three
 clock cycles to complete one instruction before proceeding to the next.
@@ -57,7 +67,17 @@ many instructions simultaneously, using a deep ``pipeline'' to control
 the flow of instructions internally to the CPU.
 These modern hardware features can greatly improve performance, as
 illustrated by Figure~\ref{fig:cpu:CPUs Old and New}.
+\fi
 
+긴 파이프라인을 가지고 CPU 의 최대 성능을 얻기 위해서는 프로그램의 컨트롤
+플로우 (코드 실행 흐름)를 매우 정밀하게 예측할 수 있어야 합니다.
+큰 행렬이나 벡터 계산과 같이 기본적으로 꽉 짜여진 루프로 구성된 프로그램에서는
+적당한 컨트롤 플로우를 얻을 수 있습니다.
+그런 경우 CPU 는 루프 마지막의, 루프 마지막의, 루프 처음으로 돌아갈지 루프를
+빠져나갈지에 대한 분기  조건이 거의 항상 참일 거라는 것을 올바르게 예측해서
+파이프라인이 꽉차 있게 해 CPU가 최대 속도로 돌아갈 수 있게 할겁니다.
+
+\iffalse
 Achieving full performance with a CPU having a long pipeline requires
 highly predictable control flow through the program.
 Suitable control flow can be provided by a program that executes primarily
@@ -65,6 +85,7 @@ in tight loops, for example, arithmetic on large matrices or vectors.
 The CPU can then correctly predict that the branch at the end of the loop
 will be taken in almost all cases,
 allowing the pipeline to be kept full and the CPU to execute at full speed.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -74,6 +95,26 @@ allowing the pipeline to be kept full and the CPU to execute at full speed.
 \ContributedBy{Figure}{fig:cpu:CPU Meets a Pipeline Flush}{Melissa Broussard}
 \end{figure}
 
+하지만, 분기 예측이 항상 그렇게 쉬운건 아닙니다.
+예를 들어, 작은 무작위적 횟수만큼 도는 많은 루프로 구성된 프로그램을
+생각해보세요.
+또다른 예로, 수많은 다른 진짜 객체를 레퍼런스 할 수 있는 가상 객체들이 있는데,
+각 진짜 객체들은 자주 호출되는 멤버 함수들을 모두 다르게 구현한 객체지향
+프로그램을 생각해보세요.
+이런 경우, CPU 가 다음 분기가 실행 흐름을 어디로 이끌지를 예측하는것 조차도
+불가능합니다.
+그렇게 되면 CPU 는 그 브랜치가 어디로 실행 흐름을 이끌지가 확실해질 때까지
+기다리며 멈춰있거나, 추측이라도 해야 합니다.
+예측 가능한 컨트롤 플로우를 갖는 프로그램에서는 추측하는 방법이 매우 잘
+동작하지만, (바이너리 서치와 같은) 예측 불가능한 분기분들에 대해서는 추측이
+대부분 틀릴 겁니다.
+추측이 잘못된 경우 CPU 는 그 분기문을 따르는, 투기적으로 그간 수행된
+인스트럭션들을 모두 폐기시켜야 하기 때문에 파이프라인 플러시를 일으키기 때문에
+잘못된 예측은 매우 비싼 비용을 지불합니다.
+만약 파이프라인 플러시가 너무 자주 일어난다면, Figure~\ref{fig:cpu:CPU Meets a
+Pipeline Flush} 에서 그려진 것처럼 엄청난 성능 하락을 겪을 수 있습니다.
+
+\iffalse
 However, branch prediction is not always so easy.
 For example, consider a program with many loops, each of which iterates
 a small but random number of times.
@@ -94,10 +135,17 @@ branch, resulting in a pipeline flush.
 If pipeline flushes appear too frequently, they drastically reduce
 overall performance, as fancifully depicted in
 Figure~\ref{fig:cpu:CPU Meets a Pipeline Flush}.
+\fi
 
+불행히도, 파이프라인 플러시는 근래의 CPU 들이 달려야 하는 장애물 코스의 유일한
+위험이 아닙니다.
+다음 섹션에서는 메모리 참조에 존재하는 위험들을 다룹니다.
+
+\iffalse
 Unfortunately, pipeline flushes are not the only hazards in the obstacle
 course that modern CPUs must run.
 The next section covers the hazards of referencing memory.
+\fi
 
 \subsection{Memory References}
 \label{sec:cpu:Memory References}
