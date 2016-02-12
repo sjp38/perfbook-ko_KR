@@ -3,6 +3,26 @@
 \section{Software Design Implications}
 \label{sec:cpu:Software Design Implications}
 
+Table~\ref{tab:cpu:Performance of Synchronization Mechanisms on 4-CPU 1.8GHz
+AMD Opteron 844 System} 에 나온 비율 값들은 주어진 병렬 어플리케이션의 효율성을
+제한하기 때문에 매우 중요합니다.
+해당 병렬 어플리케이션이 쓰레드들간에 통신을 하기 위해 CAS 를 사용한다고 생각해
+보세요.
+이 CAS 오퍼레이션들은 쓰레드들이 자기 혼자 하는게 아니라 다른 쓰레드들과 통신을
+하기 위해 사용하는 것이기 때문에 자주 캐쉬 미스를 낼 것입니다.
+더 나아가서 각각의 CAS 통신 오퍼레이션에 뒤따르는 일의 단위가 부동 소수점 연산
+작업 정도는 충분히 할 수 있는 시간인 300ns 인 경우를 상상해 보세요.
+그렇게 되면 실행 시간의 절반 가량이 CAS 통신 오퍼레이션만으로 소모되는 겁니다!
+이건 결국 그런 병렬 프로그램을 돌리는 두개짜리 CPU 로 구성된 시스템은 한개짜리
+CPU 시스템에서 돌아가는 순차적 구현보다도 빠르게 동작하지는 못한다는
+이야기입니다.
+
+단일 통신 오퍼레이션의 대기시간이 수천 또는 심지어 수백만 부동소수점
+연산만큼이나 느린 분산 시스템의 경우엔 더 상황이 나빠집니다.
+이는 통신 작업이 극단적으로 가끔만 일어나야 하고 매우 큰 단위의 연산을 가능하게
+해야 하는 것이 얼마나 중요한지를 잘 보여줍니다.
+
+\iffalse
 The values of the ratios in
 Table~\ref{tab:cpu:Performance of Synchronization Mechanisms on 4-CPU 1.8GHz AMD Opteron 844 System}
 are critically important, as they limit the
@@ -26,14 +46,42 @@ latency of a single communications operation might take as long as
 thousands or even millions of floating-point operations.
 This illustrates how important it is for communications operations to
 be extremely infrequent and to enable very large quantities of processing.
+\fi
 
 \QuickQuiz{}
+	분산 시스템에서 통신이 그렇게까지 비싸다면 누가, 그리고 왜 그걸 쓰려
+	하는 건가요?
+	\iffalse
 	Given that distributed-systems communication is so horribly
 	expensive, why does anyone bother with them?
+	\fi
 \QuickQuizAnswer{
+	몇가지 이유가 있지요:
+	\iffalse
 	There are a number of reasons:
+	\fi
 
 	\begin{enumerate}
+	\item	공유 메모리 멀티 프로세서 시스템은 크기 제한이 있습니다.
+		수천개 이상의 CPU가 필요하다면, 분산 시스템을 사용하는 것밖에
+		선택지가 없습니다.
+	\item	극단적으로 거대한 공유 메모리 시스템은 매우 비싸고,
+		Table~\ref{tab:cpu:Performance of Synchronization Mechanisms on
+		4-CPU 1.8GHz AMD Opteron 844 System} 에 나타난 것처럼 작은 네개
+		CPU 로 구성된 시스템에서보다도 긴 캐쉬 미스 대기시간을 갖는
+		경향을 보입니다..
+	\item	분산 시스템에서의 통신 대기시간은 CPU 를 사용하지 않고, 따라서
+		메세지가 전달되는 동안 컴퓨팅 연산을 병렬적으로 수행할 수
+		있습니다.
+	\item	많은 중요한 문제들은 ``당황스럽도록 병렬적'' 이라서 극단적일
+		정도로 거대한 연산 단위들이 매우 작은 수의 메세지만으로 가능해
+		질수도 있습니다.
+		SETI@HOME~\cite{SETIatHOME2008} 은 그런 어플리케이션의 한
+		예입니다.
+		이런 부류의 어플리케이션들은 극단적으로 긴 통신 대기시간에도
+		불구하고 컴퓨터 네트워크를 훌륭하게 사용할 수 있습니다.
+
+	\iffalse
 	\item	Shared-memory multiprocessor systems have strict size limits.
 		If you need more than a few thousand CPUs, you have no
 		choice but to use a distributed system.
@@ -53,16 +101,36 @@ be extremely infrequent and to enable very large quantities of processing.
 		These sorts of applications can make good use of networks
 		of computers despite extremely long communications
 		latencies.
+	\fi
 	\end{enumerate}
 
+	병렬 어플리케이션에서의 향후 노력은 긴 통신 대기시간을 가진 기계와,
+	또는 클러스터에서 잘돌아갈 수 있는 당황스럽도록 병렬적인 어플리케이션의
+	수를 늘려가는 것을 계속할 것입니다.
+	그렇다곤 해도, 하드웨어 대기시간을 크게 줄이는 것은 개발에 크게 도움이
+	될겁니다.
+
+	\iffalse
 	It is likely that continued work on parallel applications will
 	increase the number of embarrassingly parallel applications that
 	can run well on machines and/or clusters having long communications
 	latencies.
 	That said, greatly reduced hardware latencies would be an
 	extremely welcome development.
+	\fi
 } \QuickQuizEnd
 
+교훈은 분명합니다:
+병렬 알고리즘들은 거의 독립적인 쓰레드들에 의해 수행되도록 명시적으로
+설계되어야 합니다.
+어토믹 오퍼레이션을 사용하든, 락이나 명시적 메세지를 사용하든, 쓰레드들의
+커뮤니케이션이 덜 빈번할수록 어플리케이션의 성능과 확장성은 나아질 것입니다.
+요약하자면, 훌륭한 병렬 성능과 확장성을 달성하는 것은 조심스럽게 데이터 구조와
+알고리즘을 선택해서든, 존재하는 병렬 어플리케이션과 환경을 사용해서든, 또는
+문제를 당황스럽도록 병렬적인 해결책이 존재하는 문제로 변환해서든 당황스럽도록
+병렬적인 알고리즘과 구현을 위해 노력하는 것입니다.
+
+\iffalse
 The lesson should be quite clear:
 parallel algorithms must be explicitly designed
 to run nearly independent threads.
@@ -74,21 +142,48 @@ striving for embarrassingly parallel algorithms and implementations,
 whether by careful choice of data structures and algorithms, use of
 existing parallel applications and environments, or transforming the
 problem into one for which an embarrassingly parallel solution exists.
+\fi
 
 \QuickQuiz{}
+	좋아요, 우리가 분산 프로그래밍 기법들을 공유 메모리 병렬 프로그램에
+	적용하려 한다면, 항상 이런 분산 기법들을 사용하고 공유 메모리 없이 살면
+	안되나요?
+
+	\iffalse
 	OK, if we are going to have to apply distributed-programming
 	techniques to shared-memory parallel programs, why not just
 	always use these distributed techniques and dispense with
 	shared memory?
+	\fi
 \QuickQuizAnswer{
+	많은 경우 프로그램의 작은 부분만이 성능에 민감하기 때문입니다.
+	공유 메모리 병렬성은 우리가 그 작은 부분에의 분산 프로그래밍에
+	집중하고, 성능에 민감하지 않은 프로램의 대붑분의 영역은 간단한 공유
+	메모리 기법을 사용하도록 해줍니다.
+
+	\iffalse
 	Because it is often the case that only a small fraction of
 	the program is performance-critical.
 	Shared-memory parallelism allows us to focus distributed-programming
 	techniques on that small fraction, allowing simpler shared-memory
 	techniques to be used on the non-performance-critical bulk of
 	the program.
+	\fi
 } \QuickQuizEnd
 
+자, 정리해 보죠:
+
+\begin{enumerate}
+\item	좋은 소식. 멀티코어 시스템이 저렴하고 어디서든 구할 수 있게 되었습니다.
+\item	더 좋은 소식도 있어요: 많은 동기화 오퍼레이션의 오버헤드는 2000년대
+	초의 병렬 시스템에서 그랬던 것보다 훨씬 낮아졌습니다.
+\item	나쁜 소식은 캐쉬 미스의 오버헤드는, 특히 큰 시스템에서는 여전히 높다는
+	것입니다.
+\end{enumerate}
+
+이 책의 뒷부분에서는 이 나쁜 소식을 처리하는 방법들을 설명합니다.
+
+\iffalse
 So, to sum up:
 
 \begin{enumerate}
@@ -101,3 +196,4 @@ So, to sum up:
 \end{enumerate}
 
 The remainder of this book describes ways of handling this bad news.
+\fi
