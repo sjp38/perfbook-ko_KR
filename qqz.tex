@@ -1554,9 +1554,26 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	\fi
 
 \QuickQ{}
+	왜 이 \co{wait()} 함수는 그렇게 복잡해야만 하는거죠?
+	왜 그냥 셸 스크립트의 \co{wait} 같이 동작하도록 만들지 않는 거예요?
+
+	\iffalse
 	Why does this \co{wait()} primitive need to be so complicated?
 	Why not just make it work like the shell-script \co{wait} does?
+	\fi
 \QuickA{}
+	일부 병렬 어플리케이션은 특정 자식 프로세스가 끝났을 때 특별한 행동을
+	취해야 할 수 있고, 그 때문에 각 자식 프로세스에 대해 개별적으로 대기를
+	할 필요가 있습니다.
+	또한, 일부 병렬 어플리케이션들은 자식 프로세스가 종료된 이유를 알
+	필요도 있습니다.
+	Figure~\ref{fig:toolsoftrade:Using the wait() Primitive} 에서 본
+	것처럼, \co{wait()} 함수를 가지고 \co{waitall()} 함수를 만드는 건
+	어렵지 않습니다만 그 반대는 불가능하겠지요.
+	한번 특정 자식 프로세스에 대한 정보를 잃어버리면, 그건 복구될 수
+	없습니다.
+
+	\iffalse
 	Some parallel applications need to take special action when
 	specific children exit, and therefore need to wait for each
 	child individually.
@@ -1567,11 +1584,36 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	the \co{wait()} function, but it would be impossible to
 	do the reverse.
 	Once the information about a specific child is lost, it is lost.
+	\fi
 
 \QuickQ{}
+	여기서 이야기한 것 외에도 \co{fork()} 와 \co{wait()} 에 대해 이야기할
+	것들이 많지 않나요?
+
+	\iffalse
 	Isn't there a lot more to \co{fork()} and \co{wait()}
 	than discussed here?
+	\fi
 \QuickA{}
+	맞습니다, 그리고 그리고 이 섹션은 나중에 메세징 기능 (UNIX 파이프,
+	TCP/IP, 그리고 공유 파일 I/O 같은) 과 메모리 매핑 (\co{mmap()} 과
+	\co{shmget()} 같은) 기능을 포함하도록 확장될 수도 있을 겁니다.
+	그 전까지는, 이런 기능들에 대해 훨씬 자세하게 설명하는 다른 교재들이
+	많이 있고, 정말 잘 알고 싶다면 man 페이지(역주: UNIX 커맨드
+	\co{man})나, 이런 기능을 사용하며 현존하는 병렬 어플리케이션들, 또는
+	리눅스 커널 구현의 소스 코드를 참고해도 될 것입니다.
+
+	Figure~\ref{fig:toolsoftrade:Processes Created Via fork() Do Not Share
+	Memory} 의 부모 프로세스는 자식 프로세스가 종료될 때까지 자신의
+	\co{printf()} 를 위해 기다리고 있다는 것을 기억해 둘 필요가 있습니다.
+	\co{printf()} 의 buffered I/O 를 같은 파일에 대해 여러 프로세스에서
+	동시적으로 사용하는 것은 일반적이지 않고, 그러지 않는게 최선입니다.
+	정말로 동시적으로 buffered I/O 를 해야만 한다면, 당신의 OS 의 문서를
+	보세요.
+	UNIX/Linux 시스템에서는 Stewart Weiss 의 강의 노트가
+	예제~\cite{StewartWeiss2013UNIX} 와 함께 좋은 소개를 제공합니다.
+
+	\iffalse
 	Indeed there is, and
 	it is quite possible that this section will be expanded in
 	future versions to include messaging features (such as UNIX
@@ -1593,6 +1635,7 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	For UNIX/Linux systems, Stewart Weiss's lecture notes provide
 	a good introduction with informative
 	examples~\cite{StewartWeiss2013UNIX}.
+	\fi
 
 \QuickQ{}
 	If the \co{mythread()} function in
