@@ -43,11 +43,19 @@ on how best to use these tools will be provided in later chapters.
 \section{Scripting Languages}
 \label{sec:toolsoftrade:Scripting Languages}
 
+리눅스 셸 스크립트 언어들은 병렬성을 관리하는 간단하지만 효과적인 방법들을
+제공합니다.
+예를 들어, 당신이 \co{compute_it} 이라는 이름의 프로그램을 가지고 있는데 두개의
+다른 인자들로 두번 수행해야 한다고 생각해 봅시다.
+유닉스 셸 스크립트를 사용하면 다음과 같이 수행을 할 수 있습니다:
+
+\iffalse
 The Linux shell scripting languages provide simple but effective ways
 of managing parallelism.
 For example, suppose that you had a program \co{compute_it}
 that you needed to run twice with two different sets of arguments.
 This can be accomplished using UNIX shell scripting as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -70,6 +78,12 @@ This can be accomplished using UNIX shell scripting as follows:
 \label{fig:intro:Execution Diagram for Parallel Shell Execution}
 \end{figure}
 
+라인~1 과 2 는 이 프로그램의 인스턴스를 두개 실행시키고, 각 인스턴스의 결과물을 두개의 별개의 파일에 집어넣는데, \co{&} 문자는 셸이 그 두 프로그램 인스턴스를 백그라운드에서 실행하도록 합니다.
+라인~3 은 두개의 인스턴스 모두가 종료되길 기다리고, 라인~4 와 5 에서는 그들의 결과값을 화면에 출력합니다.
+실행 흐름은 Figure~\ref{fig:intro:Execution Diagram for Parallel Shell Execution} 에 나타난 대로입니다:
+\co{compute_it} 의 두개의 인스턴스는 병렬적으로 수행되고, \co{wait} 은 두개 인스턴스 모두가 완료된 뒤에 실행 완료되며, 그 뒤에 \co{cat}의 두개의 인스턴스가 순차적으로 수행됩니다.
+
+\iffalse
 Lines~1 and 2 launch two instances of this program, redirecting their
 output to two separate files, with the \co{&} character directing the
 shell to run the two instances of the program in the background.
@@ -82,11 +96,27 @@ the two instances of \co{compute_it} execute in parallel,
 of \co{cat} execute sequentially.
 % @@@ Maui scheduler, load balancing, BOINC, and so on.
 % @@@ Diagram showing parallel execution.
+\fi
 
 \QuickQuiz{}
+	하지만 이 간단한 셸 스크립트는 \emph{진짜} 병렬 프로그램이 아니잖아요!
+	왜 이런 별거아닌 걸 신경쓰는거죠???
+
+	\iffalse
 	But this silly shell script isn't a \emph{real} parallel program!
 	Why bother with such trivia???
+	\fi
 \QuickQuizAnswer{
+	당신은 \emph{결코} 이 간단한 것을 잊을 수 없을 것이기 때문입니다!
+
+	이 책의 제목이 ``Is Parallel Programming Hard, And, If So, What Can You
+	Do About It?'' 이란 걸 마음에 새겨 두십시오.
+	당신이 할 수 있는 가장 효과적인 일은 그 간단한 것을 잊지 않도록 하는
+	것입니다!
+	무엇보다, 당신이 병렬 프로그래밍을 어려운 방법으로 하기로 선택했다면,
+	당신의 선택이니, 당신은 당신 자신 외의 누구에게도 불평 할 수 없습니다.
+
+	\iffalse
 	Because you should \emph{never} forget the simple stuff!
 
 	Please keep in mind that the title of this book is
@@ -95,13 +125,23 @@ of \co{cat} execute sequentially.
 	avoid forgetting the simple stuff!
 	After all, if you choose to do parallel programming the hard
 	way, you have no one but yourself to blame.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	병렬 셸 스크립트를 작성하는 좀 더 간단한 방법은 없나요?
+	만약 있다면, 어떻게 하나요? 없다면, 왜 없죠?
+
+	\iffalse
 	Is there a simpler way to create a parallel shell script?
 	If so, how?  If not, why not?
+	\fi
 \QuickQuizAnswer{
+	가장 직관적인 방법은 셸 파이프라인입니다:
+
+	\iffalse
 	One straightforward approach is the shell pipeline:
+	\fi
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
 \small
@@ -110,13 +150,29 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+	충분히 커다란 입력 파일에 대해서, \co{grep} 의 패턴 매칭, \co{sed} 의
+	수정과 \co{sort} 의 입력물 처리는 병렬적으로 수행될 겁니다.
+	\co{parallel.sh} 파일에 셸 스크립트 병렬성과 파이프라인에 대한 데모가
+	있습니다.
+
+	\iffalse
 	For a sufficiently large input file,
 	\co{grep} will pattern-match in parallel with \co{sed}
 	editing and with the input processing of \co{sort}.
 	See the file \co{parallel.sh} for a demonstration of
 	shell-script parallelism and pipelining.
+	\fi
 } \QuickQuizEnd
 
+다른 예로, \co{make} 소프트웨어 빌드 스크립트 언어는 얼마나 많은 병렬성이 해당
+빌드 작업에 주어져야 하는지 결정하는 \co{-j} 옵션을 제공합니다.
+예를 들어, \co{make -j4} 명령을 리눅스 커널 빌드를 위해 내리게 되면 최대 4개의
+병렬 컴파일이 동시에 수행될 수 있습니다.
+
+이런 간단한 예가 병렬 프로그래밍은 항상 복잡하거나 어려울 필요는 없음을
+당신에게 납득시켜 주길 바랍니다.
+
+\iffalse
 For another example, the \co{make} software-build scripting language
 provides a \co{-j} option that specifies how much parallelism should be
 introduced into the build process.
@@ -125,11 +181,33 @@ specifies that up to four parallel compiles be carried out concurrently.
 
 It is hoped that these simple examples convince you that parallel
 programming need not always be complex or difficult.
+\fi
 
 \QuickQuiz{}
+	하지만 스크립트 기반 병렬 프로그래밍이 그렇게 쉽다면, 왜 다른 것들을
+	신경쓰는거죠?
+
+	\iffalse
 	But if script-based parallel programming is so easy, why
 	bother with anything else?
+	\fi
 \QuickQuizAnswer{
+	사실 오늘날 사용되는 병렬 프로그램들의 매우 많은 부분들이 스크립트에
+	기반합니다.
+	하지만, 스크립트 기반 병렬성은 한계점도 지니고 있습니다:
+	\begin{enumerate}
+	\item	새 프로세스의 생성은 보통 비싼 시스템콜인 \co{fork()} 와
+		\co{exec()} 를 포함하기 때문에 상당히 무거운 작업입니다.
+	\item	파이프라이닝을 포함해서 데이터의 공유는 일반적으로 비싼 file
+		I/O 를 포함합니다.
+	\item	스크립트에서 믿고 쓸 수 있는 사용 가능한 동기화 기본 도구들
+		역시 일반적으로 비싼 file I/O 를 포함합니다.
+	\end{enumerate}
+	이런 제한점들은 스크립트 기반 병렬성이 coarse-grained 병렬성을 사용하고
+	각 일의 단위들은 최소 수십 밀리세컨드, 그리고 가능하다면 그보다도 훨씬
+	긴 시간을 가질 것을 요구합니다.
+
+	\iffalse
 	In fact, it is quite likely that a very large fraction of
 	parallel programs in use today are script-based.
 	However, script-based parallelism does have its limitations:
@@ -146,13 +224,21 @@ programming need not always be complex or difficult.
 	coarse-grained parallelism, with each unit of work having
 	execution time of at least tens of milliseconds, and preferably
 	much longer.
+	\fi
 
+	finer-grained 병렬성을 필요로 하는 작업들은 그 작업의 문제가
+	coarse-grained 형태로 표현될 수는 없을지 좀 고민해 보도록 추천됩니다.
+	만약 불가능하다면, Section~\ref{sec:toolsoftrade:POSIX Multiprocessing}
+	에서 다루는 것과 같은 다른 병렬 프로그래밍 환경을 고려해 봐야 합니다.
+
+	\iffalse
 	Those requiring finer-grained parallelism are well advised to
 	think hard about their problem to see if it can be expressed
 	in a coarse-grained form.
 	If not, they should consider using other parallel-programming
 	environments, such as those discussed in
 	Section~\ref{sec:toolsoftrade:POSIX Multiprocessing}.
+	\fi
 } \QuickQuizEnd
 
 \section{POSIX Multiprocessing}
