@@ -626,6 +626,19 @@ than fork-join parallelism.
 \label{fig:toolsoftrade:Threads Created Via pthread-create() Share Memory}
 \end{figure}
 
+프로세스 내에서 쓰레드를 생성하려면 Figure~\ref{fig:toolsoftrade:Threads
+Created Via pthread-create() Share Memory}(\co{pcreate.c}) 의 라인~15 와 16 에
+보인 것처럼 \co{pthread_create()} 함수를 호출해야 합니다.
+첫번째 인자는 \co{pthread_t} 타입 변수로의 포인터로, 해당 쓰레드의 ID 를
+저장하게 되며, 두번째로 예제에서는 \co{NULL} 값을 준 인자는 필요하면 추가하게
+되는 \co{pthread_attr_t} 타입 변수로의 포인터이며, 세번째 인자는 새로 생성된
+쓰레드에 의해 호출될 함수(이 경우, \co{mythread()}) 이고, 마지막으로 여기선
+\co{NULL} 을 준 인자는 \co{mythread} 에게 전달될 인자입니다.
+
+이 예제에서, \co{mythread()} 는 단순히 리턴하지만, 대신 \co{pthread_exit()} 를
+사용할 수도 있습니다.
+
+\iffalse
 To create a thread within an existing process, invoke the
 \co{pthread_create()} primitive, for example, as shown on lines~15
 and~16 of
@@ -640,20 +653,52 @@ is the argument that will be passed to \co{mythread}.
 
 In this example, \co{mythread()} simply returns, but it could instead
 call \co{pthread_exit()}.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:toolsoftrade:Threads Created Via pthread-create() Share
+	Memory} 의 \co{mythread()} 함수가 그냥 리턴해도 된다면, 왜
+	\co{pthread_exit()} 를 신경써야하죠?
+
+	\iffalse
 	If the \co{mythread()} function in
 	Figure~\ref{fig:toolsoftrade:Threads Created Via pthread-create() Share Memory}
 	can simply return, why bother with \co{pthread_exit()}?
+	\fi
 \QuickQuizAnswer{
+	이 간단한 예제에서는 \co{pthread_exit()} 를 신경 쓸 이유가 없는게
+	맞습니다.
+	하지만, \co{mythread()} 가 별도로 컴파일된 다른 함수를 호출하는 경우를
+	생각해 봅시다.
+	그런 경우, \co{pthread_exit()} 는 이런 다른 함수들에서도 별도의 다른
+	에러들을 리턴하거나 해서 실행 흐름을 \co{mythread()} 에 되돌리거나 할
+	필요 없이 곧바로 쓰레드의 실행을 종료시킬 수 있게 합니다.
+
+	\iffalse
 	In this simple example, there is no reason whatsoever.
 	However, imagine a more complex example, where \co{mythread()}
 	invokes other functions, possibly separately compiled.
 	In such a case, \co{pthread_exit()} allows these other functions
 	to end the thread's execution without having to pass some sort
 	of error return all the way back up to \co{mythread()}.
+	\fi
 } \QuickQuizEnd
 
+라인~20 에 있는 \co{pthread_join()} 함수는 fork-join 에서의 \co{wait()} 함수와
+유사합니다.
+이 함수는 \co{tid} 변수로 이야기된 쓰레드가 \co{pthread_exit()} 함수를 통해서나
+쓰레드의 탑 레벨 함수가 리턴을 하거나 해서 실행을 완료할 때까지 기다립니다.
+쓰레드의 종료 값은 \co{pthread_join()} 함수에 두번째 인자로 넘겨진 포인터를
+통해 저장됩니다.
+쓰레드의 종료 값은 쓰레드가 어떻게 종료되었는지에 따라 다른데,
+\co{pthread_exit()} 함수에 넘겨진 값이거나 쓰레드의 탑 레벨 함수에서 리턴한
+값입니다.
+
+Figure~\ref{fig:toolsoftrade:Threads Created Via pthread-create() Share Memory}
+에 보여진 프로그램은 다음과 같이 결과를 내놓게 되는데, 이 결과는 메모리가 두개
+쓰레드간에 공유됨을 보여줍니다:
+
+\iffalse
 The \co{pthread_join()} primitive, shown on line~20,  is analogous to
 the fork-join \co{wait()} primitive.
 It blocks until the thread specified by the \co{tid} variable completes
@@ -669,6 +714,7 @@ The program shown in
 Figure~\ref{fig:toolsoftrade:Threads Created Via pthread-create() Share Memory}
 produces output as follows, demonstrating that memory is in fact
 shared between the two threads:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -680,6 +726,15 @@ Parent process sees x=1
 \end{minipage}
 \vspace{5pt}
 
+이 프로그램은 변수 \co{x} 에 값을 저장하는 쓰레드가 한번에 하나 뿐임을 확실히
+하기 위해 많은 신경을 쓰고 있음을 알아 두십시오.
+한 쓰레드가 어떤 변수에 값을 저장하는 동안 다른 쓰레드가 그 변수의 값을 읽거나
+쓰려 하는 상황을 가리켜 ``data race(데이터 레이스)'' 라 합니다.
+C 언어는 데이터 레이스의 결과에 대해 어떤 보장도 하지 않기 때문에, 우리는 다음
+섹션에서 이야기할 락킹 도구들과 같이 데이터에의 동시적 접근과 수정을 안전하게
+할 수 있는 방법이 필요합니다.
+
+\iffalse
 Note that this program carefully makes sure that only one of the threads
 stores a value to variable \co{x} at a time.
 Any situation in which one thread might be storing a value to a given
@@ -689,13 +744,32 @@ Because the C language makes no guarantee that the results of a data race
 will be in any way reasonable, we need some way of safely accessing
 and modifying data concurrently, such as the locking primitives discussed
 in the following section.
+\fi
 
 \QuickQuiz{}
+	C 언어가 데이터 레이스에 대해 어떤 보장도 하지 않는다면, 왜 리눅스
+	커널은 그렇게 많은 데이터 레이스들을 가지고 있는거죠?
+	지금 리눅스 커널이 완전 엉망이라고 이야기 하려는 거예요???
+
+	\iffalse
 	If the C language makes no guarantees in presence of a data
 	race, then why does the Linux kernel have so many data races?
 	Are you trying to tell me that the Linux kernel is completely
 	broken???
+	\fi
 \QuickQuizAnswer{
+	아, 하지만 리눅스 커널은 조심스럽게 선택된, 데이터 레이스 상황에서도
+	안전한 실행을 가능하게 하는 asm 과 같은 gcc 의 특수한 확장 기능을
+	포함하는 C 언어의 슈퍼셋으로 작성되었습니다.
+	또한, 리눅스 커널은 데이터 레이스가 특히나 문제가 되는 플랫폼들
+	위에서는 동작하지 않습니다.
+	예를 들어, 32 비트 포인터와 16 비트 버스를 갖는 임베디드 시스템을
+	생각해 보세요.
+	그런 시스템에서는 하나의 포인터에 값을 저장하고 읽어오는 데이터
+	레이스에서 읽기는 아래쪽 16 비트는 예전 값이고 위쪽 16 비트는 새 값인
+	값을 읽어올 수도 있을 겁니다.
+
+	\iffalse
 	Ah, but the Linux kernel is written in a carefully selected
 	superset of the C language that includes special gcc
 	extensions, such as asms, that permit safe execution even
@@ -708,6 +782,7 @@ in the following section.
 	from a given pointer might well result in the load returning the
 	low-order 16 bits of the old value of the pointer concatenated
 	with the high-order 16 bits of the new value of the pointer.
+	\fi
 } \QuickQuizEnd
 
 \subsection{POSIX Locking}
