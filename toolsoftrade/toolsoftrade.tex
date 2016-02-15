@@ -788,6 +788,17 @@ in the following section.
 \subsection{POSIX Locking}
 \label{sec:toolsoftrade:POSIX Locking}
 
+POSIX 표준은 프로그래머가 ``POSIX 락킹'' 을 이용해 데이터 레이스 상황을 회피할
+수 있게 합니다.
+POSIX 락킹은 여러개의 기본 기능을 제공하는데, 가장 기본적인 것들은
+\co{pthread_mutex_lock()} 과 \co{pthread_mutex_unlock()} 입니다.
+이 기본 기능들은 \co{pthread_mutex_t} 타입인 락에 대해 동작합니다.
+이 락들은 정적으로 선언되고 \co{PTHREAD_MUTEX_INITIALIZER} 를 통해 초기화
+될수도, 동적으로 할당된 후 \co{pthread_mutex_init()} 를 통해 초기화 될 수도
+있습니다.
+이 섹션의 예제 코드는 앞의 경우들을 취할 것입니다.
+
+\iffalse
 The POSIX standard allows the programmer to avoid data races via
 ``POSIX locking''.
 POSIX locking features a number of primitives, the most fundamental
@@ -797,7 +808,17 @@ These locks may be declared statically and initialized with
 \co{PTHREAD_MUTEX_INITIALIZER}, or they may be allocated dynamically
 and initialized using the \co{pthread_mutex_init()} primitive.
 The demonstration code in this section will take the former course.
+\fi
 
+\co{pthread_mutex_lock()} 함수는 특정 락을 ``획득'' 하고,
+\co{pthread_mutex_unlock()} 함수는 특정 락을 ``해제'' 합니다.
+이것들은 ``명시적'' 락킹 함수들이기 때문에, 한 순간에 하나의 쓰레드만이 특정
+락을 ``가질'' 수 있습니다.
+예를 들어, 두개의 쓰레드들이 같은 락을 동시에 획득하려 하면, 그 중 하나만이
+먼저 락을 얻을 수 있도록 ``허락'' 되고, 다른 쓰레드는 첫번째 쓰레드가 락을
+해제할 때까지 기다려야 합니다.
+
+\iffalse
 The \co{pthread_mutex_lock()} primitive ``acquires'' the specified lock,
 and the \co{pthread_mutex_unlock()} ``releases'' the specified lock.
 Because these are ``exclusive'' locking primitives,
@@ -805,11 +826,31 @@ only one thread at a time may ``hold'' a given lock at a given time.
 For example, if a pair of threads attempt to acquire the same lock
 concurrently, one of the pair will be ``granted'' the lock first, and
 the other will wait until the first thread releases the lock.
+\fi
 
 \QuickQuiz{}
+	제가 여러 쓰레드들이 한번에 같은 락을 쥐고 있게 하고 싶으면 어떻게
+	하죠?
+
+	\iffalse
 	What if I want several threads to hold the same lock at the
 	same time?
+	\fi
 \QuickQuizAnswer{
+	가장 먼저 당신이 해야할 일은 왜 그러길 원하는지 스스로에게 물어보는
+	겁니다.
+	만약 답이 ``나는 많은 쓰레드에 의해 읽혀지고 아주 가끔 수정되는 많은
+	데이터를 가지고 있기 때문'' 이라면, POSIX 리더-라이터 락이 당신이 찾고
+	있는 것일 수 있습니다.
+	이것들은 Section~\ref{sec:toolsoftrade:POSIX Reader-Writer Locking} 에
+	소개되어 있습니다.
+
+	여러 쓰레드가 같은 락을 잡고 있는 것과 같은 효과를 얻는 또다른 방법은
+	한 쓰레드가 락을 획득하고 나서 \co{pthread_create()} 함수를 이용해 다른
+	쓰레드들을 생성하는 것입니다.
+	왜 이게 좋은 방법인지는 독자 여러분께서 생각해 보시기 바랍니다.
+
+	\iffalse
 	The first thing you should do is to ask yourself why you would
 	want to do such a thing.
 	If the answer is ``because I have a lot of data that is read
@@ -823,6 +864,7 @@ the other will wait until the first thread releases the lock.
 	then use \co{pthread_create()} to create the other threads.
 	The question of why this would ever be a good idea is left
 	to the reader.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -883,6 +925,18 @@ the other will wait until the first thread releases the lock.
 \label{fig:toolsoftrade:Demonstration of Exclusive Locks}
 \end{figure}
 
+Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}
+(\co{lock.c}) 에 명시적 락킹의 사용 예가 있습니다.
+라인~1 은 \co{lock_a} 라는 이름의 POSIX 락을 정의와 함께 초기화 하고,
+라인~2 에서는 비슷하게 \co{lock_b} 라는 이름의 락을 정의하고 초기화 합니다.
+라인~3 에서는 공유 변수 ~\co{x} 를 정의와 함께 초기화 합니다.
+
+라인~5-28 은 \co{arg} 로 가리켜진 락을 잡고서 공유 변수 \co{x} 를 반복적으로
+읽는 \co{lock_reader()} 함수를 정의합니다.
+라인~10 은 \co{arg} 를 \co{pthread_mutex_lock()} 과 \co{pthread_mutex_unlock()}
+함수에 사용하기 위해 \co{pthread_mutex_t} 포인터로 캐스팅 합니다.
+
+\iffalse
 This exclusive-locking property is demonstrated using the code shown in
 Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}
 (\co{lock.c}).
@@ -896,20 +950,46 @@ the lock specified by \co{arg}.
 Line~10 casts \co{arg} to a pointer to a \co{pthread_mutex_t}, as
 required by the \co{pthread_mutex_lock()} and \co{pthread_mutex_unlock()}
 primitives.
+\fi
 
 \QuickQuiz{}
+	왜 그냥 Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}
+	라인~5 에서 \co{lock_reader()} 가 곧바로 \co{pthread_mutex_t} 포인터를
+	받도록 하지 않는거죠?
+
+	\iffalse
 	Why not simply make the argument to \co{lock_reader()}
 	on line~5 of
 	Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}
 	be a pointer to a \co{pthread_mutex_t}?
+	\fi
 \QuickQuizAnswer{
+	\co{lock_reader()} 를 \co{pthread_create()} 에 넘겨야 하기 때문이죠.
+	물론 함수를 \co{pthread_create()} 에 넘길 때 캐스팅을 해서 넘길 수도
+	있지만, 함수 캐스팅은 좀 보기도 안좋고 간단한 포인터 캐스팅에 비해
+	잘 하기가 어렵습니다.
+
+	\iffalse
 	Because we will need to pass \co{lock_reader()} to
 	\co{pthread_create()}.
 	Although we could cast the function when passing it to
 	\co{pthread_create()}, function casts are quite a bit
 	uglier and harder to get right than are simple pointer casts.
+	\fi
 } \QuickQuizEnd
 
+라인~12-15 는 특정 \co{pthread_mutex_t} 를 획득하고, 에러를 체크한 후 만약
+에러가 있었다면 프로그램을 종료합니다.
+라인~16-23 은 반복적으로 \co{x} 의 값을 체크하고, 그 값이 바뀔 때마다 새로운
+값을 화면에 출력합니다.
+라인~22 는 예제가 싱글 프로세서 머신에서도 잘 돌아가도록 1 밀리세컨드씩 잠을
+잡니다.
+라인~24-27 에서는 \co{pthread_mutex_t} 를 해제하고, 에러를 체크한 후 에러가
+났다면 프로그램을 종료합니다.
+마지막으로, 라인~28 에서는 \co{pthread_create()} 에서 요구된 함수 타입을
+맞춰주기 위해 \co{NULL} 을 리턴합니다.
+
+\iffalse
 Lines~12-15 acquire the specified \co{pthread_mutex_t}, checking
 for errors and exiting the program if any occur.
 Lines~16-23 repeatedly check the value of \co{x}, printing the new value
@@ -920,20 +1000,47 @@ Line~24-27 release the \co{pthread_mutex_t}, again checking for
 errors and exiting the program if any occur.
 Finally, line~28 returns \co{NULL}, again to match the function type
 required by \co{pthread_create()}.
+\fi
 
 \QuickQuiz{}
+	\co{pthread_mutex_t} 의 획득과 해제에 매번 4줄이나 써야한다니 좀
+	고통스러울 것 같군요!
+	더 나은 방법은 없나요?
+
+	\iffalse
 	Writing four lines of code for each acquisition and release
 	of a \co{pthread_mutex_t} sure seems painful!
 	Isn't there a better way?
+	\fi
 \QuickQuizAnswer{
+	실로 그렇습니다!
+	그리고 그런 이유로, \co{pthread_mutex_lock()} 과
+	\co{pthread_mutex_unlock()} 함수들은 보통 이 에러 체킹을 해주는 함수로
+	감싸져서 사용되곤 합니다.
+	뒤에서, 우리는 이들을 리눅스 커널의 \co{spin_lock()} 과
+	\co{spin_unlock()} API 들로 감싸서 사용할 겁니다.
+
+	\iffalse
 	Indeed!
 	And for that reason, the \co{pthread_mutex_lock()} and
 	\co{pthread_mutex_unlock()} primitives are normally wrapped
 	in functions that do this error checking.
 	Later on, we will wrapper them with the Linux kernel
 	\co{spin_lock()} and \co{spin_unlock()} APIs.
+	\fi
 } \QuickQuizEnd
 
+Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks} 의 라인~31-49 는
+주기적으로 공유 변수 \co{x} 를 특정 \co{pthread_mutex_t} 를 잡은 채로 업데이트
+하는 \co{lock_writer()} 함수를 보여줍니다.
+\co{lock_reader()} 에서처럼 라인~34 에서는 \co{arg} 를 \co{pthread_mutex_t}
+포인터로 캐스팅 하고 라인~36-39 에서 해당 락을 얻어오고, 라인~44-47 에서 락을
+놓아줍니다.
+락을 잡고 있는 동안, 라인~40-43 에서는 공유 변수 \co{x} 를 5 밀리세컨드 씩
+자면서 증가시킵니다.
+마지막으로 라인~44-47 에서는 락을 놓아줍니다.
+
+\iffalse
 Lines~31-49 of
 Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}
 shows \co{lock_writer()}, which
@@ -945,6 +1052,7 @@ and lines~44-47 releases it.
 While holding the lock, lines~40-43 increment the shared variable \co{x},
 sleeping for five milliseconds between each increment.
 Finally, lines~44-47 release the lock.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -975,12 +1083,22 @@ Finally, lines~44-47 release the lock.
 \end{figure}
 
 Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}
+는 \co{lock_reader()} 와 \co{lock_writer()} 를 같은 \co{lock_a} 락을 사용하도록
+하면서 쓰레드로 실행시키는 코드를 보여줍니다.
+라인~2-6 은 \co{lock_reader()} 를 실행하는 쓰레드를 생성하고, 라인~7-11 에서는
+\co{lock_writer()} 를 실행하는 쓰레드를 생성합니다.
+라인~12-19 에서는 두 쓰레드가 완료되기를 기다립니다.
+이 코드가 내놓는 결과는 다음과 같습니다:
+
+\iffalse
+Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}
 shows a code fragment that runs \co{lock_reader()} and
 \co{lock_writer()} as thread using the same lock, namely, \co{lock_a}.
 Lines~2-6 create a thread running \co{lock_reader()}, and then
 Lines~7-11 create a thread running \co{lock_writer()}.
 Lines~12-19 wait for both threads to complete.
 The output of this code fragment is as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -992,17 +1110,41 @@ lock_reader(): x = 0
 \end{minipage}
 \vspace{5pt}
 
+두 쓰레드가 모두 같은 락을 사용하기 때문에, \co{lock_reader()} 쓰레드는
+\co{lock_writer()} 가 락을 잡고서 만들어내는 \co{x} 의 중간 값들을 볼 수
+없습니다.
+
+\iffalse
 Because both threads are using the same lock, the \co{lock_reader()}
 thread cannot see any of the intermediate values of \co{x} produced
 by \co{lock_writer()} while holding the lock.
+\fi
 
 \QuickQuiz{}
+	``x = 0'' 만이 Figure~\ref{fig:toolsoftrade:Demonstration of Same
+	Exclusive Lock} 의 코드에서 발생 가능한 오로지 하나의 결과인가요?
+	만약 그렇다면, 왜죠?
+	아니라면, 어떤 다른 결과가 가능할까요, 그리고 왜일까요?
+
+	\iffalse
 	Is ``x = 0'' the only possible output from the code fragment
 	shown in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}?
 	If so, why?
 	If not, what other output could appear, and why?
+	\fi
 \QuickQuizAnswer{
+	아닙니다.
+	``x = 0'' 가 나온 이유는 \co{lock_reader()} 가 락을 먼저 잡았기
+	때문입니다.
+	\co{lock_writer()} 가 먼저 락을 잡았다면, 결과는 ``x = 3'' 가 되었을
+	것입니다.
+	하지만, 해당 코드에서는 \co{lock_reader()} 를 먼저 시작시키고 이 실행은
+	멀티프로세서에서 이루어졌기 때문에, 대부분은 일반적으로
+	\co{lock_reader()} 가 락을 먼저 잡을 것으로 예상할 수 있을 겁니다.
+	하지만, 보장된 건 아니지요, 특히나 바쁜 시스템에서는요.
+
+	\iffalse
 	No.
 	The reason that ``x = 0'' was output was that \co{lock_reader()}
 	acquired the lock first.
@@ -1013,6 +1155,7 @@ by \co{lock_writer()} while holding the lock.
 	one would normally expect \co{lock_reader()} to acquire the
 	lock first.
 	However, there are no guarantees, especially on a busy system.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -1045,10 +1188,18 @@ by \co{lock_writer()} while holding the lock.
 \end{figure}
 
 Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks}
+에서 비슷한, 하지만 이번엔 다른 락을 사용하는 코드를 보여줍니다:
+\co{lock_reader()} 를 위해선 \co{lock_a}를, \co{lock_wirter()} 를 위해선
+\co{lock_b} 를 사용합니다.
+이 코드의 수행 결과는 다음과 같습니다:
+
+\iffalse
+Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks}
 shows a similar code fragment, but this time using different locks:
 \co{lock_a} for \co{lock_reader()} and \co{lock_b} for
 \co{lock_writer()}.
 The output of this code fragment is as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1063,17 +1214,43 @@ lock_reader(): x = 3
 \end{minipage}
 \vspace{5pt}
 
+두 쓰레드가 다른 락을 사용하기 때문에, 서로를 배제하지 않고, 동시에 수행됩니다.
+그래서 \co{lock_reader()} 함수는 \co{lock_writer()} 가 저장한 \co{x} 중간값을
+볼 수 있습니다.
+
+\iffalse
 Because the two threads are using different locks, they do not exclude
 each other, and can run concurrently.
 The \co{lock_reader()} function can therefore see the intermediate
 values of \co{x} stored by \co{lock_writer()}.
+\fi
 
 \QuickQuiz{}
+	서로 다른 락을 사용하는건 쓰레드가 서로 상대의 중간 상태를 볼 수 있는등
+	혼란스럽게 할 수 있는 것같은데요.
+	잘 짜여진 병렬 프로그램은 이런 혼란을 막기 위해서는 하나의 락만을
+	사용해야만 하는 건가요?
+
+	\iffalse
 	Using different locks could cause quite a bit of confusion,
 	what with threads seeing each others' intermediate states.
 	So should well-written parallel programs restrict themselves
 	to using a single lock in order to avoid this kind of confusion?
+	\fi
 \QuickQuizAnswer{
+	가끔은 프로그램을 하나의 전역적인 락만을 사용하면서 잘 동작하고
+	확장성도 좋게 작성하는 것도 가능하지만, 그런 프로그램은 좀 예외적인
+	경우입니다.
+	당신은 좋은 성능과 확장성을 위해선 보통은 여러개의 락을 사용해야
+	할겁니다.
+
+	이 규칙에 대해 하나의 가능한 예외는 아직은 연구 단계에 머물러 있는,
+	``트랜잭셔널 메모리'' 입니다.
+	트랜잭셔널 메모리는 하나의 전역 락을 사용하면서 허용된 최적화를
+	사용하고, 추가적으로 롤백을 지원하는 케이스~\cite{HansJBoehm2009HOTPAR}
+	로 간략히 생각할 수 있습니다.
+
+	\iffalse
 	Although it is sometimes possible to write a program using a
 	single global lock that both performs and scales well, such
 	programs are exceptions to the rule.
@@ -1085,29 +1262,61 @@ values of \co{x} stored by \co{lock_writer()}.
 	Transactional-memory semantics can be loosely thought of as those
 	of a single global lock with optimizations permitted and
 	with the addition of rollback~\cite{HansJBoehm2009HOTPAR}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive
+	Locks} 에 보여진 코드에서, \co{lock_reader()} 는 \co{lock_writer()} 가
+	생성하는 값 모두를 보도록 보장되어 있나요?
+	그렇다면, 또 그렇지 않다면, 왜죠?
+
+	\iffalse
 	In the code shown in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks},
 	is \co{lock_reader()} guaranteed to see all the values produced
 	by \co{lock_writer()}?
 	Why or why not?
+	\fi
 \QuickQuizAnswer{
+	아닙니다.
+	바쁜 시스템에서라면, \co{lock_reader()} 는 \co{lock_writer()} 의 실행이
+	완료될 때까지 CPU 를 선점당해 \co{lock_writer()} 의 \co{x} 중간 값을
+	\emph{전혀} 볼 수 없을 수도 있습니다.
+
+	\iffalse
 	No.
 	On a busy system, \co{lock_reader()} might be preempted
 	for the entire duration of \co{lock_writer()}'s execution,
 	in which case it would not see \emph{any} of \co{lock_writer()}'s
 	intermediate states for \co{x}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	잠깐만요!!!
+	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}
+	에서는 공유 변수 \co{x} 를 초기화 하지 않았는데, 
+	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive
+	Locks} 에서는 왜 초기화 해야 했던거죠?
+
+	\iffalse
 	Wait a minute here!!!
 	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}
 	didn't initialize shared variable \co{x},
 	so why does it need to be initialized in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks}?
+	\fi
 \QuickQuizAnswer{
+	Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks} 의
+	라인~3 을 보세요.
+	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock} 의
+	코드는 먼저 수행되었기 때문에, \co{x} 의 컴파일 타임 초기화에 의존할
+	수도 있었습니다.
+	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive
+	Locks} 는 그 다음에 돌았기 때문에, \co{x} 를 다시 초기화 해야 합니다.
+
+	\iffalse
 	See line~3 of
 	Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}.
 	Because the code in
@@ -1117,12 +1326,19 @@ values of \co{x} stored by \co{lock_writer()}.
 	The code in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks}
 	ran next, so it had to re-initialize \co{x}.
+	\fi
 } \QuickQuizEnd
 
+이외에도 몇가지 더 POSIX 명시적 락킹이 있지만, 여기 소개한 것만으로도 좋은
+시작이 될 수 있고, 많은 상황에는 이것만으로도 충분할 겁니다.
+다음 섹션에서는 POSIX 리더-라이터 락킹에 대해 간략히 알아봅니다.
+
+\iffalse
 Although there is quite a bit more to POSIX exclusive locking, these
 primitives provide a good start and are in fact sufficient in a great
 many situations.
 The next section takes a brief look at POSIX reader-writer locking.
+\fi
 
 \subsection{POSIX Reader-Writer Locking}
 \label{sec:toolsoftrade:POSIX Reader-Writer Locking}

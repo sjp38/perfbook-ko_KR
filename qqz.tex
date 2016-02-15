@@ -1704,9 +1704,28 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	\fi
 
 \QuickQ{}
+	제가 여러 쓰레드들이 한번에 같은 락을 쥐고 있게 하고 싶으면 어떻게
+	하죠?
+
+	\iffalse
 	What if I want several threads to hold the same lock at the
 	same time?
+	\fi
 \QuickA{}
+	가장 먼저 당신이 해야할 일은 왜 그러길 원하는지 스스로에게 물어보는
+	겁니다.
+	만약 답이 ``나는 많은 쓰레드에 의해 읽혀지고 아주 가끔 수정되는 많은
+	데이터를 가지고 있기 때문'' 이라면, POSIX 리더-라이터 락이 당신이 찾고
+	있는 것일 수 있습니다.
+	이것들은 Section~\ref{sec:toolsoftrade:POSIX Reader-Writer Locking} 에
+	소개되어 있습니다.
+
+	여러 쓰레드가 같은 락을 잡고 있는 것과 같은 효과를 얻는 또다른 방법은
+	한 쓰레드가 락을 획득하고 나서 \co{pthread_create()} 함수를 이용해 다른
+	쓰레드들을 생성하는 것입니다.
+	왜 이게 좋은 방법인지는 독자 여러분께서 생각해 보시기 바랍니다.
+
+	\iffalse
 	The first thing you should do is to ask yourself why you would
 	want to do such a thing.
 	If the answer is ``because I have a lot of data that is read
@@ -1720,38 +1739,85 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	then use \co{pthread_create()} to create the other threads.
 	The question of why this would ever be a good idea is left
 	to the reader.
+	\fi
 
 \QuickQ{}
+	왜 그냥 Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}
+	라인~5 에서 \co{lock_reader()} 가 곧바로 \co{pthread_mutex_t} 포인터를
+	받도록 하지 않는거죠?
+
+	\iffalse
 	Why not simply make the argument to \co{lock_reader()}
 	on line~5 of
 	Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}
 	be a pointer to a \co{pthread_mutex_t}?
+	\fi
 \QuickA{}
+	\co{lock_reader()} 를 \co{pthread_create()} 에 넘겨야 하기 때문이죠.
+	물론 함수를 \co{pthread_create()} 에 넘길 때 캐스팅을 해서 넘길 수도
+	있지만, 함수 캐스팅은 좀 보기도 안좋고 간단한 포인터 캐스팅에 비해
+	잘 하기가 어렵습니다.
+
+	\iffalse
 	Because we will need to pass \co{lock_reader()} to
 	\co{pthread_create()}.
 	Although we could cast the function when passing it to
 	\co{pthread_create()}, function casts are quite a bit
 	uglier and harder to get right than are simple pointer casts.
+	\fi
 
 \QuickQ{}
+	\co{pthread_mutex_t} 의 획득과 해제에 매번 4줄이나 써야한다니 좀
+	고통스러울 것 같군요!
+	더 나은 방법은 없나요?
+
+	\iffalse
 	Writing four lines of code for each acquisition and release
 	of a \co{pthread_mutex_t} sure seems painful!
 	Isn't there a better way?
+	\fi
 \QuickA{}
+	실로 그렇습니다!
+	그리고 그런 이유로, \co{pthread_mutex_lock()} 과
+	\co{pthread_mutex_unlock()} 함수들은 보통 이 에러 체킹을 해주는 함수로
+	감싸져서 사용되곤 합니다.
+	뒤에서, 우리는 이들을 리눅스 커널의 \co{spin_lock()} 과
+	\co{spin_unlock()} API 들로 감싸서 사용할 겁니다.
+
+	\iffalse
 	Indeed!
 	And for that reason, the \co{pthread_mutex_lock()} and
 	\co{pthread_mutex_unlock()} primitives are normally wrapped
 	in functions that do this error checking.
 	Later on, we will wrapper them with the Linux kernel
 	\co{spin_lock()} and \co{spin_unlock()} APIs.
+	\fi
 
 \QuickQ{}
+	``x = 0'' 만이 Figure~\ref{fig:toolsoftrade:Demonstration of Same
+	Exclusive Lock} 의 코드에서 발생 가능한 오로지 하나의 결과인가요?
+	만약 그렇다면, 왜죠?
+	아니라면, 어떤 다른 결과가 가능할까요, 그리고 왜일까요?
+
+	\iffalse
 	Is ``x = 0'' the only possible output from the code fragment
 	shown in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}?
 	If so, why?
 	If not, what other output could appear, and why?
+	\fi
 \QuickA{}
+	아닙니다.
+	``x = 0'' 가 나온 이유는 \co{lock_reader()} 가 락을 먼저 잡았기
+	때문입니다.
+	\co{lock_writer()} 가 먼저 락을 잡았다면, 결과는 ``x = 3'' 가 되었을
+	것입니다.
+	하지만, 해당 코드에서는 \co{lock_reader()} 를 먼저 시작시키고 이 실행은
+	멀티프로세서에서 이루어졌기 때문에, 대부분은 일반적으로
+	\co{lock_reader()} 가 락을 먼저 잡을 것으로 예상할 수 있을 겁니다.
+	하지만, 보장된 건 아니지요, 특히나 바쁜 시스템에서는요.
+
+	\iffalse
 	No.
 	The reason that ``x = 0'' was output was that \co{lock_reader()}
 	acquired the lock first.
@@ -1762,13 +1828,34 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	one would normally expect \co{lock_reader()} to acquire the
 	lock first.
 	However, there are no guarantees, especially on a busy system.
+	\fi
 
 \QuickQ{}
+	서로 다른 락을 사용하는건 쓰레드가 서로 상대의 중간 상태를 볼 수 있는등
+	혼란스럽게 할 수 있는 것같은데요.
+	잘 짜여진 병렬 프로그램은 이런 혼란을 막기 위해서는 하나의 락만을
+	사용해야만 하는 건가요?
+
+	\iffalse
 	Using different locks could cause quite a bit of confusion,
 	what with threads seeing each others' intermediate states.
 	So should well-written parallel programs restrict themselves
 	to using a single lock in order to avoid this kind of confusion?
+	\fi
 \QuickA{}
+	가끔은 프로그램을 하나의 전역적인 락만을 사용하면서 잘 동작하고
+	확장성도 좋게 작성하는 것도 가능하지만, 그런 프로그램은 좀 예외적인
+	경우입니다.
+	당신은 좋은 성능과 확장성을 위해선 보통은 여러개의 락을 사용해야
+	할겁니다.
+
+	이 규칙에 대해 하나의 가능한 예외는 아직은 연구 단계에 머물러 있는,
+	``트랜잭셔널 메모리'' 입니다.
+	트랜잭셔널 메모리는 하나의 전역 락을 사용하면서 허용된 최적화를
+	사용하고, 추가적으로 롤백을 지원하는 케이스~\cite{HansJBoehm2009HOTPAR}
+	로 간략히 생각할 수 있습니다.
+
+	\iffalse
 	Although it is sometimes possible to write a program using a
 	single global lock that both performs and scales well, such
 	programs are exceptions to the rule.
@@ -1780,27 +1867,59 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	Transactional-memory semantics can be loosely thought of as those
 	of a single global lock with optimizations permitted and
 	with the addition of rollback~\cite{HansJBoehm2009HOTPAR}.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive
+	Locks} 에 보여진 코드에서, \co{lock_reader()} 는 \co{lock_writer()} 가
+	생성하는 값 모두를 보도록 보장되어 있나요?
+	그렇다면, 또 그렇지 않다면, 왜죠?
+
+	\iffalse
 	In the code shown in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks},
 	is \co{lock_reader()} guaranteed to see all the values produced
 	by \co{lock_writer()}?
 	Why or why not?
+	\fi
 \QuickA{}
+	아닙니다.
+	바쁜 시스템에서라면, \co{lock_reader()} 는 \co{lock_writer()} 의 실행이
+	완료될 때까지 CPU 를 선점당해 \co{lock_writer()} 의 \co{x} 중간 값을
+	\emph{전혀} 볼 수 없을 수도 있습니다.
+
+	\iffalse
 	No.
 	On a busy system, \co{lock_reader()} might be preempted
 	for the entire duration of \co{lock_writer()}'s execution,
 	in which case it would not see \emph{any} of \co{lock_writer()}'s
 	intermediate states for \co{x}.
+	\fi
 
 \QuickQ{}
+	잠깐만요!!!
+	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}
+	에서는 공유 변수 \co{x} 를 초기화 하지 않았는데, 
+	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive
+	Locks} 에서는 왜 초기화 해야 했던거죠?
+
+	\iffalse
 	Wait a minute here!!!
 	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock}
 	didn't initialize shared variable \co{x},
 	so why does it need to be initialized in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks}?
+	\fi
 \QuickA{}
+	Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks} 의
+	라인~3 을 보세요.
+	Figure~\ref{fig:toolsoftrade:Demonstration of Same Exclusive Lock} 의
+	코드는 먼저 수행되었기 때문에, \co{x} 의 컴파일 타임 초기화에 의존할
+	수도 있었습니다.
+	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive
+	Locks} 는 그 다음에 돌았기 때문에, \co{x} 를 다시 초기화 해야 합니다.
+
+	\iffalse
 	See line~3 of
 	Figure~\ref{fig:toolsoftrade:Demonstration of Exclusive Locks}.
 	Because the code in
@@ -1810,6 +1929,7 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	The code in
 	Figure~\ref{fig:toolsoftrade:Demonstration of Different Exclusive Locks}
 	ran next, so it had to re-initialize \co{x}.
+	\fi
 
 \QuickQ{}
 	Instead of using \co{ACCESS_ONCE()} everywhere, why not just
