@@ -1343,6 +1343,18 @@ The next section takes a brief look at POSIX reader-writer locking.
 \subsection{POSIX Reader-Writer Locking}
 \label{sec:toolsoftrade:POSIX Reader-Writer Locking}
 
+POSIX API 는 \co{pthread_rwlock_t} 로 사용되는, 리더-라이터 락을 제공합니다.
+\co{pthread_mutex_t} 처럼, \co{pthread_rwlock_t} 는
+\co{PTHREAD_RWLOCK_INITIALIZER} 를 사용해 정적으로 초기화 될 수도,
+\co{pthread_rwlock_init()} 함수를 이용해 동적으로 초기화 될 수도 있습니다.
+\co{pthread_rwlock_rdlock()} 함수는 특정 \co{pthread_rwlock_t} 의 읽기 권한을
+얻어오고, \co{pthread_rwlock_wrlock()} 함수는 쓰기 권한을 얻어오며,
+\co{pthread_rwlock_unlock()} 함수는 락을 해제합니다.
+언제든 \co{pthread_rwlock_t} 의 쓰기권한은 하나의 쓰레드만이 획득 가능하며,
+읽기 권한은 여러 쓰레드가 동시게 가질 수 있습니다만, 동시에 쓰기 권한을 쥔
+쓰레드가 없는 경우에 국한됩니다.
+
+\iffalse
 The POSIX API provides a reader-writer lock, which is represented by
 a \co{pthread_rwlock_t}.
 As with \co{pthread_mutex_t}, \co{pthread_rwlock_t} may be statically
@@ -1356,7 +1368,17 @@ Only a single thread may write-hold a given \co{pthread_rwlock_t}
 at any given time, but multiple threads may read-hold a given
 \co{pthread_rwlock_t}, at least while there is no thread
 currently write-holding it.
+\fi
 
+예상했겠지만, 리더-라이터 락은 읽기 작업이 대부분인 경우를 위해 설계되었습니다.
+이런 상황에서, 리더-라이터 락은 명시적 락에 비해 훨씬 나은 확장성을 제공할 수
+있는데, 명시적 락은 기본적으로 한번에 락을 잡을 수 있는 쓰레드의 수가 하나로
+제한되는데 반해 리더-라이터 락은 충분히 많은 수의 읽기 작업 하는 쓰레드가
+동시에 락을 잡을 수 있기 때문입니다.
+하지만, 실제로 리더-라이터 락이 얼마나 추가적인 확장성을 제공하는지 알 필요가
+있습니다.
+
+\iffalse
 As you might expect, reader-writer locks are designed for read-mostly
 situations.
 In these situations, a reader-writer lock can provide greater scalability
@@ -1366,6 +1388,7 @@ the reader-writer lock permits
 an arbitrarily large number of readers to concurrently hold the lock.
 However, in practice, we need to know how much additional scalability is
 provided by reader-writer locks.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1419,6 +1442,18 @@ provided by reader-writer locks.
 
 Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}
 (\co{rwlockscale.c})
+는 리더-라이터 락의 확장성을 측정하는 한가지 방법을 보여줍니다.
+라인~1 은 해당 리더-라이터 락의 정의와 초기화를 하고, 라인~2 에서는 각 쓰레드가
+해당 리더-라이터 락을 잡는 시간을 조절하는 \co{holdtime} 인자를 보여줍니다.
+라인~3 에서는 리더-라이터 락의 해제와 다음 획득 사이의 시간을 조절하는
+\co{thinktime} 인자를 보여주고, 라인~4 에서는 각 리더 쓰레드가 자신이 락을
+획득한 횟수를 저장하는 \co{readcounts} 배열을 정의합니다. 그리고 라인~5 에서는
+언제 모든 리더 쓰레드들이 수행을 시작했는지 알려주는 \co{nreadersrunning}
+변수를 정의합니다.
+
+\iffalse
+Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+(\co{rwlockscale.c})
 shows one way of measuring reader-writer lock scalability.
 Line~1 shows the definition and initialization of the reader-writer
 lock, line~2 shows the \co{holdtime} argument controlling the
@@ -1429,13 +1464,29 @@ line~4 defines the \co{readcounts} array into which each reader thread
 places the number of times it acquired the lock, and
 line~5 defines the \co{nreadersrunning} variable, which
 determines when all reader threads have started running.
+\fi
 
+라인~7-10 은 테스트의 시작과 끝을 맞춰주는 \co{goflag} 를 정의합니다.
+이 변수는 처음엔 \co{GOFLAG_INIT} 로 설정되어 있고, 이후에 모든 리더 쓰레드들이
+시작된 이후에 \co{GOFLAG_RUN} 으로 변경된 후, 마지막으로 테스트를 종료시키기
+위해 \co{GOFLAG_STOP} 으로 값을 바꿉니다.
+
+\iffalse
 Lines~7-10 define \co{goflag}, which synchronizes the start and the
 end of the test.
 This variable is initially set to \co{GOFLAG_INIT}, then set to
 \co{GOFLAG_RUN} after all the reader threads have started, and finally
 set to \co{GOFLAG_STOP} to terminate the test run.
+\fi
 
+라인~12-41 은 리더 쓰레드인 \co{reader()} 함수를 정의합니다.
+라인~18 은 이 쓰레드가 이제 수행됨을 알리기 위해 \co{nreadersrunning} 변수의
+값을 어토믹하게 증가시키고, 라인~19-21 은 테스트가 시작되길 기다립니다.
+\co{ACCESS_ONCE()} 함수는 컴파일러가 루프의 매 수행마다 \co{goflag} 를 실제로
+읽어오도록 합니다---그러지 않으면 컴파일러는 \co{goflag} 의 값이 영영 변하지
+않을 거라고 가정하고 동작하는 권리를 행사할 수도 있습니다.
+
+\iffalse
 Lines~12-41 define \co{reader()}, which is the reader thread.
 Line~18 atomically increments the \co{nreadersrunning} variable
 to indicate that this thread is now running, and
@@ -1443,12 +1494,30 @@ lines~19-21 wait for the test to start.
 The \co{ACCESS_ONCE()} primitive forces the compiler to fetch \co{goflag}
 on each pass through the loop---the compiler would otherwise be within its
 rights to assume that the value of \co{goflag} would never change.
+\fi
 
 \QuickQuiz{}
+	여기 저기 모든 곳에서 \co{ACCESS_ONCE()} 를 쓰는 대신에,
+	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+	의 라인~10에서 \co{goflag} 를 \co{volatile} 로 선언하는게 어때요?
+
+	\iffalse
 	Instead of using \co{ACCESS_ONCE()} everywhere, why not just
 	declare \co{goflag} as \co{volatile} on line~10 of
 	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}?
+	\fi
 \QuickQuizAnswer{
+	이 경우에는 \co{volatile} 로의 선언도 합리적인 대안입니다.
+	하지만, \co{ACCESS_ONCE()} 의 사용은 코드를 읽는 사람에게 \co{goflag}
+	가 동시적 리드와 업데이트 동작에 연관되어 있음을 분명하게 보여줍니다.
+	하지만, \co{ACCESS_ONCE()} 는 특히나 대부분의 접근이 락에 의해 보호되고
+	있지만 (따라서 변화에 종속되지 \emph{않지만}) 락 바깥에서의 접근도 약간
+	있는 경우에 유용합니다.
+	volatile 선언을 이런 경우에 사용하는 것은 코드를 읽는 사람이 락
+	바깥에서의 특수한 접근의 경우를 알아채기가 어렵게 만들고 컴파일러가 락
+	아래의 코드에 대해 좋은 코드를 만들기 어렵게 할 수 있습니다.
+
+	\iffalse
 	A \co{volatile} declaration is in fact a reasonable alternative in
 	this particular case.
 	However, use of \co{ACCESS_ONCE()} has the benefit of clearly
@@ -1462,15 +1531,38 @@ rights to assume that the value of \co{goflag} would never change.
 	for the reader to note the special accesses outside of the lock,
 	and would also make it harder for the compiler to generate good
 	code under the lock.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	\co{ACCESS_ONCE()} 는 컴파일러에만 영향을 주지, CPU 에는 영향을 안주죠.
+	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+	의 \co{goflag} 의 값의 변화가 시간 순서대로 다른 CPU 에게도 전파되게
+	하려면 메모리 배리어도 쳐야 하지 않나요?
+
+	\iffalse
 	\co{ACCESS_ONCE()} only affects the compiler, not the CPU.
 	Don't we also need memory barriers to make sure
 	that the change in \co{goflag}'s value propagates to the
 	CPU in a timely fashion in
 	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}?
+	\fi
 \QuickQuizAnswer{
+	아니오, 메모리 배리어는 여기선 필요하지도 않고 도움을 주지도 않습니다.
+	메모리 배리어들은 그저 여러 메모리 참조들 사이의 순서만을 잡아줍니다:
+	그것들은 시스템의 한 부분에서 다른 곳으로 데이터 전파를 촉진시키는 어떤
+	일도 하지 않습니다.
+	이것이 하나의 경험적 법칙을 일깨웁니다:  여러 쓰레드들 사이에 두개
+	이상의 변수를 사용해 통신하고 있지 않다면 메모리 배리어는 필요하지
+	않습니다.
+
+	하지만 \co{nreadersrunning} 의 경우는 어떨까요?
+	통신에 사용되는 두번째 변수 아닌가요?
+	맞습니다, 그리고 \co{__sync_fetch_and_add()} 아래에 해당 쓰레드가
+	시작해야 하는지 보기 전에 자신의 존재를 분명히 알리기 위해 필요한
+	메모리 배리어가 있습니다.
+
+	\iffalse
 	No, memory barriers are not needed and won't help here.
 	Memory barriers only enforce ordering among multiple
 	memory references:  They do absolutely nothing to expedite
@@ -1486,13 +1578,35 @@ rights to assume that the value of \co{goflag} would never change.
 	instructions buried in \co{__sync_fetch_and_add()},
 	which make sure that the thread proclaims its presence
 	before checking to see if it should start.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	예를 들어 \co{gcc} \co{__thread} 스토리지 클래스를 사용해 선언된
+	쓰레드별 변수에 접근할 때에도 \co{ACCESS_ONCE()} 가 필요할까요?
+
+	\iffalse
 	Would it ever be necessary to use \co{ACCESS_ONCE()} when accessing
 	a per-thread variable, for example, a variable declared using
 	the \co{gcc} \co{__thread} storage class?
+	\fi
 \QuickQuizAnswer{
+	경우에 따라 다릅니다.
+	만약 그 쓰레드별 변수가 그 쓰레드에서만 접근되었다면, 그리고 시그널
+	핸들러에서 접근되지 않았다면, 필요하지 않습니다.
+	하지만 그렇지 않다면, \co{ACCESS_ONCE()} 가 필요할 수 있습니다.
+	각 상황을 모두 Section~\ref{sec:count:Signal-Theft Limit Counter
+	Implementation} 에서 보겠습니다.
+
+	이 이야기는 어떻게 한 쓰레드가 다른 쓰레드의 \co{__thread} 변수에
+	접근할 수 있는지 질문을 가져오는데, 답은 두번째 쓰레드가 자신의
+	\co{__thread} 변수로의 포인터를 첫번째 쓰레드가 접근할 수 있는 곳에
+	저장해 둠으로써 가능하다 입니다.
+	이런 코드를 작성하는 흔한 경우 중 하나는 쓰레드당 한개씩의 원소를 갖는
+	링크드 리스트에 대해 각 쓰레드의 \co{__thread} 변수를 해당하는 원소에
+	저장하는 경우입니다.
+
+	\iffalse
 	It depends.
 	If the per-thread variable was accessed only from its thread,
 	and never from a signal handler, then no.
@@ -1507,8 +1621,20 @@ rights to assume that the value of \co{goflag} would never change.
 	One common approach is to maintain a linked list with one 
 	element per thread, and to store the address of each thread's
 	\co{__thread} variable in the corresponding element.
+	\fi
 } \QuickQuizEnd
 
+루프가 선언된 라인~22-38 은 성능 테스트를 합니다.
+라인~23-26 은 락을 얻어오고, 라인~27-29 는 정해진 시간동안 락을 쥐고 있고
+(그리고 \co{barrier()} 지시어가 컴파일러가 루프를 없애는 것을 막습니다),
+라인~30-33 에서 락을 풀어주고, 라인~34-36 에서 락을 다시 얻어오기 전에 특정
+시간동안 기다립니다.
+라인~37 은 이 락 획득 횟수를 셉니다.
+
+라인~39 에서는 해당 락 획득 횟수를 \co{readcounts[]} 배열의 해당 쓰레드의
+원소에 저장하고, 라인~40 에서는 리턴해서 쓰레드를 종료합니다.
+
+\iffalse
 The loop spanning lines~22-38 carries out the performance test.
 Lines~23-26 acquire the lock, lines~27-29 hold the lock for the specified
 duration (and the \co{barrier()} directive prevents the compiler from
@@ -1519,6 +1645,7 @@ Line~37 counts this lock acquisition.
 
 Line~39 moves the lock-acquisition count to this thread's element of the
 \co{readcounts[]} array, and line~40 returns, terminating this thread.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -1528,6 +1655,22 @@ Line~39 moves the lock-acquisition count to this thread's element of the
 \label{fig:intro:Reader-Writer Lock Scalability}
 \end{figure}
 
+Figure~\ref{fig:intro:Reader-Writer Lock Scalability} 에서는 테스트를 코어당
+2개 하드웨어 쓰레드를 지원해 소프트웨어에는 총 128개의 CPU가 존재하는 것으로
+보이는 64-코어 Power-5 시스템에서 돌린 결과입니다.
+\co{thinktime} 패러미터는 모든 테스트에서 0 이었고, \co{holdtime} 은 1000
+(그림에서는 ``1K''로 표시되었습니다) 부터 1억 (그림에선 ``100M'' 으로
+표시됩니다) 까지 값을 변화시켰습니다.
+그림으로 그려진 실제 값은 다음과 같습니다:
+\begin{equation}
+	\frac{L_N}{N L_1}
+\end{equation}
+$N$ 는 쓰레드의 갯수이고, $L_N$ 는 $N$ 쓰레드들의 락 획득 횟수, 그리고 $L_1$ 는
+단일 쓰레드의 락 획득 횟수입니다.
+이상적인 하드웨어와 소프트웨어 확장성이 주어졌다면, 이 값은 항상 1.0이 될
+것입니다.
+
+\iffalse
 Figure~\ref{fig:intro:Reader-Writer Lock Scalability}
 shows the results of running this test on a 64-core Power-5 system
 with two hardware threads per core for a total of 128 software-visible
@@ -1544,7 +1687,20 @@ $L_N$ is the number of lock acquisitions by $N$ threads, and
 $L_1$ is the number of lock acquisitions by a single thread.
 Given ideal hardware and software scalability, this value will always
 be 1.0.
+\fi
 
+그림에서 보여지듯이, 리더-라이터 락킹의 확장성은 이상적이진 않고, 특히 작은
+크기의 크리티컬 섹션에서 더 그렇습니다.
+왜 읽기 권한 락 획득이 그렇게 느린지 알아보려면, 모든 락 획득을 원하는
+쓰레드들이 \co{pthread_rwlock_t} 데이터를 수정해야 함을 상기해 보십시오.
+따라서, 모든 128개의 수행되는 쓰레드들이 리더-라이터 락으로부터 동시에 읽기
+권한 락 획득을 하려 하면, 그 쓰레드들은 \co{pathread_rwlock_t} 를 한번씩 반드시
+수정해야만 합니다.
+운좋은 쓰레드는 곧바로 그렇게 할 수 있을테지만, 가장 불행한 쓰레드는 다른
+127개의 쓰레드들이 수정을 완료할 때까지 기다려야 합니다.
+이 상황은 CPU 를 추가할수록 나빠지기만 할 겁니다.
+
+\iffalse
 As can be seen in the figure, reader-writer locking scalability is
 decidedly non-ideal, especially for smaller sizes of critical
 sections.
@@ -1557,22 +1713,57 @@ this underlying \co{pthread_rwlock_t} one at a time.
 One lucky thread might do so almost immediately, but the least-lucky
 thread must wait for all the other 127 threads to do their updates.
 This situation will only get worse as you add CPUs.
+\fi
 
 \QuickQuiz{}
+	단일 CPU 성능에 비교하는건 좀 심한 거 아닌가요?
+
+	\iffalse
 	Isn't comparing against single-CPU throughput a bit harsh?
+	\fi
 \QuickQuizAnswer{
+	전혀요.
+	사실, 이 비교는 지나치게 관대한 편입니다.
+	더 균형잡힌 비교를 위해선 락을 전혀 사용하지 않는 단일 CPU 성능과
+	비교해야 하겠죠.
+
+	\iffalse
 	Not at all.
 	In fact, this comparison was, if anything, overly lenient.
 	A more balanced comparison would be against single-CPU
 	throughput with the locking primitives commented out.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 1,000 개의 인스트럭션은 크리티컬 섹션 치고 그렇게 작은 크기는
+	아니예요. 수십 개의 인스트럭션 정도만을 가지는 훨씬 작은 크리티컬
+	섹션이 필요하면 어떻게 해야하죠?
+
+	\iffalse
 	But 1,000 instructions is not a particularly small size for
 	a critical section.
 	What do I do if I need a much smaller critical section, for
 	example, one containing only a few tens of instructions?
+	\fi
 \QuickQuizAnswer{
+	읽혀지는 데이터가 \emph{절대} 변하지 않는다면, 거기 접근하는데 어떤
+	락도 잡을 필요가 없습니다.
+	만약 데이터가 충분히 가끔만 변경된다면, 실행된 단계를 기록해두고, 모든
+	쓰레드를 종료시키고, 데이터를 변경한 후, 기록된 단계부터 쓰레드들을
+	다시 실행시키면 됩니다.
+
+	다른 방법은 쓰레드당 하나씩의 명시적 락을 두고, 자신의 락을
+	획득함으로써 커다란 리더-라이터 락의 읽기 락 획득을 하고, 모든 쓰레드의
+	락을 획득함으로써 쓰기 락 획득을 하는 것~\cite{WilsonCHsieh92a}과 같은
+	효과를 얻는 것입니다.
+	이 방법은 리더들을 위해선 상당히 잘 동작합니다만, 라이터들은 쓰레드의
+	수가 늘어날수록 큰 오버헤드를 갖게 만들 수 있습니다.
+
+	그 외의 매우 작은 크리티컬 섹션을 처리하기 위한 방법들은
+	Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 다루고 있습니다.
+
+	\iffalse
 	If the data being read \emph{never} changes, then you do not
 	need to hold any locks while accessing it.
 	If the data changes sufficiently infrequently, you might be
@@ -1589,9 +1780,19 @@ This situation will only get worse as you add CPUs.
 
 	Some other ways of handling very small critical sections are
 	described in Section~\ref{sec:defer:Read-Copy Update (RCU)}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:intro:Reader-Writer Lock Scalability} 에서 100M 에서의
+	경우 이외의 값들은 이상적인 선에서 부드럽게 멀어집니다.
+	반면, 100M 에서의 값은 64 CPU 에서 갑자기 이상적인 선으로부터
+	멀어지는군요.
+	또, 100M 값과 10M 값 사이의 거리는 10M 값과 1M 값 사이의 거리보다
+	작아요.
+	왜 100M 값은 이렇게 남들과 다른거죠?
+
+	\iffalse
 	In
 	Figure~\ref{fig:intro:Reader-Writer Lock Scalability},
 	all of the traces other than the 100M trace deviate gently
@@ -1603,7 +1804,29 @@ This situation will only get worse as you add CPUs.
 	1M trace.
 	Why does the 100M trace behave so much differently than the
 	other traces?
+	\fi
 \QuickQuizAnswer{
+	첫번째 단서는 64 CPU 는 정확히 기계의 128 CPU 의 절반이란 겁니다.
+	그 차이는 하드웨어 쓰레딩의 영향입니다.
+	이 시스템은 코어당 2개 하드웨어 쓰레드를 가지며 총 64 코어를 갖습니다.
+	64 쓰레드보다 적은 쓰레드가 돌 때 까지는 각 쓰레드가 자신의 코어를
+	하나씩 갖고 동작합니다.
+	하지만 쓰레드의 수가 64를 넘는 순간, 일부 쓰레드들은 코어를 공유해야만
+	합니다.
+	한 코어를 공유하는 쓰레드들은 일부 하드웨어 자원을 공유해야 하기
+	때문에, 한개 코어를 공유하는 두 쓰레드의 성능은 각자 코어 하나씩 가지고
+	도는 두 쓰레드의 것에 비해 낮을 수밖에 없습니다.
+	따라서 100M 경우의 성능은 리더-라이터 락에 의해 제한되는게 아니라 싱글
+	코어에서의 하드웨어 쓰레드간의 하드웨어 자원 공유에 의해 제한되는
+	것입니다.
+
+	이건 10M 경우에도 볼 수 있는데, 64 쓰레드까지 일관되게 떨어지던 성능
+	폭은 이후 급격하게 떨어져서 100M 경우와 비슷하죠.
+	64 쓰레드까지는 10M 경우도 리더-라이터 락의 확장성에 의해 성능이
+	제한되지만, 그 이후부터는 싱글 코어에서의 하드웨어 쓰레드간의 하드웨어
+	자원 공유로 인해 제한되는 것입니다.
+
+	\iffalse
 	Your first clue is that 64 CPUs is exactly half of the 128
 	CPUs on the machine.
 	The difference is an artifact of hardware threading.
@@ -1625,13 +1848,26 @@ This situation will only get worse as you add CPUs.
 	Up to 64 threads, the 10M trace is limited primarily by reader-writer
 	lock scalability, and beyond that, also by sharing of hardware
 	resources between hardware threads in a single core.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Power-5 는 나온지 몇년이 넘었고, 최신 하드웨어는 분명 더 빠를 거예요.
+	그런데 왜 리더-라이터 락의 느린 속도에 걱정해야 하죠?
+
+	\iffalse
 	Power-5 is several years old, and new hardware should
 	be faster.
 	So why should anyone worry about reader-writer locks being slow?
+	\fi
 \QuickQuizAnswer{
+	일반적으로, 최신 하드웨어에선 개선되어 있습니다.
+	하지만, 128 CPU 에서 리더-라이터 락이 이상적인 성능을 달성하기 위해선
+	100배 이상의 개선이 필요합니다.
+	게다가, CPU 의 갯수가 커질수록, 필요한 성능 향상 정도도 커집니다.
+	따라서 리더-라이터 락의 성능 문제는 당분간은 존재할 것입니다.
+
+	\iffalse
 	In general, newer hardware is improving.
 	However, it will need to improve more than two orders of magnitude
 	to permit reader-writer lock to achieve ideal performance on
@@ -1640,12 +1876,20 @@ This situation will only get worse as you add CPUs.
 	required performance improvement.
 	The performance problems of reader-writer locking are therefore
 	very likely to be with us for quite some time to come.
+	\fi
 } \QuickQuizEnd
 
+이런 한계점에도 불구하고, 리더-라이터 락킹은 많은 경우, 예를 들어 리더들이
+대기시간이 긴 파일이나 네트워크 I/O 를 하는 경우 등에 매우 유용합니다.
+다른 대안들도 있는데, 그런 것들 중 일부는 Chapter~\ref{chp:Counting} 과
+\ref{chp:Deffered Processing} 에서 다루겠습니다.
+
+\iffalse
 Despite these limitations, reader-writer locking is quite useful in many
 cases, for example when the readers must do high-latency file or network I/O.
 There are alternatives, some of which will be presented in
 Chapters~\ref{chp:Counting} and \ref{chp:Deferred Processing}.
+\fi
 
 \section{Atomic Operations}
 \label{sec:toolsoftrade:Atomic Operations}

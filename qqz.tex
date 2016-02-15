@@ -1932,10 +1932,27 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	\fi
 
 \QuickQ{}
+	여기 저기 모든 곳에서 \co{ACCESS_ONCE()} 를 쓰는 대신에,
+	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+	의 라인~10에서 \co{goflag} 를 \co{volatile} 로 선언하는게 어때요?
+
+	\iffalse
 	Instead of using \co{ACCESS_ONCE()} everywhere, why not just
 	declare \co{goflag} as \co{volatile} on line~10 of
 	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}?
+	\fi
 \QuickA{}
+	이 경우에는 \co{volatile} 로의 선언도 합리적인 대안입니다.
+	하지만, \co{ACCESS_ONCE()} 의 사용은 코드를 읽는 사람에게 \co{goflag}
+	가 동시적 리드와 업데이트 동작에 연관되어 있음을 분명하게 보여줍니다.
+	하지만, \co{ACCESS_ONCE()} 는 특히나 대부분의 접근이 락에 의해 보호되고
+	있지만 (따라서 변화에 종속되지 \emph{않지만}) 락 바깥에서의 접근도 약간
+	있는 경우에 유용합니다.
+	volatile 선언을 이런 경우에 사용하는 것은 코드를 읽는 사람이 락
+	바깥에서의 특수한 접근의 경우를 알아채기가 어렵게 만들고 컴파일러가 락
+	아래의 코드에 대해 좋은 코드를 만들기 어렵게 할 수 있습니다.
+
+	\iffalse
 	A \co{volatile} declaration is in fact a reasonable alternative in
 	this particular case.
 	However, use of \co{ACCESS_ONCE()} has the benefit of clearly
@@ -1949,14 +1966,37 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	for the reader to note the special accesses outside of the lock,
 	and would also make it harder for the compiler to generate good
 	code under the lock.
+	\fi
 
 \QuickQ{}
+	\co{ACCESS_ONCE()} 는 컴파일러에만 영향을 주지, CPU 에는 영향을 안주죠.
+	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+	의 \co{goflag} 의 값의 변화가 시간 순서대로 다른 CPU 에게도 전파되게
+	하려면 메모리 배리어도 쳐야 하지 않나요?
+
+	\iffalse
 	\co{ACCESS_ONCE()} only affects the compiler, not the CPU.
 	Don't we also need memory barriers to make sure
 	that the change in \co{goflag}'s value propagates to the
 	CPU in a timely fashion in
 	Figure~\ref{fig:toolsoftrade:Measuring Reader-Writer Lock Scalability}?
+	\fi
 \QuickA{}
+	아니오, 메모리 배리어는 여기선 필요하지도 않고 도움을 주지도 않습니다.
+	메모리 배리어들은 그저 여러 메모리 참조들 사이의 순서만을 잡아줍니다:
+	그것들은 시스템의 한 부분에서 다른 곳으로 데이터 전파를 촉진시키는 어떤
+	일도 하지 않습니다.
+	이것이 하나의 경험적 법칙을 일깨웁니다:  여러 쓰레드들 사이에 두개
+	이상의 변수를 사용해 통신하고 있지 않다면 메모리 배리어는 필요하지
+	않습니다.
+
+	하지만 \co{nreadersrunning} 의 경우는 어떨까요?
+	통신에 사용되는 두번째 변수 아닌가요?
+	맞습니다, 그리고 \co{__sync_fetch_and_add()} 아래에 해당 쓰레드가
+	시작해야 하는지 보기 전에 자신의 존재를 분명히 알리기 위해 필요한
+	메모리 배리어가 있습니다.
+
+	\iffalse
 	No, memory barriers are not needed and won't help here.
 	Memory barriers only enforce ordering among multiple
 	memory references:  They do absolutely nothing to expedite
@@ -1972,12 +2012,34 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	instructions buried in \co{__sync_fetch_and_add()},
 	which make sure that the thread proclaims its presence
 	before checking to see if it should start.
+	\fi
 
 \QuickQ{}
+	예를 들어 \co{gcc} \co{__thread} 스토리지 클래스를 사용해 선언된
+	쓰레드별 변수에 접근할 때에도 \co{ACCESS_ONCE()} 가 필요할까요?
+
+	\iffalse
 	Would it ever be necessary to use \co{ACCESS_ONCE()} when accessing
 	a per-thread variable, for example, a variable declared using
 	the \co{gcc} \co{__thread} storage class?
+	\fi
 \QuickA{}
+	경우에 따라 다릅니다.
+	만약 그 쓰레드별 변수가 그 쓰레드에서만 접근되었다면, 그리고 시그널
+	핸들러에서 접근되지 않았다면, 필요하지 않습니다.
+	하지만 그렇지 않다면, \co{ACCESS_ONCE()} 가 필요할 수 있습니다.
+	각 상황을 모두 Section~\ref{sec:count:Signal-Theft Limit Counter
+	Implementation} 에서 보겠습니다.
+
+	이 이야기는 어떻게 한 쓰레드가 다른 쓰레드의 \co{__thread} 변수에
+	접근할 수 있는지 질문을 가져오는데, 답은 두번째 쓰레드가 자신의
+	\co{__thread} 변수로의 포인터를 첫번째 쓰레드가 접근할 수 있는 곳에
+	저장해 둠으로써 가능하다 입니다.
+	이런 코드를 작성하는 흔한 경우 중 하나는 쓰레드당 한개씩의 원소를 갖는
+	링크드 리스트에 대해 각 쓰레드의 \co{__thread} 변수를 해당하는 원소에
+	저장하는 경우입니다.
+
+	\iffalse
 	It depends.
 	If the per-thread variable was accessed only from its thread,
 	and never from a signal handler, then no.
@@ -1992,21 +2054,56 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	One common approach is to maintain a linked list with one 
 	element per thread, and to store the address of each thread's
 	\co{__thread} variable in the corresponding element.
+	\fi
 
 \QuickQ{}
+	단일 CPU 성능에 비교하는건 좀 심한 거 아닌가요?
+
+	\iffalse
 	Isn't comparing against single-CPU throughput a bit harsh?
+	\fi
 \QuickA{}
+	전혀요.
+	사실, 이 비교는 지나치게 관대한 편입니다.
+	더 균형잡힌 비교를 위해선 락을 전혀 사용하지 않는 단일 CPU 성능과
+	비교해야 하겠죠.
+
+	\iffalse
 	Not at all.
 	In fact, this comparison was, if anything, overly lenient.
 	A more balanced comparison would be against single-CPU
 	throughput with the locking primitives commented out.
+	\fi
 
 \QuickQ{}
+	하지만 1,000 개의 인스트럭션은 크리티컬 섹션 치고 그렇게 작은 크기는
+	아니예요. 수십 개의 인스트럭션 정도만을 가지는 훨씬 작은 크리티컬
+	섹션이 필요하면 어떻게 해야하죠?
+
+	\iffalse
 	But 1,000 instructions is not a particularly small size for
 	a critical section.
 	What do I do if I need a much smaller critical section, for
 	example, one containing only a few tens of instructions?
+	\fi
 \QuickA{}
+	읽혀지는 데이터가 \emph{절대} 변하지 않는다면, 거기 접근하는데 어떤
+	락도 잡을 필요가 없습니다.
+	만약 데이터가 충분히 가끔만 변경된다면, 실행된 단계를 기록해두고, 모든
+	쓰레드를 종료시키고, 데이터를 변경한 후, 기록된 단계부터 쓰레드들을
+	다시 실행시키면 됩니다.
+
+	다른 방법은 쓰레드당 하나씩의 명시적 락을 두고, 자신의 락을
+	획득함으로써 커다란 리더-라이터 락의 읽기 락 획득을 하고, 모든 쓰레드의
+	락을 획득함으로써 쓰기 락 획득을 하는 것~\cite{WilsonCHsieh92a}과 같은
+	효과를 얻는 것입니다.
+	이 방법은 리더들을 위해선 상당히 잘 동작합니다만, 라이터들은 쓰레드의
+	수가 늘어날수록 큰 오버헤드를 갖게 만들 수 있습니다.
+
+	그 외의 매우 작은 크리티컬 섹션을 처리하기 위한 방법들은
+	Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 다루고 있습니다.
+
+	\iffalse
 	If the data being read \emph{never} changes, then you do not
 	need to hold any locks while accessing it.
 	If the data changes sufficiently infrequently, you might be
@@ -2023,8 +2120,18 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 
 	Some other ways of handling very small critical sections are
 	described in Section~\ref{sec:defer:Read-Copy Update (RCU)}.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:intro:Reader-Writer Lock Scalability} 에서 100M 에서의
+	경우 이외의 값들은 이상적인 선에서 부드럽게 멀어집니다.
+	반면, 100M 에서의 값은 64 CPU 에서 갑자기 이상적인 선으로부터
+	멀어지는군요.
+	또, 100M 값과 10M 값 사이의 거리는 10M 값과 1M 값 사이의 거리보다
+	작아요.
+	왜 100M 값은 이렇게 남들과 다른거죠?
+
+	\iffalse
 	In
 	Figure~\ref{fig:intro:Reader-Writer Lock Scalability},
 	all of the traces other than the 100M trace deviate gently
@@ -2036,7 +2143,29 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	1M trace.
 	Why does the 100M trace behave so much differently than the
 	other traces?
+	\fi
 \QuickA{}
+	첫번째 단서는 64 CPU 는 정확히 기계의 128 CPU 의 절반이란 겁니다.
+	그 차이는 하드웨어 쓰레딩의 영향입니다.
+	이 시스템은 코어당 2개 하드웨어 쓰레드를 가지며 총 64 코어를 갖습니다.
+	64 쓰레드보다 적은 쓰레드가 돌 때 까지는 각 쓰레드가 자신의 코어를
+	하나씩 갖고 동작합니다.
+	하지만 쓰레드의 수가 64를 넘는 순간, 일부 쓰레드들은 코어를 공유해야만
+	합니다.
+	한 코어를 공유하는 쓰레드들은 일부 하드웨어 자원을 공유해야 하기
+	때문에, 한개 코어를 공유하는 두 쓰레드의 성능은 각자 코어 하나씩 가지고
+	도는 두 쓰레드의 것에 비해 낮을 수밖에 없습니다.
+	따라서 100M 경우의 성능은 리더-라이터 락에 의해 제한되는게 아니라 싱글
+	코어에서의 하드웨어 쓰레드간의 하드웨어 자원 공유에 의해 제한되는
+	것입니다.
+
+	이건 10M 경우에도 볼 수 있는데, 64 쓰레드까지 일관되게 떨어지던 성능
+	폭은 이후 급격하게 떨어져서 100M 경우와 비슷하죠.
+	64 쓰레드까지는 10M 경우도 리더-라이터 락의 확장성에 의해 성능이
+	제한되지만, 그 이후부터는 싱글 코어에서의 하드웨어 쓰레드간의 하드웨어
+	자원 공유로 인해 제한되는 것입니다.
+
+	\iffalse
 	Your first clue is that 64 CPUs is exactly half of the 128
 	CPUs on the machine.
 	The difference is an artifact of hardware threading.
@@ -2058,12 +2187,25 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	Up to 64 threads, the 10M trace is limited primarily by reader-writer
 	lock scalability, and beyond that, also by sharing of hardware
 	resources between hardware threads in a single core.
+	\fi
 
 \QuickQ{}
+	Power-5 는 나온지 몇년이 넘었고, 최신 하드웨어는 분명 더 빠를 거예요.
+	그런데 왜 리더-라이터 락의 느린 속도에 걱정해야 하죠?
+
+	\iffalse
 	Power-5 is several years old, and new hardware should
 	be faster.
 	So why should anyone worry about reader-writer locks being slow?
+	\fi
 \QuickA{}
+	일반적으로, 최신 하드웨어에선 개선되어 있습니다.
+	하지만, 128 CPU 에서 리더-라이터 락이 이상적인 성능을 달성하기 위해선
+	100배 이상의 개선이 필요합니다.
+	게다가, CPU 의 갯수가 커질수록, 필요한 성능 향상 정도도 커집니다.
+	따라서 리더-라이터 락의 성능 문제는 당분간은 존재할 것입니다.
+
+	\iffalse
 	In general, newer hardware is improving.
 	However, it will need to improve more than two orders of magnitude
 	to permit reader-writer lock to achieve ideal performance on
@@ -2072,6 +2214,7 @@ grep $pattern1 | sed -e 's/a/b/' | sort
 	required performance improvement.
 	The performance problems of reader-writer locking are therefore
 	very likely to be with us for quite some time to come.
+	\fi
 
 \QuickQ{}
 	Is it really necessary to have both sets of primitives?
