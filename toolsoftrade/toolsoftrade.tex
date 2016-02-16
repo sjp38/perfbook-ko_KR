@@ -2273,6 +2273,23 @@ using \co{cmpxchg()}.
 \section{The Right Tool for the Job: How to Choose?}
 \label{sec:toolsoftrade:The Right Tool for the Job: How to Choose?}
 
+대략적 경험으로 얻은 교훈으로 말씀드리건대, 해야하는 일을 완수해주는 가장
+간단한 도구를 사용하세요.
+만약 가능하다면, 그냥 순차적으로 프로그램을 짜세요.
+그게 충분치 않다면, 병렬성을 성립시키기 위해 셸 스크립트를 사용하세요.
+그로 말미암은 셸 스크립트의 \co{fork()}/\co{exec()} 오버헤드(Intel Core Duo
+랩탑에서의 작은 C 프로그램의 경우 약 480 마이크로세컨드)가 지나치게 크다면, C
+언어의 \co{fork()} 와 \co{wait()} 함수를 사용해 보세요.
+이 함수들의 오버헤드(가장 작은 자식 프로세스에 약 80 마이크로세컨드)도 여전히
+너무 크다면, POSIX 쓰레딩 도구들에서 적절한 락킹과 필요하면 어토믹 오퍼레이션을
+골라서 사용해야 할겁니다.
+POSIX 쓰레딩 도구들의 오버헤드(대부분의 경우 마이크로세컨드 미만) 조차도 너무
+크다면, Chapter~\ref{chp:Deferred Processing} 에서 소개되는 도구들이 필요할 수
+있습니다.
+프로세스간 통신과 메세지 패싱은 공유 메모리 멀티 쓰레드 실행의 좋은 대안이 될
+수 있다는 점을 항상 기억하세요.
+
+\iffalse
 As a rough rule of thumb, use the simplest tool that will get the job done.
 If you can, simply program sequentially.
 If that is insufficient, try using a shell script to mediate parallelism.
@@ -2289,20 +2306,39 @@ is too great, then the primitives introduced in
 Chapter~\ref{chp:Deferred Processing} may be required.
 Always remember that inter-process communication and message-passing
 can be good alternatives to shared-memory multithreaded execution.
+\fi
 
 \QuickQuiz{}
+	셸은 기본적으로 \co{fork()} 가 아니라 \co{vfork()} 를 사용하지 않나요?
+
+	\iffalse
 	Wouldn't the shell normally use \co{vfork()} rather than
 	\co{fork()}?
+	\fi
 \QuickQuizAnswer{
+	아마 그럴겁니다만, 확인해보는건 독자의 몫입니다.
+	하지만 그렇다 해도, 전 우리가 \co{vfork()} 는 \co{fork()} 의 변종일
+	뿐이고, 따라서 \co{fork()} 를 둘 다를 이야기하는 일반적 용어로 사용해도
+	된다는데 합의했으면 합니다.
+
+	\iffalse
 	It might well do that, however, checking is left as an exercise
 	for the reader.
 	But in the meantime, I hope that we can agree that \co{vfork()}
 	is a variant of \co{fork()}, so that we can use \co{fork()}
 	as a generic term covering both.
+	\fi
 } \QuickQuizEnd
 
+물론, 실제 오버헤드는 당신의 하드웨어에 따라 달라질 수 있을 것입니다만,
+그보다는 당신이 해당 도구들을 어떻게 사용하느냐가 훨씬 더 영향을 끼칠 겁니다.
+따라서, 뒤의 챕터들에서 이야기하겠지만 개별 도구를 고르는 것 만큼이나 올바른
+설계를 하는 것이 중요합니다.
+
+\iffalse
 Of course, the actual overheads will depend not only on your hardware,
 but most critically on the manner in which you use the primitives.
 Therefore, it is necessary to make the right design choices as well as
 the correct choice of individual primitives,
 as is discussed at length in subsequent chapters.
+\fi
