@@ -2200,6 +2200,16 @@ but may be implemented straightforwardly as follows:
 \label{tab:advsync:Mapping from POSIX to Linux-Kernel Primitives}
 \end{table*}
 
+안타깝게도, 쓰레딩 오퍼레이션들, 락킹 도구들, 그리고 어토믹 오퍼레이션들은 많은
+표준 위원회가 그들을 다루기 전에도 매우 많이 사용되었습니다.
+그 결과, 이 오퍼레이션들이 지원되는 방법에는 상당히 많은 다양성이 존재합니다.
+역사적 이유로든 특정 환경에서 더 나은 성능을 얻기 위해서든, 어셈블리 언어로
+구현된 오퍼레이션들도 여전히 많습니다.
+예를 들어, gcc \co{__sync_} 류 함수들은 메모리 순서 의미를 제공해서 많은
+개발자들이 메모리 순서 의미가 요구되지 않는 상황을 위한 각자의 구현을 만들도록
+이끕니다.
+
+\iffalse
 Unfortunately, threading operations, locking primitives, and atomic
 operations were in reasonably wide use long before the various standards
 committees got around to them.
@@ -2212,7 +2222,20 @@ For example, the gcc \co{__sync_} family of primitives all
 provide memory-ordering semantics, motivating many developers to
 create their own implementations for situations where the memory
 ordering semantics are not required.
+\fi
 
+그래서,
+Table~\ref{tab:advsync:Mapping from POSIX to Linux-Kernel Primitives} on
+page~\pageref{tab:advsync:Mapping from POSIX to Linux-Kernel Primitives}
+는 대략적인 POSIX 와 gcc 도구들, 그리고 리눅스 커널 사이의 대응표를
+보여줍니다.
+완벽한 대체물을 항상 찾긴 불가능한데, 예를 들어 리눅스 커널은 다양한 락킹
+도구를 갖는 반면, gcc 는 리눅스 커널에서는 곧바로 사용할수는 없는 여러 어토믹
+오퍼레이션들을 제공합니다.
+물론, 사용자 레벨 코드는 리눅스 커널의 다양한 락킹 도구들이 필요하진 않으며,
+gcc 의 어토믹 오퍼레이션도 \co{cmpxchg()} 를 사용해 흉내내어질 수 있습니다.
+
+\iffalse
 Therefore,
 Table~\ref{tab:advsync:Mapping from POSIX to Linux-Kernel Primitives} on
 page~\pageref{tab:advsync:Mapping from POSIX to Linux-Kernel Primitives}
@@ -2225,15 +2248,26 @@ Of course, on the one hand, user-level code does not need the Linux
 kernel's wide array of locking primitives, while on the other hand,
 gcc's atomic operations can be emulated reasonably straightforwardly
 using \co{cmpxchg()}.
+\fi
 
 \QuickQuiz{}
+	리눅스 커널의 \co{fork()} 와 \co{wait()} 대체물은 어디갔죠?
+
+	\iffalse
 	What happened to the Linux-kernel equivalents to \co{fork()}
 	and \co{wait()}?
+	\fi
 \QuickQuizAnswer{
+	그런건 없습니다.
+	리눅스 커널 내에서 실행되는 모든 태스크들은 메모리를 공유합니다. 당신이
+	거대한 메모리 매핑을 손으로 일일히 할 생각이 아니라면 말이죠.
+
+	\iffalse
 	They don't really exist.
 	All tasks executing within the Linux kernel share memory,
 	at least unless you want to do a huge amount of memory-mapping
 	work by hand.
+	\fi
 } \QuickQuizEnd
 
 \section{The Right Tool for the Job: How to Choose?}
