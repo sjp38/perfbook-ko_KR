@@ -2324,17 +2324,39 @@ ret = ~ret & tmp;
 
 \QuickQAC{chp:Counting}{Counting}
 \QuickQ{}
+	대체 왜 효과적이고 확장성 있는 카운팅이 어려운가요?
+	무엇보다, 컴퓨터들은 카운팅, 더하기, 빼기, 그 외에도 여러가지를 위한
+	전용 하드웨어도 가지고 있는데, 그걸 못하나요???
+
+	\iffalse
 	Why on earth should efficient and scalable counting be hard?
 	After all, computers have special hardware for the sole purpose
 	of doing counting,
 	addition, subtraction, and lots more besides, don't they???
+	\fi
 \QuickA{}
+	공유된 카운터에 대한 어토믹 오퍼레이션과 같은 기본적인 카운팅
+	알고리즘들은 Section~\ref{sec:count:Why Isn't Concurrent Counting
+	Trivial?} 에서 이야기하듯 느리고 확장성이 나쁘거나 정확도가 떨어지기
+	때문입니다.
+
+	\iffalse
 	Because the straightforward counting algorithms, for example,
 	atomic operations on a shared counter, either are slow and scale
 	badly, or are inaccurate, as will be seen in
 	Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?}.
+	\fi
 
 \QuickQ{}
+	{ \bfseries 네트워크 패킷 카운팅 문제. }
+	당신이 송수신된 네트워크 패킷의 갯수 (또는 전체 용량) 에 대한 통계를
+	구해야 한다고 생각해 봅시다.
+	패킷들은 시스템의 어떤 CPU 를 통해서든 송신 / 수신될 수 있을 겁니다.
+	나아가서 이 커다란 기계가 초당 백만개의 패킷을 다룰 수 있고, 그 갯수를
+	매 5초마다 읽어내야 하는 시스템 모니터링 패키지가 있다고 가정해 봅시다.
+	당신이라면 이 통계 카운터를 어떻게 구현하시겠어요?
+
+	\iffalse
 	{ \bfseries Network-packet counting problem. }
 	Suppose that you need to collect statistics on the number
 	of networking packets (or total number of bytes) transmitted
@@ -2346,7 +2368,21 @@ ret = ~ret & tmp;
 	is a systems-monitoring package that reads out the count
 	every five seconds.
 	How would you implement this statistical counter?
+	\fi
 \QuickA{}
+	힌트: 카운터의 업데이트는 엄청 빨라야 합니다만, 카운터는 500만번의
+	업데이트마다 한번만 일어나기 때문에, 카운터를 읽어내는 행동은 꽤 느려도
+	될 겁니다.
+	또한, 일반적으로 읽어지는 값은 완전히 정교하진 않아도
+	될겁니다---무엇보다, 카운터는 1밀리세컨드당 1000번 업데이트되기 때문에,
+	우린 ``진짜 값''에서 수천정도는 오차값을 가질 수밖에 없을 겁니다.
+	``진짜 값'' 이란게 이 문맥에서 뭘 의미하던지요.
+	하지만, 읽혀지는 값은 어느정도는 절대적인 오차를 유지해야 할겁니다.
+	예를 들어, 카운트가 수백만 정도일 때 1\% 오차는 문제없지만, 조단위가
+	된다면 문제가 있겠죠.
+	Section~\ref{sec:count:Statistical Counters} 를 참고하세요.
+
+	\iffalse
 	Hint: The act of updating the counter must be blazingly
 	fast, but because the counter is read out only about once
 	in five million updates, the act of reading out the counter can be
@@ -2362,8 +2398,16 @@ ret = ~ret & tmp;
 	is on the order of a million or so, but might be absolutely
 	unacceptable once the count reaches a trillion.
 	See Section~\ref{sec:count:Statistical Counters}.
+	\fi
 
 \QuickQ{}
+	{ \bfseries 대략적 구조체 할당 한계 문제. }
+	할당된 구조체의 갯수가 어떤 한계(한 10,000 정도)를 넘어가면 추가 할당을
+	막기 위해 할당된 구조체의 갯수를 유지해야 한다고 생각해 봅시다.
+	또, 이 구조체들은 할당되고 나서 곧바로 해제되고, 한계치를 넘기는 일은
+	매우 드물고, ``대략적인'' 한계치 설정이 가능하다고 생각해 봅시다.
+
+	\iffalse
 	{ \bfseries Approximate structure-allocation limit problem. }
 	Suppose that you need to maintain a count of the number of
 	structures allocated in order to fail any allocations
@@ -2372,7 +2416,14 @@ ret = ~ret & tmp;
 	Suppose further that these structures are short-lived,
 	that the limit is rarely exceeded, and that a ``sloppy''
 	approximate limit is acceptable.
+	\fi
 \QuickA{}
+	힌트: 카운터의 업데이트 동작은 여기서도 매우 빨라야 합니다만, 카운터는
+	카운터가 증가될 때마다 읽혀야 합니다.
+	하지만, 읽혀지는 값은 그 값이 한계치 아래인지 위인지를 대략적으로는
+	구분해 내야 한다는 점을 \emph{제외하고는} 정교하지 않아도 됩니다.
+
+	\iffalse
 	Hint: The act of updating the counter must again be blazingly
 	fast, but the counter is read out each time that the
 	counter is increased.
@@ -2381,8 +2432,19 @@ ret = ~ret & tmp;
 	between values below the limit and values greater than or
 	equal to the limit.
 	See Section~\ref{sec:count:Approximate Limit Counters}.
+	\fi
 
 \QuickQ{}
+	{ \bfseries 정교한 구조체 할당 한계 문제. }
+	할당된 구조체의 갯수가 어떤 정확한 한계(여기서도, 한 10,000 정도)를
+	넘어가면 추가 할당을 막기 위해 할당된 구조체의 갯수를 유지해야 한다고
+	생각해 봅시다.
+	이 구조체들은 할당되고 얼마 안되 해제되고, 그 한계는 드물게 초과되며,
+	거의 항상 최소 한개의 구조체는 사용중이 됩니다. 또한 예를 들어, 하나의
+	구조체도 사용되지 않고 있다면 해제 할 수 있는 어떤 메모리를 위해
+	카운터가 0이 되는 시점을 정확히 알 필요가 있습니다.
+	\iffalse
+
 	{ \bfseries Exact structure-allocation limit problem. }
 	Suppose that you need to maintain a count of the number of
 	structures allocated in order to fail any allocations
@@ -2395,7 +2457,15 @@ ret = ~ret & tmp;
 	zero, for example, in order to free up some memory
 	that is not required unless there is at least one structure
 	in use.
+	\fi
 \QuickA{}
+	힌트: 카운터의 업데이트 동작은 역시 엄청 빨라야 합니다만, 카운터의 값이
+	증가될 때마다 그 값 역시 읽혀야 합니다.
+	하지만, 그 값은 한계치 경계를 넘어서는지와 0인지를 분명하게 체크해야
+	한다는 점을 \emph{제외하고는} 정교할 필요가 없습니다.
+	Section~\ref{sec:count:Exact Limit counters} 를 참고하세요.
+	\iffalse
+
 	Hint: The act of updating the counter must once again be blazingly
 	fast, but the counter is read out each time that the
 	counter is increased.
@@ -2405,8 +2475,18 @@ ret = ~ret & tmp;
 	and values that either are less than or equal to zero or
 	are greater than or equal to the limit on the other hand.
 	See Section~\ref{sec:count:Exact Limit Counters}.
+	\fi
 
 \QuickQ{}
+	{ \bfseries 제거될 수 있는 I/O 디바이스 접속 카운트 문제. }
+	매우 빈번하게 사용되는 제거 가능한 대용량 디바이스에 대해 사용자에게
+	해당 디바이스를 제거해도 안전한지 알려주기 위해 그 참조 횟수를 관리해야
+	한다고 가정해 봅시다.
+	이 디바이스는 사용자가 디바이스를 제거하고 싶을 때 그 의사를 알려주며,
+	시스템은 사용자에게 언제 디바이스를 제거해도 안전한지 알려주는 일반적
+	디바이스 제거 절차를 따릅니다.
+	\iffalse
+
 	{ \bfseries Removable I/O device access-count problem. }
 	Suppose that you need to maintain a reference count on a
 	heavily used removable mass-storage device, so that you
@@ -2414,7 +2494,24 @@ ret = ~ret & tmp;
 	This device follows the usual removal procedure where
 	the user indicates a desire to remove the device, and
 	the system tells the user when it is safe to do so.
+	\fi
 \QuickA{}
+	힌트: 여기서도 카운터의 업데이트 동작은 I/O 오퍼레이션이 느려지지 않게
+	매우 빠르고 확장성 있어야 합니다. 하지만 카운터는 사용자가 디바이스를
+	제거하고자 할 때에만 읽혀지기 때문에, 카운터의 읽기 동작은 매우 느려도
+	됩니다.
+	또한, 사용자가 디바이스를 제거하고자 하는 의사를 밝히지 않았다면 그
+	카운터는 읽혀질 필요가 아예 없습니다.
+	또한, 그 값은 디바이스가 제거를 위한 절차 중일 때로 한정해서 0인지 0이
+	아닌지만 분명히 구분할 수 있어야 한다는 점을 \emph{제외하고는} 정교할
+	필요가 없습니다.
+	하지만, 한번 0이라는 값을 읽었다면, 차후에 다른 쓰레드가 제거중인 해당
+	디바이스에 접근을 하거나 하는 일을 막기 위해 해당 값을 0으로 유지해야
+	합니다.
+	Section~\ref{sec:count:Applying Specialized Parallel Counters} 를
+	참고하세요.
+	\iffalse
+
 	Hint: Yet again, the act of updating the counter must be blazingly
 	fast and scalable in order to avoid slowing down I/O operations,
 	but because the counter is read out only when the
@@ -2432,6 +2529,7 @@ ret = ~ret & tmp;
 	to prevent subsequent threads from gaining access to the
 	device being removed.
 	See Section~\ref{sec:count:Applying Specialized Parallel Counters}.
+	\fi
 
 \QuickQ{}
 	But doesn't the \co{++} operator produce an x86 add-to-memory
