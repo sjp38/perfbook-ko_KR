@@ -314,6 +314,17 @@ are more appropriate for advanced students.
 \label{fig:count:Just Count!}
 \end{figure}
 
+일단 간단한, 예를 들어,
+Figure~\ref{fig:count:Just Count!} (\url{count_nonatomic.c})
+에 나온 것과 같이 직관적인 케이스부터 보도록 하죠.
+여기서, 우리는 라인~1 에 카운터를 두고, 라인~5 에서 그 값을 증가시키며, 라인~10
+에서 그 값을 읽어옵니다.
+이보다 간단할 수는 없겠죠?
+
+이 방법은 당신이 대부분의 경우 읽기만을 하고 값의 증가는 아주 가끔만 한다면
+매우 빠르다는 장점을 가지고, 또한 작은 시스템에서도 훌륭한 성능을 보일 겁니다.
+\iffalse
+
 Let's start with something simple, for example, the straightforward
 use of arithmetic shown in
 Figure~\ref{fig:count:Just Count!} (\url{count_nonatomic.c}).
@@ -324,6 +335,14 @@ What could be simpler?
 This approach has the additional advantage of being blazingly fast if
 you are doing lots of reading and almost no incrementing, and on small
 systems, the performance is excellent.
+\fi
+
+다만 여기에는 한가지 문제가 있습니다: 이 방법은 카운트를 놓칠 수 있습니다.
+제 듀얼 코어 랩탑에서 짧은 시간동안 \co{inc_count()} 를 100,014,000 번 수행했을
+때, 카운터의 마지막 값은 52,909,118 이었습니다.
+컴퓨팅에서는 대략적인 값도 충분한 경우도 있지만 그렇다 해도 50\% 이상의
+정밀도는 항상 필요합니다.
+\iffalse
 
 There is just one large fly in the ointment: this approach can lose
 counts.
@@ -332,26 +351,56 @@ On my dual-core laptop, a short run invoked \co{inc_count()}
 52,909,118.
 Although approximate values do have their place in computing,
 accuracies far greater than 50\% are almost always necessary.
+\fi
 
 \QuickQuiz{}
+	하지만 \co{++} 연산자는 x86 의 add-to-memory 명령어를 만들지 않나요?
+	그리고 CPU 캐시는 그걸 어토믹하게 수행하지 않나요?
+	\iffalse
+
 	But doesn't the \co{++} operator produce an x86 add-to-memory
 	instruction?
 	And won't the CPU cache cause this to be atomic?
+	\fi
 \QuickQuizAnswer{
+	\co{++} 연산자는 어토믹할 수\emph{도 있지만}, 그래야만 한다는 규칙은
+	없습니다.
+	그리고 실제로, \co{gcc} 는 값을 레지스터에 읽어오고, 레지스터의 값을
+	증가시킨 후, 메모리에 그 값을 저장하는, 어토믹하지 않은 방법을 종종
+	택합니다.
+	\iffalse
+
 	Although the \co{++} operator \emph{could} be atomic, there
 	is no requirement that it be so.
 	And indeed, \co{gcc} often
 	chooses to load the value to a register, increment
 	the register, then store the value to memory, which is
 	decidedly non-atomic.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	실패 횟수의 8-figure 정확도는 당신이 진짜로 이 테스트를 한 것을
+	보여주는군요.
+	왜 이런 사소한 프로그램을, 특히나 버그가 이렇게 쉽게 직관적으로
+	보이는데도 굳이 테스트 해야 하나요?
+	\iffalse
+
 	The 8-figure accuracy on the number of failures indicates
 	that you really did test this.
 	Why would it be necessary to test such a trivial program,
 	especially when the bug is easily seen by inspection?
+	\fi
 \QuickQuizAnswer{
+	사소한 병렬 프로그램이 아주 조금만 존재하지는 않고, 순차적 프로그램에도
+	마찬가지라고 저는 생각합니다.
+
+	프로그램이 얼마나 작거나 간단한지와는 상관 없이, 테스트 해보지
+	않았다면, 그건 동작하지 않는 것입니다.
+	그리고 설령 테스트 해봤다 해도, 머피의 법칙에 의하면 여전히 숨어있는
+	버그가 몇개는 있을 수 있을 수 있습니다.
+	\iffalse
+
 	Not only are there very few
 	trivial parallel programs, and most days I am
 	not so sure that there are many trivial sequential programs, either.
@@ -360,6 +409,14 @@ accuracies far greater than 50\% are almost always necessary.
 	it, it does not work.
 	And even if you have tested it, Murphy's Law says that there will
 	be at least a few bugs still lurking.
+	\fi
+
+	또한, 정확성의 증명은 분명 그 의미를 갖지만, 여기 사용된
+	\url{counttorture.h} 테스트를 포홤해 테스트를 대체하는 일은 결코 없을
+	겁니다.
+	무엇보다, 증명은 그것이 바닥에 깔고 있는 가정에 국한됩니다.
+	게다가, 증명은 프로그램이 그렇듯 버그를 가지고 있기 쉽습니다!
+	\iffalse
 
 	Furthermore, while proofs of correctness certainly do have their
 	place, they never will replace testing, including the
@@ -367,6 +424,7 @@ accuracies far greater than 50\% are almost always necessary.
 	After all, proofs are only as good as the assumptions that they
 	are based on.
 	Furthermore, proofs can have bugs just as easily as programs can!
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -397,6 +455,25 @@ accuracies far greater than 50\% are almost always necessary.
 \label{fig:count:Atomic Increment Scalability on Nehalem}
 \end{figure}
 
+정확하게 카운트를 하는 직관적 방법은
+Figure~\ref{fig:count:Just Count Atomically!} (\url{count_atomic.c})
+에 나온 것처럼 어토믹 오퍼레이션을 사용하는 것입니다.
+라인~1 은 어토믹 변수를 정의하고, 라인~5 에서 어토믹하게 값을 증가시키고,
+라인~10 에서 읽어냅니다.
+이건 어토믹하기 때문에, 완벽한 카운트를 유지합니다.
+하지만, 느립니다: 인텔 Core Duo 랩탑에서 이것은 어토믹하지 않은 방법에 비해
+싱글쓰레드에서 여섯배, 그리고 두 쓰레드를 사용했을 때엔 \emph{열 배}
+느립니다.\footnote{
+	흥미롭게도, 어토믹하지 않게 카운터를 증가시키는 두개의 쓰레드는
+	어토믹하게 카운터를 증가시키는 두개의 쓰레드보다 더 빨리 그 값을
+	증가시킵니다.
+	물론, 당신의 목표가 단순히 카운터를 더 빨리 증가시키는 거라면, 그냥
+	카운터에 큰 값을 넣으면 되겠습니다.
+	분명한건, 거대한 성능과 확장성을 위해선 정확성을 주의깊게 완화한
+	알고리즘의 역할도 있을 수 있다는
+	것입니다~\cite{Andrews91textbook,Arcangeli03,DavidUngar2011unsync}.}
+\iffalse
+
 The straightforward way to count accurately is to use atomic operations,
 as shown in
 Figure~\ref{fig:count:Just Count Atomically!} (\url{count_atomic.c}).
@@ -417,6 +494,19 @@ slower if two threads are incrementing.\footnote{
 	use carefully relaxed notions of correctness in order to gain
 	greater performance and
 	scalability~\cite{Andrews91textbook,Arcangeli03,DavidUngar2011unsync}.}
+\fi
+
+Chapter~\ref{chp:Hardware and its HAbits} 에서 이야기했던 걸 떠올려 보면
+성능이 느린 것도,
+Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem} 에서 보여지듯
+어토믹 증가 연산의 성능이 CPU 와 쓰레드의 숫자가 증가할수록 느려지는 것도
+그다지 놀라운 일은 아닙니다.
+이 그림에서, x~축에 붙어있는 수평의 점선은 완벽하게 확장하는 알고리즘에
+의해서만 얻어질 수 있는 이상적인 성능입니다: 그런 알고리즘이라면, 카운트 증가는
+싱글쓰레드에서와 동일한 오버헤드만을 일으킬 것입니다.
+하나의 전역 변수에 대한 어토믹 증가 연산은 분명하게 비이상적이며, CPU 를
+추가할수록 성능이 나빠집니다.
+\iffalse
 
 This poor performance should not be a surprise, given the discussion in
 Chapter~\ref{chp:Hardware and its Habits},
@@ -430,11 +520,26 @@ increment would incur the same overhead that it would in a single-threaded
 program.
 Atomic increment of a single global variable is clearly
 decidedly non-ideal, and gets worse as you add CPUs.
+\fi
 
 \QuickQuiz{}
+	왜 x~축의 점선은 $x=1$ 에서 대각선의 선과 만나지 않죠?
+	\iffalse
+
 	Why doesn't the dashed line on the x~axis meet the 
 	diagonal line at $x=1$?
+	\fi
 \QuickQuizAnswer{
+	어토믹 오퍼레이션의 오버헤드 때문입니다.
+	x~축의 점선은 싱글 \emph{어토믹하지 않은} 증가 연산의 오버헤드를
+	나타냅니다.
+	\emph{이상적인} 알고리즘은 선형적으로 확장될 뿐만 아니라,
+	싱글 쓰레드 코드에 비해서도 성능 하락이 없어야 할 것입니다.
+
+	이런 수준의 이상론은 좀 지나쳐 보일 수 있습니다, 다만 리누스 토발즈에게
+	충분하다면, 당신에게도 충분할 겁니다.
+	\iffalse
+
 	Because of the overhead of the atomic operation.
 	The dashed line on the x~axis represents the overhead of
 	a single \emph{non-atomic} increment.
@@ -444,16 +549,37 @@ decidedly non-ideal, and gets worse as you add CPUs.
 
 	This level of idealism may seem severe, but if it is good
 	enough for Linus Torvalds, it is good enough for you.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 어토믹 증가 연산은 여전히 꽤 빠릅니다.
+	그리고 빡빡한 루프에서 하나의 변수를 증가시키는 건 제겐 꽤 비현실적인
+	것 같아 보이구요, 무엇보다, 프로그램의 실행은 실제로 일을 하는데
+	쓰여야지, 자기가 한 일을 세는데 쓰여야 하는게 아니라구요!
+	왜 제가 이걸 빠르게 하는걸 고민해야 하나요?
+	\iffalse
+
 	But atomic increment is still pretty fast.
 	And incrementing a single variable in a tight loop sounds
 	pretty unrealistic to me, after all, most of the program's
 	execution should be devoted to actually doing work, not accounting
 	for the work it has done!
 	Why should I care about making this go faster?
+	\fi
 \QuickQuizAnswer{
+	많은 경우에 어토믹 증가 연산은 분명히 당신에겐 충분히 빠를 겁니다.
+	그런 경우에 당신은 당연히 어토믹 증가 연산을 사용해야죠.
+	그렇지만, 더 나은 카운팅 알고리즘이 필요한 실제 상황도 상당히 많이
+	존재합니다.
+	그런 상황의 예는 고도로 최적화된 네트워킹 스택에서의 패킷과 용량
+	카운팅으로, 이런 예에서는, 특히나 커다란 멀티프로세서에서는 대부분의
+	실행시간을 이런류의 카운팅 작업에 보내게 됩니다.
+
+	게다가, 이 챕터의 시작에서 이야기했듯, 카운팅은 공유 메모리 병렬
+	프로그램에서 마주칠 수 있는 문제들을 보여줍니다.
+	\iffalse
+
 	In many cases, atomic increment will in fact be fast enough
 	for you.
 	In those cases, you should by all means use atomic increment.
@@ -468,6 +594,7 @@ decidedly non-ideal, and gets worse as you add CPUs.
 	In addition, as noted at the beginning of this chapter,
 	counting provides an excellent view of the
 	issues encountered in shared-memory parallel programs.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tb]
@@ -486,6 +613,19 @@ decidedly non-ideal, and gets worse as you add CPUs.
 \ContributedBy{Figure}{fig:count:Waiting to Count}{Melissa Broussard}
 \end{figure}
 
+전역 어토믹 증가에 대한 다른 관점을 위해,
+Figure~\ref{fig:count:Data Flow For Global Atomic Increment} 를 보세요.
+각 CPU 가 주어진 전역 변수를 증가시킬 기회를 얻기 위해서, 해당 변수를 가지고
+있는 캐시 라인은 빨간 화살표로 표시된 것처럼 모든 CPU 사이를 순환해야 합니다.
+이런 순환은 상당한 시간을 요할 것이고, 이는
+Figure~\ref{fig:count:Waiting to Count} 와 같은 상황을 초래해서
+Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem} 에서 보여진 낮은
+성능을 야기할 것입니다.
+
+다음 섹션들에서는 이런 순환에서 발생하는 지연들을 없앤 고성능 카운팅에 대해
+알아봅니다.
+\iffalse
+
 For another perspective on global atomic increment, consider
 Figure~\ref{fig:count:Data Flow For Global Atomic Increment}.
 In order for each CPU to get a chance to increment a given
@@ -499,15 +639,36 @@ Figure~\ref{fig:count:Waiting to Count}.
 
 The following sections discuss high-performance counting, which
 avoids the delays inherent in such circulation.
+\fi
 
 \QuickQuiz{}
+	그런데 왜 CPU 설계자들은 단순히 데이터에의 증가 연산을 추가해서
+	담고 있는 캐시 라인의 순회가 증가하는걸 막지 않는거죠?
+	\iffalse
+
 	But why can't CPU designers simply ship the addition operation to the
 	data, avoiding the need to circulate the cache line containing
 	the global variable being incremented?
+	\fi
 \QuickQuizAnswer{
+	어떤 경우에는 그런 방법도 가능하겠죠.
+	하지만, 그러려면 좀 복잡합니다:
+	\iffalse
+
 	It might well be possible to do this in some cases.
 	However, there are a few complications:
+	\fi
 	\begin{enumerate}
+	\item	만약 그 변수의 값이 필요하다면, 그 쓰레드는 해당 오퍼레이션이
+		그 데이터로 향할 때까지 기다리고, 그러고나선 돌아오기까지
+		기다려야 합니다.
+	\item	그 어토믹 증가 오퍼레이션이 이전의, 그리고 이후의
+		오퍼레이션들과 순서를 맞춰야 한다면, 해당 쓰레드는 오퍼레이션이
+		데이터까지 가고, 돌아올 준비가 완료될 때까지 기다려야 합니다.
+	\item	오퍼레이션들을 CPU들 사이에서 보내게 되면 시스템 접속부를
+		지나야 하고, 이는 더 많은 다이 공간과 전력을 소모하게 될겁니다.
+	\iffalse
+
 	\item	If the value of the variable is required, then the
 		thread will be forced to wait for the operation
 		to be shipped to the data, and then for the result
@@ -520,11 +681,19 @@ avoids the delays inherent in such circulation.
 	\item	Shipping operations among CPUs will likely require
 		more lines in the system interconnect, which will consume
 		more die area and more electrical power.
+	\fi
 	\end{enumerate}
+	하지만 앞의 두가지 조건이 없다면?
+	그럼 당신은 Section~\ref{sec:count:Statistical Counters} 에서 논의되는,
+	실제 상품화된 하드웨어에서 이상적 상황에 근접하는 성능을 보이는
+	알고리즘을 잘 고려해 봐야 할 겁니다.
+	\iffalse
+
 	But what if neither of the first two conditions holds?
 	Then you should think carefully about the algorithms discussed
 	in Section~\ref{sec:count:Statistical Counters}, which achieve
 	near-ideal performance on commodity hardware.
+	\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -533,6 +702,26 @@ avoids the delays inherent in such circulation.
 \caption{Data Flow For Global Combining-Tree Atomic Increment}
 \label{fig:count:Data Flow For Global Combining-Tree Atomic Increment}
 \end{figure}
+
+	앞의 두개 조건이 하나라도 걸려 있다면, 개선된 하드웨어에 \emph{약간}의
+	희망이 있습니다.
+	컴바이닝 트리(combining tree) 를 하드웨어에서 구현해서, 여러 CPU 에서의
+	증가 요청이 하드웨어에 의해 결합되어 하나의 더하기 연산으로 변환되는
+	방법을 생각해 볼 수 있을 것입니다.
+	해당 하드웨어는 또한 요청들에 순서를 잡아줄 수도 있으므로, 각 CPU 에게
+	각자의 어토믹 증가에 의한 값의 반환도 가능할 겁니다.
+	Figure~\ref{fig:count:Data Flow For Global Combining-Tree Atomic Increment}
+	에서 보여지듯, 이는 인스트럭션의 대기시간을 $O(log N)$ 로 만들어
+	줍니다. 여기서 $N$ 은 CPU 의 갯수입니다.
+	그리고 이런 하드웨어 최적화를 포함하는 CPU 는 2011년부터 나오기
+	시작했습니다.
+
+	Figure~\ref{fig:count:Data Flow For Global Atomic Increment} 에 보여진
+	현재 하드웨어의  $O(N)$ 성능에 비하면 엄청난 향상이고, 하드웨어
+	대기시간은 3차원 제조 공정이 현실화되면 더욱 낮아질 수 있을 것입니다.
+	물론, 일부 중요한 특수 케이스에서는 소프트웨어가 \emph{훨씬} 나은 일을
+	할 수 있을 것입니다.
+	\iffalse
 
 	If either or both of the first two conditions hold, there is
 	\emph{some} hope for improved hardware.
@@ -557,6 +746,7 @@ avoids the delays inherent in such circulation.
 	practical.
 	Nevertheless, we will see that in some important special cases,
 	software can do \emph{much} better.
+	\fi
 } \QuickQuizEnd
 
 \section{Statistical Counters}
