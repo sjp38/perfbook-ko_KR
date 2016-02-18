@@ -759,6 +759,14 @@ avoids the delays inherent in such circulation.
 
 \subsection{Design}
 
+통계적 카운팅은 보통 쓰레드별로 (또는, 커널에서라면 CPU별로) 카운터를 제공해서
+각 쓰레드가 자신의 카운터를 업데이트 하도록 합니다.
+이 카운터들의 전체 통합 값은 더하기의 상호성과 결합성에 기반해, 단순히 모든
+쓰레드의 카운터의 값을 더하는 것으로 구해질 수 있습니다.
+이건 Section~\ref{sec:SMPdesign:Data Ownership} 에서 소개되는 데이터 소유권
+패턴의 한 예입니다.
+\iffalse
+
 Statistical counting is typically handled by providing a counter per
 thread (or CPU, when running in the kernel), so that each thread
 updates its own counter.
@@ -767,11 +775,33 @@ all of the threads' counters,
 relying on the commutative and associative properties of addition.
 This is an example of the Data Ownership pattern that will be introduced in
 Section~\ref{sec:SMPdesign:Data Ownership}.
+\fi
 
 \QuickQuiz{}
+	하지만 C 의 ``정수들'' 은 크기와 관련한 복잡한 문제들이 있지 않나요?
+	\iffalse
+
 	But doesn't the fact that C's ``integers'' are limited in size
 	complicate things?
+	\fi
 \QuickQuizAnswer{
+	아닙니다, 모듈로 더하기도 역시 상호성과 결합성을 가지니까요.
+	적어도 부호 없는 정수형을 사용한다면 말입니다.
+	오버플로우가 났을 때 넘쳐난 값을 감추는 것 외에 별다른 일을 하는
+	기계들은 요즘 거의 없지만, C 표준에 의하면 부호를 갖는 정수형의
+	오버플로우는 예상외 동작을 유발할 수 있으므로, 요즘 기계들은 대부분
+	안전하다는 사실은 신경쓰지 마십시오.
+	불행히도, 컴파일러들은 종종 부호 있는 정수형들은 오버플로우 나지 않을
+	것이라는 가정 하에 최적화를 하기 때문에, 당신의 코드가 부호 있는
+	정수형을 오버플로우 나게 한다면, 2의 보수를 사용하는 하드웨어를
+	사용하고 있다 해도 문제에 직면할 수 있습니다.
+
+	그렇다곤 해도, 32-비트 쓰레드별 카운터에서 (대략) 64-비트 합을
+	모으는데에도 추가적인 복잡한 일이 숨어있습니다.
+	이걸 처리하는 것은 독자 여러분들에게 연습문제로 남겨두겠습니다만, 이
+	챕터의 뒤에 소개될 기법들이 큰 도움이 될 수도 있습니다.
+	\iffalse
+
 	No, because modulo addition is still commutative and associative.
 	At least as long as you use unsigned integers.
 	Recall that in the C standard, overflow of signed integers results
@@ -788,6 +818,7 @@ Section~\ref{sec:SMPdesign:Data Ownership}.
 	Dealing with this added complexity is left as
 	an exercise for the reader, for whom some of the techniques
 	introduced later in this chapter could be quite helpful.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Array-Based Implementation}
