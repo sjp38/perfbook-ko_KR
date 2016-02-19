@@ -2784,9 +2784,30 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	하지만 C 의 ``정수들'' 은 크기와 관련한 복잡한 문제들이 있지 않나요?
+	\iffalse
+
 	But doesn't the fact that C's ``integers'' are limited in size
 	complicate things?
+	\fi
 \QuickA{}
+	아닙니다, 모듈로 더하기도 역시 상호성과 결합성을 가지니까요.
+	적어도 부호 없는 정수형을 사용한다면 말입니다.
+	오버플로우가 났을 때 넘쳐난 값을 감추는 것 외에 별다른 일을 하는
+	기계들은 요즘 거의 없지만, C 표준에 의하면 부호를 갖는 정수형의
+	오버플로우는 예상외 동작을 유발할 수 있으므로, 요즘 기계들은 대부분
+	안전하다는 사실은 신경쓰지 마십시오.
+	불행히도, 컴파일러들은 종종 부호 있는 정수형들은 오버플로우 나지 않을
+	것이라는 가정 하에 최적화를 하기 때문에, 당신의 코드가 부호 있는
+	정수형을 오버플로우 나게 한다면, 2의 보수를 사용하는 하드웨어를
+	사용하고 있다 해도 문제에 직면할 수 있습니다.
+
+	그렇다곤 해도, 32-비트 쓰레드별 카운터에서 (대략) 64-비트 합을
+	모으는데에도 추가적인 복잡한 일이 숨어있습니다.
+	이걸 처리하는 것은 독자 여러분들에게 연습문제로 남겨두겠습니다만, 이
+	챕터의 뒤에 소개될 기법들이 큰 도움이 될 수도 있습니다.
+	\iffalse
+
 	No, because modulo addition is still commutative and associative.
 	At least as long as you use unsigned integers.
 	Recall that in the C standard, overflow of signed integers results
@@ -2803,21 +2824,52 @@ ret = ~ret & tmp;
 	Dealing with this added complexity is left as
 	an exercise for the reader, for whom some of the techniques
 	introduced later in this chapter could be quite helpful.
+	\fi
 
 \QuickQ{}
+	배열이요???
+	하지만 그럼 쓰레드의 갯수가 제한되지 않나요?
+	\iffalse
+
 	An array???
 	But doesn't that limit the number of threads?
+	\fi
 \QuickA{}
+	그럴 수 있고, 이 간단한 구현에서는 그렇습니다.
+	하지만 임의의 갯수의 쓰레드를 지원하는 구현을 만드는 건 그렇게 어렵지
+	않은데요, 예를 들면,
+	Section~\ref{sec:count:Per-Thread-Variable-Based Implementation}
+	\co{gcc} \co{__thread} 를 사용하는 거죠.
+	\iffalse
+
 	It can, and in this toy implementation, it does.
 	But it is not that hard to come up with an alternative
 	implementation that permits an arbitrary number of threads,
 	for example, using the \co{gcc} \co{__thread} facility,
 	as shown in
 	Section~\ref{sec:count:Per-Thread-Variable-Based Implementation}.
+	\fi
 
 \QuickQ{}
+	근데, 그 외에 gcc 가 어떤 짓을 할 수 있죠???
+	\iffalse
+
 	What other choice does gcc have, anyway???
+	\fi
 \QuickA{}
+	C 표준대로라면, 다른 쓰레드에 의해 동시에 수정되고 있을 수 있는 변수를
+	읽어들이는 행동의 효과에 대해선 정의되어 있지 않습니다.
+	C 는 어토믹하게 \co{long} 타입 변수를 읽어들일 수가 없는 (예를
+	들면)8-비트 아키텍쳐를 지원해야만 했기에 C 표준은 다른 선택의 여지가
+	없었습니다.
+	다음 버전의 C 표준에서는 이 현실과의 격차를 해결해 보려 합니다만, 그
+	전까지는 gcc 개발자들의 친절함에 의존해야 합니다.
+
+	대신, 하드웨어가 한번의 메모리 참조 명령으로 필요한 값을 읽을 수 있는
+	경우라면, \co{ACCESS_ONCE()}~\cite{JonCorbet2012ACCESS:ONCE} 같은
+	volatile 접근법을 사용해서 컴파일러에 제약을 가할 수 있습니다.
+	\iffalse
+
 	According to the C standard, the effects of fetching a variable
 	that might be concurrently modified by some other thread are
 	undefined.
@@ -2832,12 +2884,24 @@ ret = ~ret & tmp;
 	can help constrain the compiler, at least
 	in cases where the hardware is capable of accessing the value
 	with a single memory-reference instruction.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Array-Based Per-Thread Statistical Counters} 의
+	쓰레드별 \co{counter} 변수는 어떻게 초기화 되나요?
+	\iffalse
+
 	How does the per-thread \co{counter} variable in
 	Figure~\ref{fig:count:Array-Based Per-Thread Statistical Counters}
 	get initialized?
+	\fi
 \QuickA{}
+	C 표준은 전역 변수의 초기값은 명시적으로 초기화되지 않는 이상 0이라고
+	명시합니다.
+	그리고, 사용자가 통계적 카운터들의 연속되는 값 사이의 차이에
+	관심있는게 아니라면, 초기값은 의미가 없습니다.
+	\iffalse
+
 	The C standard specifies that the initial value of
 	global variables is zero, unless they are explicitly initialized.
 	So the initial value of all the instances of \co{counter}
@@ -2845,17 +2909,38 @@ ret = ~ret & tmp;
 	Furthermore, in the common case where the user is interested only
 	in differences between consecutive reads
 	from statistical counters, the initial value is irrelevant.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Array-Based Per-Thread Statistical Counters}
+	의 코드가 어떻게 복수의 카운터를 가능하게 할 수 있죠?
+	\iffalse
+
 	How is the code in
 	Figure~\ref{fig:count:Array-Based Per-Thread Statistical Counters}
 	supposed to permit more than one counter?
+	\fi
 \QuickA{}
+	실제로, 이 예제는 한개 이상의 카운터는 지원하지 않습니다.
+	이 예제를 수정해서 복수의 카운터를 제공하게 하는건 독자 여러분에게
+	과제로 남겨 두겠습니다.
+	\iffalse
+
 	Indeed, this toy example does not support more than one counter.
 	Modifying it so that it can provide multiple counters is left
 	as an exercise to the reader.
+	\fi
 
 \QuickQ{}
+	읽기 오퍼레이션은 쓰레드별 값을 모두 더하는 시간을 가져야 할 것이고,
+	그동안도 카운터는 값이 변할 수 있어요.
+	그럼 Figure~\ref{fig:count:Array-Based Per-Thread Statistical Counters}
+	의  \co{read_count()} 는 정확하지 않다는 의미입니다.
+	이 카운터는 단위시간당 $r$ 만큼 카운터 값을 증가하고 \co{read_count()}
+	는 $\Delta$ 단위시간을 소모한다고 해봅시다.
+	리턴되는 값의 예상 오류값은 얼마입니까?
+	\iffalse
+
 	The read operation takes time to sum up the per-thread values,
 	and during that time, the counter could well be changing.
 	This means that the value returned by
@@ -2866,14 +2951,43 @@ ret = ~ret & tmp;
 	$r$ counts per unit time, and that \co{read_count()}'s
 	execution consumes $\Delta$ units of time.
 	What is the expected error in the return value?
+	\fi
 \QuickA{}
+	최악의 경우에 대한 분석부터 해보고, 좀 나은 경우들을 보죠.
+
+	최악의 경우는, 읽기 오퍼레이션이 실제 동작은 금방 끝냈지만 리턴하기
+	전에 $\Delta$ 단위시간동안 대기를 하는 경우로, 이 경우의 오류값은
+	간단히 $r \Delta$ 입니다.
+	\iffalse
+
 	Let's do worst-case analysis first, followed by a less
 	conservative analysis.
 
 	In the worst case, the read operation completes immediately,
 	but is then delayed for $\Delta$ time units before returning,
 	in which case the worst-case error is simply $r \Delta$.
+	\fi
 
+	이 최악의 경우 동작은 별로 현실성이 없으니 각 $N$ 카운터들에 대한 각
+	읽기 동작이 시간 간격 $\Delta$ 안에 동일한 간격으로 일어나는 경우를
+	생각해보죠.
+	$N$ 회의 읽기 사이에 $\frac{\Delta}{N+1}$ 길이의 $N+1$ 개 간격이 존재할
+	겁니다.
+	마지막 쓰레드의 카운터에서의 읽기 이후로의 지연으로 발생하는 에러치는
+	$\frac{r \Delta}{N \left( N + 1 \right)}$ 이므로, 두번째에서 마지막
+	쓰레드 사이의 카운터는
+	$\frac{2 r \Delta}{N \left( N + 1 \right)}$,
+	세번째에서 마지막 사이는
+	$\frac{3 r \Delta}{N \left( N + 1 \right)}$,
+	그리고 그렇게 계속 진행됩니다.
+	전체 오류값은 각 쓰레드의 카운터에서의 읽기로 발생한 에러의 총 합으로
+	주어지는데, 다음과 같습니다:
+
+	\begin{equation}
+		\frac{r \Delta}{N \left( N + 1 \right)}
+			\sum_{i = 1}^N i
+	\end{equation}
+	\iffalse
 	This worst-case behavior is rather unlikely, so let us instead
 	consider the case where the reads from each of the $N$
 	counters is spaced equally over the time period $\Delta$.
@@ -2893,6 +3007,22 @@ ret = ~ret & tmp;
 		\frac{r \Delta}{N \left( N + 1 \right)}
 			\sum_{i = 1}^N i
 	\end{equation}
+	\fi
+
+	합 부분은 다음과 같이 표현 가능하구요:
+
+	\begin{equation}
+		\frac{r \Delta}{N \left( N + 1 \right)}
+			\frac{N \left( N + 1 \right)}{2}
+	\end{equation}
+
+	불필요한 부분을 제거하면 다음과 같이 직관적인 결과가 나옵니다:
+
+	\begin{equation}
+		\frac{r \Delta}{2}
+	\label{eq:count:CounterErrorAverage}
+	\end{equation}
+	\iffalse
 
 	Expressing the summation in closed form yields:
 
@@ -2907,6 +3037,21 @@ ret = ~ret & tmp;
 		\frac{r \Delta}{2}
 	\label{eq:count:CounterErrorAverage}
 	\end{equation}
+	\fi
+
+	읽기 오퍼레이션 호출자가 해당 오퍼레이션으로 리턴받은 수를 가지고 어떤
+	일을 하는 코드를 수행하는 중에도 오류는 쌓여감을 기억해둘 필요가
+	있습니다.
+	예를 들어, 읽기 오퍼레이션 호출자가 리턴받은 값을 가지고 어떤 계산을
+	하는데 $t$ 시간을 사용한다면, 최악의 경우 오류치는 $r \left(\Delta +
+	t\right)$ 로 늘어날 겁니다.
+
+	예상 오류치도 비슷하게 늘어나겠죠:
+
+	\begin{equation}
+		r \left( \frac{\Delta}{2} + t \right)
+	\end{equation}
+	\iffalse
 
 	It is important to remember that error continues accumulating
 	as the caller executes code making use of the count returned
@@ -2920,6 +3065,21 @@ ret = ~ret & tmp;
 	\begin{equation}
 		r \left( \frac{\Delta}{2} + t \right)
 	\end{equation}
+	\fi
+
+	물론, 읽기 중에 카운터가 계속 증가하는건 용납될 수 없는 경우도
+	있겠습니다.
+	Section~\ref{sec:count:Applying Specialized Parallel Counters}
+	에서는 이런 상황을 해결하는 방법을 알아봅니다.
+
+	이렇게, 우리는 감소는 없고 증가만 이루어지는 카운터를 알아보았습니다.
+	만약 카운터 값이 단위시간당 $r$ 만큼 감소로든 증가로든 바뀐다면,
+	오류값은 줄어들 거라고 예상할 수 있을 겁니다.
+	하지만, 카운터가 어느 쪽으로든 움직일 수 \emph{있을지 몰라도} 최악의
+	경우는 해당 읽기 오퍼레이션이 금방 끝났지만 $\Delta$ 단위 시간동안
+	기다려야 하는데, 그 시간 동안 카운터의 값은 같은 방향으로만 이동하는
+	경우이므로 여전히 $r \Delta$ 오류값을 내므로 차이가 없습니다.
+	\iffalse
 
 	Of course, it is sometimes unacceptable for the counter to
 	continue incrementing during the read operation.
@@ -2938,6 +3098,28 @@ ret = ~ret & tmp;
 	time all the changes in the counter's value move it in
 	the same direction, again giving us an absolute error
 	of $r \Delta$.
+	\fi
+
+	평균 에러치를 계산하는데는 값의 증감 패턴에 대한 다양한 가정을 바탕으로
+	하는 여러가지 방법이 있습니다.
+	일단은 간단하게, 1 의 오퍼레이션 중 $f$ 만큼이 감소 오퍼레이션이고,
+	관심있는 오류값은 카운터의 장시간 추세선에서의 굴곡이라고 가정해
+	봅시다.
+	이 가정 하에서는 $f$ 가 0.5 이하라면, 각 감소는 증가에 의해 무효화
+	되고, 따라서 $2f$ 오퍼레이션은 서로를 무효화 시키고, $1-2f$ 의
+	오퍼레이션들은 무효화 되지 않은 증가가 됩니다.
+	반면, $f$ 가 0.5 보다 크다면, $1-f$ 의 감소는 증가에 의해 무효화 되고,
+	카운터는 음의 방향으로 $-1+2\left(1-f\right)$ 만큼 이동하는데, 이는
+	$1-2f$ 로 정리되고, 따라서 카운터는 평균적으로 오퍼레이션당 $1-2f$
+	만큼씩 어느 경우든 이동하게 됩니다.
+	따라서, 긴 시점에서의 카운터의 변화는 $\left( 1-2f \right) r$ 로
+	주어집니다.
+	이걸 Equation~\ref{eq:count:CounterErrorAverage} 에 대입하면:
+
+	\begin{equation}
+		\frac{\left( 1 - 2 f \right) r \Delta}{2}
+	\end{equation}
+	\iffalse
 
 	There are a number of ways to compute the average error,
 	based on a variety of assumptions about the patterns of
@@ -2962,6 +3144,13 @@ ret = ~ret & tmp;
 	\begin{equation}
 		\frac{\left( 1 - 2 f \right) r \Delta}{2}
 	\end{equation}
+	\fi
+
+	그렇지만, 대부분의 통계적 카운터 사용에서 \co{read_count()} 에 의해
+	리턴되는 값의 오류치는 별 의미가 없습니다.
+	\co{read_count()} 가 수행하는데 필요한 시간은 일반적으로
+	\co{read_count()} 호출 사이의 시간에 비하면 극단적으로 작기 때문입니다.
+	\iffalse
 
 	All that aside, in most uses of statistical counters, the
 	error in the value returned by \co{read_count()} is
@@ -2970,6 +3159,7 @@ ret = ~ret & tmp;
 	for \co{read_count()} to execute is normally extremely
 	small compared to the time interval between successive
 	calls to \co{read_count()}.
+	\fi
 
 \QuickQ{}
 	Why doesn't \co{inc_count()} in
