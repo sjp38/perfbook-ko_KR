@@ -3162,12 +3162,26 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent
+	Counters} 의 \co{inc_count()} 는 왜 어토믹 명령을 사용하지 않죠?
+	쓰레드별 카운터를 여러 쓰레드에서 접근하고 있잖아요!
+	\iffalse
+
 	Why doesn't \co{inc_count()} in
 	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
 	need to use atomic instructions?
 	After all, we now have multiple threads accessing the per-thread
 	counters!
+	\fi
 \QuickA{}
+	두 쓰레드 중 하나는 읽기만 하고 있고, 변수는 정렬되어 있으며 기계가
+	지원하는 워드 크기이기에, 어토믹하지 않은 명령들만으로도
+	충분합니다.
+	다만, \co{ACCESS_ONCE()} 매크로는 카운터 업데이트가 \co{eventual()}
+	에게 보여지는 것을 막을 수도 있는~\cite{JonCorbet2012ACCESS:ONCE}
+	컴파일러 최적화를 막기 위해 사용되었습니다.
+	\iffalse
+
 	Because one of the two threads only reads, and because the
 	variable is aligned and machine-sized, non-atomic instructions
 	suffice.
@@ -3175,6 +3189,25 @@ ret = ~ret & tmp;
 	compiler optimizations that might otherwise prevent the
 	counter updates from becoming visible to
 	\co{eventual()}~\cite{JonCorbet2012ACCESS:ONCE}.
+	\fi
+
+	이 알고리즘의 예전 버전은 어토믹 명령을 사용했습니다만, 감사하게도
+	Ersoy Bayramoglu 가 그것들이 필요 없다는 것을 지적해 줬습니다.
+	그렇다곤 하나, 쓰레드별 \co{counter} 변수가 \co{global_counter} 보다
+	작았다면 어토믹 명령이 필요했을 겁니다.
+	하지만, 32-bit 시스템에서 쓰레드별 \co{counter} 변수는 정확하게 합을
+	구하기 위해 32 비트로 제한되어야 하고 오버플로를 막기 위해
+	\co{global_count} 변수는 64-bit 이 되어야 할겁니다.
+	이 경우엔, 오버플로를 막기 위해 쓰레드별 \co{counter} 변수를 주기적으로
+	0으로 초기화 시켜줘야 할 겁니다.
+	0으로의 주기적 초기화는 너무 오래 지연되면 쓰레드별 변수의 오버플로가
+	가능하단 것을 반드시 기억해 둬야만 합니다.
+	따라서 이 방법은 프로그램이 돌아가는 시스템이 리얼-타임 속성을 가지고
+	있어야 하며, 매우 조심스럽게 사용되어야 함을 의미합니다.
+
+	대조적으로, 모든 변수가 같은 크기이면 어떤 변수에 오버플로가 나더라도
+	최종적 합은 워드 크기로 절삭될테니 별 문제 없습니다.
+	\iffalse
 
 	An older version of this algorithm did in fact use atomic
 	instructions, kudos to Ersoy Bayramoglu for pointing out that
@@ -3197,31 +3230,65 @@ ret = ~ret & tmp;
 	In contrast, if all variables are the same size, overflow
 	of any variable is harmless because the eventual sum
 	will be modulo the word size.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent
+	Counters} 의 단일 글로벌 쓰레드인 \co{eventual()} 함수는 글로벌 락처럼
+	큰 병목이 되거나 하진 않나요?
+	\iffalse
+
 	Won't the single global thread in the function \co{eventual()} of
 	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
 	be just as severe a bottleneck as a global lock would be?
+	\fi
 \QuickA{}
+	이 경우엔, 아닙니다.
+	그 대신 쓰레드의 갯수가 늘어나면 \co{read_count()} 에 리턴되는 카운터
+	값이 더 부정확해질 겁니다.
+	\iffalse
+
 	In this case, no.
 	What will happen instead is that as the number of threads increases,
 	the estimate of the counter
 	value returned by \co{read_count()} will become more inaccurate.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent
+	Counters} 의 \co{read_count()} 에서 리턴하는 추정값은 쓰레드의 갯수가
+	늘어날수록 부정확해져 가지 않을까요?
+	\iffalse
+
 	Won't the estimate returned by \co{read_count()} in
 	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
 	become increasingly
 	inaccurate as the number of threads rises?
+	\fi
 \QuickA{}
+	맞습니다.
+	이게 문제가 된다면, 여러 \co{eventual()} 쓰레드를 만들고, 각 쓰레드가
+	일을 나눠서 해야 하는게 한가지 해결책이 될 수 있습니다.
+	더 극단적인 경우에는, tree 같은 \co{eventual()} 쓰레드 계층 관리가
+	필요할 수도 있습니다.
+	\iffalse
+
 	Yes.
 	If this proves problematic, one fix is to provide multiple
 	\co{eventual()} threads, each covering its own subset of
 	the other threads.
 	In more extreme cases, a tree-like hierarchy of
 	\co{eventual()} threads might be required.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent
+	Counters} 의 최종적 일관성 알고리즘은 읽기에도 쓰기에도 매우 적은
+	오버헤드와 극단적인 확장성을 보이는데, 과연 누가
+	Section~\ref{sec:count:Array-Based Implementation} 같이 읽기 쪽이 비싼
+	구현을 사용하겠습니까?
+	\iffalse
+
 	Given that in the eventually-consistent algorithm shown in
 	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
 	both reads and updates have extremely low overhead
@@ -3229,7 +3296,16 @@ ret = ~ret & tmp;
 	implementation described in
 	Section~\ref{sec:count:Array-Based Implementation},
 	given its costly read-side code?
+	\fi
 \QuickA{}
+	\co{eventual()} 쓰레드를 돌리는 것은 CPU 시간을 소모합니다. 이
+	최종적으로 일관적인 카운터가 추가되어가면 언젠가는 \co{eventual()}
+	쓰레드들이 모든 CPU 를 차지할 겁니다.
+	따라서 이 구현은 확장성이 쓰레드나 CPU 의 갯수가 아니라 최종적으로
+	일관적인 카운터의 갯수에 제한되는, 또다른 종류의 확장성 한계 문제를
+	갖습니다.
+	\iffalse
+
 	The thread executing \co{eventual()} consumes CPU time.
 	As more of these eventually-consistent counters are added,
 	the resulting \co{eventual()} threads will eventually
@@ -3238,6 +3314,7 @@ ret = ~ret & tmp;
 	scalability limitation, with the scalability limit being in
 	terms of the number of eventually consistent counters rather
 	than in terms of the number of threads or CPUs.
+	\fi
 
 \QuickQ{}
 	Why do we need an explicit array to find the other threads'
