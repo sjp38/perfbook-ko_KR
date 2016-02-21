@@ -2060,15 +2060,36 @@ variables vanish when that thread exits.
 
 \subsection{Discussion}
 
+이 세개의 구현들은 병렬 머신에서 돌아감에도 통계적 카운터에 유니프로세서에서의
+성능을 얻는게 가능함을 보여줍니다.
+\iffalse
+
 These three implementations show that it is possible to obtain uniprocessor
 performance for statistical counters, despite running on a parallel
 machine.
+\fi
 
 \QuickQuiz{}
+	패킷의 사이즈가 다양하다면 패킷의 갯수를 세는 것과 패킷의 전체 바이트
+	수를 세는 것에 어떤 기본적 차이가 있나요?
+	\iffalse
+
 	What fundamental difference is there between counting packets
 	and counting the total number of bytes in the packets, given
 	that the packets vary in size?
+	\fi
 \QuickQuizAnswer{
+	패킷의 갯수를 셀 때, 카운터는 한번에 1씩 증가합니다.
+	반면, 바이트를 셀 때에는, 카운터는 큰 수만큼 증가할 수도 있습니다.
+
+	왜 이걸 신경써야 할까요?
+	1씩 증가하는 경우에 리턴되는 값은 비록 그 값이 이루어진 시점이
+	언제인지는 알 수 없더라도 분명히 어떤 시점의 값인 것은 분명하기
+	때문입니다.
+	반면, 바이트를 세는 경우에는 두개의 서로 다른 쓰레드는 오퍼레이션들의
+	순서에 따라 비일관적인 값을 리턴할 수도 있습니다.
+	\iffalse
+
 	When counting packets, the counter is only incremented by the
 	value one.
 	On the other hand, when counting bytes, the counter might
@@ -2082,6 +2103,20 @@ machine.
 	In contrast, when counting bytes, two different threads might
 	return values that are inconsistent with any global ordering
 	of operations.
+	\fi
+
+	쓰레드~0 이 자신의 카운터에 3을, 쓰레드~1 이 자신의 카운터에 5를
+	더하고, 쓰레드~2 와 쓰레드~3이 카운터를 더하는 경우를 생각해 봅시다.
+	만약 시스템이 ``취약한 순서''를 가지거나 컴파일러가 강력한 최적화를
+	사용한다면, 쓰레드~2 는 합이 3이고 쓰레드~3 은 합이 5라고 볼 수
+	있습니다.
+	일관적인 시스템이라면 값이 변하는 순서는 0,3,8 또는 0,5,8 만 가능하므로
+	이 예에서 쓰레드들이 발견한 결과는 일관적이지 못합니다.
+
+	이걸 깜박했다 해도, 당신만 그런게 아닙니다.
+	Michael Scott 은 Paul E.~McKenney 의 박사 학위 심사 과정에서 이 질문을
+	했습니다.
+	\iffalse
 
 	To see this, suppose that thread~0 adds the value three to its
 	counter, thread~1 adds the value five to its counter, and
@@ -2096,15 +2131,34 @@ machine.
 	If you missed this one, you are not alone.
 	Michael Scott used this question to stump Paul E.~McKenney
 	during Paul's Ph.D. defense.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	리더는 쓰레드들의 카운터를 모두 더해야 하므로, 쓰레드의 갯수가 늘어나면
+	더 많은 시간을 쓰게 될겁니다.
+	리더에게도 쓸만한 성능과 확장성을 주면서 쓰기 작업도 여전히 빠르고
+	확장성 있게 하는 방법은 없을까요?
+	\iffalse
+
 	Given that the reader must sum all the threads' counters,
 	this could take a long time given large numbers of threads.
 	Is there any way that the increment operation can remain
 	fast and scalable while allowing readers to also enjoy
 	reasonable performance and scalability?
+	\fi
 \QuickQuizAnswer{
+	글로벌한 추정값을 두는 게 한 방법이 될겁니다.
+	리더들은 각자의 쓰레드별 변수를 증가시키되 어떤 미리 지정된 한계에
+	도달했을 때에는 그 값을 글로벌 변수에 어토믹하게 더하고, 쓰레드별
+	변수를 0으로 초기화 시키는 겁니다.
+	이 방법은 병균적 쓰기 오버헤드와 읽혀지는 값의 정확성 사이의 협상을
+	가능하게 할겁니다.
+
+	독자분들은 다른 방법들, 예를 들어 컴바이닝 트리와 같은 것들을
+	생각해보고 시도해보는 것도 좋을 겁니다.
+	\iffalse
+
 	One approach would be to maintain a global approximation
 	to the value.
 	Readers would increment their per-thread variable, but when it
@@ -2115,11 +2169,17 @@ machine.
 
 	The reader is encouraged to think up and try out other approaches,
 	for example, using a combining tree.
+	\fi
 } \QuickQuizEnd
+
+이 섹션에서 이야기된 것을 바탕으로, 독자 여러분은 이제 이 챕터의 시작에 있던
+네트워킹에 대한 통계적 카운터에 관한 Quick Quiz 에 답변을 할 수 있을 겁니다.
+\iffalse
 
 Given what has been presented in this section, you should now be able
 to answer the Quick Quiz about statistical counters for networking
 near the beginning of this chapter.
+\fi
 
 \section{Approximate Limit Counters}
 \label{sec:count:Approximate Limit Counters}
