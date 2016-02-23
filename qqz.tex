@@ -3709,21 +3709,41 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	어째서
+	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
+	는 Section~\ref{sec:count:Statistical Counters} 에서 나왔던
+	\co{inc_count()} 와 \co{dec_count()} 인터페이스 대신에
+	\co{add_count()} 와 \co{sub_count()} 를 제공하나요?
+	\iffalse
+
 	Why does
 	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
 	provide \co{add_count()} and \co{sub_count()} instead of the
 	\co{inc_count()} and \co{dec_count()} interfaces show in
 	Section~\ref{sec:count:Statistical Counters}?
+	\fi
 \QuickA{}
+	서로 다른 크기의 구조체들이 할당 요청되기 때문입니다.
+	물론, 특정 크기의 구조체에만 사용되는 한계치 카운터는 여전히
+	\co{inc_count()} 와 \co{dec_count()} 를 사용할 수 있을 겁니다.
+	\iffalse
+
 	Because structures come in different sizes.
 	Of course, a limit counter corresponding to a specific size
 	of structure might still be able to use
 	\co{inc_count()} and \co{dec_count()}.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
+	라인~3 의 저 이상한 조건문은 뭔가요?
+	왜 다음과 같이 더 직관적힌 형태의 빠른 수행경로를 사용하지 않는거죠?
+	\iffalse
+
 	What is with the strange form of the condition on line~3 of
 	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}?
 	Why not the following more intuitive form of the fastpath?
+	\fi
 
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
@@ -3737,6 +3757,22 @@ ret = ~ret & tmp;
 	\end{minipage}
 	\vspace{5pt}
 \QuickA{}
+	두단어로 설명하죠.
+	``인티저 오버플로우.''
+
+	앞의 코드를 10의 값을 갖는 \co{counter} 와 \co{ULONG_MAX} 값을 갖는
+	\co{delta} 에 대해 수행해 보세요.
+	그러고 나서
+	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read} 의
+	코드로 한번 더 해보세요.
+
+	이 예제의 뒷부분은 인티저 오버플로우에 대한 깊은 이해를 필요로 하므로,
+	인티저 오버플로우 문제를 한번도 겪어본 적 없다면, 몇몇 예제를 가지고
+	이해해 보려 노력해보세요.
+	일부 경우에 있어서는 인티저 오버플로우가 병렬 알고리즘보다도 제대로
+	처리하기가 어렵습니다!
+	\iffalse
+
 	Two words.
 	``Integer overflow.''
 
@@ -3751,24 +3787,56 @@ ret = ~ret & tmp;
 	the hang of it.
 	Integer overflow can sometimes be more difficult to get right
 	than parallel algorithms!
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
+	에서 왜 \co{globalize_count()} 는 나중에 \co{balance_count()} 가
+	쓰레드별 변수를 다시 채우도록 쓰레드별 변수를 0으로 바꾸나요?
+	왜 그냥 쓰레드별 변수를 0이 아닌채로 놔두질 않는거죠?
+	\iffalse
+
 	Why does \co{globalize_count()} zero the per-thread variables,
 	only to later call \co{balance_count()} to refill them in
 	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}?
 	Why not just leave the per-thread variables non-zero?
+	\fi
 \QuickA{}
+	사실 이전의 버전의 이 코드에서는 그렇게 했습니다.
+	하지만 더하기와 빼기는 매우 비용이 싼 동작이고, 모든 특수 케이스를
+	처리하는건 상당히 복잡합니다.
+	다시 말하지만, 직접 한번 해보세요, 다만 인티저 오버플로우를 조심하구요!
+	\iffalse
+
 	That is in fact what an earlier version of this code did.
 	But addition and subtraction are extremely cheap, and handling
 	all of the special cases that arise is quite complex.
 	Again, feel free to try it yourself, but beware of integer
 	overflow!
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
+	에서 \co{globalreserve} 는 \co{add_count()} 에서 값이 구해지는데, 왜
+	\co{sub_count()} 에서 값을 구하지 않나요?
+	\iffalse
+
 	Given that \co{globalreserve} counted against us in \co{add_count()},
 	why doesn't it count for us in \co{sub_count()} in
 	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}?
+	\fi
 \QuickA{}
+	\co{globalreserve} 변수는 모든 쓰레드의 \co{countermax} 변수의 합을
+	따라갑니다.
+	이 쓰레드의 \co{counter} 변수들의 합은 0 부터 \co{globalreserve} 사이
+	어딘가일 것입니다.
+	따라서 우리는 모든 쓰레드의 \co{counter} 변수가 \co{add_count()} 에서
+	꽉 차고 \co{sub_count()} 에서 비어버린다 가정하는, 보수적 방법을
+	취합니다.
+
+	하지만 나중에 다시 한번 이야기할테니, 이 질문을 기억해 두세요.
+	\iffalse
+
 	The \co{globalreserve} variable tracks the sum of all threads'
 	\co{countermax} variables.
 	The sum of these threads' \co{counter} variables might be anywhere
@@ -3778,38 +3846,85 @@ ret = ~ret & tmp;
 	and that they are all empty in \co{sub_count()}.
 
 	But remember this question, as we will come back to it later.
+	\fi
 
 \QuickQ{}
+	한 쓰레드가 Figure~\ref{fig:count:Simple Limit Counter Add, Subtract,
+	and Read} 의 \co{add_count()} 를 호출하고, 다른 쓰레드가
+	\co{sub_count()} 를 호출한다고 해봅시다.
+	\co{sub_count()} 는 카운터의 값이 0이 아님에도 실패하지 않겠습니까?
+	\iffalse
+
 	Suppose that one thread invokes \co{add_count()} shown in
 	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read},
 	and then another thread invokes \co{sub_count()}.
 	Won't \co{sub_count()} return failure even though the value of
 	the counter is non-zero?
+	\fi
 \QuickA{}
+	실제로 그럴 것입니다!
+	많은 경우에, 이것은 Section~\ref{sec:count:Simple Limit Counter
+	Discussion} 에서 이야기되는 것처럼 문제가 될 것이고, 그런 경우에는
+	Section~\ref{sec:count:Exact Limit Counters} 에서 다루는 알고리즘을
+	사용하는게 좋을 겁니다.
+	\iffalse
+
 	Indeed it will!
 	In many cases, this will be a problem, as discussed in
 	Section~\ref{sec:count:Simple Limit Counter Discussion}, and
 	in those cases the algorithms from
 	Section~\ref{sec:count:Exact Limit Counters}
 	will likely be preferable.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
+	에서는 왜 \co{add_count()} 와 \co{sub_count()} 를 모두 가지고 있는
+	거죠?
+	그냥 \co{add_count()} 에 음수를 넘기면 되지 않나요?
+	\iffalse
+
 	Why have both \co{add_count()} and \co{sub_count()} in
 	Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}?
 	Why not simply pass a negative number to \co{add_count()}?
+	\fi
 \QuickA{}
+	\co{add_count()} \co{unsigned} \co{long} 타입을 인자로 받기 때문에,
+	음수를 넘기는건 조금 어려울 겁니다.
+	그리고 설령 반물질 메모리를 가지고 있다 해도, 사용중인 구조체의 수를
+	세는데에 음수를 넘긴다는건 좀 말이 이상하죠!
+	\iffalse
+
 	Given that \co{add_count()} takes an \co{unsigned} \co{long}
 	as its argument, it is going to be a bit tough to pass it a
 	negative number.
 	And unless you have some anti-matter memory, there is little
 	point in allowing negative numbers when counting the number
 	of structures in use!
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Simple Limit Counter Utility Functions} 의
+	라인~15 에서는 왜 \co{counter} 를 \co{countermax / 2}  로 만들죠?
+	그냥 \co{countermax} 값을 가져오는게 더 간단하지 않나요?
+	\iffalse
+
 	Why set \co{counter} to \co{countermax / 2} in line~15 of
 	Figure~\ref{fig:count:Simple Limit Counter Utility Functions}?
 	Wouldn't it be simpler to just take \co{countermax} counts?
+	\fi
 \QuickA{}
+	첫째로, \co{countermax} 카운트는 이미 예약되어 있긴 합니다만 (라인~14
+	를 참고하세요), 이 코드는 해당 순간에 해당 쓰레드에 의해서 실제로는 그
+	반만 사용하고 있다고 알리는 것입니다.
+	이렇게 함으로써 해당 쓰레드는 \co{globalcount} 까지 찾아가지 않고도
+	최소 \co{countermax / 2} 만큼까지는 증가 또는 감소 작업을 할 수 있게
+	합니다.
+
+	\co{globalcount} 의 수는 라인~18 에서의 조정 덕에 여전히 정확함을
+	참고하세요.
+	\iffalse
+
 	First, it really is reserving \co{countermax} counts
 	(see line~14), however,
 	it adjusts so that only half of these are actually in use
@@ -3820,15 +3935,39 @@ ret = ~ret & tmp;
 
 	Note that the accounting in \co{globalcount} remains accurate,
 	thanks to the adjustment in line~18.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Schematic of Globalization and Balancing} 에서
+	보면, 가운데와 오른쪽 구성을 잇는 뒤쪽의 점선을 보면 알 수 있듯이,
+	한계까지 남은 카운트의 4분의 1이 쓰레드~0 에게 주어졌음에도, 8분의 1
+	만이 사용되었습니다.
+	왜 그런건가요?
+	\iffalse
+
 	In Figure~\ref{fig:count:Schematic of Globalization and Balancing},
 	even though a quarter of the remaining count up to the limit is
 	assigned to thread~0, only an eighth of the remaining count is
 	consumed, as indicated by the uppermost dotted line connecting
 	the center and the rightmost configurations.
 	Why is that?
+	\fi
 \QuickA{}
+	쓰레드~0 의 \co{counter} 가 \co{countermax} 의 절반으로 책정되었기
+	때문입니다.
+	따라서, 쓰레드~0 에 할당된 4분의 1 중 절반 (8분의 1)은 \co{globalcount}
+	에서 오고, 나머지 절반(역시 8분의 1)은 남은 카운트에서 오도록 남겨두는
+	것이죠.
+
+	이런 방법을 취하는데에는 두가지 목적이 있습니다:
+	(1)~쓰레드~0가 증가만이 아니라 감소에서도 빠른 수행 경로를 사용할 수
+	있도록 하는것, 그리고
+	(2)~모든 쓰레드가 단조적으로 한계점을 향해 증가만 하고 있다면
+	비정확성을 줄이기 위해서입니다.
+	마지막 이야기를 이해하려면, 알고리즘에 한발 더 다가가 자세히
+	살펴보세요.
+	\iffalse
+
 	The reason this happened is that thread~0's \co{counter} was
 	set to half of its \co{countermax}.
 	Thus, of the quarter assigned to thread~0, half of that quarter
@@ -3842,6 +3981,7 @@ ret = ~ret & tmp;
 	incrementing up towards the limit.
 	To see this last point, step through the algorithm and watch
 	what it does.
+	\fi
 
 \QuickQ{}
 	Why is it necessary to atomically manipulate the thread's
