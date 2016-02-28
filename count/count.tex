@@ -3604,6 +3604,18 @@ gives the maximum value that may be held in either half of
 	\fi
 } \QuickQuizEnd
 
+라인~10-15 는 \co{split_ctrandmax_int()} 함수를 보여주는데, 이 함수는
+\co{atomic_t ctrandmax} 변수로부터 얻어온 \co{int} 값을 받아서, \co{counter}
+(\co{c}) 와 \co{countermax} (\co{cm}) 으로 쪼갭니다.
+라인~13 은 이 \co{int} 로부터 앞쪽 절반을 떼어내어 인자로 받은 \co{c} 에 넣고,
+라인~14 에서는 뒷쪽 절반을 떼어내어 인자로 받은 \co{cm} 에 넣습니다.
+
+라인~17-25 는 \co{split_ctrandmax()} 함수를 보여주는데, 이 함수는 라인~21 에서
+주어진 변수로부터 \co{int} 값을 읽어내고, 라인~23 에서 그 값을 인자로 받은
+\co{old} 에 저장하고, 라인~24 에서 \co{split_ctrandmax_int()} 를 호출해 쪼개는
+작업을 합니다.
+\iffalse
+
 Lines~10-15 show the \co{split_ctrandmax_int()} function, which,
 when given the underlying \co{int} from the \co{atomic_t
 ctrandmax} variable, splits it into its \co{counter} (\co{c})
@@ -3618,31 +3630,62 @@ picks up the underlying \co{int} from the specified variable
 on line~21, stores it as specified by the \co{old} argument on
 line~23, and then invokes \co{split_ctrandmax_int()} to split
 it on line~24.
+\fi
 
 \QuickQuiz{}
+	\co{ctrandmax} 변수는 하나 뿐인데,
+	Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}
+	의 라인~18에서는 왜 굳이 포인터로 받는거죠?
+	\iffalse
+
 	Given that there is only one \co{ctrandmax} variable,
 	why bother passing in a pointer to it on line~18 of
 	Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}?
+	\fi
 \QuickQuizAnswer{
+	\co{ctrandmax} 변수는 \emph{쓰레드당} 한개씩만 있습니다.
+	뒤에서 우리는 다른 쓰레드의 \co{ctrandmax} 변수를
+	\co{split_ctrandmax()} 에 넘기는 코드도 보게 될겁니다.
+	\iffalse
+
 	There is only one \co{ctrandmax} variable \emph{per thread}.
 	Later, we will see code that needs to pass other threads'
 	\co{ctrandmax} variables to \co{split_ctrandmax()}.
+	\fi
 } \QuickQuizEnd
+
+라인~27-33 은 \co{merge_ctrandmax()} 함수인데, 이 함수는 \co{split_ctrandmax()}
+함수의 반대의 일을 하는 것으로 볼 수 있습니다.
+라인~31 에서 \co{c} 와 \co{cm} 으로 받은 \co{counter} 와 \co{countermax} 값을
+합쳐서 그 결과값을 리턴합니다.
+\iffalse
 
 Lines~27-33 show the \co{merge_ctrandmax()} function, which
 can be thought of as the inverse of \co{split_ctrandmax()}.
 Line~31 merges the \co{counter} and \co{countermax}
 values passed in \co{c} and \co{cm}, respectively, and returns
 the result.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Atomic Limit Counter Variables and Access
+	Functions} 의 \co{merge_ctrandmax()} 는 왜 바로 \co{atomic_t} 에 값을
+	저장하지 않고 \co{int} 값을 리턴하는 거죠?
+	\iffalse
+
 	Why does \co{merge_ctrandmax()} in
 	Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}
 	return an \co{int} rather than storing directly into an
 	\co{atomic_t}?
+	\fi
 \QuickQuizAnswer{
+	나중에, \co{atomic_cmpxchg()} 함수에 넘기기 위해 \co{int} 리턴이 필요한
+	부분을 보게 될 겁니다.
+	\iffalse
+
 	Later, we will see that we need the \co{int} return to pass
 	to the \co{atomic_cmpxchg()} primitive.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
