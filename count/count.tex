@@ -3760,6 +3760,28 @@ the result.
 \label{fig:count:Atomic Limit Counter Add and Subtract}
 \end{figure}
 
+Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract} 는
+\co{add_count()}, \co{sub_count()}, 그리고 \co{read_count()} 함수를 보입니다.
+
+라인~1-32 는 \co{add_count()} 함수를 보이는데, 이 함수는 라인~8-15 에 빠른 수행
+경로가, 나머지에는 느린 수행경로가 있습니다.
+빠른 수행경로의 라인~8-14는 라인~13-14 에서 실제 CAS 를 \co{atomic_cmpxchg()}
+함수로 수행하는 compare-and-swap (CAS) 루프를 구성합니다.
+라인~9 는 현재 쓰레드의 \co{ctrandmax} 변수를 \co{counter} (\co{c} 에) 와
+\co{countermax} (\co{cm} 에) 으로 쪼개고, 기존의 \co{ctrandmax} 가 갖는
+\co{int} 값을 \co{old} 에 넣어 둡니다.
+라인~10 에서는 \co{delta} 값이 로컬하게 처리 가능할지 (인티저 오버플로우를 막기
+위한 처리를 하면서) 체크하고, 만약 그렇지 않다면 라인~11 의 느린 수행경로를
+밟게 됩니다.
+로컬하게 처리 가능하다면, 라인~12 에서 업데이트된 \co{counter} 값을 원본
+\co{countermax} 값과 조합해서 \co{new} 를 만듭니다.
+라인~13-14 에서는 \co{atomic_cmpxchg()} 함수를 이용해 이 쓰레드의
+\co{ctrandmax} 변수를 \co{old} 와 어토믹하게 비교하고, 만약 비교 결과 같다면 그
+값을 \co{new} 로 어토믹하게 업데이트 합니다.
+만약 비교 결과가 같다면 라인~15 에서 성공을 리턴하고, 그렇지 않았다면 라인~9 의
+루프에서 실행을 계속합니다.
+\iffalse
+
 Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract}
 shows the \co{add_count()}, \co{sub_count()}, and
 \co{read_count()} functions.
@@ -3782,13 +3804,30 @@ compares this thread's \co{ctrandmax} variable to \co{old},
 updating its value to \co{new} if the comparison succeeds.
 If the comparison succeeds, line~15 returns success, otherwise,
 execution continues in the loop at line~9.
+\fi
 
 \QuickQuiz{}
+	우웩!
+	Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract} 라인~11 의
+	저 더러운 \co{goto} 는 웬말이예요?
+	\co{break} 몰라요???
+	\iffalse
+
 	Yecch!
 	Why the ugly \co{goto} on line~11 of
 	Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract}?
 	Haven't you heard of the \co{break} statement???
+	\fi
 \QuickQuizAnswer{
+	해당 \co{goto} 를 \co{break} 로 대체하려면 라인~15 에서 리턴해야 할지
+	말아야 할지를 결정하기 위한 플래그를 하나 더 만들어야 할텐데, 이건 빠른
+	수행 경로에서 하고자 하는 일은 아닐 겁니다.
+	정말로 \co{goto} 를 그렇게나 싫어한다면, 이 빠른 수행 경로를 별도의
+	함수로 집어넣고 그 함수에서 성공인지 실패인지를 리턴하게 하고
+	``실패''는 느린 수행경로의 수행 필요를 나타내도록 하는게 최선일 겁니다.
+	이건 goto 싫어하는 독자분들의 연습문제로 남겨두겠습니다.
+	\iffalse
+
 	Replacing the \co{goto} with a \co{break} would require keeping
 	a flag to determine whether or not line~15 should return, which
 	is not the sort of thing you want on a fastpath.
@@ -3797,20 +3836,35 @@ execution continues in the loop at line~9.
 	success or failure, with ``failure'' indicating a need for the
 	slowpath.
 	This is left as an exercise for goto-hating readers.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract} 의
+	라인~13-14 의 \co{atomic_cmpxchg()} 함수는 어떻게 실패할 수 있죠?
+	우린 이전 값을 라인~9 에서 가져오고 나서 바꾼 적 없잖아요!
+	\iffalse
+
 	Why would the \co{atomic_cmpxchg()} primitive at lines~13-14 of
 	Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract}
 	ever fail?
 	After all, we picked up its old value on line~9 and have not
 	changed it!
+	\fi
 \QuickQuizAnswer{
+	나중에, Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1}
+	의 \co{flush_local_count()} 함수에서 어떻게 이 쓰레드의 \co{ctrandmax}
+	변수를 Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract} 의
+	라인~8-14 의 빠른 수행 경로 실행과 동시에 수정할 수 있는지 알아볼
+	겁니다.
+	\iffalse
+
 	Later, we will see how the \co{flush_local_count()} function in
 	Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1}
 	might update this thread's \co{ctrandmax} variable concurrently
 	with the execution of the fastpath on lines~8-14 of
 	Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract}.
+	\fi
 } \QuickQuizEnd
 
 Lines~16-31 of
