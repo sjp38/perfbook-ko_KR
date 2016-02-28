@@ -3404,6 +3404,14 @@ other hand, it would be silly not to at least give them a try.
 \subsection{Atomic Limit Counter Implementation}
 \label{sec:count:Atomic Limit Counter Implementation}
 
+불행히도, 한 쓰레드가 다른 쓰레드의 카운트를 안전하게 없애려면, 두 쓰레드 모두
+각 쓰레드의 \co{counter} 와 \co{countermax} 변수를 함께 어토믹하게 조정해야
+할겁니다.
+이걸 해결하는 일반적인 방법은, 예를 들면 32-비트 변수가 있다면, 앞쪽 16 비트는
+\co{counter}를, 뒷쪽 16 비트는 \co{countermax} 를 나타내게 하는 식으로 두
+변수를 한개의 변수로 합치는 것입니다.
+\iffalse
+
 Unfortunately,
 if one thread is to safely remove counts from another thread,
 both threads will need to atomically manipulate that thread's
@@ -3413,13 +3421,30 @@ single variable,
 for example, given a 32-bit variable, using the high-order 16 bits to
 represent \co{counter} and the low-order 16 bits to represent
 \co{countermax}.
+\fi
 
 \QuickQuiz{}
+	쓰레드의 \co{counter} 와 \co{countermax} 변수를 한번에 어토믹하게
+	수정해야 하는 이유가 뭐죠?
+	각 변수를 개별적으로 어토믹하게 수정해도 충분하지 않아요?
+	\iffalse
+
 	Why is it necessary to atomically manipulate the thread's
 	\co{counter} and \co{countermax} variables as a unit?
 	Wouldn't it be good enough to atomically manipulate them
 	individually?
+	\fi
 \QuickQuizAnswer{
+	그렇게도 할 수 있겠지만, 엄청난 주의가 필요합니다.
+	\co{counter} 를 \co{countermax} 를 먼저 0으로 하지 않고 없애는 것은
+	\co{counter} 를 0이 된 직후 증가시키는 같은 쓰레드가 카운터를 0으로
+	만든 효과를 없애버리게 만듭니다.
+
+	반대로, \co{countermax} 를 0으로 만들고 \co{counter} 를 없애는 것 역시
+	0이 아닌 \co{counter} 를 만들 수 있습니다.
+	이걸 자세히 보기 위해 다음의 이벤트 시퀀스를 봅시다:
+	\iffalse
+
 	This might well be possible, but great care is required.
 	Note that removing \co{counter} without first zeroing
 	\co{countermax} could result in the corresponding thread
@@ -3430,6 +3455,25 @@ represent \co{counter} and the low-order 16 bits to represent
 	removing \co{counter}, can also result in a non-zero
 	\co{counter}.
 	To see this, consider the following sequence of events:
+	\fi
+
+	\begin{enumerate}
+	\item	Thread~A 가 자신의 \co{countermax}를 가져오고, 0이 아님을
+		확인합니다.
+	\item	Thread~B 가 Thread~A 의 \co{countermax} 를 0으로 만듭니다.
+	\item	Thread~B 가 Thread~A 의 \co{counter}를 제거합니다.
+	\item	자신의 \co{countermax} 가 0이 아님을 확인했던 Thread~A 는
+		\co{counter} 에 값을 더하고, 이로 인해 \co{counter} 는 0이 아닌
+		값을 갖습니다.
+	\end{enumerate}
+
+	다시 말하지만, \co{countermax} 와 \co{counter} 를 별개의 변수로 두고서
+	어토믹하게 조정하는 것도 가능하긴 할겁니다만, 많은 주의가 필요할 것임은
+	분명합니다.
+	또한 그렇게 하는 것은 빠른 수행경로를 느리게 만들 확률이 큽니다.
+
+	이런 가능성을 더 알아보는건 독자 여러분의 숙제로 남겨두겠습니다.
+	\iffalse
 
 	\begin{enumerate}
 	\item	Thread~A fetches its \co{countermax}, and finds that
@@ -3449,6 +3493,7 @@ represent \co{counter} and the low-order 16 bits to represent
 
 	Exploring these possibilities are left as exercises for
 	the reader.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -3493,6 +3538,23 @@ represent \co{counter} and the low-order 16 bits to represent
 \label{fig:count:Atomic Limit Counter Variables and Access Functions}
 \end{figure}
 
+간단한 어토믹 리미트 카운터를 위한 변수와 액세스 함수들을
+Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}
+(\url{count_lim_atomic.c}) 에 보였습니다.
+앞의 알고리즘에서의 \co{counter} 와 \co{countermax} 변수들은 라인~1 에 있는
+하나의 변수 \co{ctrandmax} 에 \co{counter} 는 앞쪽 절반에, \co{countermax} 는
+뒷쪽 절반에 위치하도록 합쳐졌습니다.
+이 변수는 \co{atomic_t} 타입으로, \co{int} 형의 값을 갖습니다.
+
+라인~2-6 은 \co{globalcountmax}, \co{globalcount}, \co{globalreserve},
+\co{counterp}, 그리고 \co{gblcnt_mutex} 정의를 보이는데, 이들은
+Figure~\ref{fig:count:Approximate Limit Counter Variables} 에 있는 것들과
+비슷한 역할을 합니다.
+라인~7 은 \co{ctrandmax} 의 각 절반에 사용되는 비트의 수를 나타내는
+\co{CM_BITS}를 정의하고, 라인~8 에서는 \co{ctrandmax} 의 각 절반이 가질 수 있는
+최대값을 나타내는 \co{MAX_COUNTERMAX} 를 정의합니다.
+\iffalse
+
 The variables and access functions for a simple atomic limit counter
 are shown in
 Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}
@@ -3512,12 +3574,26 @@ Line~7 defines \co{CM_BITS}, which gives the number of bits in each half
 of \co{ctrandmax}, and line~8 defines \co{MAX_COUNTERMAX}, which
 gives the maximum value that may be held in either half of
 \co{ctrandmax}.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}
+	의 라인~7 에서는 C 표준을 어기는거 아닌가요?
+	\iffalse
+
 	In what way does line~7 of
 	Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}
 	violate the C standard?
+	\fi
 \QuickQuizAnswer{
+	해당 코드는 바이트당 비트가 8개라 가정합니다.
+	이 가정은 공유 메모리 멀티프로세서에 쉽게 장착될 수 있는 현재의 모든
+	상품화된 마이크로프로세서에 성립합니다만, 물론 C 코드가 돌아갈 수 있는
+	모든 컴퓨터 시스템에 성립하진 않습니다.
+	(C 표준에 맞추려면 대신 어떻게 할 수 있을까요? 그리고 그 때의 단점은
+	무엇일까요?)
+	\iffalse
+
 	It assumes eight bits per byte.
 	This assumption does hold for all current commodity microprocessors
 	that can be easily assembled into shared-memory multiprocessors,
@@ -3525,6 +3601,7 @@ gives the maximum value that may be held in either half of
 	ever run C code.
 	(What could you do instead in order to comply with the C
 	standard?  What drawbacks would it have?)
+	\fi
 } \QuickQuizEnd
 
 Lines~10-15 show the \co{split_ctrandmax_int()} function, which,
