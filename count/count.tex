@@ -3867,6 +3867,19 @@ execution continues in the loop at line~9.
 	\fi
 } \QuickQuizEnd
 
+Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract} 의 라인~16-31 은
+\co{add_count()} 의 느린 수행경로를 보이는데, 라인~17 에서 얻어오고 라인~24 와
+30 에서 해제하는 \co{gblcnt_mutex} 로 보호됩니다.
+라인~18 에서는 \co{globalize_count()} 를 호출하는데, 이 함수는 이 쓰레드의
+상태를 글로벌 카운터로 옮겨줍니다.
+라인~19-20 은 \co{delta} 값이 현재의 글로벌 상태에 사용 가능한지 체크하고,
+불가능하다면 라이~21 에서 \co{fluch_local_count()} 를 호출해서 모든 쓰레드의
+로컬 스테이트를 글로벌 카운터로 몰아넣고, 라인~22-23 에서 \co{delta} 가 이제는
+사용 가능한지 다시 체크합니다.
+이후에도 \co{delta} 더하기가 불가능하다면, 라인~24 에서 \co{gblcnt_mutex} 를
+해제하고 라인~25 에서 실패를 리턴합니다.
+\iffalse
+
 Lines~16-31 of
 Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract}
 show \co{add_count()}'s slowpath, which is protected by \co{gblcnt_mutex},
@@ -3881,6 +3894,18 @@ be accommodated.
 If, after all that, the addition of \co{delta} still cannot be accommodated,
 then line~24 releases \co{gblcnt_mutex} (as noted earlier), and
 then line~25 returns failure.
+\fi
+
+그렇지 않다면, 라인~28 에서 \co{delta} 를 글로벌 카운터에 더하고, 라인~29 에서
+만약 적절하다면 카운트를 로컬 스테이트에 분산시킨 후, 라인~30 에서
+\co{gblcnt_mutex} 를 해제하고, 마지막으로 라인~31 에서 성공을 리턴합니다.
+
+Figure~\ref{fig:count:Atomic Limit Counter Add and Subtract} 의 라인~34-63
+에서는 \co{sub_count()} 를 보이는데, 이 함수는 \co{add_count()} 와 유사하게
+구성되어 있어서, 라인~41-48 에 빠른 수행경로를, 그리고 라인~49-62 에 누린
+수행경로를 갖습니다.
+이 함수의 각 라인별 분석은 독자 여러분의 연습문제로 남겨두겠습니다.
+\iffalse
 
 Otherwise, line~28 adds \co{delta} to the global counter, line~29
 spreads counts to the local state if appropriate, line~30 releases
@@ -3894,6 +3919,7 @@ show \co{sub_count()}, which is structured similarly to
 lines~49-62.
 A line-by-line analysis of this function is left as an exercise to
 the reader.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
