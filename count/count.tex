@@ -4057,6 +4057,20 @@ Finally, line~17 returns the sum.
 \label{fig:count:Atomic Limit Counter Utility Functions 2}
 \end{figure}
 
+Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1}
+와~\ref{fig:count:Atomic Limit Counter Utility Functions 2} 는 유틸리티처럼
+사용되는 함수들인
+\co{globalize_count()},
+\co{flush_local_count()},
+\co{balance_count()},
+\co{count_register_thread()}, 그리고
+\co{count_unregister_thread()} 의 코드를 보입니다.
+\co{globalize_count()} 의 코드는
+Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1} 의 라인~1-12 에
+있는데 앞의 알고리즘과 거의 같지만 라인~7의, \co{counter} 와 \co{countermax} 를
+\co{ctrandmax} 에서 분할해 내기 위한 코드의 추가가 차이점입니다.
+\iffalse
+
 Figures~\ref{fig:count:Atomic Limit Counter Utility Functions 1}
 and~\ref{fig:count:Atomic Limit Counter Utility Functions 2}
 shows the utility functions
@@ -4070,6 +4084,23 @@ of Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1} and
 is similar to that of previous algorithms, with the addition of
 line~7, which is now required to split out \co{counter} and
 \co{countermax} from \co{ctrandmax}.
+\fi
+
+모든 쓰레드의 로컬 카운터 상태를 글로벌 카운터로 옮기는,
+\co{flush_local_count()} 의 코드는 라인~14-32 에 있습니다.
+라인~22 에서는 \co{globalreserve} 의 값이 모든 쓰레드별 카운트를 허용하는지
+체크하고 아니라면 라인~23 에서 리턴합니다.
+그렇지 않다면, 라인~24 에서 로컬 변수 \co{zero} 를 \co{counter} 와
+\co{countermax} 조합된 0으로 만듭니다.
+라인~25-31 의 루프에서는 각 쓰레드를 순회합니다.
+라인~26 에서 현재 쓰레드가 카운터 상태를 가지고 있는지 보고, 만약 그렇다면
+라인~27-30 에서 그 상태를 글로벌 카운터로 옮깁니다.
+라인~27 에서는 현재 쓰레드의 상태를 어토믹하게 0 으로 바꿈과 동시에 얻어옵니다.
+라인~28 에서는 이 상태를 자신의 \co{counter} (로컬 변수 \co{c} 로) 와
+\co{countermax} (로컬 변수 \co{cm} 으로) 로 분할합니다.
+라인~29 에서 이 쓰레드의 \co{counter} 를 \co{globalcount} 에 더하고 라인~30
+에서 이 쓰레드의 \co{countermax} 를 \co{globalreserve} 에서 뺍니다.
+\iffalse
 
 The code for \co{flush_local_count()}, which moves all threads' local
 counter state to the global counter, is shown on lines~14-32.
@@ -4086,14 +4117,29 @@ Line~28 splits this state into its \co{counter} (in local variable \co{c})
 and \co{countermax} (in local variable \co{cm}) components.
 Line~29 adds this thread's \co{counter} to \co{globalcount}, while
 line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1} 의
+	라인~14 에서 \co{flush_local_count()} 가 \co{ctrandmax} 변수를 0 으로
+	만든 후 그냥 다시 값을 넣을 수 없는 이유는 뭐죠?
+	\iffalse
+
 	What stops a thread from simply refilling its
 	\co{ctrandmax} variable immediately after
 	\co{flush_local_count()} on line 14 of
 	Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1}
 	empties it?
+	\fi
 \QuickQuizAnswer{
+	이 다른 쓰레드는 \co{flush_local_count()} 를 호출한 쪽에서
+	\co{gblcnt_mutex} 를 해제하기 전까지는 자신의 \co{ctrandmax} 를 재설정
+	할 수 없습니다.
+	\co{gblcnt_mutex} 가 해제되는 시점에선, \co{flush_local_count()} 호출자
+	쪽에서는 카운트 값의 사용을 이미 끝냈을 거고, 따라서 재설정에 문제는
+	없습니다 --- \co{globalcount} 가 재설정을 허용할 만큼 충분히 크다는
+	가정 하에서요.
+	\iffalse
 	This other thread cannot refill its \co{ctrandmax}
 	until the caller of \co{flush_local_count()} releases the
 	\co{gblcnt_mutex}.
@@ -4101,16 +4147,46 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 	finished making use of the counts, so there will be no problem
 	with this other thread refilling --- assuming that the value
 	of \co{globalcount} is large enough to permit a refill.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1} 의
+	라인~27 에서 \co{flush_local_count()} 가 \co{ctrandmax} 변수를 비우는
+	동안 \co{add_count()} 나 \co{sub_count()} 의 빠른 수행경로가
+	\co{ctrandmax} 를 함께 사용하면서 동시에 수행되지 못하는 이유는 뭐죠?
+	\iffalse
+
 	What prevents concurrent execution of the fastpath of either
 	\co{add_count()} or \co{sub_count()} from interfering with
 	the \co{ctrandmax} variable while
 	\co{flush_local_count()} is accessing it on line 27 of
 	Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 1}
 	empties it?
+	\fi
 \QuickQuizAnswer{
+	그런 이유는 없습니다.
+	다음의 세가지 경우를 생각해보죠:
+	\begin{enumerate}
+	\item	만약 \co{flush_local_count()} 의 \co{atomic_xchg()} 가 이야기된
+		빠른 수행경로 두개의 \co{split_ctrandmax()} 이전에 수행된다면,
+		빠른 수행경로에서는 0 이 된 \co{counter} 와 \co{countermax} 를
+		보게 될거고, 따라서 (물론 \co{delta} 가 0 이 아니라면) 그냥
+		느린 수행경로로 넘어갈 겁니다.
+	\item	만약 \co{flush_local_count()} 의 \co{atomic_xchg()} 가 두 빠른
+		수행경로의 \co{split_ctrandmax()} 뒤에, 그러나 빠른 수행경로의
+		\co{atomic_cmpxchg()} 보단 앞에 수행된다면,
+		\co{atomic_cmpxchg()} 를 실패할거고, 빠른 수행경로를 재시작해서
+		앞의 case~1 의 상황으로 돌아갈 겁니다.
+	\item	만약 \co{flush_local_count()} 의 \co{atomic_xchg()} 가 두 빠른
+		수행경로의 \co{atomic_cmpxchg()} 뒤에 수행된다면, 빠른
+		수행경로는 \co{flush_local_count()} 가 해당 쓰레드의
+		\co{ctrandmax} 변수를 0 으로 만들기 이전에 이미 성공적으로
+		완료될 겁니다.
+	\end{enumerate}
+	어느쪽이든, 경주는 올바르게 마무리 됩니다.
+	\iffalse
+
 	Nothing.
 	Consider the following three cases:
 	\begin{enumerate}
@@ -4131,7 +4207,18 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 		\co{ctrandmax} variable.
 	\end{enumerate}
 	Either way, the race is resolved correctly.
+	\fi
 } \QuickQuizEnd
+
+Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 2} 의 라인~1-22 는
+호출한 쓰레드의 로컬 \co{ctrandmax} 변수를 재설정 하는 \co{balance_count()}
+함수의 코드를 보여줍니다.
+이 함수는 앞의 알고리즘과 상당히 유사합니다만, \co{ctrandmax} 변수의 병합
+작업을 처리하는 부분이 추가되었습니다.
+해당 코드의 자세한 분석은 라인~24 에 시작하는 \co{count_register_thread()}
+함수와 라인~33 에서 시작하는 \co{count_unregister_thread()} 함수와 함께 독자
+여러분의 연습문제로 남겨두겠습니다.
+\iffalse
 
 Lines~1-22 on
 Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 2}
@@ -4143,21 +4230,40 @@ Detailed analysis of the code is left as an exercise for the reader,
 as it is with the \co{count_register_thread()} function starting on
 line~24 and the \co{count_unregister_thread()} function starting on
 line~33.
+\fi
 
 \QuickQuiz{}
+	\co{atomic_set()} 은 주어진 \co{atomic_t} 에 단순히 스토어를 할 뿐인데,
+	어떻게
+	Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 2} 의
+	라인~21 에서의 \co{balance_count()} 는 \co{flush_local_count()} 의 해당
+	변수에 동시에 가해지는 업데이트에도 불구하고 올바르게 동작할 수 있는
+	거죠?
+	\iffalse
+
 	Given that the \co{atomic_set()} primitive does a simple
 	store to the specified \co{atomic_t}, how can line~21 of
 	\co{balance_count()} in
 	Figure~\ref{fig:count:Atomic Limit Counter Utility Functions 2}
 	work correctly in face of concurrent \co{flush_local_count()}
 	updates to this variable?
+	\fi
 \QuickQuizAnswer{
+	\co{balance_count()} 와 \co{flush_local_count()} 의 호출자 모두
+	\co{gblcnt_mutex} 를 잡고 있으므로, 한번에 한쪽만 수행될 수 있습니다.
+	\iffalse
+
 	The caller of both \co{balance_count()} and
 	\co{flush_local_count()} hold \co{gblcnt_mutex}, so
 	only one may be executing at a given time.
+	\fi
 } \QuickQuizEnd
 
+다음 섹션에서는 이 설계를 질적으로 평가해 봅니다.
+\iffalse
+
 The next section qualitatively evaluates this design.
+\fi
 
 \subsection{Atomic Limit Counter Discussion}
 
