@@ -4430,15 +4430,29 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 의 \co{flush_local_count_sig()} 함수에서는 왜 \co{theft}
+	쓰레드별 변수의 사용을 \co{ACCESS_ONCE()} 로 감싼거죠?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}
 	function \co{flush_local_count_sig()}, why are there
 	\co{ACCESS_ONCE()} wrappers around the uses of the
 	\co{theft} per-thread variable?
+	\fi
 \QuickA{}
+	첫번째 \co{ACCESS_ONCE} 사용은 (라인~11) 은 필요 없는 것이라 주장할
+	수도 있습니다.
+	다음의 두 군데 사용은 (라인~14 와 16) 중요합니다.
+	이것들이 없어지면, 컴파일러는 라인~14-17 을 다음과 같이 바꿀 수도
+	있습니다:
+	\iffalse
+
 	The first one (on line~11) can be argued to be unnecessary.
 	The last two (lines~14 and 16) are important.
 	If these are removed, the compiler would be within its rights
 	to rewrite lines~14-17 as follows:
+	\fi
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
 	\small
@@ -4450,15 +4464,34 @@ ret = ~ret & tmp;
 	\end{verbatim}
 	\end{minipage}
 	\vspace{5pt}
+	느린 수행 경로는 잠깐 들어오는 값인 \co{THEFT_READY} 를 보고서 연관된
+	쓰레드가 준비되기도 전에 값을 훔쳐가기 시작할테니 위험합니다.
+	\iffalse
+
 	This would be fatal, as the slowpath might see the transient
 	value of \co{THEFT_READY}, and start stealing before the
 	corresponding thread was ready.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 에서, 왜 다른 쓰레드의 \co{countermax} 변수를 바로 접근해도
+	안전한 거죠?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions},
 	why is it safe for line~28 to directly access the other thread's
 	\co{countermax} variable?
+	\fi
 \QuickA{}
+	그 다른 쓰레드는 자신의 \co{countermax} 변수의 값을 \co{gblcnt_mutex}
+	락을 쥐지 않은 한 수정할 수 없기 때문입니다.
+	하지만 이 함수 호출 코드는 락을 잡고 함수를 호출하기 때문에, 그 다른
+	쓰레드는 해당 락을 잡을 수가 없고, 따라서 그 다른 쓰레드는
+	\co{countermax} 변수를 수정할 수 없습니다.
+	따라서 바로 접근해도 안전합니다 --- 하지만 바꾸진 않습니다.
+	\iffalse
+
 	Because the other thread is not permitted to change the value
 	of its \co{countermax} variable unless it holds the
 	\co{gblcnt_mutex} lock.
@@ -4466,30 +4499,70 @@ ret = ~ret & tmp;
 	for the other thread to hold it, and therefore the other thread
 	is not permitted to change its \co{countermax} variable.
 	We can therefore safely access it --- but not change it.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 에서, 왜 라인~33 은 현재 쓰레드가 자기 자신에게 시그널을
+	보내는지 체크하지 않나요?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions},
 	why doesn't line~33 check for the current thread sending itself
 	a signal?
+	\fi
 \QuickA{}
+	또한번 체크할 필요가 없습니다.
+	\co{flush_local_count()} 는 이미 \co{globalize_count()} 를 호출했으니,
+	라인~28 에서의 체크가 성공해서 뒤의 \co{pthread_kill()} 은 스킵될
+	겁니다.
+	\iffalse
+
 	There is no need for an additional check.
 	The caller of \co{flush_local_count()} has already invoked
 	\co{globalize_count()}, so the check on line~28 will have
 	succeeded, skipping the later \co{pthread_kill()}.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}
+	의 코드는 gcc 와 POSIX 에서 동작합니다.
+	ISO C 표준에서 동작하게 하려면 뭐가 필요할까요?
+	\iffalse
+
 	The code in
 	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions},
 	works with gcc and POSIX.
 	What would be required to make it also conform to the ISO C standard?
+	\fi
 \QuickA{}
+	\co{theft} 변수는 안전하게 시그널 핸들러와 시그널에 인터럽트되는 코드
+	사이에서 안전하게 공유될 수 있도록 \co{sig_atomic_t} 타입이어야만
+	합니다.
+	\iffalse
+
 	The \co{theft} variable must be of type \co{sig_atomic_t}
 	to guarantee that it can be safely shared between the signal
 	handler and the code interrupted by the signal.
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 의 라인~41 에서는 왜 시그널을 다시 보내죠?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}, why does line~41 resend the signal?
+	\fi
 \QuickA{}
+	지난 수십년간 많은 운영 체제는 갑자기 시그널을 잃어버리는 특성을 가졌기
+	때문입니다.
+	이게 기능인지 버그인지는 논쟁거리이지만, 그건 무의미합니다.
+	사용자가 보기에 분명한 증상은 커널 버그가 아니라 사용자
+	어플리케이션의 문제입니다.
+
+	\emph{당신의} 어플리케이션의 문제입니다!
+	\iffalse
+
 	Because many operating systems over several decades have
 	had the property of losing the occasional signal.
 	Whether this is a feature or a bug is debatable, but
@@ -4498,6 +4571,7 @@ ret = ~ret & tmp;
 	a kernel bug, but rather a user application hanging.
 
 	\emph{Your} user application hanging!
+	\fi
 
 \QuickQ{}
 	Not only are POSIX signals slow, sending one to each thread

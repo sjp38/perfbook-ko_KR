@@ -4624,6 +4624,20 @@ and \co{theft} variables, respectively.
 \end{figure}
 
 Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}
+는 쓰레드별 변수와 전역 변수 사이에 카운트를 옮겨주는 함수를 보입니다.
+라인~1-7 은 \co{globalize_count()} 함수를 보이는데, 이 함수는 앞의 구현과
+동일합니다.
+라인~9-19 는 \co{flush_local_count_sig()} 함수로, 훔치기 과정에서 사용되는
+시그널 핸들러입니다.
+라인~11 과 12 에서는 \co{theft} 상태가 REQ 인지 확인하고, 아니라면 변경 없이
+리턴합니다.
+라인~13 에서는 theft 변수의 샘플링이 해당 변수에의 변경 이전에 이루어졌음을
+분명히 하기 위해 메모리 배리어를 칩니다.
+라인~14 는 \co{theft} 상태를 ACK 로 놓고, 라인~15 에서는 이 쓰레드의 빠른 수행
+경로가 수행중인지 확인 후, 라인~16 에서 \co{theft} 상태를 READY 로 놓습니다.
+\iffalse
+
+Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}
 shows the functions responsible for migrating counts between per-thread
 variables and the global variables.
 Lines~1-7 shows \co{globalize_count()}, which is identical to earlier
@@ -4637,17 +4651,32 @@ theft variable happens before any change to that variable.
 Line~14 sets the \co{theft} state to ACK, and, if line~15 sees that
 this thread's fastpaths are not running, line~16 sets the \co{theft}
 state to READY.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 의 \co{flush_local_count_sig()} 함수에서는 왜 \co{theft}
+	쓰레드별 변수의 사용을 \co{ACCESS_ONCE()} 로 감싼거죠?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}
 	function \co{flush_local_count_sig()}, why are there
 	\co{ACCESS_ONCE()} wrappers around the uses of the
 	\co{theft} per-thread variable?
+	\fi
 \QuickQuizAnswer{
+	첫번째 \co{ACCESS_ONCE} 사용은 (라인~11) 은 필요 없는 것이라 주장할
+	수도 있습니다.
+	다음의 두 군데 사용은 (라인~14 와 16) 중요합니다.
+	이것들이 없어지면, 컴파일러는 라인~14-17 을 다음과 같이 바꿀 수도
+	있습니다:
+	\iffalse
+
 	The first one (on line~11) can be argued to be unnecessary.
 	The last two (lines~14 and 16) are important.
 	If these are removed, the compiler would be within its rights
 	to rewrite lines~14-17 as follows:
+	\fi
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
 	\small
@@ -4659,10 +4688,27 @@ state to READY.
 	\end{verbatim}
 	\end{minipage}
 	\vspace{5pt}
+	느린 수행 경로는 잠깐 들어오는 값인 \co{THEFT_READY} 를 보고서 연관된
+	쓰레드가 준비되기도 전에 값을 훔쳐가기 시작할테니 위험합니다.
+	\iffalse
+
 	This would be fatal, as the slowpath might see the transient
 	value of \co{THEFT_READY}, and start stealing before the
 	corresponding thread was ready.
+	\fi
 } \QuickQuizEnd
+
+라인~21-49 는 \co{flush_local_count()} 를 보이는데, 이 함수는 느린 수행
+경로에서 모든 쓰레드의 로컬 카운트를 비우기 위해 호출됩니다.
+라인~26-34 의 루프에서는 로컬 카운트가 있는 모든 쓰레드의 \co{theft} 상태를
+바꾸고, 해당 쓰레드들에 시그널을 날립니다.
+라인~27 에서는 존재하지 않는 쓰레드들을 스킵합니다.
+그렇지 않다면, 라인~28 에서 현재 쓰레드가 로컬 카운트를 가지고 있는지 보고,
+가지고 있지 않다면 라인~29 에서 해당 쓰레드의 \co{theft} 상태를 READY 로 바꾸고
+라인~30 에서 다음 쓰레드로 넘어갑니다.
+그렇지 않고 현재 쓰레드가 로컬 카운트를 가지고 있다면, 라인~32 에서 해당
+쓰레드의 \co{theft} 상태를 REQ 로 바꾸고, 라인~33 에서 시그널을 날립니다.
+\iffalse
 
 Lines~21-49 shows \co{flush_local_count()}, which is called from the
 slowpath to flush all threads' local counts.
@@ -4674,12 +4720,27 @@ count, and, if not, line~29 sets the thread's \co{theft} state to READY
 and line~30 skips to the next thread.
 Otherwise, line~32 sets the thread's \co{theft} state to REQ and
 line~33 sends the thread a signal.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 에서, 왜 다른 쓰레드의 \co{countermax} 변수를 바로 접근해도
+	안전한 거죠?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions},
 	why is it safe for line~28 to directly access the other thread's
 	\co{countermax} variable?
+	\fi
 \QuickQuizAnswer{
+	그 다른 쓰레드는 자신의 \co{countermax} 변수의 값을 \co{gblcnt_mutex}
+	락을 쥐지 않은 한 수정할 수 없기 때문입니다.
+	하지만 이 함수 호출 코드는 락을 잡고 함수를 호출하기 때문에, 그 다른
+	쓰레드는 해당 락을 잡을 수가 없고, 따라서 그 다른 쓰레드는
+	\co{countermax} 변수를 수정할 수 없습니다.
+	따라서 바로 접근해도 안전합니다 --- 하지만 바꾸진 않습니다.
+	\iffalse
+
 	Because the other thread is not permitted to change the value
 	of its \co{countermax} variable unless it holds the
 	\co{gblcnt_mutex} lock.
@@ -4687,29 +4748,67 @@ line~33 sends the thread a signal.
 	for the other thread to hold it, and therefore the other thread
 	is not permitted to change its \co{countermax} variable.
 	We can therefore safely access it --- but not change it.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 에서, 왜 라인~33 은 현재 쓰레드가 자기 자신에게 시그널을
+	보내는지 체크하지 않나요?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions},
 	why doesn't line~33 check for the current thread sending itself
 	a signal?
+	\fi
 \QuickQuizAnswer{
+	또한번 체크할 필요가 없습니다.
+	\co{flush_local_count()} 는 이미 \co{globalize_count()} 를 호출했으니,
+	라인~28 에서의 체크가 성공해서 뒤의 \co{pthread_kill()} 은 스킵될
+	겁니다.
+	\iffalse
+
 	There is no need for an additional check.
 	The caller of \co{flush_local_count()} has already invoked
 	\co{globalize_count()}, so the check on line~28 will have
 	succeeded, skipping the later \co{pthread_kill()}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}
+	의 코드는 gcc 와 POSIX 에서 동작합니다.
+	ISO C 표준에서 동작하게 하려면 뭐가 필요할까요?
+	\iffalse
+
 	The code in
 	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions},
 	works with gcc and POSIX.
 	What would be required to make it also conform to the ISO C standard?
+	\fi
 \QuickQuizAnswer{
+	\co{theft} 변수는 안전하게 시그널 핸들러와 시그널에 인터럽트되는 코드
+	사이에서 안전하게 공유될 수 있도록 \co{sig_atomic_t} 타입이어야만
+	합니다.
+	\iffalse
+
 	The \co{theft} variable must be of type \co{sig_atomic_t}
 	to guarantee that it can be safely shared between the signal
 	handler and the code interrupted by the signal.
+	\fi
 } \QuickQuizEnd
+
+라인~35-48 의 루프는 각 쓰레드가 READY 상태에 도달하길 기다리고, 이후 해당
+쓰레드의 카운트를 훔칩니다.
+라인~36-37 은 존재하지 않는 쓰레드들을 스킵하고, 라인~38-42 의 루프에서 현재
+쓰레드의 \co{theft} 상태가 READY 가 되길 기다립니다.
+라인~39 에서는 우선순위 역전(priority-inversion) 문제를 막기 위해 1 밀리세컨드
+동안 블락되고, 라인~40 에서 해당 쓰레드의 시그널이 아직 도착하지 않은 것으로
+판단되면 라인~41 에서 시그널을 다시 날립니다.
+현재 살펴보고 있는 쓰레드의 상태가 마침내 READY 가 되면 실행 흐름은 라인~43 에
+도달해 라인~43-46 에서 훔치기를 시전합니다.
+라인~47 은 해당 쓰레드의 \co{theft} 상태를 다시 IDLE 로 되돌립니다.
+\iffalse
 
 The loop spanning lines~35-48 waits until each thread reaches READY state,
 then steals that thread's count.
@@ -4721,10 +4820,25 @@ line~41 resends the signal.
 Execution reaches line~43 when the thread's \co{theft} state becomes
 READY, so lines~43-46 do the thieving.
 Line~47 then sets the thread's \co{theft} state back to IDLE.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration
+	Functions} 의 라인~41 에서는 왜 시그널을 다시 보내죠?
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft Limit Counter Value-Migration Functions}, why does line~41 resend the signal?
+	\fi
 \QuickQuizAnswer{
+	지난 수십년간 많은 운영 체제는 갑자기 시그널을 잃어버리는 특성을 가졌기
+	때문입니다.
+	이게 기능인지 버그인지는 논쟁거리이지만, 그건 무의미합니다.
+	사용자가 보기에 분명한 증상은 커널 버그가 아니라 사용자
+	어플리케이션의 문제입니다.
+
+	\emph{당신의} 어플리케이션의 문제입니다!
+	\iffalse
+
 	Because many operating systems over several decades have
 	had the property of losing the occasional signal.
 	Whether this is a feature or a bug is debatable, but
@@ -4733,10 +4847,15 @@ Line~47 then sets the thread's \co{theft} state back to IDLE.
 	a kernel bug, but rather a user application hanging.
 
 	\emph{Your} user application hanging!
+	\fi
 } \QuickQuizEnd
+
+라인~51-63 에서는 \co{balance_count()} 함수를 보이는데, 앞의 예제와 비슷합니다.
+\iffalse
 
 Lines~51-63 show \co{balance_count()}, which is similar to that of
 earlier examples.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -4826,6 +4945,14 @@ earlier examples.
 \label{fig:count:Signal-Theft Limit Counter Subtract Function}
 \end{figure}
 
+Figure~\ref{fig:count:Signal-Theft Limit Counter Add Function} 는
+\co{add_count()} 함수를 보입니다.
+라인~5-20 에는 빠른 수행 경로가, 라인~21-35 에는 느린 수행 경로가 있습니다.
+라인~5 에서는 쓰레드별 \co{counting} 변수를 1로 만들어서 이후에 이 쓰레드를 인터럽트하는 어떤 시그널 핸들러도 \co{theft} 상태를 READY 가 아니라 ACK 로 설정하게 해둠으로써, 이 빠른 수행 경로가 올바르게 완료되도록 합니다.
+라인~6 은 컴파일러가 빠른 수행 경로의 본체가 \co{counting} 설정보다 앞에 위치하도록 재배치 하는 것을 막아줍니다.
+라인~7 과 8 은 쓰레드별 데이터가 \co{add_count()} 를 처리할 수 있는지 확인하고 현재 수행중인 훔치기 작업이 없다면 라인~9 에서 빠른 수행 경로 더하기 연산을 수행하고 라인~10 에서 빠른 수행 경로가 진행됨을 알립니다.
+\iffalse
+
 Figure~\ref{fig:count:Signal-Theft Limit Counter Add Function}
 shows the \co{add_count()} function.
 The fastpath spans lines~5-20, and the slowpath lines~21-35.
@@ -4839,6 +4966,16 @@ Lines~7 and 8 check to see if the per-thread data can accommodate
 the \co{add_count()} and if there is no ongoing theft in progress,
 and if so line~9 does the fastpath addition and line~10 notes that
 the fastpath was taken.
+\fi
+
+어떤 경우든, 라인~12 에서 컴파일러가 빠른 수행 경로 본체가 라인~13 뒤에 오도록
+재배치해 이후의 시그널 핸들러가 훔치기 작업을 하는 사태를 만들지 못하게 합니다.
+라인~14 에서는 다시 컴파일러 재배치를 막고, 라인~15 에서 시그널 핸들러가
+\co{theft} 상태를 READY 로 바꿨는지 보고, 만약 그렇다면 라인~16 에서 라인~17
+에서 READY 로 설정한 상태를 본 CPU 는 라인~9 의 결과도 보도록 해줍니다.
+라인~9 에서의 빠른 수행 경로 더하기가 실행되었다면, 라인~20 에서 성공을
+리턴합니다.
+\iffalse
 
 In either case, line~12 prevents the compiler from reordering the
 fastpath body to follow line~13, which permits any subsequent signal
@@ -4850,6 +4987,7 @@ barrier to ensure that any CPU that sees line~17 setting state to
 READY also sees the effects of line~9.
 If the fastpath addition at line~9 was executed, then line~20 returns
 success.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -4873,6 +5011,15 @@ success.
 \label{fig:count:Signal-Theft Limit Counter Read Function}
 \end{figure}
 
+그렇지 않다면, 라인~21 부터 시작되는 느린 수행 경로로 떨어집니다.
+느린 수행 경로의 구조는 앞의 예제들과 유사하므로, 분석은 독자 여러분의 연습
+문제로 놔두겠습니다.
+비슷하게, Figure~\ref{fig:count:Signal-Theft Limit Counter Subtract Function}
+의 \co{sub_count()} 의 구조는 \co{add_count()} 와 동일하므로, \co{sub_count()}
+역시, 그리고 Figure~\ref{fig:count:Signal-Theft Limit Counter Read Function} 의
+\co{read_count()} 와 함께 그 분석을 독자 여러분의 몫으로 남겨 두겠습니다.
+\iffalse
+
 Otherwise, we fall through to the slowpath starting at line~21.
 The structure of the slowpath is similar to those of earlier examples,
 so its analysis is left as an exercise to the reader.
@@ -4883,6 +5030,7 @@ as that of \co{add_count()}, so the analysis of \co{sub_count()} is also
 left as an exercise for the reader, as is the analysis of
 \co{read_count()} in
 Figure~\ref{fig:count:Signal-Theft Limit Counter Read Function}.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -4928,6 +5076,15 @@ Figure~\ref{fig:count:Signal-Theft Limit Counter Read Function}.
 \label{fig:count:Signal-Theft Limit Counter Initialization Functions}
 \end{figure}
 
+Figure~\ref{fig:count:Signal-Theft Limit Counter Initialization Functions}
+의 라인~1-12 는 \co{count_init()} 를 보여주는데, 이 함수에선
+\co{flush_local_count_sig()} 를 \co{SIGUSR1} 의 시그널 핸들러로 설정해서
+\co{flush_local_count()} 에서 \co{pthread_kill()} 호출로
+\co{flush_local_count_sig()} 를 실행시킬 수 있게 합니다.
+쓰레드 등록과 해제를 위한 코드는 앞의 예제와 비슷하므로, 이 코드의 분석은
+독자의 몫으로 남겨 두겠습니다.
+\iffalse
+
 Lines~1-12 of
 Figure~\ref{fig:count:Signal-Theft Limit Counter Initialization Functions}
 show \co{count_init()}, which set up \co{flush_local_count_sig()}
@@ -4937,6 +5094,7 @@ to invoke \co{flush_local_count_sig()}.
 The code for thread registry and unregistry is similar to that of
 earlier examples, so its analysis is left as an exercise for the
 reader.
+\fi
 
 \subsection{Signal-Theft Limit Counter Discussion}
 
