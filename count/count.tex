@@ -5190,6 +5190,23 @@ hardware performance characteristics.
 \section{Applying Specialized Parallel Counters}
 \label{sec:count:Applying Specialized Parallel Counters}
 
+Section~\ref{sec:count:Exact Limit Counters} 에서 소개한 정확한 리미트 카운터
+구현은 매우 유용할 수 있지만, 예를 들어 I/O 디바이스로의 액세스 수를 세는
+경우와 같이 카운터의 값이 항상 0에 가깝게 유지된다면 별로 유용하지 않을 겁니다.
+그런 경우에서의 높은 오버헤드는 일반적으로 얼마나 많은 레퍼런스들이 존재하는지
+신경쓰지 않는다는 점을 감안하면 특히나 큰 문제가 됩니다.
+{\QQIOcnt} 에서 이야기한 제거 가능한 I/O 디바이스 액세스 카운트 문제에서 이야기
+했듯, 액세스의 갯수는 누군가가 정말로 해당 디바이스를 제거하려 하고 있는 드문
+경우가 아니고는 무의미합니다.
+
+이 문제에 대한 간단한 해결책은 카운터에 커다란 ``바이어스'' (예를 들어, 10억
+정도) 를 더해 값이 0 보다 충분히 커서 카운터가 효과적으로 동작할 수 있도록
+보장해 주는 것입니다.
+누군가가 디바이스를 제거하려 한다면, 이 바이어스는 카운터 값에서 빼집니다.
+마지막의 몇개 액세스들을 카운팅 하는 건 매우 비효율적이 되겠지만, 중요한 건, 그
+앞의 많은 액세스들은 최대 속도로 카운트 될 것이라는 점입니다.
+\iffalse
+
 Although the exact limit counter implementations in
 Section~\ref{sec:count:Exact Limit Counters}
 can be very useful, they are not much help if the counter's value
@@ -5211,15 +5228,37 @@ the counter value.
 Counting the last few accesses will be quite inefficient,
 but the important point is that the many prior accesses will have been
 counted at full speed.
+\fi
 
 \QuickQuiz{}
+	바이어스된 카운터를 사용할 때 그 외에 뭘 하면 좋을까요?
+	\iffalse
+
 	What else had you better have done when using a biased counter?
+	\fi
 \QuickQuizAnswer{
+	카운터가 액세스의 수가 최대값에 가까울 때에도 효과적으로 동작할 수
+	있도록 위쪽 리미트를 바이어스, 예상되는 최대 액세스 수, 그리고 충분한
+	``출렁거림'' 을 수용하기 충분하도록 크게 잡는게 좋을 겁니다.
+	\iffalse
+
 	You had better have set the upper limit to be large enough
 	accommodate the bias, the expected maximum number of accesses,
 	and enough ``slop'' to allow the counter to work efficiently
 	even when the number of accesses is at its maximum.
+	\fi
 } \QuickQuizEnd
+
+바이어스된 카운터는 매우 유용하고 도움이 될 수 있지만,
+page~\pageref{chp:Counting} 에서 이야기된 제거 가능한 I/O 디바이스 액세스
+카운트 문제에의 부분적 해결책에 불과합니다.
+디바이스를 제거하려 시도할 때, 우린 현재 I/O 액세스들의 정확한 갯수를 알아야
+할뿐만이 아니라, 이후의 액세스가 발생하지 않도록 막아야 합니다.
+이걸 해내는 한가지 방법은 리더-라이터 락을 사용해 카운터를 업데이트 할 때 읽기
+권한을 획득하고, 카운터를 체크할 때 같은 리더-라이터 락에서 쓰기 권한을
+획득하는 것입니다.
+I/O 를 위한 코드는 다음과 같이 될겁니다:
+\iffalse
 
 Although a biased counter can be quite helpful and useful, it is only a
 partial solution to the removable I/O device access-count problem
@@ -5232,6 +5271,7 @@ One way to accomplish this is to read-acquire a reader-writer lock
 when updating the counter, and to write-acquire that same reader-writer
 lock when checking the counter.
 Code for doing I/O might be as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5251,25 +5291,53 @@ Code for doing I/O might be as follows:
 \end{minipage}
 \vspace{5pt}
 
+라인~1 에서 락을 이용해 읽기 권한을 획득하고, 라인~3 이나 7 에서 이를
+해제합니다.
+라인~2 에서는 디바이스가 삭제되는 중인지 확인하고, 그렇다면 라인~3 에서 락을
+해제하고 라인~4 에서 I/O 를 취소하거나, 디바이스가 삭제될 예정일 때 해야 할
+무슨 일이든 합니다.
+디바이스가 삭제중인지 않다면 라인~6 에서 액세스 카운트를 증가시키고 라인~7 에서
+락을 해제하고, 라인~8 에서 I/O를 수행한 후, 라인~9 에서 액세스 카운트를
+낮춥니다.
+\iffalse
+
 Line~1 read-acquires the lock, and either line~3 or 7 releases it.
 Line~2 checks to see if the device is being removed, and, if so,
 line~3 releases the lock and line~4 cancels the I/O, or takes whatever
 action is appropriate given that the device is to be removed.
 Otherwise, line~6 increments the access count, line~7 releases the
 lock, line~8 performs the I/O, and line~9 decrements the access count.
+\fi
 
 \QuickQuiz{}
+	이거 참 웃기네요!
+	카운터를 \emph{업데이트} 하기 위해 리더-라이터 락의 \emph{읽기} 권한
+	획득을 한다니요?
+	뭐하는거예요???
+	\iffalse
+
 	This is ridiculous!
 	We are \emph{read}-acquiring a reader-writer lock to
 	\emph{update} the counter?
 	What are you playing at???
+	\fi
 \QuickQuizAnswer{
+	이상해 보일 수 있겠죠, 하지만 진짜예요!
+	``리더-라이터 락'' 이라는 이름은 사실 완벽하게 의미를 설명하지 못한다는
+	점을 상기하면 이해가 될 거예요, 그렇죠?
+	\iffalse
+
 	Strange, perhaps, but true!
 	Almost enough to make you think that the name
 	``reader-writer lock'' was poorly chosen, isn't it?
+	\fi
 } \QuickQuizEnd
 
+디바이스를 제거하는 코드는 다음과 같을 겁니다:
+\iffalse
+
 The code to remove the device might be as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5287,15 +5355,52 @@ The code to remove the device might be as follows:
 \end{minipage}
 \vspace{5pt}
 
+라인~1 에서는 락의 쓰기-획득을 하고 라인~4 에서 해제합니다.
+라인~2 에서 디바이스가 제거되는 중임을 알리고, 라인~5-7 에서 존재하는 I/O
+오퍼레이션들이 끝나길 기다립니다.
+마지막으로, 라인~8 에서 디바이스 제거에 필요한 작업을 진행합니다.
+\iffalse
+
 Line~1 write-acquires the lock and line~4 releases it.
 Line~2 notes that the device is being removed, and the loop spanning
 lines~5-7 wait for any I/O operations to complete.
 Finally, line~8 does any additional processing needed to prepare for
 device removal.
+\fi
 
 \QuickQuiz{}
+	실제 시스템에 적용하려면 해결해야할 문제들이 또 뭐가 있을 수 있을까요?
+	\iffalse
+
 	What other issues would need to be accounted for in a real system?
+	\fi
 \QuickQuizAnswer{
+	엄청나게 많죠!
+
+	일단 몇가지 생각을 시작할 것들은:
+
+	\begin{enumerate}
+	\item	디바이스는 여러개가 있을 수 있으니, 전역 변수는 적절치 못하고,
+		\co{do_io()}  에 인자가 없는 것도 마찬가지죠.
+	\item	폴링하는 루프는 실제 시스템에서는 문제가 있을 수 있습니다.
+		많은 경우, 마지막으로 I/O 를 완료 하는 쪽에서 디바이스 제거
+		쓰레드를 깨우는 편이 낫습니다.
+	\item	I/O 는 실패할 수 있으므로, \co{do_io()} 는 리턴 값을 가져야 할
+		겁니다.
+	\item	디바이스가 고장나면, 마지막 I/O 는 성공하지 못할 것입니다.
+		이런 경우, 에러 복구를 위한 어떤 타임아웃 같은 것이 필요할
+		것입니다.
+	\item	\co{add_count()} 와 \co{sub_count()} 모두 실패할 수 있는데
+		리턴값을 체크하지 않았습니다.
+	\item	리더-라이터 락은 확장성이 그다지 좋지 않습니다.
+		리더-라이터 락의 읽기 권한 획득의 높은 비용을 회피하는 방법
+		한가지가 Chapter~\ref{chp:Locking},\ref{chp:Deferred
+		Processing} 에 소개되어 있습니다.
+	\item	폴링 루프는 매우 낮은 에너지 효율성을 초래할 것입니다.
+		이벤트 기반 설계가 나을 겁니다.
+	\end{enumerate}
+	\iffalse
+
 	A huge number!
 
 	Here are a few to start with:
@@ -5322,6 +5427,7 @@ device removal.
 	\item	The polling loops result in poor energy efficiency.
 		An event-driven design is preferable.
 	\end{enumerate}
+	\fi
 } \QuickQuizEnd
 
 \section{Parallel Counting Discussion}
