@@ -5098,6 +5098,19 @@ reader.
 
 \subsection{Signal-Theft Limit Counter Discussion}
 
+Signal-theft 구현은 제 Intel Core Duo 랩탑에서 어토믹 인스트럭션 구현보다 두배
+이상 빠르게 동작합니다.
+항상 그럴까요?
+
+Signal-theft 구현은 펜티엄-4 시스템에서는 어토믹 인스트럭션들이 느리기 때문에
+선호될만 합니다만 과거의 80386 기반 Sequent Symmetry 시스템에서는 어토믹 구현의
+더 짧은 코드를 더 빨리 수행할 것입니다.
+하지만, 이 업데이트 쪽의 성능 향상은 높아진 읽는쪽 오버헤드와 함께 옵니다:
+POSIX 시그널은 공짜가 아닙니다.
+결국 원하는 핵심이 성능이라면, 두 구현 모두를 어플리케이션이 배포될 시스템
+위에서 돌려보는게 좋을 겁니다.
+\iffalse
+
 The signal-theft implementation runs more than twice as fast as the
 atomic implementation on my Intel Core Duo laptop.
 Is it always preferable?
@@ -5110,13 +5123,28 @@ However, this increased update-side performance comes at the
 prices of higher read-side overhead: Those POSIX signals are not free.
 If ultimate performance is of the essence, you will need to measure
 them both on the system that your application is to be deployed on.
+\fi
 
 \QuickQuiz{}
+	POSIX 시그널만 느린게 아니라, 시그널을 각 쓰레드에 보내는 행위 자체가
+	확장성이 없어요.
+	만약 10,000 개의 쓰레드가 있고 읽는 쪽도 빨라야 한다면 어떻게
+	하시겠어요?
+	\iffalse
+
 	Not only are POSIX signals slow, sending one to each thread
 	simply does not scale.
 	What would you do if you had (say) 10,000 threads and needed
 	the read side to be fast?
+	\fi
 \QuickQuizAnswer{
+	한가지 방법은
+	Section~\ref{sec:count:Eventually Consistent Implementation} 에서
+	보였던, 한개의 카운터 변수에 추정치를 합하는 방법입니다.
+	또다른 방법으로는 각각 업데이트를 하는 쓰레드의 일부와 상호작용하면서
+	읽기 작업을 함께 하는 복수의 쓰레드를 사용하는 방법도 있겠습니다.
+	\iffalse
+
 	One approach is to use the techniques shown in
 	Section~\ref{sec:count:Eventually Consistent Implementation},
 	summarizing an approximation to the overall counter value in
@@ -5124,21 +5152,39 @@ them both on the system that your application is to be deployed on.
 	Another approach would be to use multiple threads to carry
 	out the reads, with each such thread interacting with a
 	specific subset of the updating threads.
+	\fi
 } \QuickQuizEnd
+
+이건 왜 높은 품질의 API 가 그렇게 중요한지를 보여주는 한가지 예이기도 합니다:
+높은 품질의 API 는 바뀌는 하드웨어 성능 특성에 따라 요구되는 구현 변경이
+가능하게 해줍니다.
+\iffalse
 
 This is but one reason why high-quality APIs are so important:
 they permit implementations to be changed as required by ever-changing
 hardware performance characteristics.
+\fi
 
 \QuickQuiz{}
+	아래쪽 한계는 명확하게 지키지만 위쪽 한계는 좀 정확하지 않아도 되는
+	한계 카운터를 원한다면 어떻게 하면 될까요?
+	\iffalse
+
 	What if you want an exact limit counter to be exact only for
 	its lower limit, but to allow the upper limit to be inexact?
+	\fi
 \QuickQuizAnswer{
+	한가지 간단한 해결책은 위쪽 한계를 원하는 만큼 더 높게 잡아주는 것입니다.
+	그렇게 더 높게 리미트를 잡아주는 것의 한계는 카운터가 표현할 수 있는
+	최대의 값이 될 것입니다.
+	\iffalse
+
 	One simple solution is to overstate the upper limit by the
 	desired amount.
 	The limiting case of such overstatement results in the
 	upper limit being set to the largest value that the counter is
 	capable of representing.
+	\fi
 } \QuickQuizEnd
 
 \section{Applying Specialized Parallel Counters}
