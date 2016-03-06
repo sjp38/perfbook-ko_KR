@@ -4726,13 +4726,29 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	Table~\ref{tab:count:Statistical Counter Performance on Power-6} 의
+	\url{count_stat.c} 열에 보면 읽기 성능이 쓰레드 수에 따라
+	선형적으로 확장되는데요.
+	쓰레드 수가 늘어나면 더 많은 쓰레드별 카운터의 합이 이루어져야 하는데
+	어떻게 그게 가능하죠?
+	\iffalse
+
 	On the \url{count_stat.c} row of
 	Table~\ref{tab:count:Statistical Counter Performance on Power-6},
 	we see that the update side scales linearly with the number of
 	threads.
 	How is that possible given that the more threads there are,
 	the more per-thread counters must be summed up?
+	\fi
 \QuickA{}
+	읽는 쪽의 코드는 쓰레드의 수와 상관 없이 고정된 크기의 배열 전체를
+	읽어야 하기 때문에 성능에 차이가 없습니다.
+	반면, 뒤의 두개 알고리즘의 경우 쓰레드가 늘어나면 더 많은 일을 하게
+	됩니다.
+	더불어, 뒤의 두개 알고리즘은 쓰레드 ID 와 연관된 \co{__thread} 변수
+	사이의 매핑을 유지하는 추가적인 계층을 갖습니다.
+	\iffalse
+
 	The read-side code must scan the entire fixed-size array, regardless
 	of the number of threads, so there is no difference in performance.
 	In contrast, in the last two algorithms, readers must do more
@@ -4740,14 +4756,35 @@ ret = ~ret & tmp;
 	In addition, the last two algorithms interpose an additional
 	level of indirection because they map from integer thread ID
 	to the corresponding \co{__thread} variable.
+	\fi
 
 \QuickQ{}
+	Table~\ref{tab:count:Statistical Counter Performance on Power-6} 의
+	마지막 열을 보더라도 통계적 카운터 구현의 읽기쪽 성능은 매우 나쁘군요.
+	왜 이렇게 성능 나쁜 알고리즘을 신경쓰는거죠?
+	\iffalse
+
 	Even on the last row of
 	Table~\ref{tab:count:Statistical Counter Performance on Power-6},
 	the read-side performance of these statistical counter
 	implementations is pretty horrible.
 	So why bother with them?
+	\fi
 \QuickA{}
+	``해야할 일에 걸맞는 도구를 사용하세요.''
+
+	Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem} 에서 볼
+	수 있듯이, 하나의 변수에 어토믹 증가 오퍼레이션을 사용하는 방법은
+	상당한 양의 병렬적 업데이트가 있는 작업에 사용되어선 안됩니다.
+	반면, Table~\ref{tab:count:Statistical Counter Performance on Power-6}
+	에 보인 알고리즘들은 업데이트가 많은 상황에서 일을 훌륭하게 처리할
+	것입니다.
+	물론, 읽기가 대부분인 상황이라면, 다른걸 사용해야 합니다. 예를 들자면,
+	Section~\ref{sec:count:Eventually Consistent Implementation} 에 사용된
+	것과 비슷하게 한번의 로드 오퍼레이션으로 읽어낼 수 있는, 어토믹하게
+	증가되는 변수를 사용하는 결과적 일관성 설계와 같은 거요.
+	\iffalse
+
 	``Use the right tool for the job.''
 
 	As can be seen from
@@ -4763,12 +4800,33 @@ ret = ~ret & tmp;
 	variable that can be read out using a single load,
 	similar to the approach used in
 	Section~\ref{sec:count:Eventually Consistent Implementation}.
+	\fi
 
 \QuickQ{}
+	Table~\ref{tab:count:Limit Counter Performance on Power-6} 에 보여진
+	성능 데이터를 놓고 보자면, 우리는 항상 어토믹 오퍼레이션보다는 시그널을
+	사용해야겠군요, 그렇죠?
+	\iffalse
+
 	Given the performance data shown in
 	Table~\ref{tab:count:Limit Counter Performance on Power-6},
 	we should always prefer signals over atomic operations, right?
+	\fi
 \QuickA{}
+	그건 워크로드에 따라 달라집니다.
+	64-코어 시스템이라면, 단지 한개의 시그널 (약 40-나노세컨드 성능 향상)
+	을 만들기 위해 100 개가 넘는 어토믹하지 않은 오퍼레이션들의 실행 (약
+	5-\emph{마이크로세컨드} 성능 저하) 이 필요합니다.
+	더욱 읽기 위주인 워크로드는 여전히 존재하지만, 현재 처리해야하는 특정
+	워크로드에 신경쓸 필요가 있습니다.
+
+	또한, 역사적으로 메모리 배리어는 일반 인스트럭션들에 비해 비용이
+	비쌌지만, 당신이 운용하게 될 특정 하드웨어에서도 그러한지 확인해 봐야
+	합니다.
+	컴퓨터 하드웨어의 특성은 시간에 따라 변하고, 알고리즘도 그에 맞춰
+	변해야만 합니다.
+	\iffalse
+
 	That depends on the workload.
 	Note that on a 64-core system, you need more than
 	one hundred non-atomic operations (with roughly
@@ -4783,12 +4841,28 @@ ret = ~ret & tmp;
 	check this on the specific hardware you will be running.
 	The properties of computer hardware do change over time,
 	and algorithms must change accordingly.
+	\fi
 
 \QuickQ{}
+	Table~\ref{tab:count:Limit Counter Performance on Power-6} 에 보여진
+	읽는 쓰레드간의 락 컨텐션을 해결하기 위해 고급 테크닉들이 사용될 수
+	있을까요?
+	\iffalse
+
 	Can advanced techniques be applied to address the lock
 	contention for readers seen in
 	Table~\ref{tab:count:Limit Counter Performance on Power-6}?
+	\fi
 \QuickA{}
+	한가지 해결책은 scalable non-zero
+	indicators(SNZI)~\cite{FaithEllen:2007:SNZI} 처럼 업데이트 쪽 성능을
+	약간 포기하는 겁니다.
+	SNZI 외에도 이 해결책을 구현하는 여러 방법이 있겠지만, 그건 독자의
+	몫으로 남겨두겠습니다.
+	자주 획득이 요청되는 글로벌 락을 낮은 레벨의 계층의 로컬 락의 획득들로
+	대체하는 계층적 방법들도 이 문제를 잘 해결할 겁니다.
+	\iffalse
+
 	One approach is to give up some update-side performance, as is
 	done with scalable non-zero indicators
 	(SNZI)~\cite{FaithEllen:2007:SNZI}.
@@ -4797,6 +4871,7 @@ ret = ~ret & tmp;
 	Any number of approaches that apply hierarchy, which replace
 	frequent global-lock acquisitions with local lock acquisitions
 	corresponding to lower levels of the hierarchy, should work quite well.
+	\fi
 
 \QuickQ{}
 	The \co{++} operator works just fine for 1,000-digit numbers!
