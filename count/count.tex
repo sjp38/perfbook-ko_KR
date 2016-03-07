@@ -5740,6 +5740,20 @@ The next section looks at these questions.
 \subsection{Parallel Counting Specializations}
 \label{sec:count:Parallel Counting Specializations}
 
+이 알고리즘들은 각자의 특별한 경우에 대해서만 잘 동작한다는 사실은 일반적인
+병렬 프로그래밍에 있어서는 중요한 문제로 여겨질 것입니다.
+무엇보다, C 언어의 \co{++} 오퍼레이터는 싱글 쓰레드 코드에서는, 그것도 특수한
+경우에 대해서만이 아니라 일반적인 경우에서 잘 동작합니다, 그렇죠?
+
+이 생각의 흐름은 진실을 담고 있긴 하나, 본질적으로는 잘못 유추되어졌습니다.
+문제는 병렬성이 아니라, 확장성입니다.
+이걸 이해하기 위해, 먼저 C 언어의 \co{++} 오퍼레이터를 생각해 봅시다.
+사실, \co{++} 오퍼레이터는 일반적인 경우에 동작하지 \emph{않고}, 그저 제한된
+수의 영역 내에서만 동작합니다.
+1,000 자리 십진수 숫자를 다뤄야 한다면, C 언어 \co{++} 오퍼레이터는 동작하지
+않을 겁니다.
+
+\iffalse
 The fact that these algorithms only work well in their respective special
 cases might be considered a major problem with parallel programming in
 general.
@@ -5754,16 +5768,48 @@ The fact is that it does \emph{not} work in general, only for a restricted
 range of numbers.
 If you need to deal with 1,000-digit decimal numbers, the C-language \co{++}
 operator will not work for you.
+\fi
 
 \QuickQuiz{}
+	\co{++} 오퍼레이터는 1,000 자리 숫자에도 잘 동작해요!
+	연산자 오버로딩이라고 못들어봤어요???
+	\iffalse
+
 	The \co{++} operator works just fine for 1,000-digit numbers!
 	Haven't you heard of operator overloading???
+	\fi
 \QuickQuizAnswer{
+	C++ 언어에서라면 그런 수를 구현하는 클래스에 액세스가 가능하다는 가정
+	하에 1,000 자리 숫자에도 \co{++} 을 사용할 수 있겠죠.
+	하지만 최소 2010년 까지는, C 언어는 오퍼레이터 오버로딩을 허용하지
+	않습니다.
+	\iffalse
+
 	In the C++ language, you might well be able to use \co{++}
 	on a 1,000-digit number, assuming that you had access to a
 	class implementing such numbers.
 	But as of 2010, the C language does not permit operator overloading.
+	\fi
 } \QuickQuizEnd
+
+이 문제는 수에 국한되지 않습니다.
+데이터를 저장하고 찾아와야 한다고 생각해 봅시다.
+ASCII 파일을 써야 할까요?
+XML?
+관계형 데이터베이스?
+링크드 리스트?
+덴스 어레이?
+B-트리?
+래딕스 트리?
+또는 데이터를 저장하고 찾아오는 것을 허락하는 다른 수많은 데이터 구조와 환경 중
+하나?
+그건 무엇을 해야 하는가, 얼마나 빨리 해야 하는가, 그리고 얼마나 데이터가 큰가에
+달려 있습니다---심지어 순차적 시스템에서도요.
+
+비슷하게, 카운팅이 필요하다면, 해결책은 얼마나 큰 숫자를 다뤄야 하고, 얼마나
+많은 CPU 가 동시에 그 숫자를 조정할 것이며, 어떻게 그 숫자가 사용될 것이고,
+어떤 수준의 성능과 확장성이 필요한지에 따라 달라집니다.
+\iffalse
 
 This problem is not specific to arithmetic.
 Suppose you need to store and query data.
@@ -5783,6 +5829,22 @@ Similarly, if you need to count, your solution will depend on how large
 of numbers you need to work with, how many CPUs need to be manipulating
 a given number concurrently, how the number is to be used, and what
 level of performance and scalability you will need.
+\fi
+
+또한 이 문제는 소프트웨어에 국한되지도 않습니다.
+사람들이 작은 개울을 건널 수 있게 해주는 다리의 설계는 하나의 나무판자 처럼
+간단할 수도 있습니다.
+하지만 당신은 수 킬로미터 폭의 콜럼비아 강을 위해서라면은 물론, 콘크리트 트럭이
+지나가야 하는 다리를 설계해야 한다고만 해도 나무판자를 사용하진 않을 겁니다.
+짧게 말해서, 다리 설계가 거리와 부하에 따라 달라져야만 하는 만큼, 소프트웨어
+설계 역시 CPU 갯수에 따라 달라져야만 합니다.
+그렇다곤 하나, 이 작업을 자동화 해서 소프트웨어가 하드웨어 구성과 워크로드의
+변화를 수용할 수 있도록 하면 좋을 것입니다.
+실제로 그런 자동화 부류를 위한 연구~\cite{Appavoo03a,Soules03a} 가 있어왔고,
+리눅스 커널 역시 제한된 바이너리 수정을 포함해, 부팅 타임 재구성을 합니다.
+이런 종류의 적응 기능은 주요 시스템에서의 CPU 갯수가 늘어남을 유지함에 따라
+더욱 중요해질 것입니다.
+\iffalse
 
 Nor is this problem specific to software.
 The design for a bridge meant to allow people to walk across a small brook
@@ -5799,6 +5861,20 @@ automation~\cite{Appavoo03a,Soules03a}, and the Linux kernel does some
 boot-time reconfiguration, including limited binary rewriting.
 This sort of adaptation will become increasingly important as the
 number of CPUs on mainstream systems continues to increase.
+\fi
+
+요약하자면, Chapter~\ref{chp:Hardware and its Habits} 에서 이야기 했듯, 물리
+법칙은 다리와 같은 기계적 인공물에 제약을 가하듯이 병렬 소프트웨어에도 제약을
+가합니다.
+이런 제약으로 인해 특수화가 필요하게 됩니다, 다만 소프트웨어의 경우에는 그
+특수화를 요구되는 하드웨어와 워크로드에 걸맞는 특수화로 선택하는 것 자체를
+자동화 하는게 가능할 수도 있습니다.
+
+물론, 일반화된 카운팅조차도 상당히 특수화 되어 있습니다.
+컴퓨터를 가지고는 그 외에도 수많은 일을 해야 합니다.
+다음 섹션에서는 카운터로부터 배운 것과 이 책의 뒤에서 다루게 될 주제 사이의
+관계를 알아봅니다.
+\iffalse
 
 In short, as discussed in
 Chapter~\ref{chp:Hardware and its Habits},
@@ -5812,6 +5888,7 @@ Of course, even generalized counting is quite specialized.
 We need to do a great number of other things with computers.
 The next section relates what we have learned from counters to
 topics taken up later in this book.
+\fi
 
 \subsection{Parallel Counting Lessons}
 \label{sec:count:Parallel Counting Lessons}
