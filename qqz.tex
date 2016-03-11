@@ -4735,7 +4735,7 @@ ret = ~ret & tmp;
 
 	On the \url{count_stat.c} row of
 	Table~\ref{tab:count:Statistical Counter Performance on Power-6},
-	we see that the update side scales linearly with the number of
+	we see that the read-side scales linearly with the number of
 	threads.
 	How is that possible given that the more threads there are,
 	the more per-thread counters must be summed up?
@@ -9912,9 +9912,26 @@ STORE r0,counter
 
 \QuickQAC{chp:app:whymb:Why Memory Barriers?}{Why Memory Barriers?}
 \QuickQ{}
+	Writeback 메세지는 어디서 와서 어디로 가나요?
+	\iffalse
 	Where does a writeback message originate from and where does
 	it go to?
+	\fi
 \QuickA{}
+	Writeback 메세지는 해당 CPU 에서, 또는 일부 설계에서는 해당 CPU 의
+	캐시의 해당 레벨에서 발생합니다---또는 심지어 여러 CPU 들 사이에 공유된
+	캐시에서도.
+	핵심은 해당 캐시는 현재 데이터 아이템을 위한 공간이 없어서 공간을
+	만들기 위해 캐시에서 일부 데이터를 제거해야 한다는 겁니다.
+	다른 캐시나 메모리에 데이터의 복사본이 일부 존재한다면, 그 부분은
+	writeback 메세지 필요 없이 그냥 버려질 수도 있습니다.
+
+	반면, 만약 제거될 데이터의 모든 부분이 수정된 상태여서 최신 버전이 이
+	캐시에만 존재한다면, 그런 데이터 아이템들은 어딘가 다른곳에
+	복사되어야만 합니다.
+	이 복사 과정이 ``writeback 메세지'' 를 통해 이루어집니다.
+	\iffalse
+
 	The writeback message originates from a given CPU, or in some
 	designs from a given level of a given CPU's cache---or even
 	from a cache that might be shared among several CPUs.
@@ -9930,6 +9947,21 @@ STORE r0,counter
 	cache, then one of those data items must be copied somewhere
 	else.
 	This copy operation is undertaken using a ``writeback message''.
+	\fi
+
+	Writeback 메세지의 목적지는 새 값을 쓸 수 있는 곳이어야 합니다.
+	이는 메인 메모리가 될 수도 있지만, 다른 캐시일 수도 있습니다.
+	만약 그게 캐시라면, 그 캐시는 보통 같은 CPU 의 높은 레벨 캐시로, 예를
+	들어, 레벨-1 캐시는 레벨-2 캐시에 writeback 을 할 수도 있습니다.
+	하지만, 일부 하드웨어 설계는 CPU 간 writeback 을 허용해서, CPU~0 의
+	캐시는 CPU~1 에 writeback 메세지를 날릴 수 있ㅅ브니다.
+	이는 보통 CPU~1 이 어떻게든, 예를 들어, 최근에 읽기 리퀘스트를
+	했다던지와 같이 그 데이터에 흥미를 표했다면 행해질 수 있습니다.
+
+	한마디로, writeback 메세지는 공간이 부족한 시스템의 어떤 부분에서
+	보내질 수 있고, 그 데이터를 수용할 수 있는 시스템의 다른 부분에서 받게
+	됩니다.
+	\iffalse
 
 	The destination of the writeback message has to be something
 	that is able to store the new value.
@@ -9946,11 +9978,25 @@ STORE r0,counter
 	In short, a writeback message is sent from some part of the
 	system that is short of space, and is received by some other
 	part of the system that can accommodate the data.
+	\fi
 
 \QuickQ{}
+	두개의 CPU 들이 같은 캐시 라인을 동시에 무효화 하려고 하면 어떻게
+	되나요?
+	\iffalse
+
 	What happens if two CPUs attempt to invalidate the
 	same cache line concurrently?
+	\fi
 \QuickA{}
+	그 CPU 들 중 하나가 먼저 공유 버스에의 액세스를 얻고, 그 CPU 가
+	``이깁니다''.
+	이기지 못한 CPU 는 해당 캐시라인의 카피를 무효화 시키고 ``invalidate
+	acknowlege'' 메세지를 이긴 CPU 에게 보내야 합니다. \\
+	물론, 진 CPU 는 곧바로 ``read invalidate'' 요청을 보낼 것이라 예상할 수
+	있고, 따라서 이긴 CPU 의 승리는 덧없는 것이 될 겁니다.
+	\iffalse
+
 	One of the CPUs gains access
 	to the shared bus first,
 	and that CPU ``wins''.  The other CPU must invalidate its copy of the
@@ -9959,22 +10005,53 @@ STORE r0,counter
 	Of course, the losing CPU can be expected to immediately issue a
 	``read invalidate'' transaction, so the winning CPU's victory will
 	be quite ephemeral.
+	\fi
 
 \QuickQ{}
+	커다란 멀티프로세서에서 ``invalidate'' 메세지가 생기면, 모든 CPU 가
+	``invalidatge acknowledge'' 응답을 보내야만 합니다.
+	그로 인한 ``invalidate acknowledge'' 의 ``폭풍우'' 가 시스템 버스를
+	완전히 뒤덮지 않을까요?
+	\iffalse
+
 	When an ``invalidate'' message appears in a large multiprocessor,
 	every CPU must give an ``invalidate acknowledge'' response.
 	Wouldn't the resulting ``storm'' of ``invalidate acknowledge''
 	responses totally saturate the system bus?
+	\fi
 \QuickA{}
+	커다란 규모의 멀티프로세서가 그렇게 구현되어 있다면 그렇겠죠.
+	커다란 멀티프로세서들, 특히 NUMA 구조의 경우에는, ``dicrectory-based''
+	라 불리는 캐시 일관성 프로토콜을 사용해서 이런 문제 등의 여러 문제들이
+	나타나지 않게 합니다.
+	\iffalse
+
 	It might, if large-scale multiprocessors were in fact implemented
 	that way.  Larger multiprocessors, particularly NUMA machines,
 	tend to use so-called ``directory-based'' cache-coherence
 	protocols to avoid this and other problems.
+	\fi
 
 \QuickQ{}
+	SMP 머신들이 실제로 메세지 전달을 어떻게든 사용한다면, 애초에 왜 SMP 에
+	신경을 쓰는거죠?
+	\iffalse
+
 	If SMP machines are really using message passing
 	anyway, why bother with SMP at all?
+	\fi
 \QuickA{}
+	이 주제에 대해서는 지난 수십년 동안 상당한 논쟁이 있었습니다.
+	한 대답은 캐시 일관성 프로토콜은 상당히 간단해서 하드웨어만으로
+	구현되어 소프트웨어 메세지 전달로는 얻을 수 없는 대역폭과 대기시간을
+	얻을 수 있다는 겁니다.
+	또다른 대답은 진정한 사실은 커다란 SMP 머신과 작은 SMP 머신의
+	클러스터의 상대적 가격으로 인한 경제 규모에서 찾을 수 있습니다.
+	세번째 대답은 SMP 프로그래밍 모델이 분산 시스템의 것보다 쉽다는
+	겁니다만 HPC 클러스터들과 MPI 의 출현을 가지고 반박할 수도 있겠습니다.
+	그렇게 논쟁은 계속되는거죠.
+	\iffalse
+
 	There has been quite a bit of controversy on this topic over
 	the past few decades.  One answer is that the cache-coherence
 	protocols are quite simple, and therefore can be implemented
@@ -9986,6 +10063,7 @@ STORE r0,counter
 	model is easier to use than that of distributed systems, but
 	a rebuttal might note the appearance of HPC clusters and MPI.
 	And so the argument continues.
+	\fi
 
 \QuickQ{}
 	How does the hardware handle the delayed transitions
