@@ -1720,6 +1720,16 @@ messages regarding that cache line.
 \subsection{Invalidate Queues and Invalidate Acknowledge}
 \label{sec:app:whymb:Invalidate Queues and Invalidate Acknowledge}
 
+Figure~\ref{fig:app:whymb:Caches With Invalidate Queues} 는 무효화 큐를 가진
+시스템을 그리고 있습니다.
+무효화 큐를 가진 CPU 는 관련된 캐시 라인이 실제로 무효화 되는 걸 기다리지 않고
+무효화 메세지를 큐에 넣자마자 응답 메세지를 보낼 수 있습니다.
+물론, 해당 CPU 는 무효화 메세지들을 보낼 준비를 할 때 자신의 무효화 큐를 확인해
+봐야 합니다 --- 관련된 캐시 라인을 위한 항목이 무효화 큐에 존재한다면, 해당 CPU
+는 무효화 메세지를 곧바로 보낼 수 없습니다; 대신 무효화 큐의 해당 항목이
+처리되길 기다려야 합니다.
+\iffalse
+
 Figure~\ref{fig:app:whymb:Caches With Invalidate Queues}
 shows a system with invalidate queues.
 A CPU with an invalidate queue may acknowledge an invalidate message
@@ -1730,6 +1740,7 @@ to transmit invalidation messages --- if an entry for the corresponding
 cache line is in the invalidate queue, the CPU cannot immediately
 transmit the invalidate message; it must instead wait until the
 invalidate-queue entry has been processed.
+\fi
 
 \begin{figure}[htb]
 \begin{center}
@@ -1738,6 +1749,16 @@ invalidate-queue entry has been processed.
 \caption{Caches With Invalidate Queues}
 \label{fig:app:whymb:Caches With Invalidate Queues}
 \end{figure}
+
+한 항목을 무효화 큐에 집어넣는 것은 결국은 해당 CPU 가 해당 항목과 관련된 캐시
+라인에 대한 어떤 MESI 프로토콜 메세지를 나중에 보내기 전까지는 해당 항목을
+처리하겠다는 약속입니다.
+관련된 데이터 구조에 너무 많은 요청이 들어오지 않는다면 해당 CPU 가 그 약속으로
+인해 어려움을 겪는 일은 거의 없을 겁니다.
+
+하지만, 무효화 메세지가 무효화 큐에 들어가 있을 수 있다는 사실은 다음 섹션에서
+이야기할 추가적인 메모리 오퍼레이션의 잘못된 재배치 문제를 야기합니다.
+\iffalse
 
 Placing an entry into the invalidate queue is essentially a promise
 by the CPU to process that entry before transmitting any MESI protocol
@@ -1748,6 +1769,7 @@ the CPU will rarely be inconvenienced by such a promise.
 However, the fact that invalidate messages can be buffered in the
 invalidate queue provides additional opportunity for memory-misordering,
 as discussed in the next section.
+\fi
 
 \subsection{Invalidate Queues and Memory Barriers}
 \label{sec:app:whymb:Invalidate Queues and Memory Barriers}
