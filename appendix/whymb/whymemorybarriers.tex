@@ -1341,7 +1341,7 @@ subsequent loads, without having to pass through the cache.
 \end{figure}
 
 스토어 포워딩이 존재하면, 앞의 시퀀스에서의 아이템~\ref{item:app:whymb:Need
-Store Buffer} 는 ``a'' 의 올바른 값 1을 스토어 버퍼에서 찾고, 따라서 ``b'' 의
+Store Buffer} 은 ``a'' 의 올바른 값 1을 스토어 버퍼에서 찾고, 따라서 ``b'' 의
 최종값은 우리가 원했던 대로 2가 될 것입니다.
 \iffalse
 
@@ -1354,9 +1354,14 @@ as one would hope.
 \subsection{Store Buffers and Memory Barriers}
 \label{sec:app:whymb:Store Buffers and Memory Barriers}
 
+글로벌 메모리 순서의 위반이라는 두번째 문제를 보기 위해, 변수 ``a'' 와 ``b'' 가
+초기값 0을 가지고 있다는 가정 하에 다음의 코드를 봅시다:
+\iffalse
+
 To see the second complication, a violation of global memory ordering,
 consider the following code sequences
 with variables ``a'' and ``b'' initially zero:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1376,6 +1381,35 @@ with variables ``a'' and ``b'' initially zero:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+CPU~0 는 foo() 를, 그리고 CPU~1 은 bar() 를 수행한다고 해봅시다.
+그리고 ``a'' 를 담는 캐시라인은 CPU~1 의 캐시에, 그리고 ``b'' 를 담는
+캐시라인은 CPU~0 에 소유되어 있습니다.
+그러면 다음과 같은 오퍼레이션들의 시퀀스가 생길 수 있습니다:
+\begin{enumerate}
+\item	CPU~0 는 \co{a = 1} 을 실행합니다.
+	해당 캐시 라인은 CPU~0 의 캐시에 없으므로, CPU~0 는 ``a'' 의 새로운
+	값을 스토어 버퍼에 넣고 ``read invalidate'' 메세지를 던집니다.
+\item	CPU~1 은 \co{while (b == 0) continue} 를 수행합니다만, ``b'' 를 담는
+	캐시 라인이 자신의 캐시에 없습니다.
+	따라서 이 CPU 는 ``read'' 메세지를 보냅니다.
+\item	CPU~0 이 \co{b = 1} 을 수행합니다.
+	이 CPU 는 이 캐시 라인을 이미 가지고 있으므로(달리 말하자면, 해당 캐시
+	라인은 이미 ``modified'' 또는 ``exclusive'' 상태입니다), ``b'' 의 새
+	값을 캐시 라인에 저장합니다.
+\item	CPU~0 이 ``read'' 메세지를 받고, CPU~1 에게 업데이트 되어 있는 ``b''
+	값을 담은 캐시 라인을 보내며, 또한 자신의 캐시 위의 해당 라인을
+	``shared'' 로 표시합니다.
+\item	CPU~1 음 ``b'' 를 담고 있는 캐시라인을 받고 자신의 캐시에 집어넣습니다.
+\item	CPU~1 은 이제 ``b'' 의 값이 1임을 확인했으니 \co{while (b == 0)
+	continue} 의 수행을 끝낼 수 있게 되었고, 다음 문장을 수행합니다.
+\item	CPU~1 은 \co{assert(a == 1)} 을 수행하게 되는데, CPU~1 은 ``a'' 의 예전
+	값을 들고 있으므로, 이 단정문은 실패합니다.
+\item	CPU~0 은 ``a'' 를 담는 캐시 라인을 받고 바로 이때에서야 스토어 버퍼에
+	머물러 있던 스토어 오퍼레이션을 행해서 CPU~1 의 실패한 단정문이
+	가능하게 합니다.
+\end{enumerate}
+\iffalse
 
 Suppose CPU~0 executes foo() and CPU~1 executes bar().
 Suppose further that the cache line containing ``a'' resides only in CPU~1's
@@ -1410,20 +1444,38 @@ Then the sequence of operations might be as follows:
 	the buffered store just in time to fall victim to CPU~1's
 	failed assertion.
 \end{enumerate}
+\fi
 
 \QuickQuiz{}
+	앞의 step~1 에서, 왜 CPU~0 는 그냥 ``invalidate'' 가 아니라 ``read
+	invalidate'' 를 보내는거죠?
+	\iffalse
+
 	In step~1 above, why does CPU~0 need to issue a ``read invalidate''
 	rather than a simple ``invalidate''?
+	\fi
 \QuickQuizAnswer{
+	해당 캐시 라인은 변수 \co{a} 외에도 많은 정보를 담고 있기 때문입니다.
+	\iffalse
+
 	Because the cache line in question contains more than just the
 	variable \co{a}.
+	\fi
 } \QuickQuizEnd
+
+하드웨어 설계자들은 이 문제를 직접 도와줄 수는 없는데, CPU 들은 어떤 변수들이
+연관되어 있는지, 어떻게 변수들이 연관될 수 있을지 알수가 없기 때문입니다.
+따라서, 하드웨어 설계자들은 소프트웨어가 CPU 에게 그런 연관관계를 알려줄 수
+있도록 메모리 배리어 인스트럭션들을 제공합니다.
+앞의 프로그램 조각은 다음과 같이 메모리 배리어를 포함하도록 수정되어야 합니다:
+\iffalse
 
 The hardware designers cannot help directly here, since the CPUs have
 no idea which variables are related, let alone how they might be related.
 Therefore, the hardware designers provide memory-barrier instructions
 to allow the software to tell the CPU about such relations.
 The program fragment must be updated to contain the memory barrier:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1445,6 +1497,15 @@ The program fragment must be updated to contain the memory barrier:
 \end{minipage}
 \vspace{5pt}
 
+메모리 배리어 \co{smp_mb()} 는 해당 CPU 가 자신의 스토어 버퍼를 이후의 스토어
+오퍼레이션이 대상 변수의 캐시 라인에 값을 써넣기 전에 비우도록 합니다.
+해당 CPU 는 단순히 이어서 진행을 하기 전에 스토어 버퍼가 비워질 때까지 멈춰
+있을 수도 있고, 다음의 스토어 오퍼레이션들을 이미 스토어 버퍼에 채워져 있던
+내용들이 모두 적용될 때까지 스토어 버퍼 안에 들고 있을 수도 있습니다.
+
+이 두번째 방법을 사용하게 되면 오퍼레이션들의 시퀀스는 다음과 같아질 겁니다:
+\iffalse
+
 The memory barrier \co{smp_mb()} will cause the CPU to flush its store
 buffer before applying each subsequent store to its variable's cache line.
 The CPU could either simply stall until the store buffer was empty
@@ -1453,7 +1514,24 @@ stores until all of the prior entries in the store buffer had been
 applied.
 
 With this latter approach the sequence of operations might be as follows:
+\fi
 \begin{enumerate}
+\item	CPU~0 는 \co{a = 1} 을 실행합니다.
+	해당 캐시 라인은 CPU~0 의 캐시에 없으므로, CPU~0 는 ``a'' 의 새로운
+	값을 스토어 버퍼에 넣고 ``read invalidate'' 메세지를 던집니다.
+\item	CPU~1 은 \co{while (b == 0) continue} 를 수행합니다만, ``b'' 를 담는
+	캐시 라인이 자신의 캐시에 없습니다.
+	따라서 이 CPU 는 ``read'' 메세지를 보냅니다.
+\item	CPU~0 가 \co{smp_mb()} 를 수행하고, 현재 스토어 버퍼에 있는 모든 항목
+	(구체적으로는, \co{a = 1})을 마크해 둡니다.
+\item	CPU~0 가 \co{b = 1} 을 수행합니다.
+	이 CPU 는 이 캐시 라인을 이미 가지고 있습니다만(달리 말하자면, 해당
+	캐시 라인은 이미 ``modified'' 또는 ``exclusive'' 상태입니다), 스토어
+	버퍼에 마크된 항목들이 있습니다.
+	따라서, ``b'' 의 새 값을 해당 캐시 라인에 저장하는 대신, CPU~0 는 이
+	동작을 스토어 버퍼에 (하지만 \emph{마크되지 않은} 자리에) 집어넣습니다.
+\iffalse
+
 \item	CPU~0 executes \co{a = 1}.  The cache line is not in
 	CPU~0's cache, so CPU~0 places the new value of ``a'' in its
 	store buffer and transmits a ``read invalidate'' message.
@@ -1469,6 +1547,26 @@ With this latter approach the sequence of operations might be as follows:
 	Therefore, rather than store the new value of ``b'' in the
 	cache line, it instead places it in the store buffer (but
 	in an \emph{unmarked} entry).
+\fi
+\item	CPU~0 는 ``read'' 메세지를 받고, ``b'' 의 원래 값이 저장되어 있는 캐시
+	라인을 CPU~1 에게 보냅니다.
+	또한 자신의 이 캐시라인의 복사본을 ``shared'' 로 바꿔줍니다.
+\item	CPU~1 은 ``b'' 를 담고 있는 캐시 라인을 받고 자신의 캐시에
+	집어넣습니다.
+\item	CPU~1 은 이제 ``b'' 의 값을 읽을 수 있습니다만, ``b'' 의 값이 여전히
+	0임을 확인하므로, 해당 \co{while} 문을 계속 반복 수행하게 됩니다.
+	``b'' 의 새 값은 안전하게 CPU~0 의 스토어 버퍼 안에 숨겨져 있습니다.
+\item	CPU~1 은 ``read invalidate'' 메세지를 받고, ``a'' 를 담고 있는 해당
+	캐시 라인을 CPU~0 에게 보내고 자신의 캐시에서 해당 캐시 라인을 무효화
+	시킵니다.
+\item	CPU~0 은 ``a'' 를 담고 있는 캐시 라인을 받고 스토어 버퍼에 들어가 있던
+	스토어 오퍼레이션을 행하고 이 캐시 라인을 ``modified'' 상태로 바꿉니다.
+\item	``a'' 로의 스토어는 스토어 버퍼 내에 \co{smp_mb()} 에 의해 마크되어
+	있던 유일한 항목이므로, CPU~0 는 ``b'' 에의 새 값의 저장도 할 수
+	있습니다 --- ``b'' 를 담고 있는 캐시 라인이 이제는 ``shared'' 상태라는
+	사실은 제외하고.
+\iffalse
+
 \item	CPU~0 receives the ``read'' message, and transmits the
 	cache line containing the original value of ``b''
 	to CPU~1.
@@ -1490,6 +1588,20 @@ With this latter approach the sequence of operations might be as follows:
 	CPU~0 can also store the new value of ``b'' --- except for the
 	fact that the cache line containing ``b'' is now in ``shared''
 	state.
+\fi
+\item	따라서 CPU~0 는 CPU~1 에게 ``invalidate'' 메세지를 보냅니다.
+\item	CPU~1 은 ``invalidate'' 메세지를 받고, 자신의 캐시로부터 ``b'' 를 담고
+	있는 캐시 라인을 무효화 시키고, ``acknowledgement'' 메세지를 CPU~0 에게
+	보냅니다.
+\item	CPU~1 은 \co{while (b == 0) continue} 를 수행합니다만, ``b'' 를 담고
+	있는 캐시 라인이 자신의 캐시에 없습니다.
+	따라서 ``read'' 메세지를 CPU~0 에게 보냅니다.
+\item	CPU~0 는 ``read'' 메세지를 받고, ``b'' 의 새 값을 담고 있는 캐시 라인을
+	CPU~1 에게 보냅니다.
+	또한 자신이 가지고 있는 이 캐시 라인의 복사본을 ``shared'' 상태로
+	바꿉니다.
+\iffalse
+
 \item	CPU~0 therefore sends an ``invalidate'' message to CPU~1.
 \item	CPU~1 receives the ``invalidate'' message, invalidates the
 	cache line containing ``b'' from its cache, and sends an
@@ -1504,6 +1616,17 @@ With this latter approach the sequence of operations might be as follows:
 	cache line containing the new value of ``b''
 	to CPU~1.
 	It also marks its own copy of this cache line as ``shared''.
+\fi
+\item	CPU~1 이 ``b'' 를 담고 있는 캐시 라인을 받고 자신의 캐시에
+	올려넣습니다.
+\item	CPU~1 은 이제 ``b'' 의 값을 읽을 수 있고, ``b'' 의 값이 1임을 확인하기
+	되므로 \co{while} 루프를 종료하고 다음 문장으로 실행을 넘깁니다.
+\item	CPU~1 은 \co{assert(a == 1)} 을 수행하는데, ``a'' 를 담는 캐시 라인이
+	자신의 캐시에 없습니다.
+	이 캐시 라인을 CPU~0 로부터 다시 받으면, 최신 버전의 값을 갖는 ``a'' 를
+	가지고 동작하게 되므로, 단정문은 통과됩니다.
+\iffalse
+
 \item	CPU~1 receives the cache line containing ``b'' and installs
 	it in its cache.
 \item	CPU~1 can now load the value of ``b'',
@@ -1515,11 +1638,18 @@ With this latter approach the sequence of operations might be as follows:
 	Once it gets this cache from CPU~0, it will be
 	working with the up-to-date value of ``a'', and the assertion
 	therefore passes.
+\fi
 \end{enumerate}
+
+볼 수 있듯, 이 작업은 적지 않은 양의 부기 (bookkeeping) 를 필요로 합니다.
+몇몇 내용은 직관적으로 간단해 보이겠지만, ``a 의 값을 로드하기'' 와 같은 명령도
+실리콘에서는 수많은 복잡한 단계를 야기할 수 있습니다.
+\iffalse
 
 As you can see, this process involves no small amount of bookkeeping.
 Even something intuitively simple, like ``load the value of a'' can
 involve lots of complex steps in silicon.
+\fi
 
 \section{Store Sequences Result in Unnecessary Stalls}
 \label{sec:app:whymb:Store Sequences Result in Unnecessary Stalls}
