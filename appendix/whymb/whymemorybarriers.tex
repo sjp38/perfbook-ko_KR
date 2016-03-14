@@ -2141,6 +2141,17 @@ with their cache-coherence optimizations.
 \section{Read and Write Memory Barriers}
 \label{sec:app:whymb:Read and Write Memory Barriers}
 
+앞의 섹션에서, 메모리 배리어들은 스토어 버퍼와 무효화 큐 둘 다의 항목들을
+표시하는데 사용되었습니다.
+하지만 우리의 코드에서, \co{foo()} 는 무효화 큐에 대해 별다른 일을 할 이유가
+없었고, \co{bar()} 는 스토어 버퍼에 추가적인 일을 할 이유가 없었습니다.
+
+따라서 많은 CPU 들이 이 두가지 일 중 하나만 하는 좀 더 약한 메모리 배리어
+인스트럭션을 제공합니다.
+간단히 말해서, ``읽기 메모리 배리어'' 는 무효화 큐만을, 그리고 ``쓰기 메모리
+배리어'' 는 스토어 버퍼만을 마킹하며, 전체 메모리 배리어는 둘 다 합니다.
+\iffalse
+
 In the previous section, memory barriers were used to mark entries in
 both the store buffer and the invalidate queue.
 But in our code fragment, \co{foo()} had no reason to do anything
@@ -2152,6 +2163,21 @@ instructions that do only one or the other of these two.
 Roughly speaking, a ``read memory barrier'' marks only the invalidate
 queue and a ``write memory barrier'' marks only the store buffer,
 while a full-fledged memory barrier does both.
+\fi
+
+이로 인해 읽기 메모리 배리어는 자신을 수행한 CPU 에서의 로드 오퍼레이션들에
+대해서만 순서를 맞춰줘서, 읽기 메모리 배리어 앞에 있었던 로드 오퍼레이션들은
+읽기 메모리 배리어 뒤에 따라오는 로드 오퍼레이션들 이전에 완료된 것으로 보이게
+하는 효과를 냅니다.
+유사하게, 쓰기 메모리 배리어는 자신을 수행한 CPU 에서 스토어 오퍼레이션들만을
+순서를 맞춰줘서, 쓰기 메모리 배리어 앞의 모든 스토어 오퍼레이션들이 쓰기 메모리
+배리어를 뒤따르는 스토어 오퍼레이션들 이전에 끝난 것처럼 보이게 합니다.
+전체 메모리 배리어는 로드와 스토어 둘 다를 순서세웁니다만, 아까도 이야기 했듯
+메모리 배리어를 실행하는 CPU 위에서만 그렇습니다.
+
+\co{foo} 와 \co{bar} 를 읽기 메모리 배리어와 쓰기 메모리 배리어를 사용하도록
+바꾸면 다음과 같을 것입니다:
+\iffalse
 
 The effect of this is that a read memory barrier orders only loads
 on the CPU that executes it, so that all loads preceding the read memory
@@ -2166,6 +2192,7 @@ only on the CPU executing the memory barrier.
 
 If we update \co{foo} and \co{bar} to use read and write memory
 barriers, they appear as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2188,9 +2215,14 @@ barriers, they appear as follows:
 \end{minipage}
 \vspace{5pt}
 
+일부 컴퓨터는 이보다도 다양한 메모리 배리어를 가지고 있기도 합니다만, 이 세개의
+변종만 이해해도 일반적인 메모리 배리어에 대해 잘 소개 할 수 있을 것입니다.
+\iffalse
+
 Some computers have even more flavors of memory barriers, but
 understanding these three variants will provide a good introduction
 to memory barriers in general.
+\fi
 
 \section{Example Memory-Barrier Sequences}
 \label{sec:app:whymb:Example Memory-Barrier Sequences}
