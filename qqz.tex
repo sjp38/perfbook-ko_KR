@@ -10155,25 +10155,56 @@ STORE r0,counter
 	\fi
 
 \QuickQ{}
+	Section~\ref{sec:app:whymb:Invalidate Queues and Memory Barriers} 의
+	첫번째 시나리오의 스텝~1 에서, 왜 ``read invalidate'' 가 아니라
+	``invalidate'' 를 보내는 거죠?
+	CPU~0 는 ``a'' 외에도 이 캐시 라인을 공유하는 다른 변수들의 값을 필요로
+	할수도 있지 않나요?
+	\iffalse
+
 	In step~1 of the first scenario in
 	Section~\ref{sec:app:whymb:Invalidate Queues and Memory Barriers},
 	why is an ``invalidate'' sent instead of a ''read invalidate''
 	message?
 	Doesn't CPU~0 need the values of the other variables that share
 	this cache line with ``a''?
+	\fi
 \QuickA{}
+	CPU~0 는 ``a'' 를 담고 있는 캐시 라인의 read-only 복사본을 가지고 있기
+	때문에, 해당 캐시 라인을 공유하는 다른 변수들의 값들을 이미 알고
+	있습니다.
+	따라서 ``invalidate'' 메세지 만으로도 충분합니다.
+	\iffalse
+
 	CPU~0 already has the values of these variables, given that it
 	has a read-only copy of the cache line containing ``a''.
 	Therefore, all CPU~0 need do is to cause the other CPUs to discard
 	their copies of this cache line.
 	An ``invalidate'' message therefore suffices.
+	\fi
 
 \QuickQ{}
+	뭐라구요???
+	CPU 는 \co{while} 루프가 끝나기 전까지는 \co{assert()} 를 수행할 수
+	없는데 왜 여기에 메모리 배리어가 필요해요?
+	\iffalse
+
 	Say what???
 	Why do we need a memory barrier here, given that the CPU cannot
 	possibly execute the \co{assert()} until after the
 	\co{while} loop completes?
+	\fi
 \QuickA{}
+	CPU 들은 예측적으로 수행을 할 수 있어서 \co{while} 루프가 완료되기 전에
+	단정문을 수행하는 것과 같은 효과를 일으킬 수 있습니다.
+	더욱이, 컴파일러들은 일반적으로 현재 수행중인 쓰레드만이 해당 변수의
+	값을 수정한다고 가정하고, 따라서 이 가정으로 인해 컴파일러는 \co{a}
+	읽기를 루프보다 앞으로 당겨올 수 있습니다.
+
+	사실, 일부 컴파일러들은 이 루프를 다음과 같이 무한 루프를 감싸는
+	브랜치로 바꿀수도 있습니다:
+	\iffalse
+
 	CPUs are free to speculatively execute, which can have the effect
 	of executing the assertion before the \co{while} loop completes.
 	Furthermore, compilers normally assume that only the currently
@@ -10183,6 +10214,7 @@ STORE r0,counter
 
 	In fact, some compilers would transform the loop to a branch
 	around an infinite loop as follows:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -10207,6 +10239,15 @@ STORE r0,counter
 \end{minipage}
 \vspace{5pt}
 
+	이런 최적화가 만들어지면, 해당 단정문은 아예 수행이 안될 수도 있습니다.
+	컴파일러가 당신의 병렬 코드를 없애버리는 현상을 막기 위해서는 volatile
+	캐스팅이나 (가능하다면) C++ relaxed atomic 들을 사용해야 합니다.
+
+	한마디로, 컴파일러들도 CPU 들도 최적화를 공격적으로 하기 때문에,
+	컴파일러 지시어나 메모리 배리어를 이용해 당신의 제약을 분명하게
+	그것들에게 알려야 합니다.
+	\iffalse
+
 	Given this optimization, the assertion could clearly fire.
 	You should use volatile casts or (where available) C++
 	relaxed atomics to prevent the compiler from optimizing
@@ -10215,6 +10256,7 @@ STORE r0,counter
 	In short, both compilers and CPUs are quite aggressive about
 	optimizing, so you must clearly communicate your constraints
 	to them, using compiler directives and memory barriers.
+	\fi
 
 
 \QuickQ{}

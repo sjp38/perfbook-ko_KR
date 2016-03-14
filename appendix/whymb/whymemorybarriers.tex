@@ -1774,6 +1774,18 @@ as discussed in the next section.
 \subsection{Invalidate Queues and Memory Barriers}
 \label{sec:app:whymb:Invalidate Queues and Memory Barriers}
 
+CPU 들이 무효화 요청을 큐에 집어넣기만 하고 곧바로 응답하는 경우를 생각해
+봅시다.
+이 방법은 스토어를 하는 CPU 들에게 보이는 캐시 무효화 대기시간을 최소화
+해주지만, 다음의 예에서 보여지듯이 메모리 배리어들을 패배시킬 수가 있습니다.
+
+``a'' 와 ``b'' 가 초기값 0을 가지고, ``a'' 는 read-only 로 복사되어 있고 (MESI
+``shared'' 상태), ``b'' 는 CPU~0 에 의해 소유되어 있는 (MESI ``exclusive'' 또는
+``modified'' 상태) 라고 가정합시다.
+그리고 CPU~0 는 다음의 코드에서 \co{foo()} 함수를 실행하고, 그동안 CPU~1 은
+\co{bar()}  함수를 실행하고 있다고 생각해 봅시다:
+\iffalse
+
 Let us suppose that CPUs queue invalidation requests, but respond to
 them immediately.
 This approach minimizes the cache-invalidation latency seen by CPUs
@@ -1786,6 +1798,7 @@ and that ``b''
 is owned by CPU~0 (MESI ``exclusive'' or ``modified'' state).
 Then suppose that CPU~0 executes \co{foo()} while CPU~1 executes
 function \co{bar()} in the following code fragment:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1807,8 +1820,26 @@ function \co{bar()} in the following code fragment:
 \end{minipage}
 \vspace{5pt}
 
+그럼 다음과 같은 오퍼레이션들의 시퀀스가 가능합니다:
+\iffalse
+
 Then the sequence of operations might be as follows:
+\fi
 \begin{enumerate}
+\item	CPU~0 이 \co{a = 1} 을 실행합니다.
+	관련된 캐시 라인이 CPU~0 의 캐시에 read-only 상태이므로, CPU~0 는 ``a''
+	의 새 값을 스토어 버퍼에 넣고 해당 캐시 라인을 CPU~1 의 캐시로부터
+	없애기 위해 ``invalidate'' 메세지를 전송합니다.
+\item	CPU~1 이 \co{while (b == 0) continue} 를 실행합니다만, ``b'' 를 담고
+	있는 캐시라인이 자신의 캐시에 없습니다.
+	따라서 ``read'' 메세지를 보냅니다.
+\item	CPU~1 이 CPU~0 의 ``invalidate'' 메세지를 받고, 큐에 넣은 후, 곧바로
+	그에 응답합니다.
+\item	CPU~0 은 CPU~1 로부터 응답을 받고, 따라서 line~4 의 \co{smp_mb()} 를
+	수행할 수 있게 되어 ``a'' 의 값을 스토어 버퍼에서 자신의 캐시 라인으로
+	옮깁니다.
+\iffalse
+
 \item	CPU~0 executes \co{a = 1}.  The corresponding
 	cache line is read-only in
 	CPU~0's cache, so CPU~0 places the new value of ``a'' in its
@@ -1822,6 +1853,25 @@ Then the sequence of operations might be as follows:
 \item	CPU~0 receives the response from CPU~1, and is therefore free
 	to proceed past the \co{smp_mb()} on line~4 above, moving
 	the value of ``a'' from its store buffer to its cache line.
+\fi
+\item	CPU~0 가 \co{b = 1} 을 수행합니다.
+	이미 이 캐시 라인을 소유하고 있으므로 (달리 말하자면, 해당 캐시 라인은
+	이미 ``modified'' 또는 ``exclusive'' 상태입니다), ``b'' 의 새 값을
+	자신의 캐시 라인에 써넣습니다.
+\item	CPU~0 는 ``read'' 메세지를 받고, 이제 막 업데이트된 ``b'' 의 값을 담고
+	있는 캐시 라인을 CPU~1 에게 전송하고, 자신의 캐시에서 해당 캐시 라인을
+	``shared'' 로 표시합니다.
+\item	CPU~1 이 ``b'' 의 값을 포함하는 캐시 라인을 받고 자신의 캐시에
+	올립니다.
+\item	CPU~1 은 이제 \co{while (b == 0) continue} 의 수행을 끝내고, ``b'' 의
+	값이 1임을 확인하므로, 다음 문장으로 수행을 넘깁니다.
+\item	CPU~1 은 \co{assert(a == 1)} 을 수행하지만, ``a'' 의 이전 값이 여전히
+	CPU~1 의 캐시에 있으므로, 이 단정문은 실패합니다.
+\item	단정문이 실패했음에도, CPU~1 은 큐에 들어가 있는 ``invalidate''
+	메세지를 처리하고, (뻔뻔스럽게) 자신의 캐시에서 ``a'' 를 담고 있는 캐시
+	라인을 무효화 시킵니다.
+\iffalse
+
 \item	CPU~0 executes \co{b = 1}.
 	It already owns this cache line (in other words, the cache line
 	is already in either the ``modified'' or the ``exclusive'' state),
@@ -1840,22 +1890,47 @@ Then the sequence of operations might be as follows:
 \item	Despite the assertion failure, CPU~1 processes the queued
 	``invalidate'' message, and (tardily)
 	invalidates the cache line containing ``a'' from its own cache.
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	Section~\ref{sec:app:whymb:Invalidate Queues and Memory Barriers} 의
+	첫번째 시나리오의 스텝~1 에서, 왜 ``read invalidate'' 가 아니라
+	``invalidate'' 를 보내는 거죠?
+	CPU~0 는 ``a'' 외에도 이 캐시 라인을 공유하는 다른 변수들의 값을 필요로
+	할수도 있지 않나요?
+	\iffalse
+
 	In step~1 of the first scenario in
 	Section~\ref{sec:app:whymb:Invalidate Queues and Memory Barriers},
 	why is an ``invalidate'' sent instead of a ''read invalidate''
 	message?
 	Doesn't CPU~0 need the values of the other variables that share
 	this cache line with ``a''?
+	\fi
 \QuickQuizAnswer{
+	CPU~0 는 ``a'' 를 담고 있는 캐시 라인의 read-only 복사본을 가지고 있기
+	때문에, 해당 캐시 라인을 공유하는 다른 변수들의 값들을 이미 알고
+	있습니다.
+	따라서 ``invalidate'' 메세지 만으로도 충분합니다.
+	\iffalse
+
 	CPU~0 already has the values of these variables, given that it
 	has a read-only copy of the cache line containing ``a''.
 	Therefore, all CPU~0 need do is to cause the other CPUs to discard
 	their copies of this cache line.
 	An ``invalidate'' message therefore suffices.
+	\fi
 } \QuickQuizEnd
+
+메모리 배리어를 무시되게 한다면 무효화 응답을 빠르게 하는 것은 별 의미가
+없어집니다.
+하지만, 메모리 배리어 인스트럭션은 한 CPU 가 메모리 배리어를 수행할 때, 무효화
+큐에 있는 모든 항목을 표시해 두고 다음에 요청되는 로드 오퍼레이션들은 모든
+표시된 항목들이 해당 CPU 의 캐시에 적용될 때까지 기다리게 하도록 무효화 큐와
+상호작용 할 수 있습니다.
+따라서, 우린 \co{bar} 함수에 다음과 같이 메모리 배리어를 추가할 수 있습니다:
+\iffalse
 
 There is clearly not much point in accelerating invalidation responses
 if doing so causes memory barriers to effectively be ignored.
@@ -1865,6 +1940,7 @@ barrier, it marks all the entries currently in its invalidate queue,
 and forces any subsequent load to wait until all marked entries
 have been applied to the CPU's cache.
 Therefore, we can add a memory barrier to function \co{bar} as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1888,11 +1964,27 @@ Therefore, we can add a memory barrier to function \co{bar} as follows:
 \vspace{5pt}
 
 \QuickQuiz{}
+	뭐라구요???
+	CPU 는 \co{while} 루프가 끝나기 전까지는 \co{assert()} 를 수행할 수
+	없는데 왜 여기에 메모리 배리어가 필요해요?
+	\iffalse
+
 	Say what???
 	Why do we need a memory barrier here, given that the CPU cannot
 	possibly execute the \co{assert()} until after the
 	\co{while} loop completes?
+	\fi
 \QuickQuizAnswer{
+	CPU 들은 예측적으로 수행을 할 수 있어서 \co{while} 루프가 완료되기 전에
+	단정문을 수행하는 것과 같은 효과를 일으킬 수 있습니다.
+	더욱이, 컴파일러들은 일반적으로 현재 수행중인 쓰레드만이 해당 변수의
+	값을 수정한다고 가정하고, 따라서 이 가정으로 인해 컴파일러는 \co{a}
+	읽기를 루프보다 앞으로 당겨올 수 있습니다.
+
+	사실, 일부 컴파일러들은 이 루프를 다음과 같이 무한 루프를 감싸는
+	브랜치로 바꿀수도 있습니다:
+	\iffalse
+
 	CPUs are free to speculatively execute, which can have the effect
 	of executing the assertion before the \co{while} loop completes.
 	Furthermore, compilers normally assume that only the currently
@@ -1902,6 +1994,7 @@ Therefore, we can add a memory barrier to function \co{bar} as follows:
 
 	In fact, some compilers would transform the loop to a branch
 	around an infinite loop as follows:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1926,6 +2019,15 @@ Therefore, we can add a memory barrier to function \co{bar} as follows:
 \end{minipage}
 \vspace{5pt}
 
+	이런 최적화가 만들어지면, 해당 단정문은 아예 수행이 안될 수도 있습니다.
+	컴파일러가 당신의 병렬 코드를 없애버리는 현상을 막기 위해서는 volatile
+	캐스팅이나 (가능하다면) C++ relaxed atomic 들을 사용해야 합니다.
+
+	한마디로, 컴파일러들도 CPU 들도 최적화를 공격적으로 하기 때문에,
+	컴파일러 지시어나 메모리 배리어를 이용해 당신의 제약을 분명하게
+	그것들에게 알려야 합니다.
+	\iffalse
+
 	Given this optimization, the assertion could clearly fire.
 	You should use volatile casts or (where available) C++
 	relaxed atomics to prevent the compiler from optimizing
@@ -1934,11 +2036,30 @@ Therefore, we can add a memory barrier to function \co{bar} as follows:
 	In short, both compilers and CPUs are quite aggressive about
 	optimizing, so you must clearly communicate your constraints
 	to them, using compiler directives and memory barriers.
+	\fi
 
 } \QuickQuizEnd
 
+변경된 코드에서 오퍼레이션들의 시퀀스는 다음과 같이 될겁니다:
+\iffalse
+
 With this change, the sequence of operations might be as follows:
+\fi
 \begin{enumerate}
+\item	CPU~0 이 \co{a = 1} 을 실행합니다.
+	관련된 캐시 라인이 CPU~0 의 캐시에 read-only 상태이므로, CPU~0 는 ``a''
+	의 새 값을 스토어 버퍼에 넣고 해당 캐시 라인을 CPU~1 의 캐시로부터
+	없애기 위해 ``invalidate'' 메세지를 전송합니다.
+\item	CPU~1 이 \co{while (b == 0) continue} 를 실행합니다만, ``b'' 를 담고
+	있는 캐시라인이 자신의 캐시에 없습니다.
+	따라서 ``read'' 메세지를 보냅니다.
+\item	CPU~1 이 CPU~0 의 ``invalidate'' 메세지를 받고, 큐에 넣은 후, 곧바로
+	그에 응답합니다.
+\item	CPU~0 은 CPU~1 로부터 응답을 받고, 따라서 line~4 의 \co{smp_mb()} 를
+	수행할 수 있게 되어 ``a'' 의 값을 스토어 버퍼에서 자신의 캐시 라인으로
+	옮깁니다.
+\iffalse
+
 \item	CPU~0 executes \co{a = 1}.  The corresponding
 	cache line is read-only in
 	CPU~0's cache, so CPU~0 places the new value of ``a'' in its
@@ -1952,6 +2073,20 @@ With this change, the sequence of operations might be as follows:
 \item	CPU~0 receives the response from CPU~1, and is therefore free
 	to proceed past the \co{smp_mb()} on line~4 above, moving
 	the value of ``a'' from its store buffer to its cache line.
+\fi
+\item	CPU~0 가 \co{b = 1} 을 수행합니다.
+	이미 이 캐시 라인을 소유하고 있으므로 (달리 말하자면, 해당 캐시 라인은
+	이미 ``modified'' 또는 ``exclusive'' 상태입니다), ``b'' 의 새 값을
+	자신의 캐시 라인에 써넣습니다.
+\item	CPU~0 는 ``read'' 메세지를 받고, 이제 막 업데이트된 ``b'' 의 값을 담고
+	있는 캐시 라인을 CPU~1 에게 전송하고, 자신의 캐시에서 해당 캐시 라인을
+	``shared'' 로 표시합니다.
+\item	CPU~1 이 ``b'' 의 값을 포함하는 캐시 라인을 받고 자신의 캐시에
+	올립니다.
+\item	CPU~1 은 이제 \co{while (b == 0) continue} 의 수행을 끝내고, ``b'' 의
+	값이 1임을 확인하므로, 다음 문장의, 메모리 배리어를 수행하게 됩니다.
+\iffalse
+
 \item	CPU~0 executes \co{b = 1}.
 	It already owns this cache line (in other words, the cache line
 	is already in either the ``modified'' or the ``exclusive'' state),
@@ -1964,6 +2099,20 @@ With this change, the sequence of operations might be as follows:
 \item	CPU~1 can now finish executing \co{while (b == 0) continue},
 	and since it finds that the value of ``b'' is 1, it proceeds
 	to the next statement, which is now a memory barrier.
+\fi
+\item	CPU~1 은 이제 모든 무효화 큐에 들어가 있던 메세지들이 처리될 때까지
+	기다려야만 합니다.
+\item	CPU~1 은 이제 큐에 들어가 있던 ``invalidate'' 메세지를 수행하게 되어,
+	자신의 캐시에서 ``a'' 를 담고 있는 캐시 라인을 무효화 시킵니다.
+\item	CPU~1 은 \co{assert(a == 1)} 을 수행하는데, ``a'' 를 담고 있는 캐시
+	라인이 더이상 CPU~1 의 캐시에 존재하지 않으므로, ``read'' 메세지를
+	보냅니다.
+\item	CPU~0 는 이 ``read'' 메세지에 ``a'' 의 새로운 값을 담고 있는 캐시
+	라인으로 응답합니다.
+\item	CPU~1 은 ``a'' 의 값 1을 담고 있는 이 캐시 라인을 받고, 따라서 단정문은
+	성공합니다.
+\iffalse
+
 \item	CPU~1 must now stall until it processes all pre-existing
 	messages in its invalidation queue.
 \item	CPU~1 now processes the queued
@@ -1976,11 +2125,18 @@ With this change, the sequence of operations might be as follows:
 	containing the new value of ``a''.
 \item	CPU~1 receives this cache line, which contains a value of 1 for
 	``a'', so that the assertion does not trigger.
+\fi
 \end{enumerate}
+
+훨씬 많이 주고받게 된 MESI 메세지들과 함께, CPU 올바른 답에 도달했습니다.
+이 섹션은 왜 CPU 설계자들이 캐시 일관성 최적화에 매우 조심스러워야만 하는지
+이야기 했습니다.
+\iffalse
 
 With much passing of MESI messages, the CPUs arrive at the correct answer.
 This section illustrates why CPU designers must be extremely careful
 with their cache-coherence optimizations.
+\fi
 
 \section{Read and Write Memory Barriers}
 \label{sec:app:whymb:Read and Write Memory Barriers}
