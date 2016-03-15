@@ -2507,9 +2507,15 @@ the assertion.
 \subsection{Example 2}
 \label{sec:app:whymb:Example 2}
 
+Table~\ref{tab:app:whymb:Memory Barrier Example 2} 는 각각 CPU~0, 1, 2 에서
+동시에 수행되는 코드를 보이고 있습니다.
+``a'', ``b'', ``c'' 는 처음엔 0 값을 갖습니다.
+\iffalse
+
 Table~\ref{tab:app:whymb:Memory Barrier Example 2}
 shows three code fragments, executed concurrently by CPUs~0, 1, and 2.
 Both ``a'' and ``b'' are initially zero.
+\fi
 
 \begin{table*}
 \small
@@ -2531,6 +2537,21 @@ Both ``a'' and ``b'' are initially zero.
 \label{tab:app:whymb:Memory Barrier Example 2}
 \end{table*}
 
+이번에도, CPU~0 는 최근 많은 캐시 미스를 겪었어서 메세지 큐가 꽉 차 있고, CPU~1
+은 캐시 안에서만 수행을 마무리 해왔기에 CPU~1 의 메세지 큐는 비어 있는 상황을
+생각해 봅시다.
+CPU~0 의 ``a'' 에의 값 대입은 Node~0 의 캐시에 곧바로 반영될 (따라서 곧바로
+CPU~1 에게 보이게 됩니다) 것이지만, CPU~0 의 메세지 큐가 가득 차 있으므로
+곧바로 외부에 보이지는 못할 것입니다.
+반면, CPU~1 의 ``b'' 에의 값 대입은 CPU~1 의 비어있는 메세지 큐를 곧바로
+넘어갑니다.
+따라서, CPU~2 는 CPU~1 의 ``b'' 에의 값 대입을 CPU~0 의 ``a'' 에의 값 대입
+이전에 보게 되고, 메모리 배리어에도 불구하고 단정문의 실패를 야기하게 됩니다.
+
+이론적으로, 포터블한 코드는 이 예제의 코드를 사용해선 안됩니다만, 실제로는
+앞에서와 같이 대부분의 주류 컴퓨터 시스템에서 이 코드도 잘 동작합니다.
+\iffalse
+
 Again, suppose CPU~0 recently experienced many cache misses, so that its
 message queue is full, but that CPU~1 has been running exclusively within
 the cache, so that its message queue is empty.
@@ -2546,6 +2567,7 @@ despite the memory barriers.
 In theory, portable code should not rely on this example code fragment,
 however, as before, in practice it actually does work on most
 mainstream computer systems.
+\fi
 
 \subsection{Example 3}
 \label{sec:app:whymb:Example 3}
