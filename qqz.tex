@@ -10260,11 +10260,31 @@ STORE r0,counter
 
 
 \QuickQ{}
+	각 CPU 는 자신의 메모리 액세스를 순서대로 보게 된다는 보장 사항은 각
+	유저 레벨 쓰레드 역시 자신의 메모리 액세스를 순서대로 볼 것이라고
+	보장하나요?
+	그렇다면 왜 그렇고, 아니라면 왜 아니죠?
+	\iffalse
+
 	Does the guarantee that each CPU sees its own memory accesses
 	in order also guarantee that each user-level thread will see
 	its own memory accesses in order?
 	Why or why not?
+	\fi
 \QuickA{}
+	아니요.
+	한 쓰레드가 한 CPU 에서 다른 CPU 로 옮겨가는데, 옮겨져 가는 CPU 는 해당
+	쓰레드가 옮겨져 온 기존 CPU 에서 한 최근의 메모리 오퍼레이션들을 다른
+	순서대로 인지할 수 있는 경우를 생각해 보세요.
+	유저 모드에서의 일관성을 위해선, 커널 해커들이 컨텍스트 스위치
+	경로에서마다 메모리 배리어를 반드시 사용해 줘야 합니다.
+	하지만, 이미 컨텍스트 스위치를 안전하게 하기 위해 필요시되는 락킹이
+	유저 레벨 태스크가 자기 자신의 액세스들을 순서대로 볼 수 있도록 하는데
+	필요한 메모리 배리어들을 제공해야만 하게 되어 있습니다.
+	그렇다곤 해도, 커널 레벨에서든 유저 레벨에서든 당신이 매우 최적화된
+	스케쥴러를 설계하고 있다면, 부디 이 시나리오를 기억해 두세요!
+	\iffalse
+
 	No.  Consider the case where a thread migrates from one CPU to
 	another, and where the destination CPU perceives the source
 	CPU's recent memory operations out of order.  To preserve
@@ -10275,6 +10295,7 @@ STORE r0,counter
 	its own accesses in order.  That said, if you are designing a
 	super-optimized scheduler, either in the kernel or at user level,
 	please keep this scenario in mind!
+	\fi
 
 \QuickQ{}
 	Could this code be fixed by inserting a memory barrier

@@ -2247,6 +2247,21 @@ on an ordering-hostile architecture.
 \subsection{Ordering-Hostile Architecture}
 \label{sec:app:whymb:Ordering-Hostile Architecture}
 
+지난 수십년간 여러개의 순서세우기에 적대적인 컴퓨터 시스템들이
+만들어졌습니다만, 적대성의 본질은 항상 매우 교묘해서 그것을 이해하는데에는 특정
+하드웨어에 대한 자세한 지식이 필요했습니다.
+특정 하드웨어 벤더를 고르고 독자 여러분을 자세한 기술 사양서로 끌어들이는 대신,
+실존하지는 않지만 최대한 메모리 순서에 적대적인 컴퓨터 아키텍쳐를 설계해
+봅시다.\footnote{
+	실제 하드웨어 아키텍쳐를 자세히 알아보는 것을 선호하는 독자 여러분들은
+	CPU 벤더들의
+	매뉴얼들~\cite{ALPHA95,AMDOpteron02,IntelItanium02v2,PowerPC94,MichaelLyons02a,SPARC94,IntelXeonV3-96a,IntelXeonV2b-96a,IBMzSeries04a},
+	Gharachorloo 의 박사 학위 논문~\cite{Gharachorloo95}, Peter Sewell 의
+	작업물~\cite{PeterSewell2010weakmemory}, 또는 Sorin, Hill, 그리고 Wood
+	의 훌륭한 하드웨어에 기반한 초급 독본~\cite{DanielJSorin2011MemModel}
+	을 참고해 보시기 바랍니다.}
+\iffalse
+
 A number of ordering-hostile computer systems have been produced over
 the decades,
 but the nature of the hostility has always been extremely subtle,
@@ -2263,6 +2278,27 @@ memory-ordering-hostile computer architecture.\footnote{
 	Peter Sewell's work~\cite{PeterSewell2010weakmemory}, or
 	the excellent hardware-oriented primer by
 	Sorin, Hill, and Wood~\cite{DanielJSorin2011MemModel}.}
+\fi
+
+이 하드웨어는 다음과 같은 순서
+규칙~\cite{PaulMcKenney2005i,PaulMcKenney2005j}을 지켜야만 합니다:
+\begin{enumerate}
+\item	각 CPU 는 항상 자기 자신의 메모리 액세스를 프로그램 순서로 이루어진
+	것으로 인지해야 합니다.
+\item	CPU 들은 스토어 오퍼레이션들만으로 구성된 오펄에시녀들을 두
+	오퍼레이션들이 서로 다른 위치에 대해 행해진다면 순서를 바꿀 것입니다.
+\item	읽기 메모리 배리어 (\co{smp_rmb()}) 앞에 있는 한 CPU 의 모든 로드
+	오퍼레이션들은 모든 CPU 들에 그 읽기 메모리 배리어 뒤에 따라오는 로드
+	오퍼레이션들보다 앞서 수행된 것으로 인지될 것입니다.
+\item	쓰기 메모리 배리어 (\co{smp_wmb()})를 앞서는 한 CPU 의 모든 스토어
+	오퍼레이션들은 모든 CPU 들에 그 쓰기 메모리 배리어 뒤에 따라오는 스토어
+	오퍼레이션들보다 앞서 수행된 것으로 인지될 것입니다.
+\item	전체 메모리 배리어 (\co{smp_mb()})를 앞서는 한 CPU 의 모든 액세스들
+	(로드 오퍼레이션들과 스토어 오퍼레이션들) 은 그 메모리 배리어를
+	뒤따르는 어떤 다른 액세스들보다도 먼저 수행된 것으로 모든 CPU 들에
+	인지될 것입니다.
+\end{enumerate}
+\iffalse
 
 This hardware must obey the following ordering
 constraints~\cite{PaulMcKenney2005i,PaulMcKenney2005j}:
@@ -2282,13 +2318,34 @@ constraints~\cite{PaulMcKenney2005i,PaulMcKenney2005j}:
 	(\co{smp_mb()}) will be perceived by all CPUs to precede
 	any accesses following that memory barrier.
 \end{enumerate}
+\fi
 
 \QuickQuiz{}
+	각 CPU 는 자신의 메모리 액세스를 순서대로 보게 된다는 보장 사항은 각
+	유저 레벨 쓰레드 역시 자신의 메모리 액세스를 순서대로 볼 것이라고
+	보장하나요?
+	그렇다면 왜 그렇고, 아니라면 왜 아니죠?
+	\iffalse
+
 	Does the guarantee that each CPU sees its own memory accesses
 	in order also guarantee that each user-level thread will see
 	its own memory accesses in order?
 	Why or why not?
+	\fi
 \QuickQuizAnswer{
+	아니요.
+	한 쓰레드가 한 CPU 에서 다른 CPU 로 옮겨가는데, 옮겨져 가는 CPU 는 해당
+	쓰레드가 옮겨져 온 기존 CPU 에서 한 최근의 메모리 오퍼레이션들을 다른
+	순서대로 인지할 수 있는 경우를 생각해 보세요.
+	유저 모드에서의 일관성을 위해선, 커널 해커들이 컨텍스트 스위치
+	경로에서마다 메모리 배리어를 반드시 사용해 줘야 합니다.
+	하지만, 이미 컨텍스트 스위치를 안전하게 하기 위해 필요시되는 락킹이
+	유저 레벨 태스크가 자기 자신의 액세스들을 순서대로 볼 수 있도록 하는데
+	필요한 메모리 배리어들을 제공해야만 하게 되어 있습니다.
+	그렇다곤 해도, 커널 레벨에서든 유저 레벨에서든 당신이 매우 최적화된
+	스케쥴러를 설계하고 있다면, 부디 이 시나리오를 기억해 두세요!
+	\iffalse
+
 	No.  Consider the case where a thread migrates from one CPU to
 	another, and where the destination CPU perceives the source
 	CPU's recent memory operations out of order.  To preserve
@@ -2299,7 +2356,23 @@ constraints~\cite{PaulMcKenney2005i,PaulMcKenney2005j}:
 	its own accesses in order.  That said, if you are designing a
 	super-optimized scheduler, either in the kernel or at user level,
 	please keep this scenario in mind!
+	\fi
 } \QuickQuizEnd
+
+주어진 노드의 CPU 들에게 interconnect 밴드위쓰를 공정하게 할당해 줄 수 있도록
+각 노드의 interconnect interface 마다 CPU 별 큐를 제공하는, 
+Figure~\ref{fig:app:whymb:Example Ordering-Hostile Architecture} 와 같이 커다란
+non-uniform 캐시 아키텍쳐 (NUCA) 시스템을 생각해 보세요.
+한 CPU 의 액세스들은 그 CPU 에서 수행한 메모리 배리어에 의해 의도한대로 순서가
+세워지지만, 두 개의 CPU 짝의 액세스들의 상대적인 순서는 이후 보게 되듯 상당히
+자유롭게  재배치 될 수 있습니다.\footnote{
+	진짜 하드웨어 아키텍트들이나 디자이너들은 여기에 강력하게 반발할텐데,
+	두 CPU 가 모두 액세스 하는 캐시 라인에 관한 메세지를 어떤 큐가 처리해야
+	하는지에 대한 가능성에 대해, 이 예가 포함하고 있을 수 있는 많은 레이스
+	상황에 대해 아무것도 말할 수 없기 때문에, 좀 화가 날 수 있기
+	때문입니다.
+	제가 말 할 수 있는 건 ``더 나은 예를 주세요.'' 뿐입니다.}
+\iffalse
 
 Imagine a large non-uniform cache architecture (NUCA) system that,
 in order to provide fair allocation
@@ -2317,6 +2390,7 @@ as we will see.\footnote{
 	that both CPUs accessed, to say nothing of the many races that
 	this example poses.
 	All I can say is ``Give me a better example''.}
+\fi
 
 \begin{figure}[htb]
 \begin{center}
