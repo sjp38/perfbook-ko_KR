@@ -10392,9 +10392,22 @@ STORE r0,counter
 	\fi
 
 \QuickQ{}
+	Alpha 의 \co{smp_read_barrier_depends()} 는 \co{smp_rmb()} 가 아니라
+	\co{smp_mb()} 인가요?
+	\iffalse
+
 	Why is Alpha's \co{smp_read_barrier_depends()} an
 	\co{smp_mb()} rather than \co{smp_rmb()}?
+	\fi
 \QuickA{}
+	첫째로, Alpha 는 \co{mb} 와 \co{wmb} 인스트럭션들만 가지고 있고, 따라서
+	\co{smp_rmb()} 는 어떤 경우든 Alpha \co{mb} 인스트럭션으로 구현됩니다.
+
+	더 중요한 건, \co{smp_read_barrier_depends()} 는 뒤의 스토어들을
+	순서맞춰야 한다는 겁니다.
+	예를 들어, 다음의 코드를 생각해 보세요:
+	\iffalse
+
 	First, Alpha has only \co{mb} and \co{wmb} instructions,
 	so \co{smp_rmb()} would be implemented by the Alpha \co{mb}
 	instruction in either case.
@@ -10402,6 +10415,7 @@ STORE r0,counter
 	More importantly, \co{smp_read_barrier_depends()} must
 	order subsequent stores.
 	For example, consider the following code:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -10415,6 +10429,11 @@ STORE r0,counter
 \end{minipage}
 \vspace{5pt}
 
+	여기서 \co{p->a} 와 \co{p->b} 의 로드만이 아니라 \co{p->hey_look} 로의
+	스토어 역시 순서를 맞춰야 합니다.
+	\iffalse
+
 	Here the store to \co{p->hey_look} must be ordered,
 	not just the loads from \co{p->a} and \co{p->b}.
+	\fi
 
