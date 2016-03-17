@@ -3664,6 +3664,36 @@ barrier.
 \subsection{POWER / PowerPC}
 \label{sec:app:whymb:POWER / PowerPC}
 
+POWER 와 PowerPC\textsuperscript{\textregistered} CPU 계열은 다양한 메모리
+배리어 인스트럭션들을 가지고 있습니다~\cite{PowerPC94,MichaelLyons02a}:
+\begin{enumerate}
+\item	{\tt sync} 는 모든 앞의 오퍼레이션들이 뒤의 오퍼레이션이 하나라도
+	시작하기 전에 완료된 {\em 것처럼 보이게} 합니다.
+	따라서 이 인스트럭션은 상당히 비용이 비쌉니다.
+\item	{\tt lwsync} (light-weight sync) 는 로드 오퍼레이션들을 뒤의 로드와
+	스토어 오퍼레이션들에 대해 순서 맞추며, 스토어 오퍼레이션 역시 순서를
+	맞춰줍니다.
+	하지만, 스토어 오퍼레이션들을 뒤의 로드들에 대해 순서맞추지는 {\em
+	않습니다}.
+	흥미롭게도, {\tt lwsync} 인스트럭션은 zSeries, 그리고 우연히도, SPARC
+	TSO 와 같은 순서 규칙을 강제합니다.
+	\co{lwsync} 인스트럭션은 load-acquire 와 store-release 오퍼레이션을
+	구현하는데 사용될 수도 있습니다.
+\item	{\tt eieio} (enforce in-order execution of I/O, in case you were
+	wondering) 은 앞의 모든 캐싱 기능한 스토어들을 뒤의 스토어들 이전에
+	완료된 것으로 나타나게 합니다.
+	하지만, 캐싱 가능한 메모리로의 스토어들은 캐싱 불가능한 메모리로의
+	스토어들과는 별개로 순서지어지는데, 이는 {\tt eieio} 가 MMIO 스토어가
+	스핀락 해제 뒤로 재배치 되는 현상도 막지 않는다는 뜻입니다.
+\item	{\tt isync} 는 뒤의 인스트럭션이 하나라도 실행을 시작하기 이전에 앞의
+	인스트럭션들이 완료된 것으로 나타나게 만듭니다.
+	이는 앞의 인스트럭션들은 그들이 만들 수 있는 어떤 트랩도 이미
+	일어났거나 일어나지 않도록 보장될 만큼 충분히 진행되었어야 하며, 이
+	인스트럭션들의 어떤 사이드 이펙트들 (예를 들어, 페이지 테이블의 변경)
+	도 뒤의 인스트럭션들에게 보여야 함을 의미합니다.
+\end{enumerate}
+\iffalse
+
 The POWER and PowerPC\textsuperscript{\textregistered}
 CPU families have a wide variety of memory-barrier
 instructions~\cite{PowerPC94,MichaelLyons02a}:
@@ -3694,6 +3724,21 @@ instructions~\cite{PowerPC94,MichaelLyons02a}:
 	these instructions (for example, page-table changes) are seen by the
 	subsequent instructions.
 \end{enumerate}
+\fi
+
+불행히도, 이 인스트럭션들 중 어떤 것도 {\em 모든} 스토어들을 순서 맞추지만 {\tt
+sync} 인스트럭션처럼 큰 오버헤드의 많은 동작을 요하지는 않는, 리눅스의 {\tt
+wbm()} 기능과 일치하지 않습니다.
+하지만 선택의 여지가 없습니다: {\tt wmb()} 와 {\tt mb()} 의 ppc64 버전은 좀
+무겁지만 {\tt sync} 인스트럭션을 사용하게 되어 있습니다.
+하지만, 리눅스의 {\tt smp\_wmb()} 인스트럭션은 (어차피 드라이버가 MMIO 의
+순서를 UP 커널 에서도 SMP 커널에서도 알아서 순서를 맞춰야 하므로) MMIO 에
+사용하지 않기 때문에, 가벼운 {\tt eieio} 인스트럭션으로 구현되어 있습니다.
+이 인스트럭션은 다섯개 모음의 약자라 좀 독특해 보일 수 있습니다.
+{\tt smp\_mb()} 인스트럭션 또한 {\tt sync} 인스트럭션으로 정의되어 있습니다만,
+{\tt smp\_rmb()} 와 {\tt rmb()} 는 가벼운 {\tt lwsync} 인스트럭션으로 정의되어
+있습니다.
+\iffalse
 
 Unfortunately, none of these instructions line up exactly with Linux's
 {\tt wmb()} primitive, which requires {\em all} stores to be ordered,
@@ -3709,6 +3754,18 @@ This instruction may well be unique in having a five-vowel mnemonic.
 The {\tt smp\_mb()} instruction is also defined to be the {\tt sync}
 instruction, but both {\tt smp\_rmb()} and {\tt rmb()} are defined to
 be the lighter-weight {\tt lwsync} instruction.
+\fi
+
+Power 는 타동성을 얻기 위해 사용될 수 있는, ``누적성'' 을 가지고 있습니다.
+제대로 사용된다면, 앞의 코드 조각의 결과를 보는 코드는 이 앞의 코드 조각이 봤던
+결과 역시 볼 수 있을 것입니다.
+더 자세한 건 McKenney 와 Silvera의 작업물~\cite{PaulEMcKenneyN2745r2009} 에서
+볼 수 있습니다.
+
+Power \co{isync} 인스트럭션이 ARM \co{ISB} 인스트럭션으로 대체된다는 점을
+제외하고는, Power 는 ARM 에서 하는 것과 같은 방식으로 컨트롤 의존성을
+지켜줍니다.
+\iffalse
 
 Power features ``cumulativity'', which can be used to obtain
 transitivity.
@@ -3721,6 +3778,19 @@ McKenney and Silvera~\cite{PaulEMcKenneyN2745r2009}.
 Power respects control dependencies in much the same way that ARM
 does, with the exception that the Power \co{isync} instruction
 is substituted for the ARM \co{ISB} instruction.
+\fi
+
+POWER 아키텍쳐의 많은 멤버들이 일관성을 지키지 않는 인스트럭션 캐시를 가지고
+있어서, 인스트럭션이 위치하는 메모리로의 스토어는 인스트럭션 캐시에 제대로
+반영되지 않을 수 있습니다.
+감사하게도, 오늘날에는 적은 사람들만이 스스로를 수정하는 코드를 작성합니다만,
+JIT 들과 컴파일러들은 항상 그 짓을 합니다.
+더욱이, 최근에 수행된 프로그램을 다시 컴파일 하는 행위는 CPU 의 관점에서는
+스스로를 수정하는 코드처럼 보입니다.
+{\tt icbl} (instruction cache block invalidate) 인스트럭션은 인스트럭션
+캐시에서 특정 캐시 라인을 무효화 하게 하므로, 이런 상황에 사용될 수 있을
+것입니다.
+\iffalse
 
 Many members of the POWER architecture have incoherent instruction
 caches, so that a store to memory will not necessarily be reflected
@@ -3732,6 +3802,7 @@ self-modifying code from the CPU's viewpoint.
 The {\tt icbi} instruction (instruction cache block invalidate)
 invalidates a specified cache line from
 the instruction cache, and may be used in these situations.
+\fi
 
 \subsection{SPARC RMO, PSO, and TSO}
 
