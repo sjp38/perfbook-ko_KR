@@ -3468,6 +3468,21 @@ lines~3 and 4 would enforce ordering between lines~1 and 5.
 
 \subsection{IA64}
 
+IA64 는 완화된 일관성 모델을 제공하므로, 명시적으로 메모리 배리어 인스트럭션을
+사용하지 않으면 IA64 는 메모리 참조들을 재배치할 수
+있습니다~\cite{IntelItanium02v2}.
+IA64 는 {\tt mf} 라는 이름의 memory-fenct 인스트럭션을 가지고 있지만, 로드,
+스토어, 그리고 일부 어토믹 인스트력션들에 덧붙일 수 있는 ``half-memory fence''
+변경자 역시 가지고 있습니다~\cite{IntelItanium02v3}.
+Figure~\ref{fig:app:whymb:Half Memory Barrier} 에 그린 것처럼, {\tt acq}
+변경자는 뒤의 메모리 참조 인스트럭션들이 {\tt acq} 앞으로 재배치 되는 것을
+막습니다만, 앞의 메모리 참조인스트럭션들이 {\tt acq} 뒤로 재배치 되는 것은
+허용합니다.
+유사하게, {\tt rel} 변경자는 앞의 메모리 참조가 {\tt rel} 뒤로 재배치 되는 것을
+막습니다만, 뒤의 메모리 참조 인스트럭션들이 {\tt rel} 앞으로 재배치 되는 것은
+허용합니다.
+\iffalse
+
 IA64 offers a weak consistency model, so that in absence of explicit
 memory-barrier instructions, IA64 is within its rights to arbitrarily
 reorder memory references~\cite{IntelItanium02v2}.
@@ -3482,6 +3497,7 @@ Similarly, the {\tt rel} modifier prevents prior memory-reference
 instructions from being reordered after the {\tt rel}, but allows
 subsequent memory-reference instructions to be reordered before
 the {\tt rel}.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -3491,6 +3507,17 @@ the {\tt rel}.
 \ContributedBy{Figure}{fig:app:whymb:Half Memory Barrier}{Melissa Brossard}
 \end{figure}
 
+이 half-memory fence 들은 오퍼레이션들을 크리티컬 섹션에 안전하게 집어넣을 수
+있으므로 크리티컬 섹션에 유용합니다만, 이 오퍼레이션들이 삐져나오게 되면 매우
+위험합니다.
+IA64 는 이 기능을 제공하는 CPU 들 중 하나\footnote{
+	ARMv8 은 최근 load-acquire 와 store-release 인스트럭션들을
+	추가했습니다.}
+로써 리눅스의 락 획득과 해제에 연관된 메모리 오퍼레이션 순서 의미를 정의합니다.
+크리티컬 섹션은 오퍼레이션들을 집어넣기 안전하지만 바깥으로 삐져나오면
+치명적이기에 이 half-memory fence 들은 크리티컬 섹션에 유용합니다.
+\iffalse
+
 These half-memory fences are useful for critical sections, since
 it is safe to push operations into a critical section, but can be
 fatal to allow them to bleed out.
@@ -3499,6 +3526,20 @@ However, as one of the only CPUs with this property,\footnote{
 IA64 defines
 Linux's semantics of memory ordering associated with lock acquisition
 and release.
+\fi
+
+IA64 {\tt mf} 인스트럭션이 리눅스 커널의 {\tt smp\_rmb()}, {\tt smp\_mb()},
+그리고 {\tt smp\_wmb()} 기능을 위해 사용됩니다.
+아, 그리고 모순되는 루머들이 있긴 하지만, ``mf'' 는 정말로 ``memory fence'' 의
+약자입니다.
+
+마지막으로, IA64 는 ``release'' 오퍼레이션과 ``mf'' 인스트럭션들에 글로벌한
+전체 순서를 제공합니다.
+이는 한 코드 조각이 한 액세스가 일어난 것으로 본다면, 그 뒤의 코드 조각들도
+역시 그 앞의 액세스가 일어난 것으로 보게 되는 타동성의 개념을 제공합니다.
+이는 모든 코드 조각들이 올바르게 메모리 배리어들을 사용했다는 가정 하의
+이야기입니다.
+\iffalse
 
 The IA64 {\tt mf} instruction is used for the {\tt smp\_rmb()},
 {\tt smp\_mb()}, and {\tt smp\_wmb()} primitives in the Linux kernel.
@@ -3512,6 +3553,7 @@ sees a given access as having happened, any later code fragment will
 also see that earlier access as having happened.
 Assuming, that is, that all the code fragments involved correctly use
 memory barriers.
+\fi
 
 \subsection{MIPS}
 
