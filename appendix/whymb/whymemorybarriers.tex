@@ -3336,6 +3336,14 @@ SSE and 3DNOW instructions into account.
 
 \subsection{ARMv7-A/R}
 
+ARM 계열 CPU 들은 임베디드 분야, 특히 전력이 제한되는 휴대폰과 같은 분야에서는
+극단적일 정도로 인기가 있습니다.
+ARM 의 멀티프로세서 구현은 아직 5년을 넘지 않았습니다.
+ARM 의 메모리 모델은 Power 의 것 (Section~\ref{sec:app:whymb:POWER / PowerPC}
+를 참고하세요) 과 유사합니다만, ARM 은 다른 메모리 배리어 인스트럭션
+셋~\cite{ARMv7A:2010} 을 사용합니다:
+\iffalse
+
 The ARM family of CPUs is extremely popular in embedded applications,
 particularly for power-constrained applications such as cellphones.
 There have nevertheless been multiprocessor implementations of ARM
@@ -3343,8 +3351,31 @@ for more than five years.
 Its memory model is similar to that of Power
 (see Section~\ref{sec:app:whymb:POWER / PowerPC}, but ARM uses a
 different set of memory-barrier instructions~\cite{ARMv7A:2010}:
+\fi
 
 \begin{enumerate}
+\item	\co{DMB} (데이터 메모리 배리어: data memory barrier) 는 특정 타입의
+	오퍼레이션들을 같은 타입의 뒤따르는 오퍼레이션들 이전에 완료된 것으로
+	\emph{나타나게} gkqslek.
+	오퍼레이션의 ``타입'' 은 모든 오퍼레이션들이 될 수도 있고, 쓰기 만으로
+	제한될 수도 있습니다 (Alpha \co{wmb} 와 POWER \co{eieio} 인스트럭션들과
+	유사합니다).
+	또한, ARM 은 캐시 일관성이 세개의 영역 중 하나를 고를 수 있게 합니다:
+	단일 프로세서, 프로세서들 중 일부 (``inner'') 그리고 글로벌
+	(``outer'').
+\item	\co{DSB} (데이터 동기화 배리어: data synchroniztion barrier) 는 특정
+	타입의 오퍼레이션들이 실제로 뒤따르는 (모든 타입의) 오퍼레이션들이
+	수행되기 이전에 완료되게 합니다.
+	오퍼레이션들의 ``타입'' 은 \co{DMB} 에서와 같습니다.
+	\co{DSB} 인스트럭션은 ARM 아키텍쳐 초기 버전에서는 \co{DWB} (drain
+	write buffer 또는 drain write barrier) 라 불렸습니다.
+\item	\co{ISB} (인스트럭션 동기화 배리어: instruction synchronization
+	barrier) 는 CPU 파이프라인을 비워버려서 \co{ISB} 를 뒤따르는 모든
+	인스트럭션들은 \co{ISB} 가 완료된 이후에야 파이프라인으로 들어오게
+	됩니다.
+	예를 들어, (JIT 처럼) 스스로를 수정하는 프로그램을 만들고 있다면,
+	코드를 생성하고 나서 실행하기 이전에 \co{ISB} 를 실행해야 합니다.
+\iffalse
 \item	\co{DMB} (data memory barrier) causes the specified type of
 	operations to \emph{appear} to have completed before any
 	subsequent operations of the same type.
@@ -3367,7 +3398,21 @@ different set of memory-barrier instructions~\cite{ARMv7A:2010}:
 	For example, if you are writing a self-modifying program
 	(such as a JIT), you should execute an \co{ISB} after
 	between generating the code and executing it.
+\fi
 \end{enumerate}
+
+이 중 어떤 인스트럭션도 리눅스의 \co{rmb()} 기능과 의미적으로 일치하지 않기
+때문에 \co{DMB} 로 구현됩니다.
+\co{DMB} 와 \co{DSB} 인스트럭션은 배리어 전후 액세스 순서에 대한 재귀적 정의를
+가지고 있기 때문에, POWER 의 누적성과 비슷한 효과를 갖습니다.
+
+ARM 은 또한 컨트롤 의존성을 구현해서, 조건적 브랜치가 어떤 로드에 의존적이라면,
+해당 조건적 브랜치 이후에 수행되는 모든 스토어 오퍼레이션은 해당 로드 이후로
+순서세워집니다.
+하지만, 조건적 브랜치를 뒤따르는 로드들은 해당 브랜치와 해당 로드 사이에
+\co{ISB} 인스트럭션이 있지 않는 한 순서세워진다고 보장되지 \emph{않습니다}.
+다음의 예를 생각해 봅시다:
+\iffalse
 
 None of these instructions exactly match the semantics of Linux's
 \co{rmb()} primitive, which must therefore be implemented as a full
@@ -3383,6 +3428,7 @@ However, loads following the conditional branch will \emph{not}
 be guaranteed to be ordered unless there is an \co{ISB}
 instruction between the branch and the load.
 Consider the following example:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3399,6 +3445,16 @@ Consider the following example:
 \end{minipage}
 \vspace{5pt}
 
+이 예제에서, 로드-스토어 컨트롤 의존성 순서세우기가 line~1 의 \co{x} 로부터의
+로드가 line~4 의 \co{y} 로의 스토어보다 먼저 수행되도록 만듭니다.
+하지만, ARM 로드-로드 컨트롤 의존성은 신경쓰지 않으므로, line~1 의 로드는
+line~5 의 로드보다 \emph{나중에} 수행될 수 있습니다.
+반면, line~2 의 조건적 브랜치와 line~6 의 \co{ISB} 인스트럭션의 조합은 line~7
+의 로드가 line~1 의 로드보다 뒤에 수행될 것을 보장합니다.
+line~3 과 4 사이 어딘가에 \co{ISB} 인스트럭션을 추가하는 것은 line~1 과 5
+사이의 순서를 지키도록 해줄 것임을 알아 두시기 바랍니다.
+\iffalse
+
 In this example, load-store control dependency ordering causes
 the load from \co{x} on line~1 to be ordered before the store to
 \co{y} on line~4.
@@ -3410,6 +3466,7 @@ and the \co{ISB} instruction on line~6 ensures that
 the load on line~7 happens after the load on line~1.
 Note that inserting an additional \co{ISB} instruction somewhere between
 lines~3 and 4 would enforce ordering between lines~1 and 5.
+\fi
 
 \subsection{IA64}
 
