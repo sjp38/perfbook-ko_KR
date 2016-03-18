@@ -3959,6 +3959,18 @@ though there is a reference to an implementation note.
 
 \subsection{x86}
 
+x86 CPU 들은 ``프로세스 순서'' 를 제공해서 모든 CPU 들이 한 CPU 의 메모리에의
+쓰기 순서에 동의하므로 해당 CPU~\cite{IntelXeonV3-96a} 에서 {\tt smp\_wmb()}
+기능은 no-op 으로 동작합니다.
+하지만, 컴파일러가 {\tt smp\_wmb()} 를 가로지르는 재배치의 결과를 만드는
+최적화를 가하는 것을 막기 위해 컴파일러 지시어가 필요합니다.
+
+반면, x86 CPU 들은 전통적으로 로드들에 대해선 순서에 대한 보장을 제공하지
+않았으므로, {\tt smp\_mb()} 와 {\tt smp\_rmb()} 기능들은 {\tt lock;addl} 로
+확장됩니다.
+이 어토믹 인스트럭션은 로드와 스토어 둘 다에 대한 배리어처럼 동작합니다.
+\iffalse
+
 Since the x86 CPUs provide ``process ordering'' so that all CPUs agree
 on the order of a given CPU's writes to memory, the {\tt smp\_wmb()} primitive
 is a no-op for the CPU~\cite{IntelXeonV3-96a}.
@@ -3970,6 +3982,29 @@ On the other hand, x86 CPUs have traditionally given
 no ordering guarantees for loads, so
 the {\tt smp\_mb()} and {\tt smp\_rmb()} primitives expand to {\tt lock;addl}.
 This atomic instruction acts as a barrier to both loads and stores.
+\fi
+
+또한, 인텔은 x86 을 위한 메모리 모델~\cite{Intelx86MemoryOrdering2007}을
+출판했습니다.
+이를 통해 인텔의 실제 CPU 들은 앞의 사양에서 이야기한 것보다 더 강한 순서를
+제공하고 있음이 드러났으며, 따라서 이 모델은 이전의 사실상의 행동을 의무화
+했습니다.
+더 최근에, 인텔은 업데이트된 x86 을 위한 메모리
+모델~\cite[Section8.2]{Intel64IA32v3A2011} 을 발간했는데, 여기선 스토어들에
+대한 전체 전역 순서를 의무화 했습니다만 각각의 CPU 들은 여전히 각자의
+스토어들은 전체 전역적 순서가 가리키는 것보다 빨리 일어난 것으로 볼 수 있게
+허용하고 있습니다.
+스토어 버퍼와 관련된, 중요한 하드웨어 최적화를 위해 전체 스토어 순서에 대한 이
+예외가 필요했습니다.
+또한, 메모리 순서 규칙은 인과성을 준수해서, CPU~0 가 CPU~1 의 스토어를 봤다면,
+CPU~0 는 CPU~1 이 그 스토어 이전에 봤던 모든 스토어들을 볼 수 있도록
+보장됩니다.
+소프트웨어는 이런 하드웨어 최적화를 무효화 하기 위해 어토믹 오퍼레이션을 사용할
+수 있는데, 이것이 어토믹 오퍼레이션이 그렇지 않은 것들에 비해 큰 비용을 필요로
+하는 경향을 띄눈 이유 중 한가지입니다.
+이 전체 스토어 순서 (total store order) 는 옛날 프로세서들에서는 보장되지
+\emph{않습니다}.
+\iffalse
 
 Intel has also published a memory model for
 x86~\cite{Intelx86MemoryOrdering2007}.
@@ -3990,6 +4025,20 @@ Software may use atomic operations to override these hardware optimizations,
 which is one reason that atomic operations tend to be more expensive
 than their non-atomic counterparts.
 This total store order is \emph{not} guaranteed on older processors.
+\fi
+
+또한, 주어진 메모리 위치에서 수행되는 어토믹 인스트럭션들은 모두 같은 크기여야
+함~\cite[Section 8.1.2.2]{Intel64IA32v3A2011} 을 주의해야만 합니다.
+예를 들어, 한 CPU 가 어토믹 1 바이트 증가 오퍼레이션을 수행하는 동안 다른 CPU
+에서는 같은 위치에 4 바이트 어토믹 증가 오퍼레이션을 수행한다면, 결과는 알 수
+없습니다.
+
+하지만, 일부 SSE 인스트럭션들은 완화된 순서 규칙 을 가짐을 주의하십시오 ({\tt
+clflush} 와 임시적이지 않은 move 인스트럭션들~\cite{IntelXeonV2b-96a}).
+SSE 를 갖는 CPU 들은 {\tt smp\_mb()} 를 위해 {\tt mfence} 를,
+{\tt smp\_rmb()} 를 위해 {\tt lfence} 를, 그리고 {\tt smp\_wmb()} 를 위해
+{\tt sfence} 를 사용할 수 있습니다.
+\iffalse
 
 It is also important to note that atomic instructions operating
 on a given memory location should all be of the same
@@ -4002,6 +4051,17 @@ However, note that some SSE instructions are weakly ordered ({\tt clflush}
 and non-temporal move instructions~\cite{IntelXeonV2b-96a}).
 CPUs that have SSE can use {\tt mfence} for {\tt smp\_mb()},
 {\tt lfence} for {\tt smp\_rmb()}, and {\tt sfence} for {\tt smp\_wmb()}.
+\fi
+
+x86 CPU 의 일부 버전들은 순서 외 스토어를 가증하게 하는 mode bit 를 가지고
+있고, 이런 CPU 들에서는 {\tt smp\_wmb()} 가 {\tt lock;addl} 로 정의되어야만
+합니다.
+
+최신의 x86 구현은 스스로 수정하는 코드를 특별한 인스트럭션 없이 수용할 수
+있지만, 과거와 잠재적인 미래 x86 구현과 호환성을 갖기 위해, CPU 는 코드의
+수정과 실행 사이에 jump 인스트럭션이나 직렬화 인스트럭션 (예: \co{cpuid}) 을
+실행해야만 합니다~\cite[Section 8.1.3]{Intel64IA32v3A2011}.
+\iffalse
 
 A few versions of the x86 CPU have a mode bit that enables out-of-order
 stores, and for these CPUs, {\tt smp\_wmb()} must also be defined to
@@ -4013,6 +4073,7 @@ past and potential future x86 implementations, a given CPU must
 execute a jump instruction or a serializing instruction (e.g., \co{cpuid})
 between modifying the code and executing
 it~\cite[Section 8.1.3]{Intel64IA32v3A2011}.
+\fi
 
 \subsection{zSeries}
 
