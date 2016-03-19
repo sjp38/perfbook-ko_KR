@@ -4211,12 +4211,33 @@ We have no clue, so are preparing to live with either scenario.
 \section{Advice to Hardware Designers}
 \label{sec:app:whymb:Advice to Hardware Designers}
 
+하드웨어 설계자들이 소프트웨어쪽 사람들의 삶을 고통스럽게 하기 위해 할 수 있는
+여러가지 일들이 있습니다.
+여기 우리가 과거에 마주했던 그런 것들 중 몇개를 미래에는 그런 문제가 없어지도록
+도움을 주기 위한 바램으로 나열해 봅니다:
+\iffalse
+
 There are any number of things that hardware designers can do
 to make the lives of software people difficult.
 Here is a list of a few such things that we have encountered in
 the past, presented here in the hope that it might help prevent
 future such problems:
+\fi
 \begin{enumerate}
+\item	캐시 일관성을 무시하는 I/O 디바이스들.
+
+	이 유혹적인 잘못된 기능은 메모리로부터의 DMA 가 아웃풋 버퍼에 만들어진
+	최근의 변경을 놓치거나, 인풋 버퍼가 CPU 캐시에 의해 DMA 완료 직후에야
+	덮어써지게 만들 수 있습니다.
+	그런 잘못된 동작에서도 시스템이 정상적으로 동작하게 만들려면,
+	조심스럽게 모든 DMA 버퍼 위치의 CPU 캐시를 그 버퍼가 I/O 디바이스에
+	넘어가기 전에 비워야만 합니다.
+	비슷하게, 모든 DMA 버퍼 위치의 CPU 캐시를 해당 버퍼로의 DMA 가 완료된
+	직후 비워야 합니다.
+	그러고 나서도, 잘못 만들어진 인풋 버퍼로의 읽기 작업조차도 해당 데이터
+	입력을 망가뜨릴 수 있기 때문에, 포인터 버그를 \emph{매우} 조심스럽게
+	방지해야 합니다!
+\iffalse
 \item	I/O devices that ignore cache coherence.
 
 	This charming misfeature can result in DMAs from memory
@@ -4232,6 +4253,16 @@ future such problems:
 	And even then, you need to be \emph{very} careful to avoid
 	pointer bugs, as even a misplaced read to an input buffer
 	can result in corrupting the data input!
+\fi
+
+\item	캐시 일관성 데이터를 전달하는데 실패할 수 있는 외부 버스.
+
+	이건 앞의 문제보다도 더 심각한 문제로, 여러 디바이스 그룹들---그리고
+	심지어 메모리 자신도---을 캐시 일관성과 관련해 실패하게 만듭니다.
+	이야기하기 고통스러운 말이지만, 임베디드 시스템들이 멀티코어 아키텍쳐로
+	옮겨감에 따라 이런 문제들이 여럿 나타나게 될 것입니다.
+	부디 이 문제들이 2015년에는 해결되길 바랍니다.
+\iffalse
 
 \item	External busses that fail to transmit cache-coherence data.
 
@@ -4242,6 +4273,20 @@ future such problems:
 	move to multicore architectures, we will no doubt see a fair
 	number of such problems arise.
 	Hopefully these problems will clear up by the year 2015.
+\fi
+\item	캐시 일관성을 무시하는 디바이스 인터럽트들.
+
+	이건 문제 없어 보일 수 있습니다 --- 일단, 인터럽트들은 메모리 참조가
+	아니지 않습니까?
+	하지만 분할된 캐시를 갖는 CPU 에서 인풋 버퍼의 마지막 캐시라인을 매우
+	바쁜 뱅크 하나가 가지고 있는 상황을 생각해 봅시다.
+	만약 관련된 I/O 완료 인터럽트가 이 CPU 에 도착하면, 이 CPU 의 해당
+	버퍼의 마지막 캐시라인으로의 메모리 참조는 예전 데이터를 반환할 수
+	있고, 이로 인해 데이터가 망가질 수 있으며, 이 망가진 데이터는 뒤에
+	만들어질 크래시 덤프에는 보이지도 않을 겁니다.
+	시스템이 문제가 된 입력 버퍼를 덤프 뜨려 해는 시점에서는 DMA 는
+	완료됐을 것이기 때문입니다.
+\iffalse
 
 \item	Device interrupts that ignore cache coherence.
 
@@ -4257,12 +4302,28 @@ future such problems:
 	in a later crash dump.
 	By the time the system gets around to dumping the offending
 	input buffer, the DMA will most likely have completed.
+\fi
+\item	캐시 일관성을 무시하는 프로세서간 인터럽트 (IPS).
+
+	IPI 가 그 목표지에 연관된 메세지 버퍼의 캐시 라인들이 모두 메모리에
+	반영되기 전에 도달한다면 문제가 될 수 있습니다.
+\iffalse
 
 \item	Inter-processor interrupts (IPIs) that ignore cache coherence.
 
 	This can be problematic if the IPI reaches its destination
 	before all of the cache lines in the corresponding message
 	buffer have been committed to memory.
+\fi
+\item	캐시 일관성을 추월하는 컨텍스트 스위치.
+
+	메모리 액세스들이 너무 비순차적으로 완료될 수 있다면, 컨텍스트 스위치가
+	문제가 될 수 있습니다.
+	태스크가 원래 있던 CPU 에 보이는 모든 메모리 액세스들이 넘어갈 CPU 에
+	보여지게 되기 전에 이동하게 된다면, 해당 태스크에게는 관련된 변수들이
+	이전의 값으로 보이게 되어, 대부분의 알고리즘을 혼란스럽게 만들
+	것입니다.
+\iffalse
 
 \item	Context switches that get ahead of cache coherence.
 
@@ -4273,6 +4334,15 @@ future such problems:
 	destination CPU, then the task could easily see the corresponding
 	variables revert to prior values, which can fatally confuse
 	most algorithms.
+\fi
+\item	지나치게 친절한 시뮬레이터들과 에뮬레이터들.
+
+	메모리 순서 재배치를 강제하는 시뮬레이터나 에뮬레이터를 만들기는 어려운
+	관계로, 이런 환경에서 잘 동작하던 소프트웨어는 실제 하드웨어에서
+	수행되면 불쾌한 놀람을 받을 수 있습니다.
+	불행히도, 하드웨어는 시뮬레이터나 에뮬레이터보다 일탈적이라는게 여전히
+	진실입니다만, 이런 상황이 바뀌길 바랍니다.
+\iffalse
 
 \item	Overly kind simulators and emulators.
 
@@ -4283,6 +4353,11 @@ future such problems:
 	Unfortunately, it is still the rule that the hardware is more
 	devious than are the simulators and emulators, but we hope that
 	this situation changes.
+\fi
 \end{enumerate}
 
+다시 말하지만, 하드웨어 설계자들이 이런 것들을 좀 바꿔주길 바랍니다!
+\iffalse
+
 Again, we encourage hardware designers to avoid these practices!
+\fi
