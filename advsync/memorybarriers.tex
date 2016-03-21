@@ -234,11 +234,17 @@ encounter when using explicit memory barriers.
 \subsection{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
 \label{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
 
+메모리 순서 규칙과 메모리 배리어는 매우 비직관적일 수 있습니다.
+예를 들어, Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} 의 함수들이
+변수 A, B, C 가 초기값 0을 가진 채 병렬로 수행되는 경우를 생각해보세요:
+\iffalse
+
 Memory ordering and memory barriers can be extremely counter-intuitive.
 For example, consider the functions shown in
 Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal}
 executing in parallel
 where variables A, B, and C are initially zero:
+\fi
 
 \begin{figure}[htbp]
 { \centering
@@ -272,12 +278,32 @@ where variables A, B, and C are initially zero:
 \label{fig:advsync:Parallel Hardware is Non-Causal}
 \end{figure}
 
+직관적으로 볼 때, \co{thread0()} 는 B 의 값 할당을 A 에의 값 할당 후에 하고,
+\co{thread1()} 은 C 에 값을 할당하기 전, \co{thread0()} 가 B 에 값을 할당할
+때까지 기다리며, \co{thread2()} 는 A 의 값을 보기 전에 \co{thread1()} 이 C 에
+값을 할당하기까지 기다립니다.
+따라서, 역시 직관적으로, line~21 의 단정문은 실패할 수 없습니다.
+\iffalse
+
 Intuitively, \co{thread0()} assigns to B after it assigns to A,
 \co{thread1()} waits until \co{thread0()} has assigned to B before
 assigning to C, and \co{thread2()} waits until \co{thread1()} has
 assigned to C before referencing A.
 Therefore, again intuitively, the assertion on line~21 cannot possibly
 fire.
+\fi
+
+이 말은, 직관적이기는 하지만, 완전히 잘못된 것입니다.
+이건 이론적인 단정이 아님에 주의하시기 바랍니다: 실제로 이 코드를 현실의 약한
+순서 규칙의 하드웨어 (1.5 GHz 16-CPU POWER 5 시스템) 에서 수행하면 천만번의
+수행 중 16번 이 단정문이 실패했습니다.
+분명, 명시적 메모리 배리어를 사용하는 코드를 작성하는 사람은 반드시 극단적인
+테스트를 해야만 합니다 -- 정확성 증명이 도움이 될 수는 있지만, 메모리 배리어의
+본질적으로 비직관적인 동작은 그런 증명이 기반하는 가정을 상당히 제약할 수
+있습니다.
+여러개의 하드웨어 의존적인 트릭들이 이 수행에서의 실패 가능성을 상당히
+\emph{증가시키기} 때문에 극단적 테스트의 필요성은 결코 가벼워질 수 없습니다.
+\iffalse
 
 This line of reasoning, intuitively obvious though it may be, is completely
 and utterly incorrect.
@@ -292,22 +318,52 @@ memory barriers should in turn strongly limit one's trust in such proofs.
 The requirement for extreme testing should not be taken lightly, given
 that a number of dirty hardware-dependent tricks were used to
 greatly \emph{increase} the probability of failure in this run.
+\fi
 
 \QuickQuiz{}
+	page~\pageref{fig:advsync:Parallel Hardware is Non-Causal} 의
+	Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} 코드의 line~21
+	의 단정문이 대체 어떻게 실패할 수 \emph{있죠}?
+	\iffalse
+
 	How on earth could the assertion on line~21 of the code in
 	Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} on
 	page~\pageref{fig:advsync:Parallel Hardware is Non-Causal}
 	\emph{possibly} fail?
+	\fi
 \QuickQuizAnswer{
+	핵심 포인트는, 직관적 분석이 놓친 것은 C 에의 값 할당 결과가 A 에의 값
+	할당보다 먼저 {\tt thread2()} 에게 전파되는 것을 막는 것이 없다는
+	점입니다.
+	이건 이 섹션의 뒤에서 설명됩니다.
+	\iffalse
+
 	The key point is that the intuitive analysis missed is that
 	there is nothing preventing the assignment to C from overtaking
 	the assignment to A as both race to reach {\tt thread2()}.
 	This is explained in the remainder of this section.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	좋아요... 그래서 이걸 어떻게 고쳐야 하죠?
+	\iffalse
+
 	Great...  So how do I fix it?
+	\fi
 \QuickQuizAnswer{
+	가장 쉬운 방법은 line~12 와 line~20 의 \co{barrier()} 를 \co{smp_mb()}
+	로 바꾸는 것입니다.
+
+	물론, 일부 하드웨어는 다른 하드웨어보다 너그럽습니다.
+	예를 들어, x86 에서
+	page~\pageref{fig:advsync:Parallel Hardware is Non-Causal}
+	Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} 의 line~21 의
+	단정문은 실패하지 않습니다.
+	PowerPC 에서는 line~20 의 \co{barrier()} 만 \co{smp_mb()} 로 바꿔도
+	단정문이 실패하지 않게 할 수 있습니다.
+	\iffalse
+
 	The easiest fix is to replace each of the \co{barrier()}s on
 	line~12 and line~20 with an \co{smp_mb()}.
 
@@ -319,7 +375,17 @@ greatly \emph{increase} the probability of failure in this run.
 	On PowerPC, only the \co{barrier()} on line~20 need be
 	replaced with \co{smp_mb()} to prevent the assertion from
 	triggering.
+	\fi
 } \QuickQuizEnd
+
+그러니 이제 어떡해야 할까요?
+최선의 선택지는, 가능하다면 모든 필요한 메모리 배리어를 내포하고 있는 현존하는
+기능들을 사용하고 이 챕터의 나머지 내용을 그냥 무시하는 것입니다.
+
+물론, 동기화 도구를 직접 구현하고 있다면 그럴 수는 없습니다.
+다음의 메모리 순서 규칙과 메모리 배리어에 대한 이야기는 그런 경우를 위한
+것입니다.
+\iffalse
 
 So what should you do?
 Your best strategy, if possible, is to use existing primitives that
@@ -330,6 +396,7 @@ Of course, if you are implementing synchronization primitives,
 you don't have this luxury.
 The following discussion of memory ordering and memory barriers
 is for you.
+\fi
 
 \subsection{Variables Can Have More Than One Value}
 \label{sec:advsync:Variables Can Have More Than One Value}
