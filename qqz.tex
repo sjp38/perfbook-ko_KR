@@ -9138,20 +9138,46 @@ srcu_read_unlock(&srcucb, idx);
 	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:advsync:Software Logic Analyzer} 의 코드 조각이
+	가정하고 있는, 실제 하드웨어에서는 불가능한 일은 무엇인가요?
+	\iffalse
+
 	What assumption is the code fragment
 	in Figure~\ref{fig:advsync:Software Logic Analyzer}
 	making that might not be valid on real hardware?
+	\fi
 \QuickA{}
+	해당 코드는 주어진 CPU 가 자신의 값을 보는 것을 멈추는 순간, 최종의
+	모든 CPU 가 동의한, 최종값을 볼 것이라 생각합니다.
+	실제 하드웨어에서는, 일부 CPU 들은 마지막 값에 이르기 이전의 중간 상태
+	값도 볼 수 있습니다.
+	\iffalse
+
 	The code assumes that as soon as a given CPU stops
 	seeing its own value, it will immediately see the
 	final agreed-upon value.
 	On real hardware, some of the CPUs might well see several
 	intermediate results before converging on the final value.
+	\fi
 
 \QuickQ{}
+	어떻게 CPU 들이 하나의 변수에 대해 \emph{같은 시간} 에 그 값을 다르게
+	볼 수 있을까요?
+	\iffalse
+
 	How could CPUs possibly have different views of the
 	value of a single variable \emph{at the same time?}
+	\fi
 \QuickA{}
+	많은 CPU 들이 최근의 쓰기 값을 기록하며 연관된 캐시 라인이 CPU 로
+	불려갈 때 적용되는 write buffer 들을 갖습니다.
+	따라서, 각 CPU 가 한 변수에 대해 동시에 서로 다른 값을 보는 것이
+	가능합니다 --- 그리고 메인 메모리는 또다른 값을 가지고 있을 수
+	있습니다.
+	메모리 배리어가 만들어진 이유들 중 하나는 소프트웨어가 이런 상황을 잘
+	처리할 수 있도록 하기 위해서입니다.
+	\iffalse
+
 	Many CPUs have write buffers that record the values of
 	recent writes, which are applied once the corresponding
 	cache line makes its way to the CPU.
@@ -9161,11 +9187,30 @@ srcu_read_unlock(&srcucb, idx);
 	One of the reasons that memory barriers were invented was
 	to allow software to deal gracefully with situations like
 	this one.
+	\fi
 
 \QuickQ{}
+	CPU~2 와 3 은 그렇게 빨리 합의에 이르렀는데 CPU~1 과 4 는 그렇게 오래
+	걸린 이유가 뭐죠?
+	\iffalse
+
 	Why do CPUs~2 and 3 come to agreement so quickly, when it
 	takes so long for CPUs~1 and 4 to come to the party?
+	\fi
 \QuickA{}
+	CPU~2 와 3 은 같은 코어에서 수행되는 하드웨어 쓰레드여서 같은 캐시
+	구조를 공유하며, 따라서 매우 적은 통신 대기시간을 갖습니다.
+	이건 NUMA, 또는, 더 정확히는, NUCA 효과입니다.
+
+	이 사실은 CPU~2 와 3 이 동의하지 않는 경우가 왜 발생할 수 있는 건지
+	궁금하게 만듭니다.
+	한가지 가능한 이유는 CPU~2 와 3 이 공유된 커다란 캐시 외에도 작은 개별
+	캐시를 가지고 있을 수도 있다는 점입니다.
+	또다른 가능한 이유는 인스트럭션 재배치로, 동의에 걸리는 시간이 매우
+	짧은 10 나노세컨드라는 점과 해당 코드에 메모리 배리어가 없다는 점이 이
+	가설을 뒷받침합니다.
+	\iffalse
+
 	CPUs~2 and 3 are a pair of hardware threads on the same
 	core, sharing the same cache hierarchy, and therefore have
 	very low communications latencies.
@@ -9178,6 +9223,7 @@ srcu_read_unlock(&srcucb, idx);
 	Another possible reason is instruction reordering, given the
 	short 10-nanosecond duration of the disagreement and the
 	total lack of memory barriers in the code fragment.
+	\fi
 
 \QuickQ{}
 	But if the memory barriers do not unconditionally force
