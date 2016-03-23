@@ -720,6 +720,25 @@ in program order.
 \subsubsection{Single-Variable Memory Consistency}
 \label{sec:advsync:Single-Variable Memory Consistency}
 
+현재의 상용 컴퓨터 시스템들은 \emph{캐시 일관성} 을 제공하기 때문에, 어떤 CPU
+무리가 모두 하나의 변수에 동시에 어토믹하지 않은 스토어를 하게 되면, 모든 CPU
+들에 보이는 일련의 값들은 적어도 하나의 글로벌 순서 규칙에 의해 일관적일
+것입니다.
+예를 들어,
+Figure~\ref{fig:advsync:A Variable With Multiple Simultaneous Values} 에 보이는
+일련의 액세스들에서,
+CPU~1 는 {\tt \{1,2\}} 순서로,
+CPU~2 는 {\tt \{2\}} 순서로,
+CPU~3 는 {\tt \{3,2\}} 순서로,
+그리고
+CPU~4 는 {\tt \{4,2\}} 순서로 그 값을 보게 됩니다.
+이는 글로벌한 순서 {\tt \{3,1,4,2\}} 로 일관성을 갖습니다만, 꼭 이 순서가
+아니라도 이 네개의 숫자를 가지고 ``2'' 로 끝나는, 다른 다섯개의 순서로 글로벌
+순서를 유추하는 것도 가능합니다.
+즉, 하나의 변수에서 얻어지는 값의 순서에는 모호함이 있긴 하나, 모든 CPU 의
+합의가 이뤄집니다.
+\iffalse
+
 Because current commercially available computer systems provide
 \emph{cache coherence},
 if a group of CPUs all do concurrent non-atomic stores to a single variable,
@@ -737,6 +756,19 @@ but also with all five of the other sequences of these four numbers that end
 in ``2''.
 Thus, there will be agreement on the sequence of values taken on
 by a single variable, but there might be ambiguity.
+\fi
+
+반면에, 이 CPU 들이 간단한 유일값의 스토어가 아니라 (리눅스 커널의
+\co{atomic_inc_return()} 과 같은) 어토믹 오퍼레이션들을 사용했다면, CPU 들이
+보게 되는 결과들은 하나의 전체적으로 일관된 순서의 값들이 될 것입니다.
+\co{atomic_inc_return()} 실행 중 하나가 먼저 일어나서 그 값을 0 에서 1 로
+바꾸고, 다음엔 두번째가 1 에서 2로, 그리고 그렇게 진행됩니다.
+이 CPU 들은 각자 본 것들을 비교하고 \co{atomic_inc_return()} 실행의 분명한
+순서에의 합의를 얻을 수 있을 것입니다.
+이는 앞서 설명한 어토믹하지 않은 스토어로는 불가능한 일인데, 어토믹하지 않은
+스토어는 모호성의 가능성으로 인해 이전의 값에 대한 정보를 알려주지 않기
+때문입니다.
+\iffalse
 
 In contrast, had the CPUs used atomic operations (such as the Linux kernel's
 \co{atomic_inc_return()} primitive) rather than simple stores of
@@ -750,6 +782,16 @@ exact ordering of the sequence of \co{atomic_inc_return()} invocations.
 This does not work for the non-atomic stores described earlier because
 the non-atomic stores do not return any indication of the earlier value,
 hence the possibility of ambiguity.
+\fi
+
+이 섹션은 모든 CPU 들이 하나의 변수에 접근할 때에\emph{만} 적용됨에
+주의하십시오.
+이 단일 변수의 경우, 과감한 컴파일러 최적화가 리눅스 커널의 \co{ACCESS_ONCE()}
+지시어나 C++11 의 완화된 어토믹 오퍼레이션들~\cite{PeteBecker2011N3242}를 통해
+방지되었다는 최소한의 가정 위에서는 캐시 일관성이 글로벌한 순서를 보장합니다.
+반면, 만약 여러 변수들이 있다면, 현재의 상용 컴퓨터 시스템들에서는 CPU 들이
+일관성 있게 순서에 합의할 수 있도록 하기 위해 메모리 배리어가 필요합니다.
+\iffalse
 
 Please note well that this section applies \emph{only} when all
 CPUs' accesses are to one single variable.
@@ -761,6 +803,7 @@ atomics~\cite{PeteBecker2011N3242}.
 In contrast, if there are multiple variables, memory barriers are
 required for the CPUs to consistently agree on the order for current
 commercially available computer systems.
+\fi
 
 \subsubsection{Pair-Wise Memory Barriers}
 
