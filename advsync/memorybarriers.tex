@@ -807,6 +807,23 @@ commercially available computer systems.
 
 \subsubsection{Pair-Wise Memory Barriers}
 
+짝을 맞추는 메모리 배리어들은 조건적 순서 개념을 제공합니다.
+예를 들어, 다음의 오퍼레이션들에 대해, 외부에서 로직 분석을 하는 쪽의
+관점에서는 CPU~1 의 A 로의 액세스가 조건 없이 B 로의 액세스를 앞서지는 않습니다
+\IfInBook{예를 위해 (Appendix~\ref{chp:app:whymb:Why Memory Barriers?}를
+	  참고하세요)
+	  }.
+	  {(시스템은 그저 이 액세스들이 순서대로 이루어지는 \emph{것처럼}
+	  동작할 뿐입니다; 실제로 순서대로 이루어지도록 강제될 이유는
+	  없습니다).}
+하지만, 만약 CPU~2 의 B 로의 액세스가 CPU~1 의 B 로의 액세스의 결과를 보게
+된다면, CPU~2 의 A 로의 액세스는 CPU~1 의 A 로의 액세스의 결과 역시 보게 될
+것이 보장됩니다.
+일부 CPU 의 메모리 배리어들은 실은 좀 더 강력한, 무조건적 순서 개념을
+제공하지만, 이식성 있는 코드는 이와 같이 좀 더 약한 조건적 순서 개념만을
+사용해야 할 것입니다.
+\iffalse
+
 Pair-wise memory barriers provide conditional ordering semantics.
 For example, in the following set of operations, CPU~1's access to
 A does not unconditionally precede its access to B from the viewpoint
@@ -823,6 +840,7 @@ CPU~1's access to A.
 Although some CPUs' memory barriers do in fact provide stronger,
 unconditional ordering guarantees, portable code may rely only
 on this weaker if-then conditional ordering guarantee.
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -839,16 +857,37 @@ on this weaker if-then conditional ordering guarantee.
 \vspace{5pt}
 
 \QuickQuiz{}
+	하지만 메모리 배리어들이 무조건적으로 순서를 강제해 주지 않는다면,
+	디바이스 드라이버는 대체 어떻게 안정적으로 MMIO 레지스터로의 일련의
+	로드와 스토어들을 실행할 수 있나요?
+	\iffalse
+
 	But if the memory barriers do not unconditionally force
 	ordering, how the heck can a device driver reliably execute
 	sequences of loads and stores to MMIO registers?
+	\fi
 \QuickQuizAnswer{
+	MMIO 레지스터들은 특별한 경우입니다: 그것들은 물리 메모리의 캐시되지
+	않는 영역에 위치합니다.
+	메모리 배리어들은 캐시되지 않는 메모리로의 로드와 스토어는 무조건적으로
+	순서를 강제하는데, 이에 대해선 Section~\ref{sec:advsync:Device
+	Operations} 에서 다루겠습니다.
+	\iffalse
+
 	MMIO registers are special cases: because they appear
 	in uncached regions of physical memory.
 	Memory barriers \emph{do} unconditionally force ordering
 	of loads and stores to uncached memory, as discussed in
 	Section~\ref{sec:advsync:Device Operations}.
+	\fi
 } \QuickQuizEnd
+
+물론, 액세스들은 로드 또는 스토어야만 하고, 이것들은 서로 다른 특성을 갖습니다.
+Table~\ref{tab:advsync:Memory-Barrier Combinations} 은 한 쌍의 CPU 에서 모든
+가능한 로드와 스토어 조합을 보입니다.
+당연하게도, 조건적 순서를 강제하기 위해, 각 CPU 의 오퍼레이션들에 짝을 맞춰
+메모리 배리어를 사용해야만 합니다.
+\iffalse
 
 Of course, accesses must be either loads or stores, and these
 do have different properties.
@@ -857,6 +896,7 @@ shows all possible combinations of loads and stores from a pair
 of CPUs.
 Of course, to enforce conditional ordering, there must be
 a memory barrier between each CPU's pair of operations.
+\fi
 
 \begin{table*}
 \begin{center}
