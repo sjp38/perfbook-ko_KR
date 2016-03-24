@@ -1116,6 +1116,15 @@ pairings that portable software may depend on.
 
 \subsubsection{Pair-Wise Memory Barriers: Semi-Portable Combinations}
 
+Table~\ref{tab:advsync:Memory-Barrier Combinations} 에서 가져온 다음의 조합들은
+최신 하드웨어에서 사용될 수 있습니다만, 1900년대에 만들어진 일부 시스템에서는
+문제가 있을 수 있습니다.
+하지만, 2000년 이후 소개된 모든 주류 하드웨어에서는 안전하게 사용될 수
+있습니다.
+그러니 메모리 배리어가 다루기 어렵다고 생각하신다면, 일부 시스템에는 \emph{더}
+어렵단 점을 기억해 두시기 바랍니다!
+\iffalse
+
 The following pairings from
 Table~\ref{tab:advsync:Memory-Barrier Combinations}
 can be used on modern hardware, but might fail on some systems
@@ -1124,8 +1133,17 @@ However, these \emph{can} safely be used on all mainstream hardware
 introduced since the year 2000.
 So if you think that memory barriers are difficult to deal with, please
 keep in mind that they used to be a \emph{lot} harder on some systems!
+\fi
 
 \paragraph{Ears to Mouths.}
+	스토어들은 로드들의 결과를 볼 수 없기에(다시 말하지만, MMIO 레지스터는
+	지금 당장은 잊어주시기 바랍니다), 메모리 배리어 조건이 맞춰졌는지를
+	항상 알 수는 없습니다.
+	하지만, 21-세기 하드웨어는 적어도 로드들 중 하나는 연관된 스토어에 의해
+	저장된 값을 봤다고 보장해줄 수도 있습니다 (또는 같은 변수에 대한 뒤의
+	값을).
+	\iffalse
+
 	Since the stores cannot see the results of the loads
 	(again, ignoring MMIO registers for the moment),
 	it is not always possible to determine whether the memory-barrier
@@ -1134,17 +1152,41 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	hardware \emph{would} guarantee that at least one
 	of the loads saw the value stored by the corresponding store
 	(or some later value for that same variable).
+	\fi
 
 \QuickQuiz{}
+	ears-to-mouths 시나리오에서 최신 하드웨어가 로드들 중 최소 하나는 다른
+	쓰레드에 의해 저장된 값을 읽을 거라 보장함을 우리는 어떻게 알죠?
+	\iffalse
+
 	How do we know that modern hardware guarantees that at least
 	one of the loads will see the value stored by the other thread
 	in the ears-to-mouths scenario?
+	\fi
 \QuickQuizAnswer{
+	그 시나리오는 A 와 B 의 초기값이 0이라는 가정 하에 다음과 같습니다:
+	\iffalse
+
 	The scenario is as follows, with A and B both initially zero:
+	\fi
 
 	CPU~0: A=1; \co{smp_mb()}; r1=B;
 
 	CPU~1: B=1; \co{smp_mb()}; r2=A;
+
+	두 로드 모두 관련된 스토어를 보지 못한다면, 두 CPU 들이 모두 실행을
+	마쳤을 때, \co{r1} 과 \co{r2} 둘 다 0일 겁니다.
+	이제 \co{r1} 이 0이라고 생각해 봅시다.
+	그렇다면 CPU~0 의 B 로부터의 로드가 CPU~1 의 B 로의 스토어 이전에
+	일어났음을 알 수 있습니다: 그렇지 않다면 \co{r1} 이 1일 겁니다.
+	하지만 CPU~0 의 B 로부터의 로드가 CPU~1 의 B 로의 스토어 이전에
+	일어났으므로, 메모리 배리어 조합이 CPU~0 의 A 로의 스토어가 CPU~1 의 A
+	로부터의 로드 이전에 일어났음을 보장하고, 따라서 \co{r2} 는 0이 아니라
+	1일 것임을 보장합니다.
+
+	따라서, \co{r1} 과 \co{r2} 중 하나는 0이 아닐 것이고, 이는 이야기 했듯
+	최소 하나의 로드는 관련된 스토어를 봤음을 의미합니다.
+	\iffalse
 
 	If neither of the loads see the corresponding store, when both
 	CPUs finish, both \co{r1} and \co{r2} will be equal to zero.
@@ -1160,12 +1202,18 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	Therefore, at least one of \co{r1} and \co{r2} must be nonzero,
 	which means that at least one of the loads saw the value from
 	the corresponding store, as claimed.
+	\fi
 } \QuickQuizEnd
 
 \paragraph{Stores ``Pass in the Night''.}
+	다음의 예에서, 두 CPU 들이 모두 코드 실행을 끝낸 후,
+	{\tt \{A==1,B==2\}} 로 결론이 나는 일은 결코 없을 것처럼 보입니다.
+	\iffalse
+
 	In the following example, after both CPUs have finished
 	executing their code sequences, it is quite tempting to
 	conclude that the result {\tt \{A==1,B==2\}} cannot happen.
+	\fi
 
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
@@ -1180,6 +1228,21 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	\end{minipage}
 	\vspace{5pt}
 
+	안타깝게도, 이 결론은 21-세기의 시스템들에서는 맞지만, 모든 20-세기
+	시스템들에서는 맞지 않을 수 있습니다.
+	A 를 담고 있는 캐시 라인이 처음에는 CPU~2 에 의해 소유되고 있었고, B 를
+	담는 캐시 라인은 처음에는 CPU~1 에 의해 소유되고 있었다고 생각해
+	봅시다.
+	그리고 나서, 무효화 큐와 스토어 버퍼를 가지고 있는 시스템들에서는,
+	첫번째 값 할당이 ``밤에 지나가는 것 (pass in the night)'' 이 가능해서,
+	두번째 값 할당이 실제로는 먼저 일어날 수 있습니다.
+	\IfInBook{이 이상한 효과는
+		  Appendix~\ref{chp:app:whymb:Why Memory Barriers?} 에서
+		  설명됩니다.
+		  }
+	{}
+	\iffalse
+
 	Unfortunately, although this conclusion is correct on
 	21\textsuperscript{st}-century systems, it does not necessarily hold
 	on all antique 20\textsuperscript{th}-century systems.
@@ -1193,6 +1256,15 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	          Appendix~\ref{chp:app:whymb:Why Memory Barriers?}.
 		 }
 		 {}
+	\fi
+
+	이와 똑같은 효과는 ``ears to mouths'' 조합을 포함해, 각 CPU 의 메모리
+	배리어를 스토어가 앞서는 어떤 메모리 배리어 조합에서도 발생할 수
+	있습니다.
+
+	하지만, 21-세기 하드웨어는 이런 순서 규칙을 허용하지 \emph{않아서},
+	이런 조합이 안전하게 사용될 수 있도록 합니다.
+	\iffalse
 
 	This same effect can happen in any memory-barrier pairing
 	where each CPU's memory barrier is preceded by a store,
@@ -1201,6 +1273,7 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	However, 21\textsuperscript{st}-century hardware \emph{does}
 	accommodate these ordering intuitions, and \emph{do} permit
 	this combination to be used safely.
+	\fi
 
 \subsubsection{Pair-Wise Memory Barriers: Dubious Combinations}
 

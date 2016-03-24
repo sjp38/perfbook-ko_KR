@@ -9251,15 +9251,38 @@ srcu_read_unlock(&srcucb, idx);
 	\fi
 
 \QuickQ{}
+	ears-to-mouths 시나리오에서 최신 하드웨어가 로드들 중 최소 하나는 다른
+	쓰레드에 의해 저장된 값을 읽을 거라 보장함을 우리는 어떻게 알죠?
+	\iffalse
+
 	How do we know that modern hardware guarantees that at least
 	one of the loads will see the value stored by the other thread
 	in the ears-to-mouths scenario?
+	\fi
 \QuickA{}
+	그 시나리오는 A 와 B 의 초기값이 0이라는 가정 하에 다음과 같습니다:
+	\iffalse
+
 	The scenario is as follows, with A and B both initially zero:
+	\fi
 
 	CPU~0: A=1; \co{smp_mb()}; r1=B;
 
 	CPU~1: B=1; \co{smp_mb()}; r2=A;
+
+	두 로드 모두 관련된 스토어를 보지 못한다면, 두 CPU 들이 모두 실행을
+	마쳤을 때, \co{r1} 과 \co{r2} 둘 다 0일 겁니다.
+	이제 \co{r1} 이 0이라고 생각해 봅시다.
+	그렇다면 CPU~0 의 B 로부터의 로드가 CPU~1 의 B 로의 스토어 이전에
+	일어났음을 알 수 있습니다: 그렇지 않다면 \co{r1} 이 1일 겁니다.
+	하지만 CPU~0 의 B 로부터의 로드가 CPU~1 의 B 로의 스토어 이전에
+	일어났으므로, 메모리 배리어 조합이 CPU~0 의 A 로의 스토어가 CPU~1 의 A
+	로부터의 로드 이전에 일어났음을 보장하고, 따라서 \co{r2} 는 0이 아니라
+	1일 것임을 보장합니다.
+
+	따라서, \co{r1} 과 \co{r2} 중 하나는 0이 아닐 것이고, 이는 이야기 했듯
+	최소 하나의 로드는 관련된 스토어를 봤음을 의미합니다.
+	\iffalse
 
 	If neither of the loads see the corresponding store, when both
 	CPUs finish, both \co{r1} and \co{r2} will be equal to zero.
@@ -9275,6 +9298,7 @@ srcu_read_unlock(&srcucb, idx);
 	Therefore, at least one of \co{r1} and \co{r2} must be nonzero,
 	which means that at least one of the loads saw the value from
 	the corresponding store, as claimed.
+	\fi
 
 \QuickQ{}
 	How can the other ``Only one store'' entries in
