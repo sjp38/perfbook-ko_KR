@@ -948,16 +948,28 @@ a memory barrier between each CPU's pair of operations.
 
 \subsubsection{Pair-Wise Memory Barriers: Portable Combinations}
 
+아래에 Table~\ref{tab:advsync:Memory-Barrier Combinations} 에서 이식성 있는
+소프트웨어가 사용해야 할 모든 메모리 배리어 조합을 나열합니다.
+\iffalse
+
 The following pairings from
 Table~\ref{tab:advsync:Memory-Barrier Combinations},
 enumerate all the combinations of memory-barrier
 pairings that portable software may depend on.
+\fi
 
 \paragraph{Pairing 1.}
+	이 조합에서는, 다음과 같이 하나의 CPU 가 메모리 배리어가 중간에 위치한
+	한 쌍의 로드를 실행하고, 그동안 두번째 CPU 는 역시 메모리 배리어가
+	중간에 위치한 한 쌍의 스토어를 실행합니다 (A 와 B 둘 다 처음엔 0 값을
+	갖습니다):
+	\iffalse
+
 	In this pairing, one CPU executes a pair of loads separated
 	by a memory barrier, while a second CPU executes a pair
 	of stores also separated by a memory barrier, as follows
 	(both A and B are initially equal to zero):
+	\fi
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
 	\tt
@@ -970,6 +982,18 @@ pairings that portable software may depend on.
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
+	두 CPU 모두 이 코드의 수행을 완료한 후에는, 만약 \co{Y==1} 이라면
+	반드시 \co{X==1} 이어야 합니다.
+	이 경우, \co{Y==1} 은 CPU~2 의, 자신의 메모리 배리어 이전의 로드가
+	CPU~1 의 메모리 배리어 후의 스토어를 봤다는 뜻입니다.
+	메모리 배리어 짝맞추기의 원리에 의해, CPU~2 의, 자신의 메모리 배리어
+	뒤의 로드는 CPU~1 의 메모리 배리어 전의 스토어를 볼 수 있어야 하므로,
+	\co{X==1} 입니다.
+
+	반면, 만약 \co{Y==0} 라면, 메모리 배리어 조건이 잡히지 않으므로, 이
+	경우 X 는 0이 될수도, 1이 될 수도 있습니다.
+	\iffalse
+
 	After both CPUs have completed executing these code sequences,
 	if \co{Y==1}, then we must also have \co{X==1}.
 	In this case, the fact that \co{Y==1} means that
@@ -982,11 +1006,17 @@ pairings that portable software may depend on.
 
 	On the other hand, if \co{Y==0}, the memory-barrier condition
 	does not hold, and so in this case, X could be either 0 or 1.
+	\fi
 
 \paragraph{Pairing 2.}
+	이 조합에서, 각 CPU 는 다음과 같이 로드와 메모리 배리어, 그리고
+	스토어를 순서대로 실행합니다 (A 와 B 는 처음에는 0 값을 갖습니다):
+	\iffalse
+
 	In this pairing, each CPU executes a load followed by a
 	memory barrier followed by a store, as follows
 	(both A and B are initially equal to zero):
+	\fi
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
 	\tt
@@ -999,6 +1029,21 @@ pairings that portable software may depend on.
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
+	두 CPU 모두 이 코드의 실행을 완료한 후, 만약 \co{X==1} 이라면 \co{Y==0}
+	이어야만 합니다.
+	이 경우, \co{X==1} 이라는 결과는 CPU~1 의, 자신의 메모리 배리어 전의
+	로드는 CPU~2 의 메모리 배리어 후의 스토어를 봤다는 의미입니다.
+	메모리 배리어 짝맞추기의 원리에 의해, CPU~1의, 자신의 메모리 배리어
+	뒤의 스토어는 CPU~2 의, 자신의 메모리 배리어 앞의 로드의 결과를 봐야
+	하므로, \co{Y==0} 이어야 합니다.
+
+	반면, 만약 \co{X==0} 라면, 메모리 배리어 조건은 성립되지 않으므로, 이
+	경우 Y 의 값은 0일 수도, 1일 수도 있습니다.
+
+	이 두 CPU 의 코드는 동일하므로, 두 CPU 모두 코드 실행을 마무리 한 후에
+	\co{Y==1} 라면 \co{X==0} 일 겁니다.
+	\iffalse
+
 	After both CPUs have completed executing these code sequences,
 	if \co{X==1}, then we must also have \co{Y==0}.
 	In this case, the fact that \co{X==1} means that
@@ -1015,12 +1060,19 @@ pairings that portable software may depend on.
 	The two CPUs' code sequences are symmetric, so if \co{Y==1}
 	after both CPUs have finished executing these code sequences,
 	then we must have \co{X==0}.
+	\fi
 
 \paragraph{Pairing 3.}
+	이 조합에서는 다음과 같이 한 CPU 는 로드, 메모리 배리어, 스토어를
+	순서대로 실행하고, 다른 CPU 는 메모리 배리어를 가운데 두고 두개의
+	스토어를 실행합니다 (A 와 B 모두 초기값은 0입니다):
+	\iffalse
+
 	In this pairing, one CPU executes a load followed by a
 	memory barrier followed by a store, while the other CPU
 	executes a pair of stores separated by a memory barrier,
 	as follows (both A and B are initially equal to zero):
+	\fi
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
 	\tt
@@ -1033,6 +1085,20 @@ pairings that portable software may depend on.
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
+	두 CPU 모두 코드 실행을 완료한 후, 만약 \co{X==1} 이라면, \co{B==1}
+	이어야 합니다.
+	이 경우, \co{X==1} 은 CPU~1 의, 자신의 메모리 배리어 앞의 로드가 CPU~2
+	의 메모리 배리어 뒤의 스토어를 봤다는 의미입니다.
+	메모리 배리어 짝 맞추기의 원리에 의해, CPU~1 의, 자신의 메모리 배리어
+	뒤의 스토어는 CPU~2 의, 자신의 메모리 배리어 앞의 스토어의 결과를
+	봐야만 합니다.
+	이는 CPU~1 의 B 에의 스토어는 CPU~2 의 B 에의 스토어를 덮어써서
+	\co{B==1}이 됨을 뜻합니다.
+
+	반면, 만약 \co{X==0} 라면, 메모리 배리어 조건은 성립되지 않고, 따라서 B
+	의 값은 1도, 2도 될 수 있습니다.
+	\iffalse
+
 	After both CPUs have completed executing these code sequences,
 	if \co{X==1}, then we must also have \co{B==1}.
 	In this case, the fact that \co{X==1} means that
@@ -1046,6 +1112,7 @@ pairings that portable software may depend on.
 
 	On the other hand, if \co{X==0}, the memory-barrier condition
 	does not hold, and so in this case, B could be either 1 or 2.
+	\fi
 
 \subsubsection{Pair-Wise Memory Barriers: Semi-Portable Combinations}
 
