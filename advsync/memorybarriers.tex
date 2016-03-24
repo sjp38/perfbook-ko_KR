@@ -1277,6 +1277,15 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 
 \subsubsection{Pair-Wise Memory Barriers: Dubious Combinations}
 
+Table~\ref{tab:advsync:Memory-Barrier Combinations} 에서 가져온 다음의
+조합들에서 메모리 배리어들은 21-세기 하드웨어에서도 이식성 있는 코드에서는 매우
+제한적인 사용만 가능합니다. 
+하지만 ``제한적인 사용'' 은 ``사용 불가'' 와는 다르니, 뭐가 가능한지 한번
+봅시다!
+열심인 독자분들은 이게 어떻게 동작하는지 완전히 이해하기 위해 이 조합들 각각을
+사용하는 테스트용 프로그램을 작성하고자 할 것입니다.
+\iffalse
+
 In the following combinations from
 Table~\ref{tab:advsync:Memory-Barrier Combinations},
 the memory barriers have very limited use in portable code, even
@@ -1285,8 +1294,17 @@ However, ``limited use'' is different than ``no use'', so let's see
 what can be done!
 Avid readers will want to write toy programs that rely on each of
 these combinations in order to fully understand how this works.
+\fi
 
 \paragraph{Ears to Ears.}
+	로드들은 메모리의 상태를 바꾸지 않기 때문에 (MMIO 레지스터는 당장은
+	무시합시다), 로드들 중 하나가 다른 로드의 결과를 볼 수는 없습니다.
+	하지만, 만약 우리가 CPU~2 의 B 로부터의 로드가 CPU~1 의 B 로부터의
+	로드보다 새로운 값을 리턴했음을 안다면, 우리는 CPU~2 의 A 로부터의
+	로드가 CPU~1 의 A 로부터의 로드와 같거나 그보다 나중의 값을 리턴했음
+	역시 알 수 있습니다.
+	\iffalse
+
 	Since loads do not change the state of memory
 	(ignoring MMIO registers for the moment),
 	it is not possible for one of the loads to see the
@@ -1295,8 +1313,22 @@ these combinations in order to fully understand how this works.
 	newer value than CPU~1's load from B, the we also know
 	that CPU~2's load from A returned either the same value
 	as CPU~1's load from A or some later value.
+	\fi
 
 \paragraph{Mouth to Mouth, Ear to Ear.}
+	변수들 중 하나는 로드되었고, 다른 하나는 스토어 되었습니다.
+	로드가 다른 로드의 결과를 보는 것은 불가능하므로 (다시 말하지만, MMIO
+	레지스터는 무시합니다), 메모리 배리어로 제공되는 조건적 순서를 파악할
+	수는 없습니다.
+
+	하지만, 어떤 스토어가 마지막으로 발생했는지는 알 수 있습니다만, 이를
+	위해서는 B 로부터의 추가적인 로드가 필요합니다.
+	이 추가적인 B 로부터의 로드가 CPU~1 과 CPU~2 가 완료된 후 수행된다면,
+	그리고 그 수행으로 인해 CPU~2 의 B 로의 스토어가 마지막으로
+	이루어졌음이 밝혀진다면, CPU~2 의 A 로부터의 로드는 CPU~1 의 A 로부터의
+	로드와 같거나 나중의 값을 리턴했음 역시 알 수 있습니다.
+	\iffalse
+
 	One of the variables is only loaded from, and the other
 	is only stored to.
 	Because (once again, ignoring MMIO registers) it is not
@@ -1311,8 +1343,22 @@ these combinations in order to fully understand how this works.
 	store to B happened last, then we know
 	that CPU~2's load from A returned either the same value
 	as CPU~1's load from A or some later value.
+	\fi
 
 \paragraph{Only One Store.}
+	하나의 스토어만 있으므로, 변수들 중 하나만이 한 CPU 에게 다른 CPU 의
+	액세스의 결과를 볼 수 있게 합니다.
+	따라서, 메모리 배리어에 의해 제공되는 조건적 순서를 알아챌 방법이
+	없습니다.
+
+	적어도 직접적으로는요.
+	하지만 Table~\ref{tab:advsync:Memory-Barrier Combinations} 의 조합~1
+	에서, CPU~1 의 A 로부터의 로드가 CPU~2 가 A 에 저장한 값을 리턴한다고
+	생각해 봅시다.
+	그럼 우리는 CPU~1 의 B 로부터의 로드가 CPU~2 의 A 로부터의 로드와
+	같거나 나중의 값을 리턴했음을 알 수 있습니다.
+	\iffalse
+
 	Because there is only one store, only one of the variables
 	permits one CPU to see the results of the other CPU's
 	access.
@@ -1325,12 +1371,31 @@ these combinations in order to fully understand how this works.
 	CPU~1's load from A returns the value that CPU~2 stored
 	to A.  Then we know that CPU~1's load from B returned
 	either the same value as CPU~2's load from A or some later value.
+	\fi
 
 \QuickQuiz{}
+	Table~\ref{tab:advsync:Memory-Barrier Combinations} 의 다른 ``Only one
+	store'' 항목은 어떻게 사용될 수 있나요?
+	\iffalse
+
 	How can the other ``Only one store'' entries in
 	Table~\ref{tab:advsync:Memory-Barrier Combinations}
 	be used?
+	\fi
 \QuickQuizAnswer{
+	조합~2 에서는, 만약 CPU~1 의 B 로부터의 로드가 CPU~2 의 B 로의
+	스토어보다 전의 값을 본다면, 우린 CPU~2 의 A 로부터의 로드가 CPU~1 의 A
+	로부터의 로드와 같거나 나중의 값을 리턴할 것을 알 수 있습니다.
+
+	조합~4 에서는, 만약 CPU~2 의 B 로부터의 로드가 CPU~1 의 B 로의 스토어의
+	값을 본다면, CPU~2 의 A 로부터의 로드가 CPU~1 의 A 로부터의 로드와
+	같거나 나중의 값을 리턴할 것을 알 수 있습니다.
+
+	조합~8 에서는, CPU~2 의 A 로부터의 로드가 CPU~1 의 A 로 저장한 값을
+	본다면, CPU~1 의 B 로부터의 로드가 CPU~2 의 A 로부터의 로드와 같거나
+	나중의 값을 보게 됨을 알 수 있습니다.
+	\iffalse
+
 	For combination~2, if CPU~1's load from B sees a value prior
 	to CPU~2's store to B, then we know that CPU~2's load from A
 	will return the same value as CPU~1's load from A, or some later
@@ -1344,6 +1409,7 @@ these combinations in order to fully understand how this works.
 	For combination~8, if CPU~2's load from A sees CPU~1's store
 	to A, then we know that CPU~1's load from B will return the same
 	value as CPU~2's load from A, or some later value.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Semantics Sufficient to Implement Locking}
