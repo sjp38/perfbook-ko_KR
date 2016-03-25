@@ -9339,22 +9339,53 @@ srcu_read_unlock(&srcucb, idx);
 	\fi
 
 \QuickQ{}
+	어떻게 page~\pageref{codesample:advsync:What Can You Count On? 1} 의
+	{\tt b==2} 단정문이 실패할 수 있죠?
+	\iffalse
+
 	How could the assertion {\tt b==2} on
 	page~\pageref{codesample:advsync:What Can You Count On? 1}
 	possibly fail?
+	\fi
 \QuickA{}
+	해당 CPU 가 자신의 모든 로드와 스토어들을 순서대로 보도록 요구되지
+	않는다면, {\tt b=1+a} 는 변수 ``a'' 의 예전 버전을 볼 수도 있습니다.
+
+	이게 바로 각 CPU 나 쓰레드가 자신의 모든 로드와 스토어들을 프로그램
+	순서대로 보도록 해야 하는 이유입니다.
+	\iffalse
+
 	If the CPU is not required to see all of its loads and
 	stores in order, then the {\tt b=1+a} might well see an
 	old version of the variable ``a''.
 
 	This is why it is so very important that each CPU or thread
 	see all of its own loads and stores in program order.
+	\fi
 
 \QuickQ{}
+	어떻게 page~\pageref{codesample:advsync:What Can You Count On? 2} 의
+	코드가 메모리 릭을 일으킬 수 있죠?
+	\iffalse
+
 	How could the code on
 	page~\pageref{codesample:advsync:What Can You Count On? 2}
 	possibly leak memory?
+	\fi
 \QuickA{}
+	해당 크리티컬 섹션의 첫번째 수행만이 {\tt p==NULL} 을 볼 수 있습니다.
+	하지만, {\\tt mylock}을 통한 크리티컬 섹션들 간의 글로벌한 순서가
+	없다면, 어떻게 어떤 특정한 한 하나의 크리티컬 섹션 수행이 첫번째라고
+	이야기할 수 있겠습니까?
+	만약 여러개의 다른 크리티컬 섹션 수행이 자신이 첫번째라고 생각한다면,
+	그들은 모두 {\tt p==NULL} 을 보게 될 것이고, 따라서 모두 메모리를
+	할당받을 것입니다.
+	하나를 제외한 나머지 수행들은 메모리를 누수시켜 버립니다.
+
+	이게 하나의 배타적 락을 사용하는 모든 크리티컬 섹션들이 잘 정의된
+	순서대로 실행되는 것으로 나타나야 하는 이유입니다.
+	\iffalse
+
 	Only the first execution of the critical section should
 	see {\tt p==NULL}.
 	However, if there is no global ordering of critical sections for
@@ -9368,12 +9399,29 @@ srcu_read_unlock(&srcucb, idx);
 	This is why it is so very important that all the critical sections
 	for a given exclusive lock appear to execute in some well-defined
 	order.
+	\fi
 
 \QuickQ{}
+	어떻게 page~\pageref{codesample:advsync:What Can You Count On? 2} 의
+	코드가 거꾸로 수를 셀 수 있죠?
+	\iffalse
+
 	How could the code on
 	page~\pageref{codesample:advsync:What Can You Count On? 2}
 	possibly count backwards?
+	\fi
 \QuickA{}
+	해당 카운터가 값 0으로 시작을 하고, 세개의 크리티컬 섹션이 수행되어 그
+	값을 3으로 바꿔 놓았다고 생각해 봅시다.
+	만약 네번째 해당 크리티컬 섹션 수행이 가장 최근의 이 변수에의 저장된
+	값을 보도록 강제되지 않는다면, 이 수행 흐름 역시 원본값인 0을 보게
+	되고, 따라서 카운터를 1로 만들어 버리는데, 이건 거꾸로 수를 세는
+	셈입니다.
+
+	이게 특정 크리티컬 섹션에서의 특정 변수로부터의 로드는 앞의 마지막
+	크리티컬 섹션의 해당 변수에의 스토어 결과를 봐야 하는 이유입니다.
+	\iffalse
+
 	Suppose that the counter started out with the value zero,
 	and that three executions of the critical section had therefore
 	brought its value to three.
@@ -9386,6 +9434,7 @@ srcu_read_unlock(&srcucb, idx);
 	in a given critical
 	section see the last store from the last prior critical section to
 	store to that variable.
+	\fi
 
 \QuickQ{}
 	What effect does the following sequence have on the
