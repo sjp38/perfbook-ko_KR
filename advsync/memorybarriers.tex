@@ -1649,6 +1649,19 @@ they interact with a typical locking implementation.
 \subsection{Review of Locking Implementations}
 \label{sec:advsync:Review of Locking Implementations}
 
+간단한 락과 언락 오퍼레이션 구현의 대략적 수도코드가 아래에 있습니다.
+\co{atomic_xchg()} 기능은 어토믹한 교체 작업 전후로 메모리 배리어를 내포하고
+있으며, 이 어토믹한 교체 작업 후의 내포된 배리어로 인해 \co{spin_lock()} 에서의
+ㅁ여시적 메모리 배리어는 필요치 않습니다.
+또한, 이름과 달리 \co{atomic_read()} 와 \co{atomic_set()} 은 어떤 어토믹
+인스트럭션을 실행하지 \emph{않고}, 대신 그저 단순히 로드와 스토어 오퍼레이션을
+행합니다.
+언락 오퍼레이션에 대해, 이 수도 코드는 간단한 어토믹하지 않은 스토어와 이어지는
+메모리 배리어라는, 여러 리눅스 구현을 따라합니다.
+이 최소한의 구현은 Section~\ref{sec:advsync:What Can You Trust?} 에서 이야기한
+모든 락킹 특성을 가져야만 합니다.
+\iffalse
+
 Naive pseudocode for simple lock and unlock operations are shown below.
 Note that the \co{atomic_xchg()} primitive implies a memory barrier
 both before and after the atomic exchange operation, and that the
@@ -1663,6 +1676,7 @@ the unlock operation, which is a simple non-atomic store following a
 memory barrier.
 These minimal implementations must possess all the locking properties
 laid out in Section~\ref{sec:advsync:What Can You Trust?}.
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1685,10 +1699,17 @@ laid out in Section~\ref{sec:advsync:What Can You Trust?}.
 \label{codesample:advsync:Naive Lock and Unlock Pseudocode}
 \vspace{5pt}
 
+\co{spin_lock()} 기능은 앞의 \co{spin_unlock()} 기능이 완료되기 전까지는 수행될
+수 없습니다.
+CPU~1 이 CPU~2 가 획득하려 하는 락을 해제한다면, 오퍼레이션들의 차례는 다음과
+같을 것입니다:
+\iffalse
+
 The \co{spin_lock()} primitive cannot proceed until
 the preceding \co{spin_unlock()} primitive completes.
 If CPU~1 is releasing a lock that CPU~2 is attempting to acquire,
 the sequence of operations might be as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1709,6 +1730,15 @@ the sequence of operations might be as follows:
 \end{minipage}
 \vspace{5pt}
 
+이 특별한 경우, 짝을 맞춘 메모리 배리어만으로도 이 두개의 크리티컬 섹션을
+만드는데 충분합니다.
+CPU~2 의 \co{atomic_xchg(&lck->a, 1)} 은 CPU~1 의 \co{lck->a=0} 를 보게 되고,
+따라서 CPU~2 의 다음 크리티컬 섹션은 반드시 CPU~1 의 앞선 크리티컬 섹션에서
+행한 것들을 볼 수 있게 됩니다.
+거꾸로, CPU~1 의 크리티컬 섹션은 CPU~2 의 크리티컬 섹션이 할 일을 볼 수
+없습니다.
+\iffalse
+
 In this particular case, pairwise memory barriers suffice to keep
 the two critical sections in place.
 CPU~2's \co{atomic_xchg(&lck->a, 1)} has seen CPU~1's \co{lck->a=0},
@@ -1716,6 +1746,7 @@ so therefore everything in CPU~2's following critical section must see
 everything that CPU~1's preceding critical section did.
 Conversely, CPU~1's critical section cannot see anything that CPU~2's
 critical section will do.
+\fi
 
 \subsection{A Few Simple Rules}
 \label{sec:advsync:A Few Simple Rules}
