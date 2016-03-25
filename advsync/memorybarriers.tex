@@ -1751,10 +1751,34 @@ critical section will do.
 \subsection{A Few Simple Rules}
 \label{sec:advsync:A Few Simple Rules}
 
+아마도 메모리 배리어를 이해하는 가장 쉬운 방법은 몇개의 간단한 규칙들을
+이해하는 것입니다:
+\iffalse
+
 Probably the easiest way to understand memory barriers is to understand
 a few simple rules:
+\fi
 
 \begin{enumerate}
+\item	각 CPU 는 자신의 액세스들을 순서대로 봅니다.
+\item	하나의 공유된 변수가 여러 CPU 들에 의해 로드되고 스토어 되면, 한 CPU 에
+	보이는 값들의 순서는 다른 CPU 들에 보이는 순서와 일관되고, 각 CPU 들의
+	순서가 일관되는 값들이 해당 변수에 저장되는 순서가 적어도 하나는 존재할
+	것입니다.\footnote{
+		한 CPU 의 순서는 물론 완전하지 않을 수 있는데, 예를 들어 한 CPU
+		가 해당 공유 변수를 로드하지도 스토어 하지도 않았다면, 그
+		변수의 값에 대해 어떤 의견도 갖지 않을 수 있습니다.}
+\item	만약 한 CPU 가 변수 A 와 B 에의 스토어를 순서 잡고\footnote{
+		예를 들어, A 로의 스토어, 메모리 배리어, 그리고 나서 B 로의
+		스토어를 순서대로 실행하는 방법으로.}
+	, 두번째 CPU 가 B 와 A 로부터의 로드를 순서 잡는다면,\footnote{
+		예를 들어, B 를 로드하고 메모리 배리어를 친 후 A 로부터의
+		로드를 수행하는 식으로.}
+	그리고 두번째 CPU 의 B 로부터의 로드가 첫번째 CPU 가 저장한 값을
+	얻어온다면, 두번째 CPU 의 A 로부터의 로드 역시 첫번째 CPU 가 저장한
+	값을 가져와야만 합니다.
+\iffalse
+
 \item	Each CPU sees its own accesses in order.
 \item	If a single shared variable is loaded and stored by multiple
 	CPUs, then the series of values seen by a given CPU will be
@@ -1775,6 +1799,22 @@ a few simple rules:
 	then if the second CPU's load from B gives the value stored
 	by the first CPU, then the second CPU's load from A must
 	give the value stored by the first CPU.
+\fi
+\item	만약 한 CPU 가 B 로의 스토어 전으로 순서잡아 A 로부터의 로드를
+	행한다면, 그리고 두번째 CPU 의 A 로의 스토어 이전으로 순서잡아 B
+	로부터의 로드를 행한다면, 그리고 만약 두번째 CPU 의 B 로부터의 로드가
+	첫번째 CPU 가 저장한 값을 가져온다면, 첫번째 CPU 의 A 로부터의 로드는
+	두번째 CPU 가 저장한 값을 가져오지 \emph{않아야만} 합니다.
+\item	만약 한 CPU 가 B 로의 스토어 후로 순서 잡아 A 로부터의 로드를 한다면,
+	그리고 만약 두번째 CPU 가 A 로의 스토어 후로 순서 잡아 B 로부터의
+	로드를 한다면, 그리고 만약 첫번째 CPU 의 A 로부터의 로드가 두번째 CPU
+	가 저장한 값을 가져온다면, 첫번째 CPU 의 B 로의 스토어는 두번째 CPU 의
+	B 로의 스토어 뒤에 일어나야만 하며, 따라서 첫번째 CPU 가 저장한 값이
+	존재해야 합니다.\footnote{
+		또는, 더 경쟁상황 기반으로 이야기 하자면, 첫번째 CPU 의 B 로의
+		스토어가 ``승리''합니다.}
+\iffalse
+
 \item	If one CPU does a load from A ordered before a store to B,
 	and if a second CPU does a load from B ordered before a store from A,
 	and if the second CPU's load from B gives the value stored by
@@ -1788,9 +1828,14 @@ a few simple rules:
 	hence the value stored by the first CPU persists.\footnote{
 		Or, for the more competitively oriented, the first
 		CPU's store to B ``wins''.}
+\fi
 \end{enumerate}
 
+다음 섹션에서 이런 규칙들에 대한 좀 더 실질적인 시각을 봅니다.
+\iffalse
+
 The next section takes a more operational view of these rules.
+\fi
 
 \subsection{Abstract Memory Access Model}
 
