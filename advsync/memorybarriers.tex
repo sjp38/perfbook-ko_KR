@@ -1839,8 +1839,13 @@ The next section takes a more operational view of these rules.
 
 \subsection{Abstract Memory Access Model}
 
+Figure~\ref{fig:advsync:Abstract Memory Access Model} 에 그려진 추상적 모델의
+시스템을 고려해 봅시다.
+\iffalse
+
 Consider the abstract model of the system shown in
 Figure~\ref{fig:advsync:Abstract Memory Access Model}.
+\fi
 
 \begin{figure}[htb]
 \begin{center}
@@ -1849,6 +1854,22 @@ Figure~\ref{fig:advsync:Abstract Memory Access Model}.
 \caption{Abstract Memory Access Model}
 \ContributedBy{Figure}{fig:advsync:Abstract Memory Access Model}{David Howells}
 \end{figure}
+
+각 CPU 는 메모리 액세스 오퍼레이션들을 생성해내는 프로그램을 실행합니다.
+추상적으로 CPU 에서는 메모리 오퍼레이션의 순서 규칙은 매우 완화되어 있고, CPU
+는 실제로 프로그램의 인과성이 지켜지는 것으로 보이도록만 한다는 조건 아래,
+메모리 오퍼레이션들을 원하는 대로 어떤 순서로든 실행할 수 있습니다.
+비슷하게, 컴파일러는 프로그램의 명백한 수행에 영향을 끼치지 않는다는 조건 아래
+원하는대로 어떤 순서로든 생성해내는 인스트럭션을 배열할 수 있습니다.
+
+따라서 앞의 그림에서, 한 CPU 에 의해 수행되는 메모리 오퍼레이션들의 결과는
+시스템의 다른 CPU 들에게 해당 CPU 와 나머지들 사이의 인터페이스 (점선) 을
+지나는 오퍼레이션들에 의해 인지됩니다.
+
+
+예를 들어, 초기값으로 {\tt \{A = 1, B = 2\}} 를 갖는다는 가정 아래 다음의
+코드를 생각해 봅시다:
+\iffalse
 
 Each CPU executes a program that generates memory access operations.  In the
 abstract CPU, memory operation ordering is very relaxed, and a CPU may actually
@@ -1864,6 +1885,7 @@ interface between the CPU and rest of the system (the dotted lines).
 
 For example, consider the following sequence of events given the
 initial values {\tt \{A = 1, B = 2\}}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1878,9 +1900,14 @@ initial values {\tt \{A = 1, B = 2\}}:
 \end{minipage}
 \vspace{5pt}
 
+해당 메모리 시스템에 의해 보여지는 액세스들의 집합은 다음과 같이, 로드를 ``ld''
+로, 스토어를 ``st'' 로 표현하면서 24개의 다른 조합으로 만들어질 수 있습니다:
+\iffalse
+
 The set of accesses as seen by the memory system in the middle can be arranged
 in 24 different combinations, with loads denoted by ``ld'' and stores
 denoted by ``st'':
+\fi
 
 ~ \\
 \begin{minipage}[t]{\columnwidth}
@@ -1900,7 +1927,11 @@ denoted by ``st'':
 \end{minipage}
 \vspace{5pt}
 
+따라서 수행 결과로 다음과 같이 네개의 서로 다른 값 조합이 만들어질 수 있습니다:
+\iffalse
+
 and can thus result in four different combinations of values:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1915,12 +1946,21 @@ and can thus result in four different combinations of values:
 \end{minipage}
 \vspace{5pt}
 
+뿐만 아니라, 한 CPU 에 의해 메모리 시스템에 요청된 스토어들은 다른 CPU 에 의해
+만들어진 로드 오퍼레이션에 스토어들이 실제 행해진 순서와 다른 순서로 인지될
+수도 있습니다.
+
+예를 들기 위해, 초기값 {\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}} 의
+다음과 같은 이벤트들을 생각해 봅시다:
+\iffalse
+
 Furthermore, the stores committed by a CPU to the memory system may not be
 perceived by the loads made by another CPU in the same order as the stores were
 committed.
 
 As a further example, consider this sequence of events given the
 initial values {\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1935,11 +1975,17 @@ initial values {\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}}:
 \end{minipage}
 \vspace{5pt}
 
+\co{D} 로 할당되는 값은 CPU~2 에 의해 \co{P} 로부터 얻어진 주소에 의존적이므로,
+여기엔 분명한 데이터 의존성이 존재합니다.
+이 코드가 실행 완료된 후, 다음과 같은 결과가 모두 만들어질 수 있습니다:
+\iffalse
+
 There is an obvious data dependency here,
 as the value loaded into \co{D} depends on
 the address retrieved from \co{P} by CPU~2.
 At the end of the sequence, any of the
 following results are possible:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1953,8 +1999,13 @@ following results are possible:
 \end{minipage}
 \vspace{5pt}
 
+CPU~2 는 *Q 의 로드를 요청하기 전에 P 를 Q 에 할당할 것이므로 D 에 C 값을
+넣지는 않을 것입니다.
+\iffalse
+
 Note that CPU~2 will never try and load C into D because the CPU will load P
 into Q before issuing the load of *Q.
+\fi
 
 \subsection{Device Operations}
 \label{sec:advsync:Device Operations}
