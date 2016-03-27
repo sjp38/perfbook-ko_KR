@@ -2561,6 +2561,26 @@ can substitute for either.
 
 \subsubsection{Implicit Memory Barriers}
 
+묵시적 메모리 배리어라는 유형들이 존재하는데, 락킹 기능들에 내재되어 있기
+때문에 그렇게 불립니다:
+
+\begin{enumerate}
+\item	LOCK 오퍼레이션들 그리고
+\item	UNLOCK 오퍼레이션들.
+\end{enumerate}
+
+\paragraph{LOCK 오퍼레이션들}
+
+락 오퍼레이션은 단방향으로 투과될 수 있는 배리어처럼 동작합니다.
+이것은 시스템의 나머지 컴포넌트들에게 락 오퍼레이션 뒤의 모든 메모리
+오퍼레이션들이 락 오퍼레이션 후에 실행되는 것처럼 보이게 될 것을 보장합니다.
+
+락 오퍼레이션 전의 메모리 오퍼레이션들은 락 오퍼레이션이 완료된 뒤에 실행되는
+것처럼 보일 수 있습니다.
+
+락 오퍼레이션은 거의 항상 언락 오퍼레이션과 함께 사용됩니다.
+\iffalse
+
 There are a couple of types of implicit memory barriers, so called
 because they are embedded into locking primitives:
 
@@ -2580,6 +2600,23 @@ Memory operations that occur before a LOCK operation may appear to happen
 after it completes.
 
 A LOCK operation should almost always be paired with an UNLOCK operation.
+\fi
+
+\paragraph{UNLOCK 오퍼레이션}
+
+언락 오퍼레이션들 역시 단방향으로 투과될 수 있는 배리어처럼 동작합니다.
+이것은 시스템의 나머지 컴포넌트들에게 언락 오퍼레이션 앞의 메모리
+오퍼레이션들이 언락 오퍼레이션 전에 행해진 것처럼 보이게 될 것을 보장합니다.
+
+언락 오퍼레이션 뒤의 메모리 오퍼레이션들은 언락 오퍼레이션이 완료되기 전에
+수행되는 것처럼 보일 수 있습니다.
+
+락과 언락 오퍼레이션들은 서로에게 명기된 순서대로 보이게 될 것이 보장됩니다.
+
+락과 언락 오펄에시녀들의 사용은 일반적으로 다른 종류의 메모리 배리어의 사용을
+막습니다 (하지만 ``MMIO write barrier'' 서브섹션에서 설명한 예외에
+유의하십시오).
+\iffalse
 
 \paragraph{UNLOCK Operations}
 
@@ -2597,18 +2634,31 @@ other strictly in the order specified.
 The use of LOCK and UNLOCK operations generally precludes the need for
 other sorts of memory barrier (but note the exceptions mentioned in the
 subsection ``MMIO write barrier'').
+\fi
 
 \QuickQuiz{}
+	다음의 코드는 변수 ``a'' 와 ``b'' 로의 스토어들의 순서에 어떤 영향을
+	끼칠까요? \\
+	\iffalse
+
 	What effect does the following sequence have on the
 	order of stores to variables ``a'' and ``b''? \\
+	\fi
 	{\tt ~~~~a = 1;} \\
 	{\tt ~~~~b = 1;} \\
 	{\tt ~~~~<write barrier>}
 \QuickQuizAnswer{
+	아무것도요.
+	이 배리어는 ``a'' 와 ``b'' 로의 값 할당이 뒤의 어떤 값 할당보다도 먼저
+	일어남을 보장할 겁니다만, ``a'' 와 ``b'' 로의 값 할당 자체 사이의
+	순서에 대해서는 아무것도 강제하지 않습니다.
+	\iffalse
+
 	Absolutely none.  This barrier {\em would} ensure that the
 	assignments to ``a'' and ``b'' happened before any subsequent
 	assignments, but it does nothing to enforce any order of
 	assignments to ``a'' and ``b'' themselves.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{What May Not Be Assumed About Memory Barriers?}
