@@ -2366,6 +2366,18 @@ interaction of multiple CPUs and/or devices.
 \subsubsection{Explicit Memory Barriers}
 \label{sec:advsync:Explicit Memory Barriers}
 
+메모리 배리어들은 네가지 종류가 있습니다:
+
+\begin{enumerate}
+\item	쓰기 (또는 스토어) 메모리 배리어들,
+\item	데이터 종속성 배리어들,
+\item	읽기 (또는 로드) 메모리 배리어들, 그리고
+\item	범용 메모리 배리어들.
+\end{enumerate}
+
+각 타입에 대해 아래에서 설명합니다.
+\iffalse
+
 Memory barriers come in four basic varieties:
 
 \begin{enumerate}
@@ -2376,6 +2388,26 @@ Memory barriers come in four basic varieties:
 \end{enumerate}
 
 Each variety is described below.
+\fi
+
+\paragraph{쓰기 메모리 배리어들}
+
+쓰기 메모리 배리어는 해당 배리어 앞에서 명기된 모든 STORE 오퍼레이션들이 해당
+배리어 뒤에 명기된 모든 STORE 오퍼레이션들보다 먼저 수행된 것으로 시스템의 다른
+요소들에 보이도록 하는 것을 보장합니다.
+
+쓰기 메모리 배리어는 스토어들에만 적용되는 부분적 순서세우기입니다; 로드들에
+어떤 영향을 끼칠 것은 요구되지 않습니다.
+
+하나의 CPU 는 시간의 흐름에 따라 메모리 시스템에 일련의 스토어 오퍼레이션들을
+일으키는 것으로 보여질 수 있습니다.
+쓰기 배리어 전의 모든 스토어들은 쓰기 배리어 후의 모든 스토어들 \emph{이전에}
+행해질 겁니다.
+
+$\dagger$ 쓰기 배리어들은 일반적으로 읽기나 데이터 종속성 배리어들과 짝을 맞춰
+사용됨에 유의하세요; Section~\ref{sec:advsync:SMP Barrier Pairing} 을
+참고하세요.
+\iffalse
 
 \paragraph{Write Memory Barriers}
 
@@ -2394,6 +2426,20 @@ occur in the sequence \emph{before} all the stores after the write barrier.
 $\dagger$ Note that write barriers should normally be paired with read
 or data dependency barriers; see the
 Section~\ref{sec:advsync:SMP Barrier Pairing}.
+\fi
+
+\paragraph{데이터 종속성 배리어들}
+
+데이터 종속성 배리어는 읽기 배리어의 완화된 형태입니다.
+두번째 것이 첫번째 것의 결과에 의존하는 것과 같은 (예: 첫번째 로드는 두번째
+로드가 향하게 될 주소를 얻어옴.) 두개의 로드들이 수행되는 경우, 두번째 로드의
+타겟이 첫번째 로드에 의해 얻어지는, 해당 주소가 액세스 되기 전에 업데이트
+되었음을 분명히 하기 위해 데이터 종속성 배리어가 필요할 겁니다.
+
+데이터 종속성 배리어는 상호 의존적인 로드들에만 적용되는 부분적 순서 세우기
+입니다; 어떤 스토어들이나 종속성 없는 로드들이나 중복되는 로드들에 대해서는
+어떤 영향을 끼칠 의무가 없습니다.
+\iffalse
 
 \paragraph{Data Dependency Barriers}
 
@@ -2407,6 +2453,32 @@ obtained by the first load is accessed.
 A data dependency barrier is a partial ordering on interdependent loads
 only; it is not required to have any effect on stores, independent loads
 or overlapping loads.
+\fi
+
+쓰기 메모리 배리어들에 대해 이야기 했듯, 시스템의 다른 CPU 들은 특정 CPU 가
+원한다면 볼 수 있는 일련의 스토어들을 메모리 시스템에 일으키는 것으로 보여질 수
+있습니다.
+다른 CPU 의 스토어 오퍼레이션을 보기 원하는 CPU 가 일으키는 데이터 종속성
+배리어는 그것 앞의 모든 로드 오퍼레이션들에 대해, 만약 그 로드가 일련의 다른
+CPU 로부터의 스토어들 중 하나를 만진다면, 해당 배리어가 완료되는 시점에서는 그
+로드에 의한 만짐 앞의 모든 스토어들은 이 데이터 종속성 배리어 뒤에 요청되는
+모든 로드에 지각될 수 있을 것입니다.
+
+순서 규칙을 보여주는 그림을 위해 Section~\ref{sec:advsync:Examples of Memory
+Barrier Pairings} 을 참고하세요.
+
+$\dagger$ 첫번째 로드는 \emph{데이터} 종속성을 가져야 하지 컨트롤 종속성을
+가져야 하는게 아님에 유의하세요.
+만약 두번째 로드가 목표로 하는 주소가 첫번째 로드에 의존적이라면, 하지만 그
+의존성이 제어에 의해서이지 그 주소 자체를 로드하는게 아니라면, 그것은
+\emph{컨트롤} 종속성이고 이 경우엔 읽기 배리어나 그보다 더한 것이 필요해집니다.
+더 많은 내용을 위해선 Section~\ref{sec:advsync:Control Dependencies} 를
+참고하세요.
+
+$\dagger$ 일반적으로 데이터 종속성 배리어들은 일반적으로 쓰기 배리어들과 짝을
+맞춰 사용되어야 합니다; Section~\ref{sec:advsync:SMP Barrier Pairing} 을
+참고하세요.
+\iffalse
 
 As mentioned for write memory barriers,
 the other CPUs in the system can be viewed as
@@ -2431,8 +2503,23 @@ subsection for more information.
 
 $\dagger$ Note that data dependency barriers should normally be paired with
 write barriers; see the ``SMP barrier pairing'' subsection.
+\fi
 
 \paragraph{Read Memory Barriers}
+
+읽기 배리어는 데이터 종속성 배리어에 더해서 해당 배리어 앞에 명기된 모든 LOAD
+오퍼레이션들이 해당 배리어 뒤에 명기된 모든 LOAD 오퍼레이션들 보다 먼저 행해진
+것으로 시스템의 다른 컴포넌트들에 보이게 함을 보장합니다.
+
+읽기 배리어는 로드들에만 적용되는 부분적 순서 세우기입니다; 스토어들에 어떤
+영향을 끼칠 의무는 없습니다.
+
+읽기 메모리 배리어들은 데이터 종속성 배리어를 내포하고 있으므로, 그것들을
+대체할 수도 있습니다.
+
+$\dagger$ 읽기 배리어들은 일반적으로 쓰기 배리어들과 짝을 맞춰 사용되어야
+합니다; Section~\ref{sec:advsync:SMP Barrier Pairing} 을 참고하세요.
+\iffalse
 
 A read barrier is a data dependency barrier plus a guarantee that all the
 LOAD operations specified before the barrier will appear to happen before
@@ -2447,8 +2534,19 @@ for them.
 
 $\dagger$ Note that read barriers should normally be paired with write barriers;
 see the ``SMP barrier pairing'' subsection.
+\fi
 
 \paragraph{General Memory Barriers}
+
+범용 메모리 배리어는 해당 배리어 앞에서 명기된 모든 LOAD 와 STORE
+오퍼레이션들이 해당 배리어 뒤에서 명기된 모든 LOAD 와 STORE 오퍼레이션들보다
+먼저 실행된 것으로 시스템의 다른 컴포넌트들에 보이도록 함을 보장합니다.
+
+볌용 메모리 배리어는 로드와 스토어 둘 다에 적용되는 부분적 순서 세우기 입니다.
+
+범용 메모리 배리어들은 일기과 쓰기 메모리 배리어들 둘 다를 내포하므로, 둘 다를
+대체할 수 있습니다.
+\iffalse
 
 A general memory barrier gives a guarantee that all the LOAD and STORE
 operations specified before the barrier will appear to happen before all
@@ -2459,6 +2557,7 @@ A general memory barrier is a partial ordering over both loads and stores.
 
 General memory barriers imply both read and write memory barriers, and so
 can substitute for either.
+\fi
 
 \subsubsection{Implicit Memory Barriers}
 
