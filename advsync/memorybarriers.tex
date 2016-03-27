@@ -2062,11 +2062,20 @@ the address \emph{after} attempting to read the register.
 \subsection{Guarantees}
 \label{sec:advsync:Guarantees}
 
+하나의 CPU 에 대해 기대할 수 있는, 몇개의 최소한의 보장들이 있습니다:
+
+\begin{enumerate}
+\item	어떤 CPU 에서든, 의존성을 갖는 메모리 액세스들은 해당 CPU 의 관점에서는
+	순서대로 요청됩니다.
+	따라서, 다음의 코드에서:
+\iffalse
+
 There are some minimal guarantees that may be expected of a CPU:
 
 \begin{enumerate}
 \item	On any given CPU, dependent memory accesses will be issued in order,
 	with respect to itself.  This means that for:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2077,7 +2086,11 @@ Q = P; D = *Q;
 \end{minipage}
 \vspace{5pt}
 
+	해당 CPU 는 다음과 같이 메모리 오퍼레이션들을 요청할 겁니다:
+\iffalse
+
 	the CPU will issue the following memory operations:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2087,11 +2100,18 @@ Q = LOAD P, D = LOAD *Q
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+	그리고 항상 이 순서만을 만들 겁니다.
+
+\item	특정 CPU 내에서 로드와 스토어들을 중복되게 하면 그 CPU 내에서는 순서가
+	맞춰지는 것으로 보일 것입니다.
+	따라서, 다음의 코드에서:
+\iffalse
 
 	and always in that order.
 
 \item	Overlapping loads and stores within a particular CPU will appear to be
 	ordered within that CPU.  This means that for:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2102,7 +2122,11 @@ a = *X; *X = b;
 \end{minipage}
 \vspace{5pt}
 
+	해당 CPU 는 다음과 같은 순서로만 메모리 오퍼레이션들을 요청할 겁니다:
+\iffalse
+
 	the CPU will only issue the following sequence of memory operations:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2113,7 +2137,11 @@ a = LOAD *X, STORE *X = b
 \end{minipage}
 \vspace{5pt}
 
+	그리고 다음의 코드에서는:
+\iffalse
+
 	And for:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2124,7 +2152,11 @@ a = LOAD *X, STORE *X = b
 \end{minipage}
 \vspace{5pt}
 
+	해당 CPU 는 다음의 순서로만 오퍼레이션을 요청합니다:
+\iffalse
+
 	the CPU will only issue:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2135,6 +2167,14 @@ STORE *X = c, d = LOAD *X
 \end{minipage}
 \vspace{5pt}
 
+	(로드들과 스토어들은 그것들이 메모리의 중복된 지역에 가해질 때에
+	중복됩니다.)
+\item	하나의 변수로의 일련의 스토어들은 모든 CPU 들에 하나의 순서로 가해진
+	것으로 보이게 됩니다만, 이 순서는 코드만으로 예측할 수 없고, 실제로 그
+	순서는 매 실행마다 다를 것입니다.
+\end{enumerate}
+\iffalse
+
 	(Loads and stores overlap if they are targeted at overlapping pieces of
 	memory).
 \item	A series of stores to a single variable will appear to all
@@ -2142,12 +2182,23 @@ STORE *X = c, d = LOAD *X
 	might not be predictable from the code, and in fact the
 	order might vary from one run to another.
 \end{enumerate}
+\fi
+
+그리고 \emph{반드시} 가정되거나 \emph{절대로} 가정되지 말아야 하는 것들이
+있습니다:
+
+\begin{enumerate}
+\item	의존성 없는 로드들과 스토어들은 주어진 순서대로 요청될 것이라고는
+	\emph{절대로} 가정하지 말아야 합니다.
+	무슨 말이냐면, 다음의 코드는:
+\iffalse
 
 And there are a number of things that \emph{must} or \emph{must not} be assumed:
 
 \begin{enumerate}
 \item	It \emph{must not} be assumed that independent loads and stores will
 	be issued in the order given.  This means that for:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2158,7 +2209,11 @@ X = *A; Y = *B; *D = Z;
 \end{minipage}
 \vspace{5pt}
 
+	다음의 순서들을 만들어 낼 수 있습니다:
+\iffalse
+
 	we may get any of the following sequences:
+\fi
 
 
 \vspace{5pt}
@@ -2175,6 +2230,10 @@ STORE *D = Z,  Y = LOAD *B,  X = LOAD *A
 \end{minipage}
 \vspace{5pt}
 
+\item	중복되는 메모리 액세스들은 병합되거나 버려질 수 있음을 \emph{반드시}
+	가정해 두어야 합니다.
+	무슨 말이냐면, 다음의 코드는:
+
 \item	It \emph{must} be assumed that overlapping memory accesses may
 	be merged or discarded.  This means that for:
 
@@ -2187,7 +2246,11 @@ X = *A; Y = *(A + 4);
 \end{minipage}
 \vspace{5pt}
 
+	다음의 순서들을 만들어 낼 수 있습니다:
+\iffalse
+
 	we may get any one of the following sequences:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2200,7 +2263,11 @@ Y = LOAD *(A + 4); X = LOAD *A;
 \end{minipage}
 \vspace{5pt}
 
+	그리고 다음의 코드에서는:
+\iffalse
+
 	And for:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2211,7 +2278,10 @@ Y = LOAD *(A + 4); X = LOAD *A;
 \end{minipage}
 \vspace{5pt}
 
+	다음의 순서들을 얻을 수 있습니다:
+\iffalse
 	we may get any of:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2224,7 +2294,11 @@ STORE {*A, *(A + 4) } = {X, Y};
 \end{minipage}
 \vspace{5pt}
 
+	마지막으로, 다음의 코드는:
+\iffalse
+
 	Finally, for:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2235,7 +2309,11 @@ STORE {*A, *(A + 4) } = {X, Y};
 \end{minipage}
 \vspace{5pt}
 
+	다음의 순서들을 만들어 낼 수 있습니다:
+\iffalse
+
 	we may get either of:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
