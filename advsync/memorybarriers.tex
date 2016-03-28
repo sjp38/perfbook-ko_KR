@@ -2725,10 +2725,17 @@ of the confines of a given architecture:
 \subsubsection{Data Dependency Barriers}
 \label{sec:advsync:Data Dependency Barriers}
 
+데이터 의존성 배리어의 사용 필요성은 약간 애매하고, 그 필요성이 항상 분명하지는
+않습니다.
+이를 자세히 보기 위해, {\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}} 초기
+조건을 갖는 가정 하에 다음의 이벤트들을 생각해 봅시다:
+\iffalse
+
 The usage requirements of data dependency barriers are a little subtle, and
 it's not always obvious that they're needed.  To illustrate, consider the
 following sequence of events, with initial values
 {\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2746,9 +2753,14 @@ following sequence of events, with initial values
 \end{minipage}
 \vspace{5pt}
 
+여기엔 분명한 데이터 의존성이 존재하고, 직관적으로 볼 때 이 이벤트들이 종료된
+후에, \co{Q} 는 \co{&A} 또는 \co{&B} 여야 할 것이고, 또한 다음과 같을 것입니다:
+\iffalse
+
 There's a clear data dependency here, and it would seem intuitively
 obvious that by the end of the sequence, \co{Q} must be either \co{&A}
 or \co{&B}, and that:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2761,9 +2773,14 @@ or \co{&B}, and that:
 \end{minipage}
 \vspace{5pt}
 
+그러나, 직관에 반대되지만 CPU~2 의 \co{P} 에 대한 인식은 \co{B} 의 인식
+\emph{전에} 업데이트 될 수 있고, 따라서 다음의 상황을 이끌어낼 수 있습니다:
+\iffalse
+
 Counter-intuitive though it might be, it is quite possible that
 CPU~2's perception of \co{P} might be updated \emph{before} its perception
 of \co{B}, thus leading to the following situation:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2775,6 +2792,14 @@ of \co{B}, thus leading to the following situation:
 \end{minipage}
 \vspace{5pt}
 
+이는 일관성이나 인과정의 관리에 실패한 것처럼 보일 수 있지만, 그렇지 않으며, 이
+동작은 일부 실제 CPU 들 (DEC Alpha 와 같은) 에서 볼 수 있습니다.
+
+이걸 처리하기 위해, 데이터 의존성 배리어가 다음과 같이 주소의 로드와 데이터의
+로드 사이에 삽입되어야만 합니다 (역시 초기값은
+{\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}}와 같습니다):
+\iffalse
+
 Whilst this may seem like a failure of coherency or causality maintenance, it
 isn't, and this behaviour can be observed on certain real CPUs (such as the DEC
 Alpha).
@@ -2782,6 +2807,7 @@ Alpha).
 To deal with this, a data dependency barrier must be inserted between the
 address load and the data load (again with initial values of
 {\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}}):
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2799,6 +2825,21 @@ address load and the data load (again with initial values of
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
+
+이는 두개의 영향 중 하나를 제거하고, 세번째 가능성을 방지합니다.
+이 매우 비직관적인 상황은 분할된 캐시를 갖는 머신에서 쉽게 발생 가능한데, 예를
+들어 한 캐시 뱅크가 짝수 번호 캐시 라인을 처리하고 다른 뱅크는 홀수 번호 캐시
+라인을 처리한다고 생각해 봅시다.
+포인터 \co{P} 는 홀수 번호 캐시 라인에 저장되어 있고 변수 \co{B} 는 짝수 번호
+캐시 라인에 젖아되어 있습니다.
+그리고, 만약 읽는 CPU 의 캐시의 짝수 번호 뱅크가 엄청 바쁜데 홀수 번호 뱅크는
+쉬고 있었다면, (\co{&B} 일) 포인터 \co{P} 의 값은 새 값을 보지만, 변수 \co{B}
+는 (2 인) 옛 값을 볼 수도 있습니다.
+
+데이터 의존성 배리어가 필요한 또다른 예는 다음과 같이 숫자가 메모리에서
+읽혀지고는 배열에 인덱스를 계산하는데 사용되는 예입니다(초기 값은 {\tt \{M[0] =
+1, M[1] = 2, M[3] = 3, P = 0, Q = 3\}} 입니다):
+\iffalse
 
 This enforces the occurrence of one of the two implications, and prevents the
 third possibility from arising.
@@ -2818,6 +2859,7 @@ Another example of where data dependency barriers might by required is where a
 number is read from memory and then used to calculate the index for an array
 access with initial values
 {\tt \{M[0] = 1, M[1] = 2, M[3] = 3, P = 0, Q = 3\}}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2836,6 +2878,14 @@ access with initial values
 \end{minipage}
 \vspace{5pt}
 
+데이터 의존성 배리어는 리눅스 커널의 RCU 시스템에 매우 중요한데, 예를 위해
+\url{include/linux/rcupdate.h} 의 \co{rcu_dereference()} 를 참고하세요.
+이는 RCU 된 포인터의 현재 타겟이 새로운, 수정된 타겟으로 바뀌되 이 바뀌는
+타겟이 초기화가 덜 된 것으로 보이는 것을 방지할 수 있게 합니다.
+
+더 큰 예를 위해선 Section~\ref{sec:advsync:Cache Coherency} 를 참고하세요.
+\iffalse
+
 The data dependency barrier is very important to the Linux kernel's
 RCU system, for example,
 see \co{rcu_dereference()} in \url{include/linux/rcupdate.h}.
@@ -2846,6 +2896,7 @@ the replacement target appearing to be incompletely initialised.
 See also
 Section~\ref{sec:advsync:Cache Coherency}
 for a larger example.
+\fi
 
 \subsubsection{Control Dependencies}
 \label{sec:advsync:Control Dependencies}
