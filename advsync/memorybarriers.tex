@@ -3348,6 +3348,19 @@ No such guarantee exists for the first load of
 \subsubsection{Read Memory Barriers vs. Load Speculation}
 \label{sec:advsync:Read Memory Barriers vs. Load Speculation}
 
+많은 CPU 들이 로드 오퍼레이션들을 추측합니다: 즉, 어떤 아이템을 메모리에서
+로드해야 할지, 그리고 언제 다른 로드를 위해 버스를 사용하지 않는 시간을
+찾아내서는 그 로드 오퍼레이션을 미리 해버립니다 --- 아직 그 인스트럭션을 실행할
+차례에 도착하지 않았더라도 말이죠.
+나중에, 이 동작은 실제 로드 인스트럭션이 곧바로 완료되게 해주는데, 해당 CPU 는
+이미 그 값을 쥐고 있기 때문입니다.
+
+(브랜치로 우회되는 로드라던지로 인해) 해당 CPU 가 실제로는 그 값을 필요로 하지
+않음이 밝혀질 수도 있는데, 이 경우에는 해당 값을 그냥 버리거나 나중의 사용을
+위해 캐시해 둘 수 있습니다.
+예를 들어, 다음과 같은 경우를 생각해 봅시다:
+\iffalse
+
 Many CPUs speculate with loads: that is, they see that they will need to
 load an item from memory, and they find a time where they're not using
 the bus for any other loads, and then do the load in advance --- even though
@@ -3360,6 +3373,7 @@ It may turn out that the CPU didn't actually need the value (perhaps because a
 branch circumvented the load) in which case it can discard the value or just
 cache it for later use.
 For example, consider the following:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3376,6 +3390,16 @@ For example, consider the following:
 \end{minipage}
 \vspace{5pt}
 
+일부 CPU 들에서, 나누기 인스트럭션 (DIVIDE) 들은 완료되기까지 긴 시간을
+요하는데, 따라서 CPU~2 의 버스는 그동안 아무 일도 하지 않고 있을 것입니다.
+따라서, CPU~2 는 나누기가 완료되기 전에 \co{A} 의 로드를 추측적으로 행할 수도
+있습니다.
+(원컨대) 드물게도 이 나누기들 중 하나에서 예외가 발생하는 경우, 이 추측적
+로드는 쓸모없어질 것입니다만, (역시, 원컨대) 일반적인 경우에는 로드를 나누기와
+겹쳐서 실행하는 행위는 해당 로드가 Figure~\ref{fig:advsync:Speculative Load} 에
+보여진 것처럼 더 빨리 완료되게 해 줄 것입니다.
+\iffalse
+
 On some CPUs, divide instructions can take a long time to complete,
 which means that CPU~2's bus might go idle during that time.
 CPU~2 might therefore speculatively load \co{A} before the divides
@@ -3385,6 +3409,7 @@ this speculative load will have been wasted, but in the (again, hopefully)
 common case, overlapping the load with the divides will permit the load
 to complete more quickly, as illustrated by
 Figure~\ref{fig:advsync:Speculative Load}.
+\fi
 
 \begin{figure*}[htb]
 \begin{center}
@@ -3394,8 +3419,12 @@ Figure~\ref{fig:advsync:Speculative Load}.
 \ContributedBy{Figure}{fig:advsync:Speculative Load}{David Howells}
 \end{figure*}
 
+읽기 배리어나 데이터 의존성 배리어를 두번째 로드 앞에 놓게 된다면:
+\iffalse
+
 Placing a read barrier or a data dependency barrier just before the second
 load:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3413,6 +3442,16 @@ load:
 \end{minipage}
 \vspace{5pt}
 
+추측적으로 얻어진 모든 값은 사용된 배리어의 종류에 따라 다른 정도로 다시 고려될
+것입니다.
+해당 추측적으로 얻어진 메모리 위치에 다른 변화가 없었다면, 추측된 해당 값은
+Figure~\ref{fig:advsync:Speculative Loads and Barrier} 에 보여진 것처럼 그냥
+사용될 것입니다.
+반면, 어떤 다른 CPU 에서 \co{A} 에 업데이트나 무효화를 행했다면,
+Figure~\ref{fig:advsync:Speculative Loads Cancelled by Barrier} 에 보여진
+것처럼, 추측은 취소되고 \co{A} 의 값은 다시 로드될 것입니다.
+\iffalse
+
 will force any value speculatively obtained to be reconsidered to an extent
 dependent on the type of barrier used.  If there was no change made to the
 speculated memory location, then the speculated value will just be used,
@@ -3422,6 +3461,7 @@ On the other hand, if there was an update or invalidation to \co{A}
 from some other CPU, then the speculation will be cancelled and the
 value of \co{A} will be reloaded,
 as shown in Figure~\ref{fig:advsync:Speculative Loads Cancelled by Barrier}.
+\fi
 
 \begin{figure*}[htb]
 \begin{center}
