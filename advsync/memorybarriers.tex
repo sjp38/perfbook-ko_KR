@@ -3571,12 +3571,20 @@ These implicit memory barriers provide the following guarantees:
 
 \subsubsection{Locking Examples}
 
+\paragraph{LOCK 다음 UNLOCK:}
+LOCK 다음 UNLOCK 이 따라오는 코드는 전체 메모리 배리어를 갖는다고 볼 수 없는데,
+LOCK 앞의 액세스는 LOCK 뒤에 일어날 수 있고, UNLOCK 뒤의 액세스는 UNLOCK 앞에
+수행될 수 있으며, 이들은 서로를 지나갈 수 있기 때문입니다.
+예를 들어, 다음의 코드는:
+\iffalse
+
 \paragraph{LOCK Followed by UNLOCK:}
 A LOCK followed by an UNLOCK may not be assumed to be a full memory barrier
 because it is possible for an access preceding the LOCK to happen after the
 LOCK, and an access following the UNLOCK to happen before the UNLOCK, and the
 two accesses can themselves then cross.
 For example, the following:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3589,8 +3597,12 @@ For example, the following:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+다음의 순서로 실행될 수 있습니다:
+\iffalse
 
 might well execute in the following order:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3603,35 +3615,68 @@ might well execute in the following order:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+다시 말하지만, LOCK 과 UNLOCK 은 각각 앞의 오퍼레이션과 뒤의 오퍼레이션을
+크리티컬 섹션에 ``흘러들어올'' 수 있게 허용함을 항상 기억하시기 바랍니다.
+\iffalse
 
 Again, always remember that LOCK and UNLOCK are permitted to let preceding
 operations and following operations ``bleed in'' to the critical section
 respectively.
+\fi
 
 \QuickQuiz{}
+	LOCK-UNLOCK 오퍼레이션들을 어떻게 조합해야 전체 메모리 배리어처럼
+	동작할까요?
+	\iffalse
+
 	What sequence of LOCK-UNLOCK operations \emph{would}
 	act as a full memory barrier?
+	\fi
 \QuickQuizAnswer{
+	등을 맞대는 두개의 LOCK-UNLOCK 오퍼레이션들, 또는, 덜 관습적이지만,
+	UNLOCK 뒤에 LOCK 을 배치하는 경우가 되겠습니다.
+	\iffalse
+
 	A series of two back-to-back LOCK-UNLOCK operations, or, somewhat
 	less conventionally, an UNLOCK operation followed by a LOCK
 	operation.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	(만약 있다면) 어떤 CPU 들이 이런 투과성의 락킹 기능들을 만들 수 있는
+	메모리 배리어 인스트럭션들을 가지고 있을까요?
+	\iffalse
+
 	What (if any) CPUs have memory-barrier instructions
 	from which these semi-permeable locking primitives might
 	be constructed?
+	\fi
 \QuickQuizAnswer{
+	Itanium 이 하나의 예가 될 것입니다.
+	다른 것들을 찾아보는 것은 독자의 몫으로 두겠습니다.
+	\iffalse
+
 	Itanium is one example.
 	The identification of any others is left as an
 	exercise for the reader.
+	\fi
 } \QuickQuizEnd
+
+\paragraph{LOCK 기반의 크리티컬 섹션들:}
+LOCK-UNLOCK 짝은 전체 메모리 배리어로 동작하지 않지만, 이 오퍼레이션들은 메모리
+순서에 \emph{영향}을 끼칠 수 있습니다.
+
+다음의 코드를 생각해 봅시다:
+\iffalse
 
 \paragraph{LOCK-Based Critical Sections:}
 Although a LOCK-UNLOCK pair does not act as a full memory barrier,
 these operations \emph{do} affect memory ordering.
 
 Consider the following code:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3649,9 +3694,14 @@ Consider the following code:
 \end{minipage}
 \vspace{5pt}
 
+이것은 다음과 같이 합법적인 순서로 실행될 수 있을 것으로, 같은 줄의
+오퍼레이션들은 CPU 가 해당 오퍼레이션들을 동시적으로 수행함을 의미합니다:
+\iffalse
+
 This could legitimately execute in the following order, where pairs
 of operations on the same line indicate that the CPU executed those
 operations concurrently:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3696,6 +3746,14 @@ operations concurrently:
 \end{table}
 
 \QuickQuiz{}
+	Table~\ref{tab:advsync:Lock-Based Critical Sections} 에서 중괄호로
+	그룹지어진 오퍼레이션들은 동시에 수행된다고 보면, 표의 어떤 열들이
+	``A'' 에서 ``F'' 까지의 변수들과 LOCK/UNLOCK 오퍼레이션들의 합법적인
+	재배치일까요?
+	(코드의 순서는 A, B, LOCK, C, D, UNLOCK, E, F 입니다.)
+	합법이면 왜 합법이고 아니라면 왜 아니죠?
+	\iffalse
+
 	Given that operations grouped in curly braces are executed
 	concurrently, which of the rows of
 	Table~\ref{tab:advsync:Lock-Based Critical Sections}
@@ -3703,7 +3761,30 @@ operations concurrently:
 	``A'' through ``F'' and the LOCK/UNLOCK operations?
 	(The order in the code is A, B, LOCK, C, D, UNLOCK, E, F.)
 	Why or why not?
+	\fi
 \QuickQuizAnswer{
+	\begin{enumerate}
+	\item	합법입니다, 순서 그대로 실행되었습니다.
+	\item	합법입니다, 락 획득은 크리티컬 앞의 마지막 값 할당과 동시적으로
+		수행되었습니다.
+	\item	비합법입니다, ``F'' 에의 값 할당은 LOCK 오퍼레이션 뒤에
+		이뤄져야만 합니다.
+	\item	비합법입니다, LOCK 은 크리티컬 섹션의 어떤 오퍼레이션 보다도
+		먼저 완료되어야만 합니다.
+		하지만, UNLOCK 은 앞의 오펄에시녀들과 동시적으로 수행되어도
+		합법일 수 있습니다.
+	\item	합법입니다, ``A'' 에의 값 할당은 요청된 대로 UNLOCK 을 앞섰고,
+		모든 다른 오퍼레이션들은 순서 그대로입니다.
+	\item	비합법입니다, ``C'' 에의 값 할당은 LOCK 뒤에 이뤄져야만 합니다.
+	\item	비합법입니다, ``D'' 에의 값 할당은 UNLOCK 앞에 이뤄져야만
+		합니다.
+	\item	합법입니다, 모든 할당이 LOCK 과 UNLOCK 기준으로 순서 맞춰져
+		있습니다.
+	\item	비합법입니다, ``A'' 에의 값 할당은 UNLOCK 전에 이뤄져야만
+		합니다.
+	\end{enumerate}
+	\iffalse
+
 	\begin{enumerate}
 	\item	Legitimate, executed in order.
 	\item	Legitimate, the lock acquisition was executed concurrently
@@ -3721,7 +3802,15 @@ operations concurrently:
 		LOCK and UNLOCK operations.
 	\item	Illegitimate, the assignment to ``A'' must precede the UNLOCK.
 	\end{enumerate}
+	\fi
 } \QuickQuizEnd
+
+\paragraph{여러 락들을 사용한 순서:}
+여러 락들을 포함하고 있는 코드는 여전히 그 락들로부터의 순서 제약을 바라보게
+됩니다만, 어떤 락이 어떤 락인지 주의 깊게 신경써야 합니다.
+예를 들어, Table~\ref{tab:advsync:Ordering With Multiple Locks} 에 있는, ``M''
+과 ``Q'' 라 이름붙여진 한쌍의 락을 사용하는 코드를 보기 바랍니다.
+\iffalse
 
 \paragraph{Ordering with Multiple Locks:}
 Code containing multiple locks still sees ordering constraints from
@@ -3729,6 +3818,7 @@ those locks, but one must be careful to keep track of which lock is which.
 For example, consider the code shown in
 Table~\ref{tab:advsync:Ordering With Multiple Locks}, which uses
 a pair of locks named ``M'' and ``Q''.
+\fi
 
 \begin{table}[htbp]
 \scriptsize
@@ -3746,15 +3836,35 @@ a pair of locks named ``M'' and ``Q''.
 \label{tab:advsync:Ordering With Multiple Locks}
 \end{table}
 
+이 예에서는, 앞의 섹션에서 이야기했듯 해당 락들이 각자에게 주는 제약 외에는,
+변수 ``A'' 부터 ``H'' 까지의 값 할당이 어떤 순서로 이뤄질지에 대해서는 아무런
+보장이 없습니다.
+\iffalse
+
 In this example, there are no guarantees as to what order the
 assignments to variables ``A'' through ``H'' will appear in, other
 than the constraints imposed by the locks themselves, as
 described in the previous section.
+\fi
 
 \QuickQuiz{}
+	Table~\ref{tab:advsync:Ordering With Multiple Locks} 에서의 제약은
+	뭐죠?
+	\iffalse
+
 	What are the constraints for
 	Table~\ref{tab:advsync:Ordering With Multiple Locks}?
+	\fi
 \QuickQuizAnswer{
+	모든 CPU 들은 다음의 순서 제약을 봐야만 합니다:
+	\begin{enumerate}
+	\item	LOCK M 은 B, C, D 보다 먼저 행해짐.
+	\item	UNLOCK M 은 A, B, C 보다 뒤에 행해짐.
+	\item	LOCK Q 는 F, G, H 보다 먼저 행해짐.
+	\item	UNLOCK Q 는 E, F ,G 보다 뒤에 행해짐.
+	\end{enumerate}
+	\iffalse
+
 	All CPUs must see the following ordering constraints:
 	\begin{enumerate}
 	\item	LOCK M precedes B, C, and D.
@@ -3762,13 +3872,21 @@ described in the previous section.
 	\item	LOCK Q precedes F, G, and H.
 	\item	UNLOCK Q follows E, F, and G.
 	\end{enumerate}
+	\fi
 } \QuickQuizEnd
+
+\paragraph{하나의 락을 사용하는 여러 CPU 들의 순서:}
+Table~\ref{tab:advsync:Ordering With Multiple Locks} 처럼 두개의 서로 다른
+락들이 아니라, Table~\ref{tab:advsync:Ordering With Multiple CPUs on One Lock}
+처럼 두개의 CPU 들이 같은 락을 획득하는 경우를 생각해 봅시다.
+\iffalse
 
 \paragraph{Ordering with Multiple CPUs on One Lock:}
 Suppose, instead of the two different locks as shown in
 Table~\ref{tab:advsync:Ordering With Multiple Locks}, both CPUs acquire
 the same lock, as shown in
 Table~\ref{tab:advsync:Ordering With Multiple CPUs on One Lock}?
+\fi
 
 \begin{table}[htbp]
 \scriptsize
@@ -3786,11 +3904,19 @@ Table~\ref{tab:advsync:Ordering With Multiple CPUs on One Lock}?
 \label{tab:advsync:Ordering With Multiple CPUs on One Lock}
 \end{table}
 
+이 경우, CPU~1 는 CPU~2 보다 먼저 M 을 획득하거나, 반대일 수 있습니다.
+첫번째 경우, A, B, C 에의 값 할당은 F, G, H 에의 값 할당보다 먼저 이루어질
+것입니다.
+반대의 경우, 만약 CPU~2 가 해당 락을 먼저 획득하면, E, F, G 에의 값 할당이 B,
+C, D 보다 먼저 이루어질 것입니다.
+\iffalse
+
 In this case, either CPU~1 acquires M before CPU~2 does, or vice versa.
 In the first case, the assignments to A, B, and C must precede
 those to F, G, and H.
 On the other hand, if CPU~2 acquires the lock first, then the
 assignments to E, F, and G must precede those to B, C, and D.
+\fi
 
 \subsection{The Effects of the CPU Cache}
 \label{sec:advsync:The Effects of the CPU Cache}
