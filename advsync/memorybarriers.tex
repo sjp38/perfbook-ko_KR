@@ -3977,12 +3977,20 @@ wait for some queued memory access to complete.
 \subsubsection{Cache Coherency}
 \label{sec:advsync:Cache Coherency}
 
+캐시 일관성 프로토콜은 한 CPU 가 자신의 액세스들을 순서대로 볼 수 있고, 모든
+CPU 들이 하나의 캐시라인에 담긴 하나의 변수에의 수정의 순서에 동의하도록
+하지만, 다른 변수에의 수정들이 모든 CPU 들에 같은 순서로 보일 것이라는 보장은
+하지 않습니다 --- 일부 컴퓨터 시스템들은 그런 보장을 하지만, 이식성 있는
+소프트웨어는 그런 사실에 기반해선 안됩니다.
+\iffalse
+
 Although cache-coherence protocols guarantee that a given CPU sees its
 own accesses in order, and that all CPUs agree on the order of modifications
 to a single variable contained within a single cache line, there is no
 guarantee that modifications to different variables will be seen in
 the same order by all CPUs --- although some computer systems do make
 some such guarantees, portable software cannot rely on them.
+\fi
 
 \begin{figure*}[htb]
 \begin{center}
@@ -3991,6 +3999,30 @@ some such guarantees, portable software cannot rely on them.
 \caption{Split Caches}
 \ContributedBy{Figure}{fig:advsync:Split Caches}{David Howells}
 \end{figure*}
+
+왜 재배치가 일어날 수 있는지 알아보기 위해, Figure~\ref{fig:advsync:Split
+Caches} 에 보인 것과 같이, 두개의 CPU 를 가지며 각 CPU 는 분할된 캐시를 갖는
+시스템을 생각해 봅시다.
+이 시스템은 다음과 같은 특성을 갖습니다:
+\begin{enumerate}
+\item	홀수번 캐시 라인은 캐시 A, 캐시 C, 메모리, 또는 이것들의 조합에 존재할
+	수 있습니다.
+\item	짝수번 캐시 라인은 캐시 B, 캐시 D, 메모리, 또는 이것들의 조합에 존재할
+	수 있습니다.
+\item	한 CPU 코어가 자신의 캐시 중 하나에게 질의를 던지는 동안,\footnote{
+		하지만 ``슈퍼스칼라'' 시스템에서는, CPU 는 한번에 두 캐시에
+		대해 각 캐시의 절반씩을 액세스 할수도 있으며, 이 두 캐시의 각
+		절반씩에 여러개의 동시적 액세스를 수행할 수도 있습니다.}
+	다른 캐시가 가만히 있어야 할 필요는 없습니다.
+	이 다른 캐시는 그대신 무효화 요청에 응답하거나 dirty 캐시 라인을
+	메모리에 write back 하거나 CPU 의 메모리 액세스 큐의 원소들을
+	처리하거나 그 외에도 이것 저것 할 수 있습니다.
+\item	각각의 캐시는 요청된 일관성과 순서 규칙을 유지하기 위해 해당 캐시에
+	적용되어야 할 오퍼레이션들을 담는 큐를 갖습니다.
+\item	이 큐들은 이 큐들의 원소들에 의해 영향 받는 캐시 라인의 로드와 스토어에
+	의해 비워져야 할 필요는 없습니다.
+\end{enumerate}
+\iffalse
 
 To see why reordering can occur, consider the two-CPU system shown in
 Figure~\ref{fig:advsync:Split Caches}, in which each CPU has a split
@@ -4017,6 +4049,19 @@ This system has the following properties:
 \item	These queues are not necessarily flushed by loads from or
 	stores to cache lines affected by entries in those queues.
 \end{enumerate}
+\fi
+
+요약하자면, 만약 캐시 A 가 바쁘지만 캐시 B 는 할 일이 없다면, CPU~1 의 홀수번
+캐시라인으로의 스토어는 CPU~2 의 짝수번 캐시라인으로의 스토어에 비해 늦게
+처리될 수 있습니다.
+너무 극단적인 경우가 아니라면, CPU~2 는 CPU~1 의 오퍼레이션들을 비순차적으로
+보게 될 것입니다.
+
+\IfInBook{하드웨어와 소프트웨어에서의 메모리 순서에 대해 더 많은 자세한 내용을
+	  위해선 Appendix~\ref{chp:app:whymb:Why Memory Barriers?} 를 참고하세요.
+	  }
+	  {}
+\iffalse
 
 In short, if cache A is busy, but cache B is idle, then CPU~1's
 stores to odd-numbered cache lines may be delayed compared to
@@ -4028,6 +4073,7 @@ of order.
 	  may be found in Appendix~\ref{chp:app:whymb:Why Memory Barriers?}.
 	 }
 	 {}
+\fi
 
 \subsection{Where Are Memory Barriers Needed?}
 \label{sec:advsync:Where Are Memory Barriers Needed?}
