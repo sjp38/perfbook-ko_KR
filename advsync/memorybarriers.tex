@@ -3921,6 +3921,16 @@ assignments to E, F, and G must precede those to B, C, and D.
 \subsection{The Effects of the CPU Cache}
 \label{sec:advsync:The Effects of the CPU Cache}
 
+지각되는 메모리 오퍼레이션들의 순서는 CPU 들과 메모리 사이에 위치하는
+캐시들에게 메모리 일관성과 순서를 관리하는 캐시 일관성 프로토콜에 의해 영향을
+받습니다.
+소프트웨어 관점에서는, 이런 캐시들은 그저 메모리로 보여집니다.
+메모리 배리어들은 Figure~\ref{fig:advsync:Memory Architecture} 의 점선 위치에서
+CPU 가 자신의 값을 메모리에 올바른 순서로 제공하도록 보장하고, 다른 CPU 들이
+만든 변화를 올바른 순서로 볼 수 있도록 보장하도록 동작하는 것으로 생각될 수
+있습니다.
+\iffalse
+
 The perceived ordering of memory operations is affected by the caches
 that lie between the CPUs and memory, as well as by the cache coherence
 protocol that maintains memory consistency and ordering.
@@ -3930,6 +3940,7 @@ Memory barriers can be thought of as acting on the vertical dotted line in
 Figure~\ref{fig:advsync:Memory Architecture}, ensuring that the CPU
 presents its values to memory in the proper order, as well as ensuring
 that it sees changes made by other CPUs in the proper order.
+\fi
 
 \begin{figure*}[htb]
 \begin{center}
@@ -3938,6 +3949,17 @@ that it sees changes made by other CPUs in the proper order.
 \caption{Memory Architecture}
 \ContributedBy{Figure}{fig:advsync:Memory Architecture}{David Howells}
 \end{figure*}
+
+이 캐시들은 한 CPU 의 메모리 액세스를 시스템의 나머지 것들로부터 ``숨길'' 수
+있지만, 캐시 일관성 프로토콜은 캐시라인들을 필요시 옮기고 무효화 시켜가며 모든
+다른 CPU 들이 이 숨겨진 액세스들의 효과를 볼 수 있도록 보장합니다.
+또한, CPU 코어는 프로그램 인과성과 메모리 순서가 관리됨을 지킨다는 제약
+아래에서는 인스트럭션들을 어떤 순서로든 실행할 수 있습니다.
+이런 인스트럭션들 중 일부는 해당 CPU 의 메모리 액세스 큐에 들어가는 메모리
+액세스들을 생성할 수도 있습니다만, 그 실행은 CPU 가 내부 자원을 모두 채우기
+전까지는 계속되지 못할 것이며, 그렇지 않은 경우 먼저 큐에 들어온 다른 메모리
+액세스가 완료되기 전까지는 기다려야만 합니다.
+\iffalse
 
 Although the caches can ``hide'' a given CPU's memory accesses from the rest of
 the system, the cache-coherence protocol ensures that all other CPUs see
@@ -3950,6 +3972,7 @@ Some of these instructions may generate memory accesses that must be queued
 in the CPU's memory access queue, but execution may nonetheless continue
 until the CPU either fills up its internal resources or until it must
 wait for some queued memory access to complete.
+\fi
 
 \subsubsection{Cache Coherency}
 \label{sec:advsync:Cache Coherency}
