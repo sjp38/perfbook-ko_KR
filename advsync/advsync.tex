@@ -123,12 +123,46 @@ which is described in the following section.
 \section{Non-Blocking Synchronization}
 \label{sec:advsync:Non-Blocking Synchronization}
 
+\emph{non-blocking synchronization} (NBS) 라는 용어는
+\emph{진행 보장사항 (forward-progress guarantee)} 들을 달리 하는, 6개의
+linearizable 알고리즘 클래스들을 말합니다.
+이 진행 보장사항 들은 리얼타임 프로그래밍 (Real-time programming) 의 근간을
+형성하는 그것들과는 직교적입니다:
+\iffalse
+
 The term \emph{non-blocking synchronization} (NBS) describes six classes of
 linearizable algorithms with differing \emph{forward-progress guarantees}.
 These forward-progress guarantees are orthogonal to those that form the
 basis of real-time programming:
+\fi
 
 \begin{enumerate}
+\item	리얼타임 진행 보장사항들은 그것들과 관련된 분명한 시간을 갖는데, 예를
+	들어, ``스케쥴링 대기시간은 100 마이크로세컨드 보다 작아야 한다.'' 같은
+	것입니다.
+	반면, 가장 인기있는 형태의 NBS 는 분명한 최대 제한 없이 유한한 시간
+	내에 진행이 이뤄질 것만을 보장합니다.
+\item	리얼타임 진행 보장사항들은 간혹 확률적인데, 소프트 리얼타임 보장사항은
+	``최소 99.9\% 의 경우 스케쥴링 대기시간은 100 마이크로세컨드 이내여야
+	한다.'' 와 같은 식입니다.
+	반면, NBS 의 진행 보장사항은 전통적으로 무조건적입니다.
+\item	리얼타임 진행 보장사항은 종종 환경 제약에 조건적인데, 예를 들어, 각 CPU
+	가 최소한 어떤 특정한 양의 시간을 아무일도 하지 않고 보내거나, I/O 의
+	비율이 특정 최대치 미만인 경우 가장 높은 우선순위의 작업들만이 그
+	보장을 받게 됩니다.
+	반면, NBS 의 진행 보장사항은 보통 무조건적입니다.\footnote{
+		아래에서 보게 되겠지만, 최근의 일부 NBS 는 이 보장사항을
+		완화시켰습니다.}
+\item	리얼타임 진행 보장사항은 보통 소프트웨어 버그가 없을 때에만 적용됩니다.
+	반면, 대부분의 NBS 보장사항은 멈춰버리는 버그가 있더라도 적용
+	가능합니다.\footnote{
+		다시 말하지만, 최근의 일부 NBS 는 이 보장사항을 완화했습니다.}
+\item	NBS 진행 보장사항은 linearizability 를 내포합니다.
+	반면, 리얼타임 진행 보장사항은 linearizability 와 같은 순서 제약과
+	무관합니다.
+\end{enumerate}
+\iffalse
+
 \item	Real-time forward-progress guarantees usually have some
 	definite time associated with them, for example,
 	``scheduling latency must be less than 100 microseconds.''
@@ -159,6 +193,14 @@ basis of real-time programming:
 	In contrast, real-time forward progress guarantees are often
 	independent of ordering constraints such as linearizability.
 \end{enumerate}
+\fi
+
+이런 차이에도 불구하고, 여러 NBS 알고리즘들은 리얼타임 프로그램에 상당히
+유용합니다.
+
+현재 NBS 계층~\cite{DanAlitarh2013PracticalProgress} 에는 7개의 단계가 있는데,
+간략히 설명하자면 다음과 같습니다:
+\iffalse
 
 Despite these differences, a number of NBS algorithms are extremely
 useful in real-time programs.
@@ -166,8 +208,32 @@ useful in real-time programs.
 There are currently seven levels in the NBS
 hierarchy~\cite{DanAlitarh2013PracticalProgress}, which are roughly
 as follows:
+\fi
 
 \begin{enumerate}
+\item	\emph{Bounded wait-free synchronization}: 모든 쓰레드는 특정한 유한한
+	시간 내에 진행을 만들어낸다~\cite{Herlihy91}.
+	(이 레벨은 대부분의 사람들로부터 불가능할 것으로 여겨지는데, Alitarh
+	등~\cite{DanAlitarh2013PracticalProgress} 이 해내지 못한 이유일 수도
+	있습니다.)
+\item	\emph{Wait-free synchronization}: 모든 쓰레드는 유한한 시간 내에 진행을
+	만들어낸다~\cite{Herlihy93}.
+\item	\emph{Lock-free synchronization}: 최소한 한 쓰레드는 유한한 시간 내에
+	진행을 만들어낸다~\cite{Herlihy93}.
+\item	\emph{Obstruction-free synchronization}: 경쟁이 없다면 모든 쓰레드가
+	유한한 시간 내에 진행을 만들어낸다~\cite{HerlihyLM03}.
+\item	\emph{Clash-free synchronization}: 경쟁이 없다면 최소한 하나의 쓰레드는
+	유한한 시간 내에 진행을
+	만들어낸다~\cite{DanAlitarh2013PracticalProgress}.
+\item	\emph{Starvation-free synchronization}: 실패가 없다면 모든 쓰레드가
+	유한한 시간 내에 진행을
+	만들어낸다~\cite{DanAlitarh2013PracticalProgress}.
+\item	\emph{Deadlock-free synchronization}: 실패가 없다면 적어도 하나의
+	쓰레드는 유한한 시간 내에 진행을
+	만들어낸다~\cite{DanAlitarh2013PracticalProgress}.
+\end{enumerate}
+\iffalse
+
 \item	\emph{Bounded wait-free synchronization}: Every thread
 	will make progress within
 	a specific finite period of time~\cite{Herlihy91}.
@@ -192,6 +258,17 @@ as follows:
 	make progress in finite time in the absence of
 	failures~\cite{DanAlitarh2013PracticalProgress}.
 \end{enumerate}
+\fi
+
+NBS 클래스~1, 2 그리고 3 은 1990년대 초, 클래스~4 는 2000년대 초, 그리고
+클래스~5 는 2013년에 처음 입안되었습니다.
+마지막 두개의 클래스들은 수십년동안 비공식적으로 사용되어왔습니다만 2013년에
+들어 다시 입안되었습니다.
+
+이론적으로는 어떤 병렬 알고리즘도 wait-free 형태로 변형될 수 있습니다만, 흔히
+사용되는 NBS 알고리즘들의 부분집합은 상대적으로 작은 편입니다.
+이것들 중 일부가 다음 섹션에서 설명됩니다.
+\iffalse
 
 NBS classes~1, 2 and~3 were first formulated in the early 1990s,
 class~4 was first formulated in the early 2000s,
@@ -203,6 +280,7 @@ In theory, any parallel algorithm can be cast into wait-free form,
 but there are a relatively small subset of NBS algorithms that are
 in common use.
 A few of these are listed in the following section.
+\fi
 
 \subsection{Simple NBS}
 \label{sec:advsync:Simple NBS}
