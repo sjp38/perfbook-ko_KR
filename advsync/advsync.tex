@@ -285,6 +285,19 @@ A few of these are listed in the following section.
 \subsection{Simple NBS}
 \label{sec:advsync:Simple NBS}
 
+아마도 가장 단순한 NBS 알고리즘은 fetch-and-add(\co{atomic_add_return()})
+기능을 이용한 정수 카운터의 어토믹한 업데이트일 것입니다.
+
+또다른 간단한 NBS 알고리즘은 한 배열 안의 정수들의 집합입니다.
+여기서 배열 인덱스는 해당 집합의 멤버일 값을 가리키고 배열의 원소들은 해당 값이
+실제로 집합의 멤버인지 아닌지를 알립니다.
+NBS 알고리즘을 위한 Linearizability 규범은 이 배열에의 읽기와 쓰기가 어토믹
+인스트럭션을 사용하거나 메모리 배리어를 수반할 것을 요구합니다만
+linearizability 가 그다지 중요하지 않은, 그렇게 희귀하지도 않은 경우들에서는
+간단한 volatile 로드와 스토어만으로도 충분한데, \co{ACCESS_ONCE()} 의 사용이 한
+예일 것입니다.
+\iffalse
+
 Perhaps the simplest NBS algorithm is atomic update of an integer
 counter using fetch-and-add (\co{atomic_add_return()}) primitives.
 
@@ -297,6 +310,26 @@ and updates to the array either use atomic instructions or be accompanied
 by memory barriers, but in the not-uncommon case where linearizability
 is not important, simple volatile loads and stores suffice, for example,
 using \co{ACCESS_ONCE()}.
+\fi
+
+NBS 집합은 비트맵을 이용해 구현될 수도 있을 텐데, 해당 집합의 멤버인 값은
+하나의 비트와 연관될 것입니다.
+읽기와 업데이트는 일반적으로 어토믹한 비트 조작 인스트럭션들로 이루어져야만
+합니다만 compare-and-swap (\co{cmpxchg()} 또는 CAS) 인스트럭션 또한 사용될 수
+있습니다.
+
+Section~\ref{sec:count:Statistical Counters} 에서 이야기 되었던 통계적 카운터
+알고리즘은 그 합이 정확하지는 않고 대략적이라는 분명한 트릭을 사용할 때라면
+wait-free 로 간주될 수 있습니다.\footnote{
+	인용이 필요합니다.
+	전 이 트릭을 Mark Moir 로부터 구두로 들었습니다.}
+\co{read_count()} 함수가 카운터들의 합을 구하는데 갖는 시간의 길이의 기능인
+충분히 큰 에러 한계들을 감안하면, 어떤 linearizable 하지 않은 동작이 일어났음을
+증명하는 것은 불가능합니다.
+이는 분명히 (약간 인위적이라면) 이 통계적 카운터 알고리즘을 wait-free 로
+분류합니다.
+이 알고리즘은 아마도 리눅스 커널에서 가장 많이 사용하는 NBS 알고리즘입니다.
+\iffalse
 
 An NBS set may also be implemented using a bitmap, where each value that
 might be a member of the set corresponds to one bit.
@@ -317,6 +350,7 @@ This definitely (if a bit artificially) classifies the statistical-counters
 algorithm as wait-free.
 This algorithm is probably the most heavily used NBS algorithm in
 the Linux kernel.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -348,6 +382,18 @@ the Linux kernel.
 \label{fig:count:NBS Enqueue Algorithm}
 \end{figure}
 
+또다른 흔한 NBS 알고리즘은 하나의 어토믹한 큐로, 원소들의 추가는 어토믹한 교체
+인스트럭션~\cite{MagedMichael1993JPDC} 을 사용하고, 이어서 새 원소의
+\co{->next} 포인터를 저장하는데, 이는 유저스페이스-RCU 라이브러리
+구현~\cite{MathieuDesnoyers2009URCU} 인 Figure~\ref{fig:count:NBS Enqueue
+Algorithm} 에 나와 있습니다.
+Line~9 는 tail 포인터가 새 원소를 가리키도록 업데이트 하면서 그 앞의 것으로의
+레퍼런스를 리턴하는데, 이 값은 로컬 변수 \co{old_tail} 에 저장됩니다.
+Line~10 은 이제 앞의 원소의 \co{->next} 포인터가 새로 추가된 원소를 가리키도록
+업데이트 하며, 마지막으로 line~11 에서 해당 큐가 원래 비어있었는지 여부를
+리턴합니다.
+\iffalse
+
 Another common NBS algorithm is the atomic queue where elements are
 enqueued using an atomic exchange instruction~\cite{MagedMichael1993JPDC},
 followed by a store into the \co{->next} pointer of the new element's
@@ -362,6 +408,18 @@ Line~10 then updates the predecessor's \co{->next} pointer to
 reference the newly added element, and finally line~11
 returns an indication as to whether or not the queue was initially
 empty.
+\fi
+
+하나의 원소를 꺼내기 위해선 상호 배타성이 필요하지만 (따라서 꺼내기 적업은
+블락됩니다), 큐의 전체 컨텐츠를 제거하는 일은 블락킹하지 않게도 할 수 있습니다.
+불가능한 것은 어떤 주어진 원소를 블락킹하지 않는 방법으로 꺼내는 것입니다:
+원소를 넣는 쪽은 line~9 와 10 에서 실패할 것이고, 따라서 요청된 원소는
+부분적으로만 추가되었을 것입니다.
+이로 인해 원소를 집어넣는 작업은 NBS 지만 꺼내는 것은 블락킹되는 반만 NBS 인
+알고리즘으로 귀결됩니다.
+이 알고리즘은 실제 상황에서 사용되지는 않는데, 대부분의 상품화된 소프트웨어는
+임의의 fail-stop 에러들을 견뎌내도록 요구되지는 않기 때문입니다.
+\iffalse
 
 Although mutual exclusion is required to dequeue a single element
 (so that dequeue is blocking), it is possible to carry out a non-blocking
@@ -374,6 +432,7 @@ dequeues are blocking.
 This algorithm is nevertheless used in practice, in part because
 most production software is not required to tolerate arbitrary fail-stop
 errors.
+\fi
 
 \subsection{NBS Discussion}
 \label{sec:advsync:NBS Discussion}
