@@ -814,15 +814,33 @@ exercise for the reader.
 \subsubsection{Compound Double-Ended Queue Revisited}
 \label{sec:SMPdesign:Compound Double-Ended Queue Revisited}
 
+이 섹션에서는 비어있지 않은 큐의 모든 원소들을 이제 비어있는 큐로 모두 옮기는
+간단한 균형잡기 방식을 사용해서 compound double-ended 큐를 다시 생각해 봅니다.
+\iffalse
+
 This section revisits the compound double-ended queue, using a trivial
 rebalancing scheme that moves all the elements from the non-empty
 queue to the now-empty queue.
+\fi
 
 \QuickQuiz{}
+	비어진 큐로 \emph{모든} 원소들을 옮긴다구요?
+	대체 어떤 미친 세상에서는 이런 방법이 최적인 거죠???
+	\iffalse
+
 	Move \emph{all} the elements to the queue that became empty?
 	In what possible universe is this brain-dead solution in any
 	way optimal???
+	\fi
 \QuickQuizAnswer{
+	데이터의 흐름이 아주 가끔만 그 방향을 바꿀 때에 최적입니다.
+	물론 double-ended 큐가 양쪽에서 동시에 비어진다면 매우 잘못된 선택일
+	겁니다.
+	이는 당연하게도 또다른 질문을 일으키는데, 대체 어떤 세상에서는 양쪽에서
+	동시에 큐를 비게 만드는게 합당한 일이 되냐는 것이죠.
+	Work-stealing 큐들이 이 질문에의 가능한 답 중 하나일 것입니다.
+	\iffalse
+
 	It is optimal in the case where data flow switches direction only
 	rarely.
 	It would of course be an extremely poor choice if the double-ended
@@ -831,12 +849,19 @@ queue to the now-empty queue.
 	universe emptying from both ends concurrently would be a reasonable
 	thing to do.
 	Work-stealing queues are one possible answer to this question.
+	\fi
 } \QuickQuizEnd
+
+앞의 섹션에서 이야기한 해시 기반 구현과 대조적으로, compound 기반 구현은 락도
+어토믹 오퍼레이션도 사용하지 않는, 순차적 구현으로 만들어진 double-ended 큐
+위에서 만들어집니다.
+\iffalse
 
 In contrast to the hashed implementation presented in
 the previous section, the compound implementation will build on
 a sequential implementation of a double-ended queue that uses
 neither locks nor atomic operations.
+\fi
 
 \begin{figure*}[bp]
 { \scriptsize
@@ -904,20 +929,50 @@ neither locks nor atomic operations.
 \end{figure*}
 
 Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+에 그 구현이 있습니다.
+해시 기반 구현과 달리, 이 compound 기반 구현은 왼쪽과 오른쪽이 비대칭적이므로,
+\co{pdeq_pop_l()} 과 \co{pdeq_pop_r()} 구현을 각각 신경써야 합니다.
+\iffalse
+
+Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
 shows the implementation.
 Unlike the hashed implementation, this compound implementation is
 asymmetric, so that we must consider the \co{pdeq_pop_l()}
 and \co{pdeq_pop_r()} implementations separately.
+\fi
 
 \QuickQuiz{}
+	왜 compound parallel double-ended queue 구현은 대칭적으로 만들어질 수
+	없는거죠?
+	\iffalse
+
 	Why can't the compound parallel double-ended queue
 	implementation be symmetric?
+	\fi
 \QuickQuizAnswer{
+	식사하는 철학자들 문제에 대한 해결책에서 포크에 숫자를 매기는 것이
+	그랬듯이, 락 계층구졸르 사용해 데드락을 예방해야 하는 관계로 비대칭성이
+	필요해집니다 (Section~\ref{sec:SMPdesign:Dining Philosophers Problem}
+	를 참고하세요).
+	\iffalse
+
 	The need to avoid deadlock by imposing a lock hierarchy
 	forces the asymmetry, just as it does in the fork-numbering
 	solution to the Dining Philosophers Problem
 	(see Section~\ref{sec:SMPdesign:Dining Philosophers Problem}).
+	\fi
 } \QuickQuizEnd
+
+이 그림의 line~1-16 에 \co{pdeq_pop_l()} 의 구현이 보여져 있습니다.
+Line~5 는 왼쪽 락을 얻어오고, 이 락은 line~14 에서 해제합니다.
+Line~6 에서는 왼쪽의 아래에 있는 double-ended 큐에서 왼쪽 디큐를 하려 시도하고,
+성공하면, 그냥 그 원소를 리턴하기 위해 line~8-13 을 건너뜁니다.
+그렇지 않다면, line~8 에서 오른쪽 락을 잡고, line~9 에서 오른쪽 큐로부터 왼쪽
+디큐 하고, line~10 에서 오른쪽 큐의 모든 남아있는 원소들을 왼쪽 큐로
+옮겨버리며, line~11 에서 오른쪽 큐를 초기화 하고, line~12 에서 오른쪽 락을
+놓습니다.
+만약 존재한다면, line~10 에서 디큐된 원소가 리턴됩니다.
+\iffalse
 
 The \co{pdeq_pop_l()} implementation is shown on lines~1-16
 of the figure.
@@ -931,6 +986,20 @@ and line~10 moves any remaining elements on the right-hand
 queue to the left-hand queue, line~11 initializes the right-hand queue,
 and line~12 releases the right-hand lock.
 The element, if any, that was dequeued on line~10 will be returned.
+\fi
+
+\co{pdeq_pop_r()} 구현은 이 그림의 line~18-38 에 보여져 있습니다.
+앞에서 그랬듯, line~22 에서 오른쪽 락을 얻고 (line~36 에서 해제합니다), line~23
+에서 오른쪽 큐로부터 원소 하나를 오른쪽 디큐하려 시도하고, 성공하면 line~24-35
+를 건너뛰고 그냥 이 원소를 리턴합니다.
+하지만, line~24 가 디큐할 원소가 없음을 알게 된다면, line~25 에서 오른쪽 락을
+놓고 line~26-27 에서 올바른 순서로 두 락을 모두 잡습니다.
+Line~28 에서는 이제 오른쪽 큐에서 원소 하나를 오른쪽 디큐하려 시도하고, line~29
+에서 이 두번째 시도도 실패했음을 깨닫게 되면, line~30 에서 왼쪽 큐로부터
+(원소가 있다면) 원소 하나를 오른쪽 디큐하고, line~31 에서 왼쪽 큐로부터
+남아있는 모든 원소를 오른쪽 큐로 옮기고, line~32 에서 왼쪽 큐를 초기화 합니다.
+어떤 경우든, line~34 에서 왼쪽 락을 놓습니다.
+\iffalse
 
 The \co{pdeq_pop_r()} implementation is shown on lines~18-38
 of the figure.
@@ -948,31 +1017,67 @@ failed, line~30 right-dequeues an element from the left-hand queue
 from the left-hand queue to the right-hand queue, and line~32
 initializes the left-hand queue.
 Either way, line~34 releases the left-hand lock.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	의 line~28 에서 왜 오른쪽 디큐를 또 시도하는거죠?
+	\iffalse
+
 	Why is it necessary to retry the right-dequeue operation
 	on line~28 of
 	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}?
+	\fi
 \QuickQuizAnswer{
+	이 쓰레드가 \co{d->rlock} 을 line~25 에서 놓고 나서 line~27 에서 다시
+	잡는 사이에 다른 쓰레드가 원소를 집어넣었을 수도 있기 때문에
+	필요합니다.
+	\iffalse
+
 	This retry is necessary because some other thread might have
 	enqueued an element between the time that this thread dropped
 	\co{d->rlock} on line~25 and the time that it reacquired this
 	same lock on line~27.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	왼쪽 락은 \emph{언젠가는} 사용 가능할 겁니다!!!
+	그런데
+	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	의 line~25 에서는 오른쪽 락을 조건없이 놔버려야 하는거죠?
+	\iffalse
+
 	Surely the left-hand lock must \emph{sometimes} be available!!!
 	So why is it necessary that line~25 of
 	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
 	unconditionally release the right-hand lock?
+	\fi
 \QuickQuizAnswer{
+	왼쪽 락이 획득 가능할 때에 그걸 얻기 위해 \co{spin_trylock()} 을 사용할
+	수도 있을 겁니다.
+	하지만, 실패할 경우에는 여전히 오른쪽 락을 잠시 내려놓고 두 락을
+	순서대로 다시 잡아야만 할 겁니다.
+	이런 변경을 가해보는건 (그리고 그게 가치있는 것인지 결정하는 것은)
+	독자의 몫으로 남겨두겠습니다.
+	\iffalse
+
 	It would be possible to use \co{spin_trylock()} to attempt
 	to acquire the left-hand lock when it was available.
 	However, the failure case would still need to drop the
 	right-hand lock and then re-acquire the two locks in order.
 	Making this transformation (and determining whether or not
 	it is worthwhile) is left as an exercise for the reader.
+	\fi
 } \QuickQuizEnd
+
+\co{pdeq_push_l()} 의 구현이
+Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+의 line~40-47 에 있습니다.
+Line~44 에서는 왼쪽 스핀락을 잡고, line~45 에서 왼쪽 큐에 왼쪽 인큐를 하고,
+마지막으로 line~46 에서 이 락을 놓습니다.
+\co{pdeq_enqueue_r()} 구현 (line~49-56 에 있습니다) 은 상당히 비슷합니다.
+\iffalse
 
 The \co{pdeq_push_l()} implementation is shown on lines~40-47 of
 Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}.
@@ -981,6 +1086,7 @@ element onto the left-hand queue, and finally line~46 releases
 the lock.
 The \co{pdeq_enqueue_r()} implementation (shown on lines~49-56)
 is quite similar.
+\fi
 
 \subsubsection{Double-Ended Queue Discussion}
 \label{sec:SMPdesign:Double-Ended Queue Discussion}

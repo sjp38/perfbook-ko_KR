@@ -5087,10 +5087,23 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	비어진 큐로 \emph{모든} 원소들을 옮긴다구요?
+	대체 어떤 미친 세상에서는 이런 방법이 최적인 거죠???
+	\iffalse
+
 	Move \emph{all} the elements to the queue that became empty?
 	In what possible universe is this brain-dead solution in any
 	way optimal???
+	\fi
 \QuickA{}
+	데이터의 흐름이 아주 가끔만 그 방향을 바꿀 때에 최적입니다.
+	물론 double-ended 큐가 양쪽에서 동시에 비어진다면 매우 잘못된 선택일
+	겁니다.
+	이는 당연하게도 또다른 질문을 일으키는데, 대체 어떤 세상에서는 양쪽에서
+	동시에 큐를 비게 만드는게 합당한 일이 되냐는 것이죠.
+	Work-stealing 큐들이 이 질문에의 가능한 답 중 하나일 것입니다.
+	\iffalse
+
 	It is optimal in the case where data flow switches direction only
 	rarely.
 	It would of course be an extremely poor choice if the double-ended
@@ -5099,38 +5112,78 @@ ret = ~ret & tmp;
 	universe emptying from both ends concurrently would be a reasonable
 	thing to do.
 	Work-stealing queues are one possible answer to this question.
+	\fi
 
 \QuickQ{}
+	왜 compound parallel double-ended queue 구현은 대칭적으로 만들어질 수
+	없는거죠?
+	\iffalse
+
 	Why can't the compound parallel double-ended queue
 	implementation be symmetric?
+	\fi
 \QuickA{}
+	식사하는 철학자들 문제에 대한 해결책에서 포크에 숫자를 매기는 것이
+	그랬듯이, 락 계층구졸르 사용해 데드락을 예방해야 하는 관계로 비대칭성이
+	필요해집니다 (Section~\ref{sec:SMPdesign:Dining Philosophers Problem}
+	를 참고하세요).
+	\iffalse
+
 	The need to avoid deadlock by imposing a lock hierarchy
 	forces the asymmetry, just as it does in the fork-numbering
 	solution to the Dining Philosophers Problem
 	(see Section~\ref{sec:SMPdesign:Dining Philosophers Problem}).
+	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	의 line~28 에서 왜 오른쪽 디큐를 또 시도하는거죠?
+	\iffalse
+
 	Why is it necessary to retry the right-dequeue operation
 	on line~28 of
 	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}?
+	\fi
 \QuickA{}
+	이 쓰레드가 \co{d->rlock} 을 line~25 에서 놓고 나서 line~27 에서 다시
+	잡는 사이에 다른 쓰레드가 원소를 집어넣었을 수도 있기 때문에
+	필요합니다.
+	\iffalse
+
 	This retry is necessary because some other thread might have
 	enqueued an element between the time that this thread dropped
 	\co{d->rlock} on line~25 and the time that it reacquired this
 	same lock on line~27.
+	\fi
 
 \QuickQ{}
+	왼쪽 락은 \emph{언젠가는} 사용 가능할 겁니다!!!
+	그런데
+	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	의 line~25 에서는 오른쪽 락을 조건없이 놔버려야 하는거죠?
+	\iffalse
+
 	Surely the left-hand lock must \emph{sometimes} be available!!!
 	So why is it necessary that line~25 of
 	Figure~\ref{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
 	unconditionally release the right-hand lock?
+	\fi
 \QuickA{}
+	왼쪽 락이 획득 가능할 때에 그걸 얻기 위해 \co{spin_trylock()} 을 사용할
+	수도 있을 겁니다.
+	하지만, 실패할 경우에는 여전히 오른쪽 락을 잠시 내려놓고 두 락을
+	순서대로 다시 잡아야만 할 겁니다.
+	이런 변경을 가해보는건 (그리고 그게 가치있는 것인지 결정하는 것은)
+	독자의 몫으로 남겨두겠습니다.
+	\iffalse
+
 	It would be possible to use \co{spin_trylock()} to attempt
 	to acquire the left-hand lock when it was available.
 	However, the failure case would still need to drop the
 	right-hand lock and then re-acquire the two locks in order.
 	Making this transformation (and determining whether or not
 	it is worthwhile) is left as an exercise for the reader.
+	\fi
 
 \QuickQ{}
 	Why are there not one but two solutions to the double-ended queue
