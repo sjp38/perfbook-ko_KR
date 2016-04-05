@@ -475,6 +475,16 @@ interesting to try for an algorithm with greater determinism.
 \subsubsection{Hashed Double-Ended Queue}
 \label{sec:SMPdesign:Hashed Double-Ended Queue}
 
+데이터 구조를 결정론적으로 쪼개는 가장 간단하고 효과적인 방법은 해싱입니다.
+각 원소에 그 리스트에서의 위치에 기반해서, 빈 큐에 왼쪽으로 들어온 첫번째
+원소는 0을 가지고, 빈 큐에 오른쪽으로 들어온 원소에는 1을 할당하는식으로 숫자를
+할당함으로써 double-ended 큐를 간단히 해시하는 것이 가능합니다.
+이후 큐에 왼쪽으로 들어온 원소들은 감소하는 숫자 (-1, -2, -3, ...) 를 갖고,
+오른쪽으로 들어온 원소들은 증가하는 수를 갖습니다 (2, 3, 4, ...).
+핵심은, 이 숫자는 해당 큐에서의 위치를 의미하기 때문에, 특정 원소의 수를 실제로
+나타낼 필요는 없다는 것입니다.
+\iffalse
+
 One of the simplest and most effective ways to deterministically
 partition a data structure is to hash it.
 It is possible to trivially hash a double-ended queue by assigning
@@ -489,6 +499,7 @@ increasing numbers (2, 3, 4, ...).
 A key point is that it is not necessary to actually represent a given
 element's number, as this number will be implied by its position in
 the queue.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -498,6 +509,15 @@ the queue.
 \label{fig:SMPdesign:Hashed Double-Ended Queue}
 \end{figure}
 
+이 방법에서, 왼쪽 인덱스를 지키는데 한 락을 할당하고, 오른쪽 인덱스를 지키는데
+또하나를, 그리고 각 해시 체인을 위해 락을 하나 더 할당합니다.
+Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue} 가 이로 인해 구성되는
+데이터 구조를 네개의 해시 체인들로 표현하고 있습니다.
+락 도메인들은 오버랩하지 않고, 데드락은 체인 락 이전에 인덱스 락을 획득하고
+한번에 한 타입의 락 (인덱스 또는 체인) 만을 획득함으로써 함으로써 발생
+불가능하게 되었습니다.
+\iffalse
+
 Given this approach, we assign one lock to guard the left-hand index,
 one to guard the right-hand index, and one lock for each hash chain.
 Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue} shows the resulting
@@ -505,6 +525,7 @@ data structure given four hash chains.
 Note that the lock domains do not overlap, and that deadlock is avoided
 by acquiring the index locks before the chain locks, and by never
 acquiring more than one lock of each type (index or chain) at a time.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -513,6 +534,20 @@ acquiring more than one lock of each type (index or chain) at a time.
 \caption{Hashed Double-Ended Queue After Insertions}
 \label{fig:SMPdesign:Hashed Double-Ended Queue After Insertions}
 \end{figure}
+
+각 해시 체인은 그 자체로 double-ended 큐이며, 이 예제에서, 각각이 네개의 원소를
+모두 가지고 있습니다.
+Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue After Insertions} 의 가장
+위에는 하나의 원소 (``R1'') 이 오른쪽으로 들어온 후의, 오른쪽 인덱스가 해시
+체인~2 를 참조하게 증가된 상황이 그려져 있습니다.
+이 그림의 중간 부분에는 세개의 원소가 더 오른쪽으로 들어온 후의 상황을
+그립니다.
+볼 수 있듯, 인덱스들은 최초의 상태
+(Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue} 를 참고하세요) 로
+돌아갔지만, 각 해시 체인은 이제 비어있지 않습니다.
+이 그림의 아랫쪽은 추가적으로 원소들이 왼쪽으로, 그리고 오른쪽으로 들어온 후의
+상태를 그립니다.
+\iffalse
 
 Each hash chain is itself a double-ended queue, and in this example,
 each holds every fourth element.
@@ -529,6 +564,16 @@ each hash chain is now non-empty.
 The lower portion of this figure shows the state after three additional
 elements have been left-enqueued and an additional element has been
 right-enqueued.
+\fi
+
+Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue After Insertions} 에 보여진
+마지막 상황에서, 왼쪽 꺼내기 오퍼레이션은 ``L-2'' 를 리턴하고 왼쪽 인덱스가
+이제는 하나의 원소 (``R2'')만을 가지고 있는 해시 체인~2 를 가리키도록 할
+것입니다.
+이 상태에서, 동시에 왼쪽 집어넣기와 오른쪽 집어넣기가 실행되면 락 경쟁 상황에
+빠지게 됩니다만, 그런 경쟁 상황은 더 큰 해시 테이블을 사용함으로써 비교적 적은
+수준으로 경감될 수 있을 겁니다.
+\iffalse
 
 From the last state shown in
 Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue After Insertions},
@@ -538,6 +583,7 @@ contain only a single element (``R2'').
 In this state, a left-enqueue running concurrently with a right-enqueue
 would result in lock contention, but the probability of such contention
 can be reduced to arbitrarily low levels by using a larger hash table.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -547,11 +593,19 @@ can be reduced to arbitrarily low levels by using a larger hash table.
 \label{fig:SMPdesign:Hashed Double-Ended Queue With 12 Elements}
 \end{figure}
 
+Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue With 12 Elements} 는 네개의
+해시 버킷을 갖는 병렬 double-ended 큐에 12개의 원소가 들어가면 어떻게
+구성되는지 보입니다.
+전체 double-ended queue 를 구성하는, 단일 락으로 지켜지는 각각의 double-ended
+큐는 전체 병렬 double-ended queue 의 4분의 1 조각을 갖는다고 볼 수 있겠습니다.
+\iffalse
+
 Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue With 12 Elements}
 shows how 12 elements would be organized in a four-hash-bucket
 parallel double-ended queue.
 Each underlying single-lock double-ended queue holds a one-quarter
 slice of the full parallel double-ended queue.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -570,6 +624,17 @@ slice of the full parallel double-ended queue.
 \end{figure}
 
 Figure~\ref{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Data Structure}
+는 관련된 C-언어 데이터 구조를 보여주는데, \co{struct deq} 가 간단히 락을
+사용하는 double-ended 큐 구현을 제공한다고 가정합니다.
+이 데이터 구조는 왼쪽 락을 line~2 에서 포함하고 있고, 왼쪽 인덱스는 line~3 에,
+오른쪽 락을 line~4 에서(실제 구현에서는 캐시 라인 크기로 정렬되어있겠습니다만),
+오른쪽 인덱스를 line~5 에서, 그리고 마지막으로 간단한 락 기반의 double-ended
+큐들의 해시된 배열을 line~6 에서 갖습니다.
+고성능의 구현은 거짓 공유 (false sharing) 를 막기 위해 패딩이나 특별한 정렬
+지시어를 사용할 것입니다.
+\iffalse
+
+Figure~\ref{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Data Structure}
 shows the corresponding C-language data structure, assuming an
 existing \co{struct deq} that provides a trivially locked
 double-ended-queue implementation.
@@ -580,6 +645,7 @@ the right-hand index on line~5, and, finally, the hashed array
 of simple lock-based double-ended queues on line~6.
 A high-performance implementation would of course use padding or special
 alignment directives to avoid false sharing.
+\fi
 
 \begin{figure*}[bp]
 { \scriptsize
@@ -641,6 +707,23 @@ alignment directives to avoid false sharing.
 
 Figure~\ref{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
 (\co{lockhdeq.c}) 
+는 집어넣기 (enqueue) 와 꺼내기 (dequeue) 기능 구현을 보입니다.\footnote{
+	다른 언어들로 다양한 형태의 구현을 하는 것도 쉬울 것입니다만, 그건
+	독자의 몫으로 남겨두겠습니다.}
+이야기는 왼쪽 오퍼레이션들에 집중해서 진행될텐데, 오른쪽 오퍼레이션들은 왼쪽의
+그것과 비슷하기 때문입니다.
+
+Line~1-13 은 왼쪽에서 꺼내고 원소가 있었다면 그 원소를, 그렇지 않다면 \co{NULL}
+을 리턴하는 \co{pdeq_pop_l()} 를 보입니다.
+Line~6 에서는 왼쪽 스핀락을 얻고, line~7 에서 꺼내어질 인덱스를 계산합니다.
+Line~8 에서 해당 원소를 꺼내고, line~9 에서 그 결과가 \co{NULL} 이 아니라는 걸
+확인하면, line~10 에서 새 왼쪽 인덱스를 기록합니다.
+어느쪽이건, line~11 에서 락을 풀고, line~12 에서 마침내 원소가 있었다면 그것을,
+아니면 \co{NULL} 을 리턴합니다.
+\iffalse
+
+Figure~\ref{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
+(\co{lockhdeq.c}) 
 shows the implementation of the enqueue and dequeue functions.\footnote{
 	One could easily create a polymorphic implementation in any
 	number of languages, but doing so is left as an exercise for
@@ -656,6 +739,18 @@ Line~8 dequeues the element, and, if line~9 finds the result to be
 non-\co{NULL}, line~10 records the new left-hand index.
 Either way, line~11 releases the lock, and, finally, line~12 returns
 the element if there was one, or \co{NULL} otherwise.
+\fi
+
+Line~29-38 은 왼쪽에 특정 원소를 집어넣는 \co{pdeq_push_l()} 을 보이고
+있습니다.
+Line~33 은 왼쪽 락을 잡고, line~34 에서 왼쪽 인덱스를 잡습니다.
+Line~35 에서 왼쪽 인덱스로 가리켜진 double-ended 큐에 원소를 왼쪽으로
+집어넣습니다.
+Line~36 에서는 왼쪽 인덱스를 업데이트 하고 line~37 에서 락을 풉니다.
+
+앞서 언급되었듯, 오른쪽 오퍼레이션들은 왼쪽의 그것들과 비슷하므로, 그쪽의
+분석은 독자 여러분의 연습문제로 남겨두겠습니다.
+\iffalse
 
 Lines~29-38 shows \co{pdeq_push_l()}, which left-enqueues the specified
 element.
@@ -668,11 +763,24 @@ Line~36 then updates the left-hand index and line~37 releases the lock.
 As noted earlier, the right-hand operations are completely analogous
 to their left-handed counterparts, so their analysis is left as an
 exercise for the reader.
+\fi
 
 \QuickQuiz{}
+	해시를 사용한 double-ended 큐는 좋은 해결책인가요?
+	그렇다면 왜고 그렇지 않다면 또 왜죠?
+	\iffalse
+
 	Is the hashed double-ended queue a good solution?
 	Why or why not?
+	\fi
 \QuickQuizAnswer{
+	이 질문에 답을 하는 가장 좋은 방법은 \url{lockhdeq.c} 를 여러개의
+	멀티프로세서 시스템들 위에서 돌려보는 것이고, 가능한한 그렇게
+	해보시기를 권장합니다.
+	신경써야 하는 한가지 이유는, 이 구현에서 각 오퍼레이션은 한개가 아니라
+	두개의 락들을 획득해야 한다는 점입니다.
+	\iffalse
+
 	The best way to answer this is to run \url{lockhdeq.c} on
 	a number of different multiprocessor systems, and you are
 	encouraged to do so in the strongest possible terms.
@@ -682,6 +790,17 @@ exercise for the reader.
 	% a queue on a 4.2GHz Power system.  This is roughly the same as
 	% the version covered by a single lock.  Sequential (unlocked
 	% variant is more than an order of magnitude faster!
+	\fi
+
+	일단은 잘 설계된 성능 연구를 보는 것으로 시작을 해야 할
+	겁니다.\footnote{
+		Dalessandro 등의
+		연구~\cite{LukeDalessandro:2011:ASPLOS:HybridNOrecSTM:deque} 와
+		Dice 등의
+		연구~\cite{DavidDice:2010:SCA:HTM:deque} 가 좋은 시작점이 될
+		것입니다.}
+	순차적 구현과 비교해 보는 것을 잊지 마세요!
+	\iffalse
 
 	The first well-designed performance study will be cited.\footnote{
 		The studies by Dalessandro
@@ -689,6 +808,7 @@ exercise for the reader.
 		and Dice et al.~\cite{DavidDice:2010:SCA:HTM:deque} are
 		good starting points.}
 	Do not forget to compare to a sequential implementation!
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Compound Double-Ended Queue Revisited}
