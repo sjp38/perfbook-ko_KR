@@ -1091,6 +1091,27 @@ is quite similar.
 \subsubsection{Double-Ended Queue Discussion}
 \label{sec:SMPdesign:Double-Ended Queue Discussion}
 
+Compound 기반 구현은 Section~\ref{sec:SMPdesign:Hashed Double-Ended Queue} 에서
+이야기한 해시 기반 구현에 비해 좀 복잡하지만, 여전히 간단한 편이라 말할 수
+있겠습니다.
+물론, 더 똑똑한 균형잡기 방법들은 어느정도 복잡할 수 있겠습니다만, 여기 소개한
+간단한 방법들은 다른 소프트웨어 기반
+방법들~\cite{LukeDalessandro:2011:ASPLOS:HybridNOrecSTM:deque} 과 비교해서도,
+그리고 심지어 하드웨어의 도움을 받는
+알고리즘들~\cite{DavidDice:2010:SCA:HTM:deque} 과 비교해서도 잘 동작함을 보이기
+위한 것들입니다.
+더도 아니고 덜도 아니고, 이런 방법에서 우리가 최대한 희망할 수 있는 건
+2배까지의 확장성인데, 최대 두개의 쓰레드가 디큐를 위한 락들을 동시에 잡고 있을
+수 있기 때문입니다.
+이런 제약은 Michael 의 compare-and-swap 기반 디큐
+알고리즘~\cite{DBLP:conf/europar/Michael03} 과 같은 non-blocking 동기화
+알고리즘에도 적용됩니다.\footnote{
+	이 논문은 double-ended 큐들의 lock-free 구현에 특별한
+	double-compare-and-swap (DCAS) 인스트럭션들이 필요치 않음을 보였다는
+	점에서 흥미롭습니다.
+	대신, 일반적인 compare-and-swap (예: x86 cmpxchg) 만으로도 충분합니다.}
+\iffalse
+
 The compound implementation is somewhat more complex than the
 hashed variant presented in
 Section~\ref{sec:SMPdesign:Hashed Double-Ended Queue},
@@ -1112,15 +1133,35 @@ Michael~\cite{DBLP:conf/europar/Michael03}.\footnote{
 	for lock-free implementations of double-ended queues.
 	Instead, the common compare-and-swap (e.g., x86 cmpxchg)
 	suffices.}
+\fi
 
 \QuickQuiz{}
+	double-ended 큐 문제에 왜 한개가 아니라 두개나 해결책이 있는 거죠?
+	\iffalse
+
 	Why are there not one but two solutions to the double-ended queue
 	problem?
+	\fi
 \QuickQuizAnswer{
+	실은 최소한 세개입니다.
+	Domink Dingel 의 세번째 것은 reader-writer 락킹을 사용하는데,
+	\co{lockrwdeq.c} 에서 보실 수 있을 겁니다.
+	\iffalse
+
 	There are actually at least three.
 	The third, by Dominik Dingel, makes interesting use of
 	reader-writer locking, and may be found in \co{lockrwdeq.c}.
+	\fi
 } \QuickQuizEnd
+
+사실, Dice 등~\cite{DavidDice:2010:SCA:HTM:deque} 에 의해 이야기 되었듯, 동기화
+되지 않은 단일 쓰레드 기반 double-ended 큐는 그들이 알아본 다른 어떤 병렬
+구현들보다도 성능이 좋습니다.
+따라서, 핵심은 실제 구현과 관계 없이 공유된 큐에 인큐와 디큐를 하는 데에는
+커다란 오버헤드가 존재한다는 점입니다.
+Chapter~\ref{chp:Hardware and its Habits} 에서의 내용이 이 큐들의 FIFO 의
+섭리를 생각하면 크게 놀라운 일도 아닙니다.
+\iffalse
 
 In fact, as noted by Dice et al.~\cite{DavidDice:2010:SCA:HTM:deque},
 an unsynchronized single-threaded double-ended queue significantly
@@ -1130,6 +1171,30 @@ or dequeuing from a shared queue, regardless of implementation.
 This should come as no surprise given the material in
 Chapter~\ref{chp:Hardware and its Habits}, given the strict
 FIFO nature of these queues.
+\fi
+
+더우기, 이런 철저한 FIFO 큐들은 사실 그 사용자들에게는 보이지 않는
+\emph{linearization point}\footnote{
+	짧게 요약해서, linearization point 는 한 함수 내에서 그 함수가 수행
+	결과를 만들어냈다고 할 수 있는 하나의 지점입니다.
+	이 락 기반의 구현에서 linearization point 들은 실제 일을 하는 크리티컬
+	섹션 안의 어딘가라고 할 수 있습니다.}
+들에 대해서만 엄격하게 FIFO 인데, 이 예에서, linearization point 들은 락 기반의
+크리티컬 섹션들 안에 있습니다.
+이런 큐들은 개별적인 오퍼레이션들이 시작된 시점의 관점에서는 철저한 FIFO 가
+아닙니다~\cite{AndreasHaas2012FIFOisnt}.
+이는 동시적 프로그램들에서 철저한 FIFO 속성은 그렇게 가치있는 것은 아님을
+의미하며, 실제로 Kirsch 등은 향상된 성능과 확장성을 제공하는 덜 철저한 큐들을
+선보였습니다~\cite{ChristophMKirsch2012FIFOisntTR}.\footnote{
+	Nir Shavit 은 대략적으로는 같은 이유로 완화된 스택들을
+	만들었습니다~\cite{Shavit:2011:DSM:1897852.1897873}.
+	이런 상황은 몇몇 사람들에게 linearization point 들은 개발자들보다는
+	이론가들에게 유용하다고 믿게 하고, 그런 데이터 스트럭쳐들과
+	알고리즘들의 설계자들은 얼마나 사용자들의 필요에 고려를 하고 있었는지
+	의아해 하게 합니다.}
+그렇다고는 하나, 당신이 당신의 동시적 프로그램에서 사용하는 모든 데이터를
+하나의 큐를 통해 집어넣는다면, 전체 설계를 다시 한번 생각해 볼 필요가 있습니다.
+\iffalse
 
 Furthermore, these strict FIFO queues are strictly FIFO only with
 respect to
@@ -1158,6 +1223,7 @@ scalability~\cite{ChristophMKirsch2012FIFOisntTR}.\footnote{
 All that said, if you are pushing all the data used by your concurrent
 program through a single queue, you really need to rethink your
 overall design.
+\fi
 
 \subsection{Partitioning Example Discussion}
 \label{sec:SMPdesign:Partitioning Example Discussion}
