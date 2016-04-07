@@ -3,6 +3,20 @@
 \section{Design Criteria}
 \label{sec:SMPdesign:Design Criteria}
 
+최고의 성능과 확장성을 얻는 한가지 방법은 최고의 달성 가능한 병렬 프로그램에
+이르를 때까지 핵을 지속하는 것입니다.
+불행히도, 당신의 프로그램이 현미경으로 봐야할 정도로 작지 않다면, 가능한 병렬
+프로그램의 공간은 우주의 수명이라는 거대한 시간 동안에도 최고의 달성 가능한
+프로그램에 이르기를 보장하지 못할 정도로 커다랗습니다.
+그리고 또, ``최고의 달성 가능한 병렬 프로그램'' 이란 무엇일까요?
+어쨌든, Section~\ref{sec:intro:Parallel Programming Goals} 에서는 성능, 생산성,
+그리고 일반성 (generality) 의 세가지 병렬 프로그래밍 목표를 이야기 했고, 최고의
+달성 가능한 병렬 프로그램은 생산성과 일반성에의 비용으로 다가올 확률이 큽니다.
+프로그램이 구식이 되기 전에 충분히 받아들여질만한 좋은 병렬 프로그램까지는
+만들기 위해 설계 단계에서 높은 수준에서의 선택들을 만들 수 있게 할 필요가 분명
+있습니다.
+\iffalse
+
 One way to obtain the best performance and scalability is to simply
 hack away until you converge on the best possible parallel program.
 Unfortunately, if your program is other than microscopically tiny,
@@ -17,6 +31,20 @@ terms of productivity and generality.
 We clearly need to be able to make higher-level choices at design
 time in order to arrive at an acceptably good parallel program
 before that program becomes obsolete.
+\fi
+
+하지만, 정말로 실제 세계의 설계를 하기 위해선 디자인 규범들이 필요한데, 이
+섹션에서 다룰 것입니다.
+실제 세계에서, 이 규범들은 종종 더 크거나 작은 정도에서 충돌하므로, 설계자들은
+그로 인한 트레이드오프들을 잘 균형 맞춰야 합니다.
+
+이 규범들은 그 자체로써 설계에 동작하는 ``힘''들로 생각될 수 있으며, 특히 이런
+힘들 간의 좋은 트레이드오프들은 ``디자인 패턴''~\cite{Alexander79,GOF95} 이라
+불릴 수 있을 것입니다.
+
+세개의 병렬 프로그래밍 목표들을 얻기 위한 디자인 규범들은 속도 향상, 경쟁,
+오버헤드, 읽기-쓰기 비율, 그리고 복잡도입니다:
+\iffalse
 
 However, more detailed design criteria are required to
 actually produce a real-world design, a task taken up in this section.
@@ -31,7 +59,20 @@ these forces being called ``design patterns''~\cite{Alexander79,GOF95}.
 The design criteria for attaining the three parallel-programming goals
 are speedup,
 contention, overhead, read-to-write ratio, and complexity:
+\fi
 \begin{description}
+\item[Speedup:]  Section~\ref{sec:intro:Parallel Programming Goals} 에서
+	이야기했듯, 성능이야말로 대부분의 시간을 쏟아야 하는 곳이고 병렬화를
+	해야 하는 문제입니다.
+	속도 향상은 순차적 버전의 프로그램을 돌리는데 드는 시간 대비 병렬
+	버전을 돌리는데 드는 시간 사이의 비율입니다.
+\item[Contention:]  더 많은 CPU 들이 한 병렬 프로그램에 사용되고 그 프로그램에
+	의해 열심히 일을 하게 된다면, 너무 많은 CPU 들은 서로의 경쟁으로 인해
+	유의미한 일을 하지 못하게 되어버립니다.
+	이는 락 경쟁, 메모리 경쟁, 또는 다른 성능 문제 부분으로부터의 것일 수도
+	있습니다.
+\iffalse
+
 \item[Speedup:]  As noted in
 	Section~\ref{sec:intro:Parallel Programming Goals},
 	increased performance is the major reason
@@ -46,6 +87,21 @@ contention, overhead, read-to-write ratio, and complexity:
 	useful work by contention.
 	This may be lock contention, memory contention, or a host
 	of other performance killers.
+\fi
+\item[Work-to-Synchronization Ratio:]  유니프로세서, 싱글쓰레드, 프리엠션 불가,
+	그리고 인터럽트 불가\footnote{
+		인터럽트 마스킹을 하거나 그것들을 감지하지 못해서.}
+	한 버전의 병렬 프로그램은 어떤 동기화 도구들도 필요가 없을 것입니다.
+	따라서, 이런 도구들에 소모되는 (커뮤니케이션 캐시 미스들과 메세지
+	대기시간, 락킹 도구, 어토믹 인스트럭션들, 그리고 메모리 배리어들을
+	포함하는) 시간들은그로그램이 완수하려 의도한 유용한 일에 직접적으로
+	도움을 주거나 하지 않는 오버헤드일 뿐입니다.
+	중요하게 측정해 봐야 할 것은 동기화 오버헤드와 크리티컬 섹션의 코드의
+	오버헤드 사이의 관계로, 더 큰 크리티컬 섹션은 더 큰 동기화 오버헤드를
+	견딜 수 있게 합니다.
+	일-대-동기화 비율은 동기화 효율성과 연관됩니다.
+\iffalse
+
 \item[Work-to-Synchronization Ratio:]  A uniprocessor,
 	single-threaded, non-preemptible, and non-interruptible\footnote{
 		Either by masking interrupts or by being oblivious to them.}
@@ -63,6 +119,16 @@ contention, overhead, read-to-write ratio, and complexity:
 	critical sections able to tolerate greater synchronization overhead.
 	The work-to-synchronization ratio is related to
 	the notion of synchronization efficiency.  % @@@ reference.
+\fi
+\item[Read-to-Write Ratio:]  아주 가끔만 업데이트 되는 데이터 구조체는 파티션
+	되기보다는 복사가 될 수 있을 것이고, 더 나아가서 읽는 쪽의 동기화
+	오버헤드를 쓰는 쪽을 부담시키는 대신 완화시켜주는 비대칭적 동기화
+	도구를 사용해서 보호될 수 있어서 전체 동기화 오버헤드를 줄일 수 있을
+	것입니다.
+	관련된 최적화들은 Chapter~\ref{chp:Counting} 에서 이야기 되었듯 자주
+	업데이트 되는 데이터 구조체에도 적용될 수 있습니다.
+\iffalse
+
 \item[Read-to-Write Ratio:]  A data structure that is
 	rarely updated may often be replicated rather than partitioned,
 	and furthermore may be protected with asymmetric
@@ -72,6 +138,29 @@ contention, overhead, read-to-write ratio, and complexity:
 	Corresponding optimizations are possible for frequently
 	updated data structures, as discussed in
 	Chapter~\ref{chp:Counting}.
+\fi
+\item[Complexity:]  병렬 프로그램은 똑같은 순차적 프로그램에 비해 복잡한데,
+	병렬 프로그램은 순차적 프로그램에 비해 훨씬 큰 상태 공간을 갖기
+	때문입니다만, 이 커다란 상태 공간은 충분한 질서와 구조가 주어진다면
+	쉽게 이해될 수 있긴 합니다.
+	병렬 프로그램을 만드는 사람은 이 커다란 상태 공간의 문맥에서 동기화
+	도구들, 메세지, 락킹 설계, 크리티컬 섹션 식별, 그리고 데드락을 고려해야
+	합니다.
+
+	이 거대한 복잡도는 종종 높은 개발과 유지 비용으로 이야기되곤 합니다.
+	따라서, 예산의 제한이 존재하는 프로그램에 가할 수 있는 변경의 수와
+	종류를 제한할 수 있는데, 속도 향상은 많은 시간과 문제를 개선할 때에만
+	가치가 있기 때문입니다.
+	더 나쁜 것은, 추가된 복잡도가 실제로 성능과 확장성을 \emph{줄일} 수
+	있다는 것입니다.
+
+	따라서, 어떤 특정한 지점 이후부터는 병렬화보다는 더 싸고 효과적인
+	순차적 최적화가 잠재하고 있을 수 있습니다.
+	Section~\ref{sec:intro:Performance} 에서 이야기 했듯, 병렬화는 많은
+	것들 중 하나의 성능 최적화일 뿐이고, CPU-기반의 보틀넥들에 적용될 수
+	있는 최적화입니다.
+\iffalse
+
 \item[Complexity:]  A parallel program is more complex than
 	an equivalent sequential program because the parallel
 	program has a much larger state space than does the
@@ -100,7 +189,16 @@ contention, overhead, read-to-write ratio, and complexity:
 	parallelization is but one performance optimization of
 	many, and is furthermore an optimization that applies
 	most readily to CPU-based bottlenecks.
+\fi
 \end{description}
+이런 규범들은 최대의 속도향상을 위해 함께 동작할 것입니다.
+앞의 세개의 규범들은 깊게 관계되어 있으므로, 이 섹션의 뒷부분은 이 상호관계에
+대해 분석해 보겠습니다.\footnote{
+	실제 세계의 병렬 시스템은 많은 디자인 규범들에 반하는 사례가 있을
+	것인데, 데이터 구조체 레이아웃, 메모리 사이즈, 메모리 구조 대기시간,
+	대역폭 제한, I/O 문제등이 그것입니다.}
+\iffalse
+
 These criteria will act together to enforce a maximum speedup.
 The first three criteria are deeply interrelated, so
 the remainder of this section analyzes these
@@ -109,6 +207,18 @@ interrelationships.\footnote{
 	design criteria, such as data-structure layout,
 	memory size, memory-hierarchy latencies, bandwidth limitations,
 	and I/O issues.}
+\fi
+
+이런 규범들은 또한 요구사항의 일부분으로 나타날 수도 있음을 알아 두십시오.
+예를 들어, 속도 향상은 상대적 요구사항으로 (``더 빠르게, 너 좋게'') 나올 수도
+있고 워크로드의 절대적 요구사항으로 (``시스템은 최소한 초당 1,000,000 웹 힛을
+지원해야 한다'') 나올 수도 있습니다.
+고전의 디자인 패턴 언어들은 상대적 요구사항을 효력으로, 그리고 절대적
+요구사항을 문맥으로 이야기 합니다.
+
+이 디자인 규범들 사이의 관계에 대한 이해는 한 병렬 프로그램을 위한 적절한 설계
+트레이드오프를 정하는 데에 매우 도움이 될 수 있을 것입니다.
+\iffalse
 
 Note that these criteria may also appear as part of the requirements
 specification.
@@ -122,7 +232,28 @@ and absolute requirements as context.
 An understanding of the relationships between these design criteria can
 be very helpful when identifying appropriate design tradeoffs for a
 parallel program.
+\fi
 \begin{enumerate}
+\item	프로그램이 크리티컬 섹션들에서 더 적은 시간을 보낼수록, 잠재적인 속도
+	향상은 커집니다.
+	이는 Amdhal 의 법칙~\cite{GeneAmdahl1967AmdahlsLaw} 과, 주어진 시간
+	동안 크리티컬 섹션은 오로지 하나의 CPU 에 의해서만 실행될 수 있다는
+	사실로 인한 결과입니다.
+
+	더 자세히 이야기 하자면, 특정한 갯수의 CPU 들에서 실제 성능 향상을 얻기
+	위해선, 프로그램이 배타적 크리티컬 섹션에서 소모하는 시간의 비율은 CPU
+	들의 수의 역수보다 작아야 합니다.
+	예를 들어, 10 개의 CPU 들을 사용하는 한 프로그램은 잘 확장하기 위해선
+	가장 한정적인 크리티컬 섹션에서는 자신의 시간 중 10분의 1 미만만을
+	사용해야 합니다.
+\item	경쟁은 많은 CPU 와, 또는 벽시계 시간을 소모할 것이어서 실제 성능 향상은
+	사용 가능한 CPU 들의 수보다 작을 것입니다.
+	CPU 들의 수와 실제 속도 향상 사이의 차이가 클수록, CPU 들은 더
+	비효율적으로 사용될 것입니다.
+	유사하게, 원하는 효율성이 클수록 얻을 수 있는 속도 향상은 줄어들
+	것입니다.
+\iffalse
+
 \item	The less time a program spends in critical sections,
 	the greater the potential speedup.
 	This is a consequence of Amdahl's Law~\cite{GeneAmdahl1967AmdahlsLaw}
@@ -144,6 +275,26 @@ parallel program.
 	CPUs will be used.
 	Similarly, the greater the desired efficiency, the smaller
 	the achievable speedup.
+\fi
+\item	사용 가능한 동기화 도구들이 그것들이 지키는 크리티컬 섹션들에 비해 높은
+	오버헤드를 갖는다면, 속도 향상을 개선하는 최선의 방법은 그 도구들이
+	사용되는 횟수를 줄이는 것입니다 (크리티컬 섹션들을 합치거나, 데이터
+	소유권을 사용하거나, 비대칭적으로 도구를
+	사용하거나(Section~\ref{chp:Deferred Processing} 을 참고하세요), 코드
+	락킹과 같이 더 큰 단위를 사용하는 디자인 으로 옮겨가거나 하는
+	방법으로).
+\item	만약 크리티컬 섹션들이 그것들을 지키는 도구들에 비해 높은 오버헤드를
+	갖는다면, 속도 향상을 개선하는 최선의 방법은 reader/writer 락킹, 데이터
+	락킹, 비대칭적, 또는 데이터 소유권을 사용하는 쪽으로 옮겨가서 병렬성을
+	높이는 것입니다.
+\item	크리티컬 섹션들이 그것들을 지키는 도구들에 비해 높은 오버헤드를 갖고
+	보호되는 데이터 구조체에는 수정보다 읽기가 훨씬 많이 수행된다면,
+	병렬성을 높이는 최고의 방법은 reader/writer 락킹이나 비대칭적 도구들을
+	사용하는 것입니다.
+\item	SMP 성능을 개선하는 많은 변경들, 예를 들어 락 경쟁을 줄이는 것은 실시간
+	대기시간도 향상을 시킵니다~\cite{PaulMcKenney2005h}.
+\iffalse
+
 \item	If the available synchronization primitives have
 	high overhead compared to the critical sections
 	that they guard, the best way to improve speedup
@@ -166,14 +317,30 @@ parallel program.
 \item	Many changes that improve SMP performance, for example,
 	reducing lock contention, also improve real-time
 	latencies~\cite{PaulMcKenney2005h}.
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	크리티컬 섹션들과 관련한 이 모든 문제들은 우리가 크리티컬 섹션이 아예
+	없는 non-blocking 동기화~\cite{MauriceHerlihy90a}를 사용해야 한다는
+	의미는 아닌가요?
+	\iffalse
+
 	Don't all these problems with critical sections mean that
 	we should just always use
 	non-blocking synchronization~\cite{MauriceHerlihy90a},
 	which don't have critical sections?
+	\fi
 \QuickQuizAnswer{
+	Non-blocking 동기화는 일부 상황에서는 매우 유용할 수 있지만,
+	만병통치약은 아닙니다.
+	또한, non-blocking 동기화는 Josh Triplett 에 의해 이야기되었듯 실제로는
+	크리티컬 섹션을 갖습니다.
+	예를 들어, compare-and-swap 오퍼레이션에 기반한 한 non-blocking
+	알고리즘에서, 최초의 로드와 이어지는 compare-and-swap 으로 이어지는
+	코드는 여러면에서 락 기반의 크리티컬 섹션과 유사합니다.
+	\iffalse
+
 	Although non-blocking synchronization can be very useful
 	in some situations, it is no panacea.
 	Also, non-blocking synchronization really does have
@@ -182,4 +349,5 @@ parallel program.
 	compare-and-swap operations, the code starting at the
 	initial load and continuing to the compare-and-swap
 	is in many ways analogous to a lock-based critical section.
+	\fi
 } \QuickQuizEnd
