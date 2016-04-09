@@ -99,6 +99,33 @@ issues arise with all forms of synchronization.
 \subsection{Sequential Program}
 \label{sec:SMPdesign:Sequential Program}
 
+프로그램이 싱글 프로세서 위에서 충분히 빨리 돌아간다면, 그리고 다른
+프로세스들이나 쓰레드, 또는 인터럽트 핸들러들과의 상호작용이 없다면, 동기화
+기능들을 모두 제거해서 그것들의 오버헤드와 복잡성을 당신으로부터 떼어놓기
+바랍니다.
+몇년 전에는, Moore 의 법칙이 결국은 모든 프로그램을 이 카테고리로 만들 것이라
+주장하던 사람들도 있었습니다.
+하지만,
+% @@@ Intel Trademark
+Figure~\ref{fig:SMPdesign:Clock-Frequency Trend for Intel CPUs} 에서 볼 수
+있듯이, 싱글 쓰레드의 성능의 기하급수적인 증가는 2003년 정도에 멈췄습니다.
+따라서, 성능을 늘리기 위해선 병렬성을 필요로 할 것입니다.\footnote{
+	이 그림은 이론적으로 클락당 하나 이상의 인스트럭션들을 처리할 수 있는
+	최신 CPU 들의 경우 클락 주파수를, 그리고 하나의 간단한 인스트럭션을
+	처리하는데 여러 클락을 필요로 하는 오래된 CPU 들의 경우 MIPS 를
+	보입니다.
+	이런 접근을 취하는 이유는 클락당 여러 인스트럭션들을 처리하는 최신 CPU
+	들의 기능들은 일반적으로 메모리 시스템 성능에 제한되기 때문입니다.}
+이 새로운 트렌드가 수천개의 CPU 들을 갖는 하나의 칩을 나타나게 할 것인지에 대한
+논쟁은 금방 끝나지 않겠지만, Paul 이 이 문장을 듀얼코어 랩탑으로 쓰고 있다는
+점을 볼 때, SMP 의 시대는 우리에게 와 있는 것으로 보입니다.
+이더넷 대역폭이
+Figure~\ref{fig:SMPdesign:Ethernet Bandwidth vs. Intel x86 CPU Performance}
+에서 볼 수 있듯이 지속적으로 성장하고 있음을 알아두는 것 역시 중요합니다.
+이런 추세는 커뮤니케이션 부하를 처리하기 위해 멀티쓰레드 서버들이 나타나도록
+촉진하는 역할을 할 것입니다.
+\iffalse
+
 If the program runs fast enough on a single processor, and
 has no interactions with other processes, threads, or interrupt
 handlers, you should
@@ -130,6 +157,7 @@ to grow, as shown in
 Figure~\ref{fig:SMPdesign:Ethernet Bandwidth vs. Intel x86 CPU Performance}.
 This growth will motivate multithreaded servers in order to handle
 the communications load.
+\fi
 
 \begin{figure}[htb]
 \begin{center}
@@ -147,6 +175,19 @@ the communications load.
 \label{fig:SMPdesign:Ethernet Bandwidth vs. Intel x86 CPU Performance}
 \end{figure}
 
+이는 당신이 모든 프로그램을 멀티쓰레드 방식으로 코딩해야 한다는 의미가
+\emph{아닙니다}.
+다시 말하지만, 프로그램이 싱글 프로세서에서 충분히 빨리 동작한다면, SMP 동기화
+기능들의 오버헤드와 복잡성으로부터 당신을 멀리 하십시오.
+Figure~\ref{fig:SMPdesign:Sequential-Program Hash Table Search} 에 나와 있는
+해시 테이블 탐색 코드의 단순성이 이 점을 강조합니다.\footnote{
+이 섹션의 예들은 Hart 등~\cite{ThomasEHart2006a} 으로부터 얻어졌으며, 여러
+	파일들로부터 관련된 코드를 모음으로써 켱쾌함을 위해 적용되었습니다.}
+키 포인트는 병렬성으로 인한 속도향상은 CPU 들의 갯수에 제한된다는 것입니다.
+반면, 예컨대 조심스럽게 선택된 데이터 구조와 같은 순차적 최적화를 통한
+속도향상은 얼마든지 클 수 있습니다.
+\iffalse
+
 Please note that this does \emph{not} mean that you should code each
 and every program in a multi-threaded manner.
 Again, if a program runs quickly enough on a single processor,
@@ -162,6 +203,7 @@ A key point is that speedups due to parallelism are normally
 limited to the number of CPUs.
 In contrast, speedups due to sequential optimizations, for example,
 careful choice of data structure, can be arbitrarily large.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -204,7 +246,11 @@ careful choice of data structure, can be arbitrarily large.
 % ./test_hash_null.exe: nmilli: 1000 update/total: 0/100 nelements: 1 nbuckets: 1024 nthreads: 1
 % ./test_hash_null.exe: avg = 93.3568  max = 106.162  min = 89.8828  std = 6.40418
 
+반면, 이런 행복한 상황에 처해 있는 게 아니라면, 계속 읽으세요!
+\iffalse
+
 On the other hand, if you are not in this happy situation, read on!
+\fi
 
 \subsection{Code Locking}
 \label{sec:SMPdesign:Code Locking}
