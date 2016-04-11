@@ -5351,13 +5351,50 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	구조체가 그것의 락이 잡혀 있는 동안은 메모리 해제 되지 않도록 할 수
+	있는 방법들은 어떤 것들이 있을까요?
+	\iffalse
+
 	What are some ways of preventing a structure from being freed while
 	its lock is being acquired?
+	\fi
 \QuickA{}
+	여기 \emph{존재 보장} 문제를 위한 해결책 몇가지가 있습니다:
+	\iffalse
+
 	Here are a few possible solutions to this \emph{existence guarantee}
 	problem:
+	\fi
 
 	\begin{enumerate}
+	\item	구조체별 락이 잡혀 있는 동안 잡혀 있는 정적으로 할당된 락을
+		두는 것으로, 계층적 락킹의 한 예입니다
+		(Section~\ref{sec:SMPdesign:Hierarchical Locking} 을
+		참고하세요).
+		물론, 이런 목적으로 하나의 글로벌 락을 사용하는 것은
+		허용불가능할 정도로 높은 락 경쟁 상황을 가져와서 극적인 성능과
+		확장성의 하락을 가져올 수 있습니다.
+	\item	정적으로 할당된 락들의 배열을 두어서, 구조체의 어드레스를
+		해싱해서 잡아야 할 락을 고르는 것으로,
+		Chapter~\ref{chp:Locking} 에서 설명된 방식입니다.
+		주어진 해시 함수가 충분히 높은 성능을 갖는다면, 이는 하나의
+		글로벌 락이 갖는 확장성의 한계를 해결할 수 있습니다만, 읽기가
+		대부분인 상황에서는 락 획득 오버헤드가 수용불가할 정도로 성능을
+		떨어뜨릴 수 있습니다.
+	\item	가비지 콜렉터를 제공하는 소프트웨어 환경이라면 가비지 콜렉터를
+		사용해서, 구조체가 참조되어 있는 동안은 메모리 해제되지 않도록
+		하는 것입니다.
+		이 방법은 잘 동작하고, 존재-보장의 짐을 (그리고 그외의 것들을)
+		개발자의 어깨에서 내려놓게 하지만, 프로그램의 가비지 콜렉션의
+		오버헤드를 갖습니다.
+		가비지 콜렉션 기술은 지난 수십년간 상당히 진보했지만, 그
+		오버헤드는 일부 어플리케이션에서는 수용하기 어려울 만큼 높을 수
+		있습니다.
+		또한, 일부 어플리케이션들은 개발자가 데이터 구조체의 배치와
+		위치의 조정에 대해 대부분의 가비지 콜렉션 환경에 비해 많은
+		연습을 필요로 할수도 있습니다.
+	\iffalse
+
 	\item	Provide a statically allocated lock that is held while
 		the per-structure lock is being acquired, which is an
 		example of hierarchical locking (see
@@ -5386,6 +5423,37 @@ ret = ~ret & tmp;
 		exercise more control over the layout and placement of
 		data structures than is permitted by most garbage collected
 		environments.
+	\fi
+	\item	가비지 콜렉터의 특수한 경우로, 글로벌 레퍼런스 카운터를 두거나
+		레퍼런스 카운터들의 글로벌한 배열을 두는 방법이 있습니다.
+	\item	안에서-밖으로의 참조 카운트라 생각할 수 있는, \emph{해저드
+		포인터}~\cite{MagedMichael04a} 들을 사용하는 방법이 있습니다.
+		해저드 포인터 기반의 알고리즘들은 쓰레드별 포인터들의 리스트를
+		두어서, 이 리스트들에 있는 포인터의 존재가 연관된 구조체로의
+		참조처럼 동작하게 합니다.
+		해저드 포인터들은 흥미로운 연구 방향입니다만, 상품화 단계
+		(2008년도 시점에선) 에선 아직 잘 쓰여지지 않고 있습니다.
+	\item	트랜잭셔널
+		메모리(TM)~\cite{Herlihy93a,DBLomet1977SIGSOFT,Shavit95} 를
+		사용해서 데이터 구조체로 요청되는 각각의 참조와 수정이
+		어토믹하게 수행되도록 하는 방법이 있습니다.
+		TM 은 최근의 수년간 대단한 흥분을 일으켰고 상품 단계
+		소프트웨어에서 일부 사용될 것처럼 보였지만, 개발자들은 몇가지
+		주의를 기울여야
+		하며~\cite{Blundell2005DebunkTM,Blundell2006TMdeadlock,McKenney2007PLOSTM}
+		이는 특히 성능에 영향을 주는 코드에선 더더욱 그렇습니다.
+		특히, 존재 보장은 트랜잭션이 글로벌 레퍼런스부터 업데이트되는
+		데이터 원소들에 이르기까지 전체를 감싸야 할 것을 필요로 합니다.
+	\item	극단적으로 가벼운 가비지 콜렉터의 추상화로 생각될 수 있는, RCU
+		를 사용하는 것입니다.
+		업데이트를 하는 쪽은 RCU 로 보호되는 데이터 구조체를 RCU
+		읽는쪽이 여전히 참조를 하고 있는 동안은 메모리에서 해제시킬 수
+		없습니다.
+		RCU 는 읽기가 대부분인 데이터 구조체에서 상당히 많이 사용되고
+		있고, Chapter~\ref{chp:Deferred Processing} 에서 이야기될
+		것입니다.
+	\iffalse
+
 	\item	As a special case of a garbage collector, use a global
 		reference counter, or a global array of reference counters.
 	\item	Use \emph{hazard pointers}~\cite{MagedMichael04a}, which
@@ -5416,10 +5484,16 @@ ret = ~ret & tmp;
 		RCU is most heavily used for read-mostly data structures,
 		and is discussed at length in
 		Chapter~\ref{chp:Deferred Processing}.
+	\fi
 	\end{enumerate}
+
+	존재 보장에 대해 더 많은 내용을 위해선 Chapter~\ref{chp:Locking} 과
+	\ref{chp:Deferred Processing} 을 참고하세요.
+	\iffalse
 
 	For more on providing existence guarantees, see
 	Chapters~\ref{chp:Locking} and \ref{chp:Deferred Processing}.
+	\fi
 
 \QuickQ{}
 	How can a single-threaded 64-by-64 matrix multiple possibly
