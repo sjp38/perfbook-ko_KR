@@ -5496,30 +5496,74 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	싱글쓰레드로 동작하는 64 행 64 열 행렬 곱셈이 어떻게 1.0보다 낮은
+	효율성을 가질 수 있죠?
+	Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency} 의 모든
+	조합에서의 결과들이 한 쓰레드에서만 돌아갈 때에는 정확히 1.0 의
+	효율성을 보여야 하는 거 아닌가요?
+	\iffalse
+
 	How can a single-threaded 64-by-64 matrix multiple possibly
 	have an efficiency of less than 1.0?
 	Shouldn't all of the traces in
 	Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency}
 	have efficiency of exactly 1.0 when running on only one thread?
+	\fi
 \QuickA{}
+	\texttt{matmul.c} 프로그램은 명시된 수의 워커 쓰레드들을 생성하므로,
+	하나의 워커 쓰레드만을 생성한 경우에도 쓰레드 생성 오버헤드는 발생할 수
+	있습니다.
+	하나의 워커 쓰레드의 경우에 쓰레드 생성 오버헤드를 없애기 위한 변경을
+	만드는 것은 독자분들의 연습문제로 남겨두겠습니다.
+	\iffalse
+
 	The \texttt{matmul.c} program creates the specified number of
 	worker threads, so even the single-worker-thread case incurs
 	thread-creation overhead.
 	Making the changes required to optimize away thread-creation
 	overhead in the single-worker-thread case is left as an
 	exercise to the reader.
+	\fi
 
 \QuickQ{}
+	행렬 곱셈에서 데이터 병렬화 기법이 어떻게 도움이 될 수 있나요?
+	그건 \emph{이미} 병렬적인 데이터잖아요!!!
+	\iffalse
+
 	How are data-parallel techniques going to help with matrix
 	multiply?
 	It is \emph{already} data parallel!!!
+	\fi
 \QuickA{}
+	주의를 기울이고 있으신 것 같아 기쁩니다!
+	이 예는 데이터 병렬성은 매우 좋은 것이긴 하지만, 어떤 그리고 모든
+	비효율성의 원인을 자동으로 제거하는 마술봉은 아니란 것을 보이기 위한
+	것임을 보이기 위한 것입니다.
+	64 쓰레드에게 ``한정적인'' 상황에서조차도 전체 성능을 가지고 선형적으로
+	성능을 확장하는 데에는 설계와 구현의 모든 단계에서의 세심한 주의가
+	필요합니다.
+	\iffalse
+
 	I am glad that you are paying attention!
 	This example serves to show that although data parallelism can
 	be a very good thing, it is not some magic wand that automatically
 	wards off any and all sources of inefficiency.
 	Linear scaling at full performance, even to ``only'' 64 threads,
 	requires care at all phases of design and implementation.
+	\fi
+
+	특히, 분할된 조각의 크기에 매우 세심한 관심을 기울여야만 합니다.
+	예를 들어, 64 행 64 열 행렬 곱셈 문제를 64 쓰레드에게 쪼갠다면, 각
+	쓰레드는 64 개의 부동소수점 곱셈 연산만을 하게 될 것입니다.
+	부동소수점 곱셈 연산의 비용은 쓰레드 생성의 오버헤드에 비하면 매우
+	작습니다.
+
+	교훈: 변화무쌍한 입력을 받을 수 있는 병렬 프로그램을 가지고 있다면,
+	항상 입력의 크기를 체크하는 과정을 포함시켜서 병렬화 시킬 가치가 없을
+	정도로 너무 작은 입력 사이즈에 대응하도록 하십시오.
+	그리고 병렬화에 도움이 되지 않을 정도라면, 쓰레드를 생성하는데 필요한
+	오버헤드를 감내하기에도 도움이 되지 않을 정도입니다, 그렇죠?
+	\iffalse
 
 	In particular, you need to pay careful attention to the
 	size of the partitions.
@@ -5533,6 +5577,7 @@ ret = ~ret & tmp;
 	be worth parallelizing.
 	And when it is not helpful to parallelize, it is not helpful
 	to incur the overhead required to spawn a thread, now is it?
+	\fi
 
 \QuickQ{}
 	In what situation would hierarchical locking work well?

@@ -859,6 +859,23 @@ Chapter~\ref{chp:Data Ownership}.
 \subsection{Locking Granularity and Performance}
 \label{sec:SMPdesign:Locking Granularity and Performance}
 
+이 섹션은 락킹 빈도와 성능 사이의 관계를 수학적인 동기화 효율성 관점에서
+살펴봅니다.
+수학이 지루한 독자분들은 이 섹션을 건너뛰셔도 됩니다.
+
+사용할 방법은 하나의 공유되는 글로벌 변수에 대해 동작하는 동기화 메커니즘의
+효율성을 위한 간단한 큐잉 모델을 M/M/1 큐를 기반으로 사용해 보는 것입니다.
+M/M/1 큐잉 모델들은 지수적으로 분포되는 ``도착간 비율 (inter-arrival rate)''
+$\lambda$ 와 지수적으로 분포되는 ``서비스 비율 (service rate)'' $\mu$ 에
+기반합니다.
+도착간 비율 $\lambda$ 는 만약 동기화 비용이 전혀 들지 않는다면 시스템이 처리할
+수 있는, 초당 동기화 오퍼레이션들의 평균 숫자로 생각될 수 있는데, 달리 말하자면
+$\lambda$ 는 작업의 비동기 유닛의 오버헤드의 역수입니다.
+예를 들어, 일의 각 유닛이 트랜잭션이고, 각 트랜잭션이 처리되는데 동기화
+오버헤드를 제외하고 1 밀리세컨드가 걸린다면, $\lambda$ 는 초당 1,000 트랜잭션이
+될 것입니다.
+\iffalse
+
 This section looks at locking granularity and performance from
 a mathematical synchronization-efficiency viewpoint.
 Readers who are uninspired by mathematics might choose to skip
@@ -878,6 +895,28 @@ unit of work.
 For example, if each unit of work was a transaction, and if each transaction
 took one millisecond to process, excluding synchronization overhead,
 then $\lambda$ would be 1,000 transactions per second.
+\fi
+
+서비스 비율 $\mu$ 는 비슷하게 정의됩니다만, CPU 들이 각자의 동기화
+오퍼레이션들을 완료하기를 기다려야 한다는 사실을 무시하고 각 트랜잭션의
+오버헤드가 존재하지 않는다면 시스템이 1초 안에 처리할 수 있는 동기화
+오퍼레이션들의 수의 평균으로, 달리 말하자면, $\mu$ 는 컨텐션이 없을 때의 동기화
+오버헤드라고 생각될 수 있겠습니다.
+예를 들어, 각 동기화 오퍼레이션이 어토믹 값 증가 인스트럭션을 내포하고 있고,
+컴퓨터 시스템은 각 CPU 에서 각자의 변수에 25 나노세컨드마다 어토믹 값 증가
+인스트럭션을 수행할 수 있다고 해 봅시다.\footnote{
+	물론, 같은 공유 변수의 값을 증가시키는 8 개의 CPU 가 존재한다면, 각각의
+	CPU 는 자신의 값 증가 작업을 위해 25 나노세컨드를 소모하기 전에 다른
+	CPU 들이 각자의 값 증가 작업을 마무리 할 때까지 175 나노세컨드를
+	기다려야 할 것입니다.
+	실제로는, 이 대기는 더 길어질텐데 그 변수를 한 CPU 에서 다른 CPU 로
+	옮기는 시간도 걸리기 때문입니다.}
+따라서 $\mu$ 의 값은 초당 40,000,000 어토믹 값 증가 일 것입니다.
+
+물론, $\lambda$ 의 값은 CPU 수가 늘어나면 함께 늘어날텐데, 각 CPU 가 독립적으로
+트랜잭션들을 처리할 수 있기 때문입니다 (다시 말하지만, 동기화를 무시합니다):
+
+\iffalse
 
 The service rate $\mu$ is defined similarly, but for the average
 number of synchronization operations per second that the system
@@ -901,10 +940,20 @@ per second.
 Of course, the value of $\lambda$ increases with increasing numbers of
 CPUs, as each CPU is capable of processing transactions independently
 (again, ignoring synchronization):
+\fi
 
 \begin{equation}
 	\lambda = n \lambda_0
 \end{equation}
+
+$n$ 은 CPU 들의 갯수이고 $\lambda_0$ 는 단일 CPU 의 트랜잭션 처리 가능량입니다.
+단일 CPU 가 하나의 트랜잭션을 처리하는데 걸릴 것으로 기대되는 시간은
+$1 / \lambda_0$ 임을 기억해 두십시오.
+
+이 CPU 들은 다른 CPU 들이 각각 하나의 공유 변수의 값을 증가시킬 동안
+``줄을 서서 기다려야'' 하기 때문에, 기대되는 전체 대기 시간을 표현하는데 M/M/1
+큐잉 모델을 다음과 같이 사용할 수 있습니다:
+\iffalse
 
 where $n$ is the number of CPUs and $\lambda_0$ is the transaction-processing
 capability of a single CPU.
@@ -914,35 +963,56 @@ is $1 / \lambda_0$.
 Because the CPUs have to ``wait in line'' behind each other to get their
 chance to increment the single shared variable, we can use the M/M/1
 queueing-model expression for the expected total waiting time:
+\fi
 
 \begin{equation}
 	T = \frac{1}{\mu - \lambda}
 \end{equation}
 
+앞의 $\lambda$ 값을 대입하면:
+\iffalse
+
 Substituting the above value of $\lambda$:
+\fi
 
 \begin{equation}
 	T = \frac{1}{\mu - n \lambda_0}
 \end{equation}
 
+이제, 효율성은 동기화 없을 때 트랜잭션 하나를 처리하는데 필요한 시간 ($1 /
+\lambda_0$) 과 동기화를 포함해서 필요한 시간 ($T + 1 / \lambda_0$) 사이의
+비율입니다:
+\iffalse
+
 Now, the efficiency is just the ratio of the time required to process
 a transaction in absence of synchronization ($1 / \lambda_0$)
 to the time required including synchronization ($T + 1 / \lambda_0$):
+\fi
 
 \begin{equation}
 	e = \frac{1 / \lambda_0}{T + 1 / \lambda_0}
 \end{equation}
 
+앞의 $T$ 값을 대입하고 간략화 하면:
+\iffalse
+
 Substituting the above value for $T$ and simplifying:
+\fi
 
 \begin{equation}
 	e = \frac{\frac{\mu}{\lambda_0} - n}{\frac{\mu}{\lambda_0} - (n - 1)}
 \end{equation}
 
+하지만 $\mu / \lambda_0$ 의 값은 그저 트랜잭션을 처리하는데 필요한 시간과
+(경쟁상황이 없는 상태에서의) 동기화 자체 오버헤드 간의 비율입니다.
+이 비율을 $f$ 라고 하면, 이렇게 됩니다:
+\iffalse
+
 But the value of $\mu / \lambda_0$ is just the ratio of the time required
 to process the transaction (absent synchronization overhead) to that of 
 the synchronization overhead itself (absent contention).
 If we call this ratio $f$, we have:
+\fi
 
 \begin{equation}
 	e = \frac{f - n}{f - (n - 1)}
@@ -955,6 +1025,20 @@ If we call this ratio $f$, we have:
 \caption{Synchronization Efficiency}
 \label{fig:SMPdesign:Synchronization Efficiency}
 \end{figure}
+
+Figure~\ref{fig:SMPdesign:Synchronization Efficiency} 는 동기화 효율성 $e$ 가
+CPU/쓰레드 수 $n$ 에 의해 변화되는 모습을 오버헤드 비율 $f$ 몇개의 값과 함께
+보여줍니다.
+예를 들어, 25 나노세컨드 걸리는 어토믹 값 증가 연산을 사용하면 $f=10$ 선은 각
+CPU 가 매 250 나노세컨드마다 어토믹 값 증가 연산을 시도하고, $f=100$ 라인은 각
+CPU 가 수천개의 인스트럭션이 처리될 수 있는 시간인 2.5 마이크로세컨드마다
+어토믹 값 증가 연산을 시도합니다.
+각 조합의 결과가 CPU 나 쓰레드의 수가 늘어남에 따라 급격하게 떨어지는 것으로
+보아, 하나의 글로벌 공유 변수에의 어토믹 조정을 통한 동기화 메커니즘은 현재의
+하드웨어에서 많이 사용되면 잘 확장되지 못할 것이라 결론 내릴 수 있습니다.
+이건 이 규칙들을 수학적으로 그려본 것으로, Chapter~\ref{chp:Counting} 에서
+이야기한 병렬 카운팅 알고리즘을 이끌어내게 합니다.
+\iffalse
 
 Figure~\ref{fig:SMPdesign:Synchronization Efficiency} plots the synchronization
 efficiency $e$ as a function of the number of CPUs/threads $n$ for
@@ -971,6 +1055,18 @@ atomic manipulation of a single global shared variable will not
 scale well if used heavily on current commodity hardware.
 This is a mathematical depiction of the forces leading to the parallel
 counting algorithms that were discussed in Chapter~\ref{chp:Counting}.
+\fi
+
+이 효율성 컨셉은 정규적인 동기화가 적거나 아예 없을 때에도 효과적입니다.
+예를 들어, 한 행렬의 행이 (``dot product'' 로) 다른 행렬의 열로 곱해져 세번째
+행렬을 만들어내는 행렬 곱셈을 생각해 봅시다.
+이 오퍼레이션들은 서로 겹치지 않기 대문에, 첫번째 행렬의 행들을 쓰레드들에
+분할시키고 각 쓰레드는 결과 행렬의 연관된 행을 계산하는 것이 가능합니다.
+따라서 이 쓰레드들은 \texttt{matmul.c} 에서와 같이 아무런 동기화 오버헤드 없이
+완전히 독립적으로 동작할수 있습니다.
+따라서 병렬적 행렬 곱셈은 완벽한 효율성, 1.0을 가질 것이라 예상할 수도
+있습니다.
+\iffalse
 
 The concept of efficiency is useful even in cases having little or
 no formal synchronization.
@@ -985,6 +1081,7 @@ synchronization overhead whatsoever, as is done in
 \texttt{matmul.c}.
 One might therefore expect a parallel matrix multiply to have a
 perfect efficiency of 1.0.
+\fi
 
 \begin{figure}[tbp]
 \begin{center}
@@ -993,6 +1090,17 @@ perfect efficiency of 1.0.
 \caption{Matrix Multiply Efficiency}
 \label{fig:SMPdesign:Matrix Multiply Efficiency}
 \end{figure}
+
+하지만,
+Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency} 는 다르게 이야기하는데,
+특히 64 행 64 열 행렬 곱셈에서는 0.7 보다 나은 효율성을 절대 갖지 못합니다,
+싱글쓰레드고 동작하는데도 불구하고 말이지요.
+512 행 512 열 행렬 곱셈의 효율성은 10 쓰레드 아래에서는 1.0보다 조금 작은
+것으로 측정되며 심지어 1024 행 1024 열 행렬 곱셈조차도 수십 쓰레드에서는 완벽한
+효율성을 벗어나게 되고 맙니다.
+더도 아니고 덜도 아니고, 이 그림은 몰아서 처리하기의 성능과 확장성에서의 이점을
+분명하게 보여주고 있으며, 이로 인해 당신의 돈의 가치도 알 수 있게 해줍니다.
+\iffalse
 
 However,
 Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency}
@@ -1005,39 +1113,90 @@ multiply deviates noticeably from perfection at a few tens of threads.
 Nevertheless, this figure clearly demonstrates the performance and
 scalability benefits of batching: If you must incur synchronization
 overhead, you may as well get your money's worth.
+\fi
 
 \QuickQuiz{}
+	싱글쓰레드로 동작하는 64 행 64 열 행렬 곱셈이 어떻게 1.0보다 낮은
+	효율성을 가질 수 있죠?
+	Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency} 의 모든
+	조합에서의 결과들이 한 쓰레드에서만 돌아갈 때에는 정확히 1.0 의
+	효율성을 보여야 하는 거 아닌가요?
+	\iffalse
+
 	How can a single-threaded 64-by-64 matrix multiple possibly
 	have an efficiency of less than 1.0?
 	Shouldn't all of the traces in
 	Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency}
 	have efficiency of exactly 1.0 when running on only one thread?
+	\fi
 \QuickQuizAnswer{
+	\texttt{matmul.c} 프로그램은 명시된 수의 워커 쓰레드들을 생성하므로,
+	하나의 워커 쓰레드만을 생성한 경우에도 쓰레드 생성 오버헤드는 발생할 수
+	있습니다.
+	하나의 워커 쓰레드의 경우에 쓰레드 생성 오버헤드를 없애기 위한 변경을
+	만드는 것은 독자분들의 연습문제로 남겨두겠습니다.
+	\iffalse
+
 	The \texttt{matmul.c} program creates the specified number of
 	worker threads, so even the single-worker-thread case incurs
 	thread-creation overhead.
 	Making the changes required to optimize away thread-creation
 	overhead in the single-worker-thread case is left as an
 	exercise to the reader.
+	\fi
 } \QuickQuizEnd
+
+이런 비효율성 아래, Section~\ref{sec:SMPdesign:Data Locking} 에서 이야기한
+데이터 락킹과 같이 더 확장성 있는 방법을 생각해 보거나 다음 섹션에서 다룰 병렬
+상황 빠른 수행 경로 해결책을 고려해 보는것도 가치가 있을 것입니다.
+\iffalse
 
 Given these inefficiencies,
 it is worthwhile to look into more-scalable approaches
 such as the data locking described in
 Section~\ref{sec:SMPdesign:Data Locking}
 or the parallel-fastpath approach discussed in the next section.
+\fi
 
 \QuickQuiz{}
+	행렬 곱셈에서 데이터 병렬화 기법이 어떻게 도움이 될 수 있나요?
+	그건 \emph{이미} 병렬적인 데이터잖아요!!!
+	\iffalse
+
 	How are data-parallel techniques going to help with matrix
 	multiply?
 	It is \emph{already} data parallel!!!
+	\fi
 \QuickQuizAnswer{
+	주의를 기울이고 있으신 것 같아 기쁩니다!
+	이 예는 데이터 병렬성은 매우 좋은 것이긴 하지만, 어떤 그리고 모든
+	비효율성의 원인을 자동으로 제거하는 마술봉은 아니란 것을 보이기 위한
+	것임을 보이기 위한 것입니다.
+	64 쓰레드에게 ``한정적인'' 상황에서조차도 전체 성능을 가지고 선형적으로
+	성능을 확장하는 데에는 설계와 구현의 모든 단계에서의 세심한 주의가
+	필요합니다.
+	\iffalse
+
 	I am glad that you are paying attention!
 	This example serves to show that although data parallelism can
 	be a very good thing, it is not some magic wand that automatically
 	wards off any and all sources of inefficiency.
 	Linear scaling at full performance, even to ``only'' 64 threads,
 	requires care at all phases of design and implementation.
+	\fi
+
+	특히, 분할된 조각의 크기에 매우 세심한 관심을 기울여야만 합니다.
+	예를 들어, 64 행 64 열 행렬 곱셈 문제를 64 쓰레드에게 쪼갠다면, 각
+	쓰레드는 64 개의 부동소수점 곱셈 연산만을 하게 될 것입니다.
+	부동소수점 곱셈 연산의 비용은 쓰레드 생성의 오버헤드에 비하면 매우
+	작습니다.
+
+	교훈: 변화무쌍한 입력을 받을 수 있는 병렬 프로그램을 가지고 있다면,
+	항상 입력의 크기를 체크하는 과정을 포함시켜서 병렬화 시킬 가치가 없을
+	정도로 너무 작은 입력 사이즈에 대응하도록 하십시오.
+	그리고 병렬화에 도움이 되지 않을 정도라면, 쓰레드를 생성하는데 필요한
+	오버헤드를 감내하기에도 도움이 되지 않을 정도입니다, 그렇죠?
+	\iffalse
 
 	In particular, you need to pay careful attention to the
 	size of the partitions.
@@ -1051,6 +1210,7 @@ or the parallel-fastpath approach discussed in the next section.
 	be worth parallelizing.
 	And when it is not helpful to parallelize, it is not helpful
 	to incur the overhead required to spawn a thread, now is it?
+	\fi
 } \QuickQuizEnd
 
 \section{Parallel Fastpath}
