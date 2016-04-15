@@ -1378,6 +1378,15 @@ Chapter~\ref{chp:Locking}.
 \subsection{Hierarchical Locking}
 \label{sec:SMPdesign:Hierarchical Locking}
 
+계층적 락킹의 아이디어는 잘게 쪼개진 락을 잡는 동작을 하는 동안만 잡는 굵게
+쪼개진 락을 두자는 것입니다.
+Figure~\ref{fig:SMPdesign:Hierarchical-Locking Hash Table Search}
+는 해시 테이블 탐색에 계층적 락킹이 어떻게 사용될 수 있을지 보여주는데, 또한 이
+방법의 커다란 단점 역시 보여줍니다:
+두번째 락을 잡기 위한 오버헤드를 감내했지만, 그 락은 짧은 시간동안만 잡습니다.
+이 경우, 간단한 데이터 락킹 방법은 더 간단하고 더 좋은 성능을 보일 것입니다.
+\iffalse
+
 The idea behind hierarchical locking is to have a coarse-grained lock
 that is held only long enough to work out which fine-grained lock
 to acquire.
@@ -1388,6 +1397,7 @@ we have paid the overhead of acquiring a second lock, but we only
 hold it for a short time.
 In this case, the simpler data-locking approach would be simpler
 and likely perform better.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -1438,14 +1448,26 @@ and likely perform better.
 \end{figure}
 
 \QuickQuiz{}
+	계층적 락킹이 잘 동작할 만한 상황은 뭐가 있을까요?
+	\iffalse
+
 	In what situation would hierarchical locking work well?
+	\fi
 \QuickQuizAnswer{
+	Figure~\ref{fig:SMPdesign:Hierarchical-Locking Hash Table Search} 의
+	라인~31 에서의 비교 연산이 훨씬 무거운 연산으로 교체된다면, {\tt
+	bp->bucket\_lock} 을 놓는 작업은 \emph{아마도} 락 경쟁을 충분히
+	줄여줘서 추가적인 {\tt cur->node\_lock} 의 획득과 해제에 드는
+	오버헤드보다 우세해질 수도 있을 것입니다.
+	\iffalse
+
 	If the comparison on line~31 of
 	Figure~\ref{fig:SMPdesign:Hierarchical-Locking Hash Table Search}
 	were replaced by a much heavier-weight operation,
 	then releasing {\tt bp->bucket\_lock} \emph{might} reduce lock
 	contention enough to outweigh the overhead of the extra
 	acquisition and release of {\tt cur->node\_lock}.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Resource Allocator Caches}
