@@ -1667,6 +1667,23 @@ smaller than the number of non-\co{NULL} pointers.
 
 \subsubsection{Allocation Function}
 
+할당을 하는 함수인 \co{memblock_alloc()} 을
+Figure~\ref{fig:SMPdesign:Allocator-Cache Allocator Function} 에서 확인할 수
+있습니다.
+Line~7 에서는 현재 쓰레드의 per-thread 풀을 가져오고, line~8 에서 그게
+비어있는지 확인합니다.
+
+만약 그렇다면, line~9-16 에서 line~9 에서 획득하고 line~16 에서 해제하는 스핀락
+아래 글로벌 풀로부터 해당 per-thread 풀을 채우려 시도합니다.
+Line~10-14 는 블럭들을 글로벌에서 per-thread 풀로 로컬 풀이 목표로 하는 크기
+(절반) 에 도달하거나 글로벌 풀이 텅 빌 때까지 옮기고, line~15 에서는 per-thread
+풀의 수를 올바른 값으로 설정합니다.
+
+어떤 경우든, line~18 에서 per-thread 풀이 여전히 비어있는지 확인하고, 만약
+그렇지 않다면, line~19-21 에서 블럭 하나를 제거하고 그걸 리턴합니다.
+그렇지 않다면, line~23 에서 메모리가 부족하다는 슬픈 이야기를 전합니다.
+\iffalse
+
 The allocation function \co{memblock_alloc()} may be seen in
 Figure~\ref{fig:SMPdesign:Allocator-Cache Allocator Function}.
 Line~7 picks up the current thread's per-thread pool,
@@ -1682,6 +1699,7 @@ count to the proper value.
 In either case, line~18 checks for the per-thread pool still being
 empty, and if not, lines~19-21 remove a block and return it.
 Otherwise, line~23 tells the sad tale of memory exhaustion.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
