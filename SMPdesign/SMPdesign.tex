@@ -2084,6 +2084,19 @@ this book.
 
 \subsubsection{Real-World Design}
 
+이 장난감 병렬 리소스 할당자는 상당히 간단했습니다만 실제 세계에서의 설계는 이
+방법으로부터 여러가지 방법으로 확장됩니다.
+
+먼저, 실제 세계에서의 할당자는 넓은 범위의 할당 크기들을 다룰 수 있어야 하는데,
+이 장난감 예제에서 보았던 단일한 크기와 반대됩니다.
+이를 해결하는 대중적인 방법 하나는 1980년대 후반 BSD 메모리
+할당자~\cite{McKusick88} 같은 방식으로, 고정된 크기들의 집합을 제공하는 것인데,
+외부의, 그리고 내부의 파편화 문제를 균형 맞추기 위해 그렇게 공간을 사용합니다.
+이렇게 하는 것은 곧 ``globalmem'' 변수가 크기별로 복사본이 존재해야 함을
+의미하고, 연관된 락 역시 비슷하게 복사되어야 해서, 이 장난감 프로그램의 코드
+락킹보다는 데이터 락킹에 가까운 결과를 이끌어낼 것입니다.
+\iffalse
+
 The toy parallel resource allocator was quite simple, but real-world
 designs expand on this approach in a number of ways.
 
@@ -2097,6 +2110,25 @@ Doing this would mean that the ``globalmem'' variable would need
 to be replicated on a per-size basis, and that the associated
 lock would similarly be replicated, resulting in data locking
 rather than the toy program's code locking.
+\fi
+
+두번째로, 상품 단계 품질의 시스템들은 메모리의 용도를 바꿀수도 있어야만 하는데,
+다시 말해 그것들은 블럭들을 합체해서 페이지~\cite{McKenney93} 와 같은 더 큰
+구조체로 만들어질 수도 있어야만 합니다.
+이 합체 역시 락으로 보호되어야 하는데, 이것 역시 앞의 것들과 마찬가지로
+크기별로 복사본이 있어야 할 수 있습니다.
+
+세번째로, 합쳐진 메모리는 아랫단의 메모리 시스템에 반환되어야만 하고, 메모리의
+페이지들은 또한 그 아랫단의 메모리 시스템들로부터 할당되어야만 합니다.
+이 단계에서 필요한 락킹은 이 아랫단의 메모리 시스템에 의존적일 것입니다만, 코드
+락킹이 될 수도 있습니다.
+코드 락킹은 종종 이 단계에서 받아들여질 수 있는데, 이 단계에 도달하는 것은 잘
+설계된 시스템에서는 매우 희박하게 이루어지기 때문입니다~\cite{McKenney01e}.
+
+이 실제 세계 설계의 커다란 복잡도에도 불구하고, 그 아래 자리잡고 있는
+아이디어는 똑같습니다 --- Table~\ref{fig:app:questions:Schematic of Real-World
+Parallel Allocator} 에 보인것과 같은 병렬 빠른 수행 경로의 반복적인 적용.
+\iffalse
 
 Second, production-quality systems must be able to repurpose memory,
 meaning that they must be able to coalesce blocks into larger structures,
@@ -2116,6 +2148,7 @@ Despite this real-world design's greater complexity, the underlying
 idea is the same --- repeated application of parallel fastpath,
 as shown in
 Table~\ref{fig:app:questions:Schematic of Real-World Parallel Allocator}.
+\fi
 
 \begin{table}[htbp]
 { \scriptsize
