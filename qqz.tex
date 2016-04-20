@@ -5602,18 +5602,48 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	Figure~\ref{fig:SMPdesign:Allocator Cache Performance} 에서, 세개의
+	샘플들마다 할당 수행 시간 길이가 증가함에 따라 성능이 따라 증가하는
+	패턴이 존재하는데, 예를 들어, 할당 수행 시간 길이 10, 11, 12 의
+	경우입니다.
+	왜 그런거죠?
+	\iffalse
+
 	In Figure~\ref{fig:SMPdesign:Allocator Cache Performance},
 	there is a pattern of performance rising with increasing run
 	length in groups of three samples, for example, for run lengths
 	10, 11, and 12.
 	Why?
+	\fi
 \QuickA{}
+	이는 per-CPU 타겟 값이 3이기 때문입니다.
+	할당 수행 시간 길이 12 의 경우는 글로벌 풀 락을 두번 잡아야 하는데,
+	반면 할당 수행 시간 길이 13은 글로벌 풀 락을 세번 잡아야 합니다.
+	\iffalse
+
 	This is due to the per-CPU target value being three.
 	A run length of 12 must acquire the global-pool lock twice,
 	while a run length of 13 must acquire the global-pool lock
 	three times.
+	\fi
 
 \QuickQ{}
+	할당 실패 횟수들은 두개 쓰레드를 사용한 테스트에서 할당 수행 길이가 19
+	이상일 때 발견되었습니다.
+	글로벌 풀 사이즈가 40 이고 per-thread 타겟 풀 사이즈 $s$ 가 3이고,
+	쓰레드의 갯수 $n$ 가 2이며, per-thread 풀들은 초기에 비어있고 메모리를
+	아무도 사용하고 있지 않다고 가정하는 조건 하에서, 할당 실패가 발생할 수
+	있는 최소의 할당 수행 시간 길이 $m$ 은 무엇일까요?
+	(각 쓰레드는 메모리의 $m$ 블럭을 할당받고 $m$ 블럭의 메모리를 해제하는
+	것을 반복함을 다시 이야기 합니다.)
+	그 대신에, $n$ 쓰레드들이 각각 풀 사이즈 $s$ 를 갖는다면, 그리고 각
+	쓰레드가 먼저 메모리의 $m$ 개 블럭을 할당받고 그 $m$ 블럭들을 해제하는
+	것을 반복한다고 하는 조건이라면, 글로벌 풀 사이즈는 얼마나 커야 할까요?
+	\emph{Note:} 올바른 답을 얻기 위해서는 \co{smpalloc.c} 소스 코드를
+	자세히 들여다보고, 한단계 한단계씩 들여다봐야 할 겁니다.
+	분명 경고했어요!
+	\iffalse
+
 	Allocation failures were observed in the two-thread
 	tests at run lengths of 19 and greater.
 	Given the global-pool size of 40 and the per-thread target
@@ -5631,7 +5661,21 @@ ret = ~ret & tmp;
 	examine the \co{smpalloc.c} source code, and very likely
 	single-step it as well.
 	You have been warned!
+	\fi
 \QuickA{}
+	이 답안은 Alexey Roytman 이 제출한 것으로부터 받아들여졌습니다.
+	이는 다음의 정의에 기초합니다:
+	\begin{description}
+	\item[$g$]	전역적으로 사용 가능한 블럭들의 갯수
+	\item[$i$]	초기화 쓰레드의 per-thread 풀에 남아 있는 블럭들의 수.
+			(이게 코드를 들여다봐야 하는 이유 중 하나입니다!)
+	\item[$m$]	할당/해제 수행 시간 길이.
+	\item[$n$]	초기화 쓰레드를 제외한 쓰레드의 수.
+	\item[$p$]	실제로 할당된 블럭들과 per-thread 풀에 남아있는
+			블럭들을 포함해서 쓰레드 당 최대 블럭 소비량.
+	\end{description}
+	\iffalse
+
 	This solution is adapted from one put forward by Alexey Roytman.
 	It is based on the following definitions:
 
@@ -5646,16 +5690,26 @@ ret = ~ret & tmp;
 			both the blocks actually allocated and the blocks
 			remaining in the per-thread pool.
 	\end{description}
+	\fi
+
+	$g$, $m$, 그리고 $n$ 의 값은 문제에서 이미 주어졌습니다.
+	$p$ 의 값은 $m$ 을 $s$ 의 배수로 반올림된 값으로, 다음과 같습니다:
+	\iffalse
 
 	The values $g$, $m$, and $n$ are given.  The value for $p$ is
 	$m$ rounded up to the next multiple of $s$, as follows:
+	\fi
 
 	\begin{equation}
 		p = s \left \lfloor \frac{m + s - 1}{s} \right \rfloor
 	\label{sec:SMPdesign:p}
 	\end{equation}
 
+	$i$ 의 값은 다음과 같습니다:
+	\iffalse
+
 	The value for $i$ is as follows:
+	\fi
 
 	\begin{equation}
 		i = \left \{
@@ -5675,6 +5729,25 @@ ret = ~ret & tmp;
 	\label{fig:SMPdesign:Allocator Cache Run-Length Analysis}
 	\end{figure}
 
+	이 값들 사이의 관계는
+	Figure~\ref{fig:SMPdesign:Allocator Cache Run-Length Analysis} 에
+	보여진 것과 같습니다.
+	글로벌 풀은 이 그림의 꼭대기에 그려져 있고, ``나머지'' 초기화 쓰레드의
+	쓰레드별 풀과 쓰레드별 할당은 가장 왼쪽의 두개의 박스들로 그려져
+	있습니다.
+	이 초기화 쓰레드는 할당된 블럭을 가지고 있지 않습니다만, $i$ 개의
+	블럭들이 초기화 쓰레드의 쓰레드별 풀에 고립되어 있습니다.
+	가장 오른쪽의 두개의 박스들은 최대 가능한 수의 블럭을 쥐고 있는
+	쓰레드들의 쓰레드별 풀들과 쓰레드별 할당들이고, 왼쪽에서 두번째의
+	박스들은 현재 할당을 시도하고 있는 쓰레드를 가리킵니다.
+
+	블럭 전체의 갯수는 $g$ 이고, 쓰레드별 할당과 쓰레드별 풀들을 함께
+	고려해보면, 우리는 글로벌 풀이 $g-i-p(n-1)$ 블럭들을 가지고 있음을 알
+	수 있습니다.
+	할당을 하는 쓰레드가 할당에 성공하려면, 글로벌 풀에는 최소한 $m$ 개의
+	블럭들은 남아 있어야 하는데, 달리 말하자면 다음과 같습니다:
+	\iffalse
+
 	The relationships between these quantities is shown in
 	Figure~\ref{fig:SMPdesign:Allocator Cache Run-Length Analysis}.
 	The global pool is shown on the top of this figure, and
@@ -5692,11 +5765,27 @@ ret = ~ret & tmp;
 	contains $g-i-p(n-1)$ blocks.
 	If the allocating thread is to be successful, it needs at least
 	$m$ blocks in the global pool, in other words:
+	\fi
 
 	\begin{equation}
 		g - i - p(n - 1) \ge m
 	\label{sec:SMPdesign:g-vs-m}
 	\end{equation}
+
+	문제에서 $g=40$, $s=3$, $n=2$ 였습니다.
+	Equation~\ref{sec:SMPdesign:i} 에 따라 $i=4$ 이고
+	Equation~\ref{sec:SMPdesign:p} 에 따라 $m=18$ 이면 $p=18$ 이고 $m=19$
+	이면 $p=21$ 입니다.
+	이것들을 Equation~\ref{sec:SMPdesign:g-vs-m} 에 대입해 보면 $m=18$ 은
+	넘치지 않는 반면, $m=19$ 는 넘칠 것을 알 수 있습니다.
+
+	$i$ 의 존재는 버그로 여겨질 수도 있을 것입니다.
+	무엇보다도, 왜 메모리를 초기화 쓰레드의 캐시에 고립된 채로 남겨둡니까?
+	이를 고치는 한가지 방법은 현재 쓰레드의 풀을 글로벌 풀로 비워버리는
+	\co{memblock_flush()} 함수를 제공하는 것이 될 것입니다.
+	그렇게 되면 이 초기화 쓰레드는 블럭들을 모두 해제한 이후에 이 함수를
+	호출할 수 있을 것입니다.
+	\iffalse
 
 	The question has $g=40$, $s=3$, and $n=2$.
 	Equation~\ref{sec:SMPdesign:i} gives $i=4$, and
@@ -5714,6 +5803,7 @@ ret = ~ret & tmp;
 	global pool.
 	The initialization thread could then invoke this function
 	after freeing all of the blocks.
+	\fi
 
 \QuickQAC{chp:Locking}{Locking}
 \QuickQ{}
