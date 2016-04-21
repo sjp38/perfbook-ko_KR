@@ -4,6 +4,20 @@
 \label{sec:SMPdesign:Beyond Partitioning}
 \OriginallyPublished{Section}{sec:SMPdesign:Beyond Partitioning}{Retrofitted Parallelism Considered Grossly Sub-Optimal}{4\textsuperscript{th} USENIX Workshop on Hot Topics on Parallelism}{PaulEMcKenney2012HOTPARsuboptimal}
 
+이 챕터에서는 데이터 파티셔닝이 간단한 선형적으로 확장 가능한 병렬 프로그램을
+설계하는데 사용될 수 있는지 알아봤습니다.
+Section~\ref{sec:SMPdesign:Data Ownership} 에서는 데이터 복사 가능성에서 힌트를
+얻었는데, 이는 Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 커다란
+효과를 가져올 것입니다.
+
+파티셔닝과 복사본 사용을 적용하는 주요 목표는 선형적인 속도 향상을 얻기 위한
+것으로, 달리 말하자면 CPU 나 쓰레드의 수가 늘어남에 따라 전체적으로 필요한 일의
+양이 크게 늘어나지는 않음을 보장하기 위한 것입니다.
+파티셔닝과 복사본 사용을 통해 해결될 수 있어서 선형적인 속도향상이 가능한
+문제들은 \emph{당혹스럽게 병렬적} 입니다.
+하지만 이보다 더 잘할 수는 없을까요?
+\iffalse
+
 This chapter has discussed how data partitioning can be used to design
 simple linearly scalable parallel programs.
 Section~\ref{sec:SMPdesign:Data Ownership} hinted at the possibilities
@@ -17,6 +31,19 @@ or threads increases.
 A problem that can be solved via partitioning and/or replication,
 resulting in linear speedups, is \emph{embarrassingly parallel}.
 But can we do better?
+\fi
+
+이 질문에 답을 하기 위해, 미궁과 미로의 해결책을 생각해 보도록 합시다.
+물론, 미궁과 미로는 수천년동안 매력적인 것이었으며~\cite{WikipediaLabyrinth},
+따라서 그것들이 바이오 컴퓨터~\cite{AndrewAdamatzky2011SlimeMold},
+GPGPU~\cite{ChristerEricson2008GPUMaze}, 심지어는 분리된
+하드웨어~\cite{MIT:TRMag:MemristorMazes} 등의 컴퓨터들을 사용해서 만들어지고
+해결되었음은 별로 놀라운 일도 아닙니다.
+미로의 병렬적 해결책은 대학 수업에서의 과제
+프로젝트~\cite{ETHZurich:FS2011maze,UMD:CMSC433maze} 로도 사용되었고, 병렬
+프로그래밍 프레임웍의 이점을 보이기 위한 매개물~\cite{RonFosner2010maze} 로도
+사용되었습니다.
+\iffalse
 
 To answer this question, let us examine the solution of
 labyrinths and mazes.
@@ -31,6 +58,27 @@ Parallel solution of mazes is sometimes used as a class project in
 universities~\cite{ETHZurich:FS2011maze,UMD:CMSC433maze} and
 as a vehicle to demonstrate the benefits of parallel-programming
 frameworks~\cite{RonFosner2010maze}.
+\fi
+
+흔한 조언은 병렬 일거리-대기열 알고리즘(PWQ: Parallel work-queue
+algorithm)~\cite{ETHZurich:FS2011maze,RonFosner2010maze} 을 사용하라는
+것입니다.
+이 섹션은 무작위적으로 생성된 정사각형의 미로를 해결하는 모든 경우에 대해
+순차적 알고리즘 (SEQ) 과 대안적인 병렬 알고리즘에 대해 PWQ 를 비교하는 것으로
+이 조언을 평가해 보겠습니다.
+Section~\ref{sec:SMPdesign:Work-Queue Parallel Maze Solver} 에서는 PWQ 를
+이야기 하고,
+Section~\ref{sec:SMPdesign:Alternative Parallel Maze Solver} 에서 대안적인 병렬
+알고리즘을 설명하며,
+Section~\ref{sec:SMPdesign:Performance Comparison I} 에서는 그것의 문제 있는
+성능에 대해 이야기 한 후,
+Section~\ref{sec:SMPdesign:Alternative Sequential Maze Solver} 에서 앞의 대안적
+병렬 알고리즘으로부터 향상된 순차적 알고리즘을 소개하며,
+Section~\ref{sec:SMPdesign:Performance Comparison II} 에서 성능을 비교해 보고,
+마지막으로
+Section~\ref{sec:SMPdesign:Future Directions and Conclusions} 에서 미래의
+방향을 알아보고 결론을 내려봅니다.
+\iffalse
 
 Common advice is to use a parallel work-queue algorithm
 (PWQ)~\cite{ETHZurich:FS2011maze,RonFosner2010maze}.
@@ -49,6 +97,7 @@ comparisons,
 and finally
 Section~\ref{sec:SMPdesign:Future Directions and Conclusions}
 presents future directions and concluding remarks.
+\fi
 
 \subsection{Work-Queue Parallel Maze Solver}
 \label{sec:SMPdesign:Work-Queue Parallel Maze Solver}
