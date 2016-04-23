@@ -133,6 +133,19 @@ presents future directions and concluding remarks.
 \label{fig:SMPdesign:SEQ Pseudocode}
 \end{figure}
 
+PWQ 는 Figure~\ref{fig:SMPdesign:SEQ Pseudocode}(\co{maze_seq.c}) 에 있는 SEQ
+에 기반합니다.
+미로는 셀들의 2D 배열과 \co{->visited} 로 이름 붙여진 선형적 배열 기반 일거리
+대기열로 나타내어집니다.
+
+Line~7 에서 첫번째 셀에 들어가고, line~8-21 에 있는 루프의 매 반복에서 하나의
+셀에 의해 향해지는 통로를 횡단합니다.
+Line9-13 의 루프에서는 \co{->visited[]} 배열을 방문되지 않은 이웃을 가지고
+방문된 셀을 위해 스캔하고, line~14-19 의 루프에서는 그 이웃을 통해 향해지는
+작은 미로를 횡단합니다.
+Line~20 에서는 밖의 루프에 의해 통과될 다음 경로를 위해 초기화를 합니다.
+\iffalse
+
 PWQ is based on SEQ, which is shown in
 Figure~\ref{fig:SMPdesign:SEQ Pseudocode}
 (\co{maze_seq.c}).
@@ -145,6 +158,7 @@ The loop spanning lines~9-13 scans the \co{->visited[]} array for a
 visited cell with an unvisited neighbor, and the loop spanning
 lines~14-19 traverses one fork of the submaze headed by that neighbor.
 Line~20 initializes for the next pass through the outer loop.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -183,6 +197,31 @@ Line~20 initializes for the next pass through the outer loop.
 \label{fig:SMPdesign:SEQ Helper Pseudocode}
 \end{figure}
 
+\co{maze_try_visit_cell()} 의 슈도코드가
+Figure~\ref{fig:SMPdesign:SEQ Helper Pseudocode}
+(\co{maze.c}) 의 line~1-12 에 나타나
+있습니다.
+Line~4 에서셀 \co{c} 와 \co{n} 이 근처에 있고 연결되어 있는지 체크해 보고,
+line~5 에서는 셀 \co{n} 이 아직 방문되지 않았는지 확인해 봅니다.
+\co{celladdr()} 함수는 지목된 셀의 주소를 리턴합니다.
+두 체크 중 하나라도 실패하면, line~6 에서 실패했음을 리턴합니다.
+Line~7 에서는 다음 셀을 알리고, line~8 에서 이 셀을 \co{->visited[]} 배열의
+다음 슬롯에 기록해 두고, line~9 에서 이 슬롯이 이제 채워졌음을 알리며, line~10
+에서 이 셀을 방문되었음으로 마크하고 미로의 시작점으로부터의 거리를 기록해
+둡니다.
+Line~11 은 이제 성공했음을 리턴합니다.
+
+\co{maze_find_any_next_cell()} 의 슈도코드가
+Figure~\ref{fig:SMPdesign:SEQ Helper Pseudocode}
+(\co{maze.c}) 의 line~14-28 에 있습니다.
+Line~17 에서는 현재 셀의 거리 더하기 1을 얻어오고, 라인~19, 21, 23, 25 에서는
+각 방향의 해당 셀들을 체크하고, ine~20, 22, 24, 26 에서는 연관된 셀이 다음 셀
+후보라면 \co{true} 를 리턴합니다.
+\co{prevcol()}, \co{nextcol()}, \co{prevrow()}, 그리고 \co{nextrow()} 는 각각
+배열 인덱스 변환 작업을 수행합니다.
+어떤 셀도 후보가 아니라면, line~27 에서 \co{false} 를 리턴합니다.
+\iffalse
+
 The pseudocode for \co{maze_try_visit_cell()} is shown on lines~1-12
 of Figure~\ref{fig:SMPdesign:SEQ Helper Pseudocode}
 (\co{maze.c}).
@@ -205,6 +244,7 @@ return true if the corresponding cell is a candidate next cell.
 The \co{prevcol()}, \co{nextcol()}, \co{prevrow()}, and \co{nextrow()}
 each do the specified array-index-conversion operation.
 If none of the cells is a candidate, line~27 returns false.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -214,6 +254,13 @@ If none of the cells is a candidate, line~27 returns false.
 \label{fig:SMPdesign:Cell-Number Solution Tracking}
 \end{figure}
 
+해당 경로는 Figure~\ref{fig:SMPdesign:Cell-Number Solution Tracking} 에
+보여지는 것처럼, 미로에 시작점으로부터의 셀들의 수를 세는 것으로 기록되는데,
+시작 셀은 좌상단에 위치해 있고 끝의 셀은 우하단에 위치해 있습니다.
+끝 셀로부터 시작해서 연속적으로 줄어드는 셀 숫자들을 따라가는 것으로 해결
+경로를 따라 횡단할 수 있습니다.
+\iffalse
+
 The path is recorded in the maze by counting the number of cells from
 the starting point, as shown in
 Figure~\ref{fig:SMPdesign:Cell-Number Solution Tracking},
@@ -221,6 +268,7 @@ where the starting cell is in the upper left and the ending cell is
 in the lower right.
 Starting at the ending cell and following
 consecutively decreasing cell numbers traverses the solution.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -229,6 +277,19 @@ consecutively decreasing cell numbers traverses the solution.
 \caption{CDF of Solution Times For SEQ and PWQ}
 \label{fig:SMPdesign:CDF of Solution Times For SEQ and PWQ}
 \end{figure}
+
+병렬 작업 대기열 처리자 (work-queue solver) 는
+Figures~\ref{fig:SMPdesign:SEQ Pseudocode} 와
+~\ref{fig:SMPdesign:SEQ Helper Pseudocode} 에 보여진 알고리즘의 직선적인
+병렬화입니다.
+Figure~\ref{fig:SMPdesign:SEQ Pseudocode} 의 line~10 은 fetch-and-add 를
+사용해야만 하고 지역 변수인 \co{vi} 는 여러 쓰레드들 사이에 공유되어야만
+합니다.
+Figure~\ref{fig:SMPdesign:SEQ Helper Pseudocode} 의 Line~5 와~10 은 CAS 루프로
+구성되어야만 하는데, 이 때 CAS 의 실패는 미로 루프를 의미하게 됩니다.
+이 그림의 Line~8-9 는 셀들을 \co{->visited[]} 배열에 동시적으로 기록하려
+시도하는 것을 처리하기 위해 fetch-and-add 를 사용해야만 합니다.
+\iffalse
 
 The parallel work-queue solver is a straightforward parallelization
 of the algorithm shown in
@@ -240,6 +301,25 @@ combined into a CAS loop, with CAS failure indicating a loop in the
 maze.
 Lines~8-9 of this figure must use fetch-and-add to arbitrate concurrent
 attempts to record cells in the \co{->visited[]} array.
+\fi
+
+이 접근법은 Figure~\ref{fig:SMPdesign:CDF of Solution Times For SEQ and PWQ}
+에서 볼 수 있듯이 2.53GHz 의 속도로 동작하는 dual-CPU
+Lenovo\textsuperscript\texttrademark W500 에서 상당한 속도 향상을 보여주는데,
+두 알고리즘의 해결책을 얻는데 걸리는 시간의 누적 분포 함수들 (CDF) 을 500 개의
+다른 500행 500열의 정사각으로 무작위적으로 만들어진 미로들에 대해
+측정되었습니다.
+이 CDF 들을 x 축에 투영해서 만들어지는 실질적인 겹쳐진 모습은
+Section~\ref{sec:SMPdesign:Performance Comparison I} 에서 다루어질 것입니다.
+
+상당히 흥미롭게도, 순차적인 해결책의 경로 탐색은 병렬 알고리즘에서도 바뀌지
+않았습니다.
+하지만, 이는 병렬 알고리즘의 상당한 약점을 드러냈습니다:
+어떤 주어진 시간 동안 최대 하나의 쓰레드만이 해결책 경로로의 진행을 만들 수
+있습니다.
+이 약점은 다음 섹션에서 다루어집니다.
+\iffalse
+
 
 This approach does provide significant speedups on a dual-CPU
 Lenovo\textsuperscript\texttrademark W500
@@ -258,6 +338,7 @@ However, this uncovers a significant weakness in the parallel algorithm:
 At most one thread may be making progress along the solution path at
 any given time.
 This weakness is addressed in the next section.
+\fi
 
 \subsection{Alternative Parallel Maze Solver}
 \label{sec:SMPdesign:Alternative Parallel Maze Solver}
