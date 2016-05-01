@@ -653,6 +653,19 @@ improves modularity.
 \label{fig:lock:Layered Locking Hierarchy for qsort()}
 \end{figure}
 
+불행하게도, \co{qsort()} 가 자신의 모든 락들을 앞서 이야기한 비교 함수를
+호출하기 전에 해제하는 것은 불가능할 수 있습니다.
+이런 경우, 알 수 없는 코드를 실행하기 전에 모든 락들을 해제하는 지역적 락킹
+계층을 사용할 수 없습니다.
+하지만, 그 대신에 층을 이룬 락킹 계층을 사용할 수 있는데, 이 방법은
+Figure~\ref{fig:lock:Layered Locking Hierarchy for qsort()} 에 그려져 있습니다.
+여기서, \co{cmp()} 함수는 Lock~A, B, C 가 잡힌 이후에 새로운 Lock~D 를
+사용함으로써 데드락을 막습니다.
+따라서 전역적인 데드락 계층에 세개의 층이 존재하는 셈인 것으로, 첫번째 층은
+Lock~A 와 B 에, 그리고 두번째 층은 Lock~C 를 가지며, 세번째 층은 Lock~D 를
+포함합니다.
+\iffalse
+
 Unfortunately, it might not be possible for \co{qsort()} to release
 all of its locks before invoking the comparison function.
 In this case, we cannot construct a local locking hierarchy by
@@ -664,6 +677,7 @@ all of Locks~A, B, and C, avoiding deadlock.
 we therefore have three layers to the global deadlock hierarchy, the
 first containing Locks~A and B, the second containing Lock~C, and
 the third containing Lock~D.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -697,6 +711,24 @@ the third containing Lock~D.
 \label{fig:locking:Concurrent List Iterator}
 \end{figure}
 
+\co{cmp()} 함수가 새로운 락인 Lock~D 를 사용하도록 수정하는 것을 기계적으로
+하는 건 일반적으로 불가능하다는 것을 알아 두시기 바랍니다.
+오히려 그 반대입니다: 그러한 변경을 위해서는 대부분의 경우 기초적인 설계
+레벨에서의 수정을 필요로 하게 됩니다.
+하지만 더도 아니고 덜도 아니고, 그런 변경을 위해 필요한 노력은 일반적으로
+데드락을 막기 위해서 치뤄야 하는 대가 치고는 적은 편입니다.
+
+알 수 없는 코드를 실행하기 전에 모든 락을 해제하는 것이 비현실적인 또다른 예를
+들어보기 위해서는,
+Figure~\ref{fig:locking:Concurrent List Iterator} (\co{locked_list.c}) 에
+보여진 것과 같이 링크드 리스트를 순회하는 반복자 (iterator) 를 생각해 보시기
+바랍니다.
+\co{list_start()} 함수는 리스트의 락을 잡고서 첫번째 원소를 리턴하고 (원소가
+존재한다면), \co{list_next()} 함수는 리스트의 그 다음 원소로의 포인터를
+리턴하는데, 리스트의 끝에 도달한 경우에는 앞서 잡았던 락을 해제하고 \co{NULL}
+을 리턴합니다.
+\iffalse
+
 Please note that it is not typically possible to mechanically
 change \co{cmp()} to use the new Lock~D.
 Quite the opposite: It is often necessary to make profound design-level
@@ -712,6 +744,7 @@ the first element (if there is one), and
 \co{list_next()} either returns a pointer to the next element in the list
 or releases the lock and returns \co{NULL} if the end of the list has
 been reached.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -739,6 +772,16 @@ been reached.
 \label{fig:locking:Concurrent List Iterator Usage}
 \end{figure}
 
+Figure~\ref{fig:locking:Concurrent List Iterator Usage} 는 이 리스트 반복자가
+어떻게 사용될 수 있는지 보여줍니다.
+Line~1-4 는 하나의 정수를 포함하는 \co{list_ints} 원소를 정의하고 line~6-17
+에서는 이 원소가 포함된 리스트에의 순회를 어떻게 반복하는지 보입니다.
+Line~11 에서는 이 리스트를 잠그고 첫번째 원소로의 포인터를 얻어온 후, line~13
+에서 해당 원소에 동봉되어 있는 \co{list_ints} 구조체로의 포인터를 얻어오고,
+line~14 에서 연관된 정수를 출력하고서, line~15 에서 다음 원소로 넘어갑니다.
+이 코드는 상당히 간단하고, 락킹을 모두 숨겼습니다.
+\iffalse
+
 Figure~\ref{fig:locking:Concurrent List Iterator Usage} shows how
 this list iterator may be used.
 Lines~1-4 define the \co{list_ints} element containing a single integer,
@@ -748,6 +791,26 @@ line~13 provides a pointer to our enclosing \co{list_ints} structure,
 line~14 prints the corresponding integer, and
 line~15 moves to the next element.
 This is quite simple, and hides all of the locking.
+\fi
+
+각 리스트의 원소를 처리하는 코드가 그 스스로 \co{list_start()} 나
+\co{list_next()} 를 호출하는 다른 코드와 함께 사용하는, 데드락을 초래할 수
+있는, 락을 사용하지 않는한은 이 락킹은 계속 숨겨져 있을 수 있습니다.
+이렇게 리스트 반복자 락킹을 구현하면서 데드락을 막기 위해 락킹 계층을 여러
+레이어에 층층이 놓을 수 있습니다.
+
+이 층쌓기 방법은 임의의 많은 수의 레이어들로 확장될 수도 있습니다만, 각각의
+추가된 레이어는 락킹 설계의 복잡도를 증가시킵니다.
+그런 증가된 복잡도는 특히 객체지향적 설계의 어떤 타입들에는 불편할 수 있는데,
+코드의 제어와 수행이 많은 수의 객체들 사이를 규칙이 정해지지 않은 형태로 왔다
+갔다 하게 되는 경우가 그런 경우입니다.\footnote{
+	이런 것들을 일컫기를 ``객체지향적 스파게티 코드'' 라고 합니다.}
+이런 객체지향적 설계의 습관들과 데드락 회피의 필요성 사이의 미스매치는 병렬
+프로그래밍이 어떤 사람들에게는 매우 어렵다고 인지되는데 대한 심각한 이유입니다.
+
+수많은 레이어를 사용하는 락킹 계층들에 대한 일부 대안책은
+Chapter~\ref{chp:Deferred Processing} 에서 다뤄집니다.
+\iffalse
 
 That is, the locking remains hidden as long as the code processing each
 list element does not itself acquire a lock that is held across some
@@ -768,6 +831,7 @@ is perceived by some to be so difficult.
 
 Some alternatives to highly layered locking hierarchies are covered in
 Chapter~\ref{chp:Deferred Processing}.
+\fi
 
 \subsubsection{Locking Hierarchies and Pointers to Locks}
 \label{sec:locking:Locking Hierarchies and Pointers to Locks}
