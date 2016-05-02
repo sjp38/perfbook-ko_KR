@@ -946,6 +946,21 @@ this is unlikely.
 \label{fig:locking:Protocol Layering and Deadlock}
 \end{figure}
 
+하지만 합리적인 락킹 계층이 존재하지 않는다고 생각해 봅시다.
+이런 상황은 실제 세상에 존재할 수 있는데, 예를 들어보자면 패킷이 양방향에서
+오가는 계층적 네트워크 프로토콜 스택을 생각해 볼 수 있겠습니다.
+이 네트워킹의 경우, 한 패킷을 한 계층에서 다른 계층으로 보내고자 할 때 양
+계층에서 모두 락을 잡아야 할 필요가 있을 수 있습니다.
+패킷들은 이 프로토콜 스택의 위로도 아래로도 이동될 수 있다는 점을 생각해 보면, 
+Figure~\ref{fig:locking:Protocol Layering and Deadlock} 에 보여진 것처럼
+데드락을 유발하기 위한 좋은 방법입니다.
+여기서, 랜선을 향해 스택의 아래 방향으로 이동하게 되는 패킷은 다음 계층의 락을
+위에서 아래 순서대로 잡아야만 합니다.
+랜선으로부터 스택의 위 방향으로 이동하게 되는 패킷들은 그 락들을 아래에서 위
+순서대로 잡아야 한다는 점을 상기해 보면, 해당 그림의 line~4 에서의 락 획득은
+데드락을 초래할 수 있습니다.
+\iffalse
+
 But suppose that there is no reasonable locking hierarchy.
 This can happen in real life, for example, in layered network protocol stacks
 where packets flow in both directions.
@@ -959,6 +974,7 @@ the next layer's lock out of order.
 Given that packets moving up the stack away from the wire are acquiring
 the locks in order, the lock acquisition in line~4 of the figure
 can result in deadlock.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -986,6 +1002,16 @@ can result in deadlock.
 \label{fig:locking:Avoiding Deadlock Via Conditional Locking}
 \end{figure}
 
+이 경우에 데드락을 막을 수 있는 한가지 방법은 락킹 계층을 적용하되, 락을 위에서
+아래 순서로 잡아야 할 경우에는 
+Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking} 에 보인
+것처럼 조건적으로 잡는 것입니다.
+무조건적으로 layer-1 락을 획득하는 대신에, line~5 에서는 그 락을
+\co{spin_trylock()} 기능을 사용해 조건적으로 획득합니다.
+이 기능은 만약 락이 획득 가능하다면 곧바로 락을 획득해 버리고 (0 이 아닌 값을
+리턴합니다), 그렇지 않다면 락을 잡지 않고 0을 리턴합니다.
+\iffalse
+
 One way to avoid deadlocks in this case is to impose a locking hierarchy,
 but when it is necessary to acquire a lock out of order, acquire it
 conditionally, as shown in
@@ -994,6 +1020,20 @@ Instead of unconditionally acquiring the layer-1 lock, line~5
 conditionally acquires the lock using the \co{spin_trylock()} primitive.
 This primitive acquires the lock immediately if the lock is available
 (returning non-zero), and otherwise returns zero without acquiring the lock.
+\fi
+
+만약 \co{spin_trylock()} 이 성공했다면, line~15 는 필요한 layer-1 의 처리를
+진행합니다.
+그렇지 않다면, line~6 에서 락을 해제하고 line~7 과 8 에서 올바른 순서대로 그
+락들을 다시 잡습니다.
+불행히도, 시스템에는 여러 네트워킹 디바이스들이 존재할 수 있는데 (예: 이더넷과
+WiFi), 따라서 \co{layer_1()} 함수는 라우팅 결정을 해야만 합니다.
+이 결정은 언제든 바뀔 수도 있는데, 특히 그 시스템이 모바일 기기라면 더욱
+그렇습니다.\footnote{
+	그리고, 1900년대와는 다르게, 모바일 기기는 상당히 흔해졌죠.}
+따라서, line~9 는 그 결정을 다시 한번 체크해 봐야 하고, 바뀌었다면 그 락들을
+놓고 일을 처음부터 다시 시작해야 합니다.
+\iffalse
 
 If \co{spin_trylock()} was successful, line~15 does the needed
 layer-1 processing.
@@ -1007,13 +1047,22 @@ is mobile.\footnote{
 	And, in contrast to the 1900s, mobility is the common case.}
 Therefore, line~9 must recheck the decision, and if it has changed,
 must release the locks and start over.
+\fi
 
 \QuickQuiz{}
-	Can the transformation from
-	Figure~\ref{fig:locking:Protocol Layering and Deadlock} to
-	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking}
-	be applied universally?
+	Figure~\ref{fig:locking:Protocol Layering and Deadlock} 에서
+	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking} 로의
+	변경이 어디서나 적용될 수 있는 걸까요?
 \QuickQuizAnswer{
+	절대 그렇지 않습니다!
+
+	이 변경은 \co{layer_2_processing()} 함수가 같은 입력에 대해선 항상 같은
+	출력을 내놓는다는 가정을 가지고 있는데, \co{layer_1()} 의 라우팅 결정이
+	변화되면 같은 패킷에 대해 이 함수가 여러번 수행될 수도 있기 때문입니다.
+	따라서, 실제 세상에서 이런 변경을 적용하기는 상당히 복잡해질 수
+	있습니다.
+	\iffalse
+
 	Absolutely not!
 
 	This transformation assumes that the
@@ -1022,13 +1071,31 @@ must release the locks and start over.
 	the \co{layer_1()} routing decision changes.
 	Therefore, in real life, this transformation can become
 	arbitrarily complex.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	그렇지만
+	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking}
+	에서의 추가된 복잡도는 그게 데드락을 막는다는 점을 생각하면 꽤 가치있는
+	거예요, 맞죠?
+	\iffalse
+
 	But the complexity in
 	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking}
 	is well worthwhile given that it avoids deadlock, right?
+	\fi
 \QuickQuizAnswer{
+	아마도요.
+
+	만약 \co{layer_1()} 에서의 라우팅 결정이 충분히 자주 바뀐다면, 해당
+	코드는 항상 재시도만 할테고, 진전은 전혀 이루지 못할 겁니다.
+	이런 현상을 가리켜 어떤 쓰레드도 진행을 못하고 있을 때에는 ``livelock''
+	이라 하고, 일부 쓰레드는 진행을 이루고 있지만 다른 것들은 못하고 있을
+	때에는 ``starvation'' 이라 합니다 (Section~\ref{sec:locking:Livelock
+	and Starvation} 을 참고하세요).
+	\iffalse
+
 	Maybe.
 
 	If the routing decision in \co{layer_1()} changes often enough,
@@ -1037,6 +1104,7 @@ must release the locks and start over.
 	``starvation''
 	if some threads make forward progress but other do not
 	(see Section~\ref{sec:locking:Livelock and Starvation}).
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Acquire Needed Locks First}

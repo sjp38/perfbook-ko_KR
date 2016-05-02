@@ -6021,11 +6021,19 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
-	Can the transformation from
-	Figure~\ref{fig:locking:Protocol Layering and Deadlock} to
-	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking}
-	be applied universally?
+	Figure~\ref{fig:locking:Protocol Layering and Deadlock} 에서
+	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking} 로의
+	변경이 어디서나 적용될 수 있는 걸까요?
 \QuickA{}
+	절대 그렇지 않습니다!
+
+	이 변경은 \co{layer_2_processing()} 함수가 같은 입력에 대해선 항상 같은
+	출력을 내놓는다는 가정을 가지고 있는데, \co{layer_1()} 의 라우팅 결정이
+	변화되면 같은 패킷에 대해 이 함수가 여러번 수행될 수도 있기 때문입니다.
+	따라서, 실제 세상에서 이런 변경을 적용하기는 상당히 복잡해질 수
+	있습니다.
+	\iffalse
+
 	Absolutely not!
 
 	This transformation assumes that the
@@ -6034,12 +6042,30 @@ ret = ~ret & tmp;
 	the \co{layer_1()} routing decision changes.
 	Therefore, in real life, this transformation can become
 	arbitrarily complex.
+	\fi
 
 \QuickQ{}
+	그렇지만
+	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking}
+	에서의 추가된 복잡도는 그게 데드락을 막는다는 점을 생각하면 꽤 가치있는
+	거예요, 맞죠?
+	\iffalse
+
 	But the complexity in
 	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking}
 	is well worthwhile given that it avoids deadlock, right?
+	\fi
 \QuickA{}
+	아마도요.
+
+	만약 \co{layer_1()} 에서의 라우팅 결정이 충분히 자주 바뀐다면, 해당
+	코드는 항상 재시도만 할테고, 진전은 전혀 이루지 못할 겁니다.
+	이런 현상을 가리켜 어떤 쓰레드도 진행을 못하고 있을 때에는 ``livelock''
+	이라 하고, 일부 쓰레드는 진행을 이루고 있지만 다른 것들은 못하고 있을
+	때에는 ``starvation'' 이라 합니다 (Section~\ref{sec:locking:Livelock
+	and Starvation} 을 참고하세요).
+	\iffalse
+
 	Maybe.
 
 	If the routing decision in \co{layer_1()} changes often enough,
@@ -6048,6 +6074,7 @@ ret = ~ret & tmp;
 	``starvation''
 	if some threads make forward progress but other do not
 	(see Section~\ref{sec:locking:Livelock and Starvation}).
+	\fi
 
 \QuickQ{}
 	When using the ``acquire needed locks first'' approach described in
