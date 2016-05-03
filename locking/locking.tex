@@ -1110,6 +1110,17 @@ must release the locks and start over.
 \subsubsection{Acquire Needed Locks First}
 \label{sec:locking:Acquire Needed Locks First}
 
+조건적 락킹의 중요하고 특수한 한 케이스에는 모든 필요한 락들이 추후의 작업
+진행을 이루기 전에 획득됩니다.
+이런 경우에, 처리하는 일이 멱등성을 가질 필요는 없습니다: 이미 쥐고 있는 락들
+가운데 하나를 먼저 놓지 않고는 어떤 락을 잡는 것이 불가능함이 밝혀진다면, 그냥
+모든 락을 놓아버리고 다시 락 획득을 시도합니다.
+모든 필요한 락들을 한번이라도 모두 잡기만 한다면 추후의 작업이 진행됩니다.
+
+하지만, 이런 처리 방법은 \emph{livelock} 을 초래할 수 있는데, 이에 대해서는
+Section~\ref{sec:locking:Livelock and Starvation} 에서 이야기 합니다.
+\iffalse
+
 In an important special case of conditional locking all needed
 locks are acquired before any processing is carried out.
 In this case, processing need not be idempotent: if it turns out
@@ -1121,18 +1132,51 @@ Only once all needed locks are held will any processing be carried out.
 However, this procedure can result in \emph{livelock}, which will
 be discussed in
 Section~\ref{sec:locking:Livelock and Starvation}.
+\fi
 
 \QuickQuiz{}
+	Section~\ref{sec:locking:Acquire Needed Locks First} 에서 이야기한
+	``필요한 락들을 먼저 획득하기'' 방법을 사용할 때에, 어떻게 하면
+	livelock 을 막을 수 있을까요?
+	\iffalse
+
 	When using the ``acquire needed locks first'' approach described in
 	Section~\ref{sec:locking:Acquire Needed Locks First},
 	how can livelock be avoided?
+	\fi
 \QuickQuizAnswer{
+	추가적인 글로벌 락을 제공하는 겁니다.
+	어떤 쓰레드가 반복적으로 필요한 락들을 획득하려 노력하고 실패했다면 그
+	쓰레드는 조건없이 새로운 글로벌 락을 획득하도록 하고 조건없이 모든
+	필요한 락들을 획득하게 하는 겁니다.
+	(Doug Lea. 에 의해 제안된 방법입니다.)
+	\iffalse
+
 	Provide an additional global lock.
 	If a given thread has repeatedly tried and failed to acquire the needed
 	locks, then have that thread unconditionally acquire the new
 	global lock, and then unconditionally acquire any needed locks.
 	(Suggested by Doug Lea.)
+	\fi
 } \QuickQuizEnd
+
+관련된 방법으로 two-phase 락킹~\cite{PhilipABernstein1987} 이 있는데, 이 방법은
+트랜잭션을 제공하는 상용 수준의 데이터베이스 시스템들에서 오랫동안 사용되어
+왔습니다.
+Two-phase 락킹 트랜잭션의 첫번째 페이스 (phase) 에서는 락들은 획득은 되지만
+해제는 되지 않습니다.
+모든 필요한 락들이 획득된다면, 이 트랜잭션은 두번째 페이스로 들어가게 되는데,
+이 페이스에서는 락들이 해제만 되지, 획득은 되지 않습니다.
+이 락킹 방법은 데이터베이스들이 serializability 를 트랜잭션들에게 보장해줄 수
+있게 하는데, 달리 말하자면, 트랜잭션들에 의해 만들어지고 보여지는 모든 값들이
+모든 트랜잭션들의 어떤 전체적인 순서에 대해 일관적이게 될 것을 보장해 주기 위해
+사용됩니다.
+그런 많은 시스템들은 트랜잭션들을 중단 (abort) 시킬 수 있는 기능에 의존하는데,
+사실 모든 필요한 락들이 획득되기 전까지는 공유된 데이터에 어떤 변경도 가하지
+않도록 하는 것으로 단순화 시킬 수도 있습니다.
+Livelock 과 deadlock 은 그런 시스템들에서의 문제거리들인데, 실용적인 해결책들은
+많은 데이터베이스 서적들에서 찾을 수 있을 겁니다.
+\iffalse
 
 A related approach, two-phase locking~\cite{PhilipABernstein1987},
 has seen long production use in transactional database systems.
@@ -1149,6 +1193,7 @@ this can be simplified by avoiding making any changes to shared data
 until all needed locks are acquired.
 Livelock and deadlock are issues in such systems, but practical
 solutions may be found in any of a number of database textbooks.
+\fi
 
 \subsubsection{Single-Lock-at-a-Time Designs}
 \label{sec:locking:Single-Lock-at-a-Time Designs}
