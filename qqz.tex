@@ -6103,10 +6103,28 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	시그널 핸들러 안에서 획득되는 Lock~B 를 잡은 채로 시그널들을 블락시키지
+	않고 시그널 핸들러 밖에서 획득되는 Lock~A 를 잡는 행위가 해선 안되는
+	행위이죠?
+	\iffalse
 	Why is it illegal to acquire a Lock~A that is acquired outside
 	of a signal handler without blocking signals while holding
 	a Lock~B that is acquired within a signal handler?
+	\fi
 \QuickA{}
+	데드락을 유발할 수 있기 때문입니다.
+	Lock~A 가 시그널들을 블락시키지 않은 상태로 시그널 핸들러의 밖에서
+	잡혔다면, 이 락을 잡고 있는 상태로 어떤 시그널은 처리될 수 있을 겁니다.
+	이제 그 시그널에 연관된 시그널 핸들러는 Lock~B 를 잡으려 할텐데, 따라서
+	Lock~B 는 Lock~A 를 잡은채로 획득될 것입니다.
+	따라서, 질문에서 이야기한 것처럼 우리가 Lock~B 를 잡은 채로 Lock~A 를
+	잡으려 한다면 데드락 사이클이 생기게 되는 것입니다.
+
+	따라서, 시그널 핸들러 안에서 획득하는 락을 잡고 시그널들을 블락시키지
+	않은채로 시그널 핸들러 밖에서 획득되는 락을 잡는 행위는 금지된
+	행위입니다.
+	\iffalse
+
 	Because this would lead to deadlock.
 	Given that Lock~A is held outside of a signal
 	handler without blocking signals, a signal might be handled while
@@ -6119,20 +6137,50 @@ ret = ~ret & tmp;
 	Therefore, it is illegal to acquire a lock that is acquired outside
 	of a signal handler without blocking signals while holding
 	a another lock that is acquired within a signal handler.
+	\fi
 
 \QuickQ{}
+	시그널 핸들러 안에서 어떻게 시그널들을 블락시킬 수가 있죠?
+	\iffalse
+
 	How can you legally block signals within a signal handler?
+	\fi
 \QuickA{}
+	그렇게 할 수 있는 가장 간단하고 가장 빠른 방법은 시그널을 설정할 때
+	\co{sigaction()} 함수에 전달하는 \co{struct sigaction} 객체의
+	\co{sa_mask} 필드를 사용하는 겁니다.
+	\iffalse
+
 	One of the simplest and fastest ways to do so is to use
 	the \co{sa_mask} field of the \co{struct sigaction} that
 	you pass to \co{sigaction()} when setting up the signal.
+	\fi
 
 \QuickQ{}
+	시그널 핸들러들 안에서 락을 잡는 행위가 그렇게 나쁜 생각이라면, 그걸
+	안전하게 해내기 위한 생각 자체는 대체 왜 하는거죠?
+	\iffalse
+
 	If acquiring locks in signal handlers is such a bad idea, why
 	even discuss ways of making it safe?
+	\fi
 \QuickA{}
+	똑같은 규칙이 운영체제 커널들과 일부 임베디드 어플리케이션들에서
+	사용되는 인터럽트 핸들러들에도 적용되기 때문입니다.
+	\iffalse
+
 	Because these same rules apply to the interrupt handlers used in
 	operating-system kernels and in some embedded applications.
+	\fi
+
+	많은 어플리케이션 환경에서, 시그널 핸들러 안에서 락을 잡으려 하는
+	행위는 해로운 행위로 여겨져 왔습니다~\cite{OpenGroup1997pthreads}.
+	하지만, 그런 분위기가 똑똑한 개발자들이 (보통은 현명하지 못한 짓이지만)
+	어토믹 오퍼레이션들을 사용해서 직접 만든 락들을 사용해대는 것을 멈추게
+	하지는 않았습니다.
+	그리고 어토믹 오퍼레이션들은 많은 경우 시그널 핸들러 안에서 사용되어도
+	전혀 문제가 되지 않습니다.
+	\iffalse
 
 	In many application environments, acquiring locks in signal
 	handlers is frowned upon~\cite{OpenGroup1997pthreads}.
@@ -6140,6 +6188,7 @@ ret = ~ret & tmp;
 	unwisely) fashioning home-brew locks out of atomic operations.
 	And atomic operations are in many cases perfectly legal in
 	signal handlers.
+	\fi
 
 \QuickQ{}
 	Given an object-oriented application that passes control freely
