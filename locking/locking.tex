@@ -1393,23 +1393,52 @@ fatal errors.
 \subsubsection{Discussion}
 \label{sec:locking:Locking Hierarchy Discussion}
 
+공유 메모리 병렬 프로그래머가 사용할 수 있는 수많은 데드락 방지 전략이
+존재합니다만 그 중 어느것도 잘 들어맞지 않는 순차적 프로그램들도 존재하지요.
+이게 전문적인 프로그래머들이라면 자신의 도구상자에 두개 이상의 도구를 갖추고
+있는 이유입니다: 락킹은 훌륭한 동시성 제어 도구이지만, 다른 도구들을 가지고
+다룰 수 있는 일들도 많습니다.
+\iffalse
+
 There are a large number of deadlock-avoidance strategies available to
 the shared-memory parallel programmer, but there are sequential
 programs for which none of them is a good fit.
 This is one of the reasons that expert programmers have more than
 one tool in their toolbox: locking is a powerful concurrency
 tool, but there are jobs better addressed with other tools.
+\fi
 
 \QuickQuiz{}
+	다양한 객체들 사이로 실행 제어가 완전 자유롭게 오가는 객체 지향
+	어플리케이션이어서 직관적인 락킹 계층, 레이어, 또는 다른 것들이
+	존재하지 않는 경우\footnote{
+		``객체 지향 스파게티 코드''라고도 알려져 있죠.}
+	라면 그 어플리케이션은 어떻게 병렬화 시켜야 할까요?
+	\iffalse
+
 	Given an object-oriented application that passes control freely
 	among a group of objects such that there is no straightforward
 	locking hierarchy,\footnote{
 		Also known as ``object-oriented spaghetti code.''}
 	layered or otherwise, how can this
 	application be parallelized?
+	\fi
 \QuickQuizAnswer{
+	다양한 방법이 있습니다:
+	\iffalse
+
 	There are a number of approaches:
+	\fi
 	\begin{enumerate}
+	\item	기계적인 또는 전기적인 기기를 위한 좋은 설계를 찾아내기
+		위해서라든지 하는 경우를 위해 많은 수의 시뮬레이션을 수행하게
+		되는 시뮬레이션을 통한 모수 검색의 경우라면, 그 시뮬레이션을
+		단일 쓰레드로 수행되도록 두되, 많은 수의 시뮬레이션의 수행들을
+		병렬로 돌리는 겁니다.
+		이 방법은 객체 지향적 설계를 유지하고, 높은 수준으로 병렬성을
+		끌어올리며, 또한 동기화 오버헤드 역시 없앱니다.
+	\iffalse
+
 	\item	In the case of parametric search via simulation,
 		where a large number of simulations will be run
 		in order to converge on (for example) a good design
@@ -1419,6 +1448,20 @@ tool, but there are jobs better addressed with other tools.
 		This retains the object-oriented design, and
 		gains parallelism at a higher level, and likely
 		also avoids synchronization overhead.
+	\fi
+	\item	객체들을 여러 그룹들로 분류하는데, 한번에 그룹과 그룹 사이의
+		객체들 사이의 수행은 없도록 분류를 합니다.
+		그리고 각 그룹별로 락을 사용하도록 연관시킵니다.
+		이는 Section~\ref{sec:locking:Single-Lock-at-a-Time Designs}
+		에서 알아본 한번에 한 락만 잡기 전략의 한 예라고 볼 수
+		있습니다.
+	\item	객체들을 여러 그룹들로 분류하는데, 쓰레드들은 모두 한 그룹의
+		객체들에 대해 어떤 그룹 단위의 순서로만 수행을 할 수 있도록
+		분류합니다.
+		그리고 각 그룹별로 락을 하나씩 연관시키고, 그룹들 단위의 락킹
+		계층을 적용시킵니다.
+	\iffalse
+
 	\item	Partition the objects into groups such that there
 		is no need to operate on objects in
 		more than one group at a given time.
@@ -1431,6 +1474,22 @@ tool, but there are jobs better addressed with other tools.
 		groupwise ordering.
 		Then associate a lock with each group, and impose a
 		locking hierarchy over the groups.
+	\fi
+	\item	임의로 선택된 계층을 락들에 적용하고 락을 비순서적으로 획득해야
+		하는 경우에는 
+		Section~\ref{sec:locking:Conditional Locking} 에 이야기 했던
+		조건적 락킹을 적용합니다.
+	\item	일련의 오퍼레이션들을 수행하기 전에, 그 오퍼레이션들의 수행을
+		위해 어떤 락들이 획득되어야 할지 예측하고, 그것들을 정말로 어떤
+		업데이트를 가하기 전에 획득합니다.
+		그 예측이 틀렸던 것으로 드러난다면, 모든 락들을 내려놓고
+		경험으로부터 얻은 정보를 바탕으로 수정된 예측을 가지고 다시 락
+		획득을 시도합니다.
+		이런 접근법은
+		Section~\ref{sec:locking:Acquire Needed Locks First} 에서
+		이야기 되었습니다.
+	\iffalse
+
 	\item	Impose an arbitrarily selected hierarchy on the locks,
 		and then use conditional locking if it is necessary
 		to acquire a lock out of order, as was discussed in
@@ -1443,6 +1502,18 @@ tool, but there are jobs better addressed with other tools.
 		that includes the benefit of experience.
 		This approach was discussed in
 		Section~\ref{sec:locking:Acquire Needed Locks First}.
+	\fi
+	\item	트랜잭셔널 메모리를 사용합니다.
+		이 접근법은 많은 장점과 단점을 가지고 있는데,
+		Section~\ref{sec:future:Transactional Memory} 에서 다루어질
+		겁니다.
+	\item	어플리케이션 자체가 좀 더 동시성에 친화적이도록 수정을 합니다.
+		이는 심지어 어플리케이션이 단일 쓰레드로 수행될 때조차도 빠르게
+		동작하는 부가적 효과를 만들어낼 수도 있습니다만 어플리케이션을
+		수정하기가 좀 더 어렵게 만들어 버릴 수도 있습니다.
+	\item	락킹 이외에 뒤의 챕터들에서 설명할 기법들을 적용해 봅니다.
+	\iffalse
+
 	\item	Use transactional memory.
 		This approach has a number of advantages and disadvantages
 		which will be discussed in
@@ -1452,11 +1523,17 @@ tool, but there are jobs better addressed with other tools.
 		the application run faster even when single-threaded, but might
 		also make it more difficult to modify the application.
 	\item	Use techniques from later chapters in addition to locking.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
 
+과장 없이 이야기 하건대, 이 섹션에서 이야기된 전략들은 많은 환경에서 꽤 유용한
+것으로 입증되었습니다.
+\iffalse
+
 Nevertheless, the strategies described in this section have proven
 quite useful in many settings.
+\fi
 
 \subsection{Livelock and Starvation}
 \label{sec:locking:Livelock and Starvation}
@@ -1497,14 +1574,38 @@ quite useful in many settings.
 \label{fig:locking:Abusing Conditional Locking}
 \end{figure}
 
+조건적 락킹은 효과적인 데드락 예방책이긴 하지만, 남용될 수도 있습니다.
+예를 들어서, Figure~\ref{fig:locking:Abusing Conditional Locking} 에 보여진
+것과 같이 아름답도록 대칭적인 예제 코드에 대해 생각해 봅시다.
+이 예제의 아름다운 부분은 추한 livelock 의 가능성을 감추고 있습니다.
+이를 드러내 보이기 위해, 다음과 같은 일련의 이벤트들이 일어나는 경우를 생각해
+봅시다:
+\iffalse
+
 Although conditional locking can be an effective deadlock-avoidance
 mechanism, it can be abused.
 Consider for example the beautifully symmetric example shown in
 Figure~\ref{fig:locking:Abusing Conditional Locking}.
 This example's beauty hides an ugly livelock.
 To see this, consider the following sequence of events:
+\fi
 
 \begin{enumerate}
+\item	Thread~1 이 line~4 에서 \co{lock1} 을 잡는데 성공하고
+	\co{do_one_thing()} 을 호출합니다.
+\item	Thread~2 가 line~18 에서 \co{lock2} 를 잡고 \co{do_a_third_thing()} 을
+	호출합니다.
+\item	Thread~1 이 line~6 에서 \co{lock2} 를 잡으려 시도합니다만 Thread~2 가
+	그 락을 이미 잡고 있기 때문에 실패합니다.
+\item	Thread~2 가 line~20 에서 \co{lock1} 을 획득하려 시도하지만, Thread~1 이
+	그 락을 이미 잡고 있으므로 실패합니다.
+\item	Thread~1 이 line~7 에서 \co{lock1} 을 해제하고 line~3 의 \co{retry} 로
+	점프합니다.
+\item	Thread~2 가 line~21 에서 \co{lock2} 를 해제하고 line~17 의 \co{retry}
+	로 점프합니다.
+\item	이런 livelock 댄스가 시작부터 다시 반복됩니다.
+\iffalse
+
 \item	Thread~1 acquires \co{lock1} on line~4, then invokes
 	\co{do_one_thing()}.
 \item	Thread~2 acquires \co{lock2} on line~18, then invokes
@@ -1518,13 +1619,39 @@ To see this, consider the following sequence of events:
 \item	Thread~2 releases \co{lock2} on line~21, and jumps to \co{retry}
 	at line~17.
 \item	The livelock dance repeats from the beginning.
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	Figure~\ref{fig:locking:Abusing Conditional Locking} 에 보여진 livelock
+	은 어떻게 예방할 수 있나요?
+	\iffalse
+
 	How can the livelock shown in
 	Figure~\ref{fig:locking:Abusing Conditional Locking}
 	be avoided?
+	\fi
 \QuickQuizAnswer{
+	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking} 는
+	일부의 좋은 힌트들을 제공합니다.
+	많은 경우, livelock 들은 락킹 설계를 다시 한번 들여다 봐야 한다는 힌트
+	역할을 하곤 합니다.
+	또는, 락킹 설계가 ``성장했다면'' 첫번째로 들여다봐야 하는 영역이기도
+	합니다.
+
+	그렇다고는 하나, Doug Lea 에 의하면 훌륭하고 충분한 접근법은
+	Section~\ref{sec:locking:Conditional Locking} 에서 설명된 것처럼 조건적
+	락킹을 하되, 
+	Section~\ref{sec:locking:Acquire Needed Locks First} 에서 설명된 대로
+	공유되어 있는 데이터를 수정하기 전에 모든 필요한 락들을 먼저 획득하는
+	방법과 조합해서 쓰는 것입니다.
+	주어진 크리티컬 섹션이 너무 많이 재시도를 하게 되면, 조건 없이 글로벌
+	락을 잡아버리고, 조건 없이 모든 필요한 락들을 잡아버리는 방법입니다.
+	이 방법은 deadlock 과 livelock 두가지 모두를 예방할 뿐더러, 이야기한
+	글로벌 락이 너무 자주 잡혀지지는 않는다는 가정 하에서는 합리적인
+	수준으로 확장성을 갖습니다.
+	\iffalse
+
 	Figure~\ref{fig:locking:Avoiding Deadlock Via Conditional Locking}
 	provides some good hints.
 	In many cases, livelocks are a hint that you should revisit your
@@ -1543,7 +1670,18 @@ To see this, consider the following sequence of events:
 	a global lock, then unconditionally acquire all the needed locks.
 	This avoids both deadlock and livelock, and scales reasonably
 	assuming that the global lock need not be acquired too often.
+	\fi
 } \QuickQuizEnd
+
+Livelock 은 starvation 의 한 극단적인 예로 생각되어질 수 있는데, 여러 쓰레드들
+중 하나만이 아니라 모든 쓰레드들이 굶게 되는 경우라고 볼 수 있는
+것입니다.\footnote{
+	Livelock, starvation, 그리고 unfairness 같은 단어들의 정확한 정의에
+	대헤 너무 매달려 있지 마시기 바랍니다.
+	어떤 쓰레드들의 무리가 앞으로의 진행을 만들어나가지 못하고 있는 상황은
+	그 상황에 어떤 이름을 붙일지에 상관없이 해결되어야만 하는 문제일
+	뿐입니다.}
+\iffalse
 
 Livelock can be thought of as an extreme form of starvation where
 a group of threads starve, rather than just one of them.\footnote{
@@ -1552,6 +1690,7 @@ a group of threads starve, rather than just one of them.\footnote{
 	Anything that causes a group of threads to fail to make adequate
 	forward progress is a problem that needs to be fixed, regardless
 	of what name you choose for it.}
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1595,6 +1734,16 @@ a group of threads starve, rather than just one of them.\footnote{
 \label{fig:locking:Conditional Locking and Exponential Backoff}
 \end{figure}
 
+Livelock 과 starvation 은 소프트웨어 트랜잭셔널 메모리 구현에 있어서의 심각한
+문제이고, 따라서 이런 문제들을 해결해 주기 위해 \emph{contention manager} 의
+개념이 만들어졌습니다.
+락킹의 경우에는 exponential backoff 방법으로 이 livelock 과 starvation 을
+해결할 수 있습니다.
+이 방법은 Figure~\ref{fig:locking:Conditional Locking and Exponential Backoff}
+에 보여진 것처럼 매번 재시도를 할때마다 시도에 실패한 다음 재시도 하기 전까지
+기다리는 딜레이 시간을 지수적으로 증가시키는 방법입니다.
+\iffalse
+
 Livelock and starvation are serious issues in software transactional
 memory implementations, and so the concept of \emph{contention
 manager} has been introduced to encapsulate these issues.
@@ -1603,11 +1752,29 @@ livelock and starvation.
 The idea is to introduce exponentially increasing delays before each
 retry, as shown in
 Figure~\ref{fig:locking:Conditional Locking and Exponential Backoff}.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:locking:Conditional Locking and Exponential Backoff}
+	에서 어떤 문제를 발견할 수 있나요?
+	\iffalse
+
 	What problems can you spot in the code in
 	Figure~\ref{fig:locking:Conditional Locking and Exponential Backoff}?
+	\fi
 \QuickQuizAnswer{
+	여기 두가지가 있습니다:
+	\begin{enumerate}
+	\item	대부분의 경우에 대기시간 1초는 너무나 긴 시간입니다.
+		대기 간격은 대략 해당 크리티컬 섹션을 수행하는데 걸리는 시간
+		정도에서부터 시작해야 하는데, 이는 일반적으로 마이크로세컨드나
+		밀리세컨드 영역에 있을 것입니다.
+	\item	해당 코드는 오버플로우를 체크하지 않고 있습니다.
+		반면에, 이 버그는 그 앞의 버그에 의해 무효가 됩니다: 32 비트로
+		나타낼 수 있는 최대의 초는 50년이 넘습니다.
+	\end{enumerate}
+	\iffalse
+
 	Here are a couple:
 	\begin{enumerate}
 	\item	A one-second wait is way too long for most uses.
@@ -1619,7 +1786,16 @@ Figure~\ref{fig:locking:Conditional Locking and Exponential Backoff}.
 		by the previous bug: 32 bits worth of seconds is
 		more than 50 years.
 	\end{enumerate}
+	\fi
 } \QuickQuizEnd
+
+하지만, 더 나은 결과를 위해, 이 backoff 의 최대 크기는 어딘가에 바운드 되어야만
+하고, 심지어 이보다도 높은 경쟁상황에서의 더 나은 결과가
+Section~\ref{sec:locking:Other Exclusive-Locking Implementations} 에서 이야기
+되는 대기열을 서는 락킹~\cite{Anderson90} 을 통해 관찰되었습니다.
+물론, 가장 최선의 방법은 락 경쟁이 낮은 수준으로 유지되는 좋은 병렬 설계를
+사용하는 것입니다.
+\iffalse
 
 However, for better results, the backoff should be bounded, and
 even better high-contention results have been obtained via queued
@@ -1627,6 +1803,7 @@ locking~\cite{Anderson90}, which is discussed more in
 Section~\ref{sec:locking:Other Exclusive-Locking Implementations}.
 Of course, best of all is to use a good parallel design so that lock
 contention remains low.
+\fi
 
 \subsection{Unfairness}
 \label{sec:locking:Unfairness}
