@@ -1816,6 +1816,21 @@ contention remains low.
 \label{fig:lock:System Architecture and Lock Unfairness}
 \end{figure}
 
+불공정성은 starvation 의 덜 심각한 형태라고 생각되어질 수 있는데, 어떤 주어진
+락을 가지고 경쟁하고 있는 쓰레드들 가운데 일부 쓰레드들이 그 락을 획득하는데 더
+좋은 우선순위를 갖는 경우입니다.
+이는 공유된 캐시들이나 NUMA 특성을 가지고 있는 기계들에서 일어날 수 있는
+일인데, 예를 들어
+Figure~\ref{fig:lock:System Architecture and Lock Unfairness} 같은 경우입니다.
+CPU~0 가 다른 모든 CPU 들이 획득하려 하고 있는 락을 놓게 되는 경우, CPU~0 과 1
+사이의 공유된 접합부는 CPU~1 이 CPU~2-7 에 비해 혜택을 갖게 될 것임을
+의미합니다.
+따라서 CPU~1 은 그 락을 잡는데 성공할 확률이 큽니다.
+CPU~1 이 그 락을 CPU~1 이 놓게 되는 시점에 CPU~0 이 그 락을 다시 잡으려 시도할
+만큼 충분히 오래 잡고있다가 놓게 되거나 그 반대 경우라면, 이 락은 CPU~0 과 1
+사이에서만 오가게 되고 CPU~2-7 은 소외되어 버리게 됩니다.
+\iffalse
+
 Unfairness can be thought of as a less-severe form of starvation,
 where a subset of threads contending for a given lock are granted
 the lion's share of the acquisitions.
@@ -1829,11 +1844,29 @@ Therefore CPU~1 will likely acquire the lock.
 If CPU~1 hold the lock long enough for CPU~0 to be requesting the
 lock by the time CPU~1 releases it and vice versa, the lock can
 shuttle between CPUs~0 and 1, bypassing CPUs~2-7.
+\fi
 
 \QuickQuiz{}
+	락 경쟁정도가 충분히 낮아서 비공정성을 예방할 수 있을 정도가 되는 좋은
+	병렬 설계를 사용하는 편이 더 낫지 않을까요?
+	\iffalse
+
 	Wouldn't it be better just to use a good parallel design
 	so that lock contention was low enough to avoid unfairness?
+	\fi
 \QuickQuizAnswer{
+	어떤 면에서는 그렇게 하는게 낫겠습니다만, 가끔은 높은 락 경쟁률을 갖게
+	되어버리는 설계를 사용하는 편이 더 적합한 상황도 존재합니다.
+
+	예를 들어, 매우 드물게 발생하는 에러 조건을 처리하는 시스템을 생각해
+	봅시다.
+	이렇게 매우 드물게 발생하는 에러 조건에 대해서는 매우 낮은 성능과
+	확장성을 갖지만 간단한 에러 처리 설계를 사용하는 게 그런 매우 드물게
+	발생하는 에러 조건들 가운데 하나가 실제로 발생했을 때에만 효과를 발하는
+	복잡하고 디버깅 하기 어려운 설계를 사용하는 것에 비해 최선일 수
+	있습니다.
+	\iffalse
+
 	It would be better in some sense, but there are situations
 	where it can be appropriate to use
 	designs that sometimes result in high lock contentions.
@@ -1845,11 +1878,18 @@ shuttle between CPUs~0 and 1, bypassing CPUs~2-7.
 	the rare error condition, as opposed to a complex and
 	difficult-to-debug design that is helpful only when one of
 	those rare error conditions is in effect.
+	\fi
+
+	그렇다고는 하나, 간단할 뿐만 아니라 에러 조건에 대해서도 효과적인
+	설계를 만들어내는데 노력을 기울이는 것이 할만한 가치가 있는데, 문제를
+	쪼개는 것이 한 예입니다.
+	\iffalse
 
 	That said, it is usually worth putting some effort into
 	attempting to produce a design that both simple as well as
 	efficient during error conditions, for example by partitioning
 	the problem.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Inefficiency}
