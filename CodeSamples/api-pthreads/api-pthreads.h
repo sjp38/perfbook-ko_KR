@@ -79,7 +79,7 @@ retry:
 		if (errno == EINTR)
 			goto retry;
 		perror("spin_lock_init:pthread_mutex_init");
-		exit(-1);
+		abort();
 	}
 }
 
@@ -87,7 +87,7 @@ static __inline__ void spin_lock(spinlock_t *sp)
 {
 	if (pthread_mutex_lock(sp) != 0) {
 		perror("spin_lock:pthread_mutex_lock");
-		exit(-1);
+		abort();
 	}
 }
 
@@ -100,15 +100,24 @@ static __inline__ int spin_trylock(spinlock_t *sp)
 	if (retval == EBUSY)
 		return 0;
 	perror("spin_trylock:pthread_mutex_trylock");
-	exit(-1);
+	abort();
 }
 
 static __inline__ void spin_unlock(spinlock_t *sp)
 {
 	if (pthread_mutex_unlock(sp) != 0) {
 		perror("spin_unlock:pthread_mutex_unlock");
-		exit(-1);
+		abort();
 	}
+}
+
+static __inline__ int spin_is_locked(spinlock_t *sp)
+{
+	if (spin_trylock(sp)) {
+		spin_unlock(sp);
+		return 0;
+	}
+	return 1;
 }
 
 #define spin_lock_irqsave(l, f) do { f = 1; spin_lock(l); } while (0)
