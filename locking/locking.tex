@@ -2332,6 +2332,26 @@ rests with the developer.
 \subsection{Reader-Writer Locks}
 \label{sec:locking:Reader-Writer Locks}
 
+Reader-writer 락~\cite{Courtois71} 는 그 락이 보호하는 데이터를 읽는 쓰레드는
+다른 쓰레드와 동시에도 얼마든지 잡을 수 있게 허용하는 한편 그 데이터를 쓰는
+쓰레드는 단 하나의 쓰레드만이 그 락을 잡을 수 있도록 합니다.
+이렇게 되면, 이론상으로는, reader-writer 락들은 주로 읽히기만 하고 쓰여지는
+일은 매우 드문 데이터에 대해서는 훌륭한 확장성을 보여야만 합니다.
+실전에서는, 실제 확장성은 해당 reader-writer 락의 구현 내용에 따라서 달라질
+겁니다.
+
+고전적인 reader-writer 락 구현은 어토믹하게 조정되는 여러개의 카운터들과
+플래그들을 사용했습니다.
+이런 종류의 구현들은 짧은 크리티컬 섹션으로 인해 배타적 락킹이 받는 것과 같은
+문제로 어려움을 겪었습니다: 락을 획득하고 해제하는데 드는 오버헤드가 간단한,
+실제 할일만 하는 인스트럭션의 오버헤드에 비해 수백배 가까이 크게 되는
+현상입니다.
+물론, 이 크리티컬 섹션이 충분히 길다면 그 락을 획득하고 해제하는데 드는
+오버헤드는 무시해도 좋은 정도가 됩니다.
+하지만, 한번에 하나의 쓰레드만이 그 락을 조정할 수 있으므로, CPU 의 수가
+늘어남에 따라 필요시되는 크리티컬 섹션의 크기는 커집니다.
+\iffalse
+
 Reader-writer locks~\cite{Courtois71}
 permit any number of readers to hold the lock
 concurrently on the one hand or a single writer to hold the lock
@@ -2353,6 +2373,25 @@ acquiring and releasing the lock becomes negligible.
 However, because only
 one thread at a time can be manipulating the lock, the required
 critical-section size increases with the number of CPUs.
+\fi
+
+쓰레드별 배타적 락을 사용해서 읽기를 하는 쓰레드에 훨씬 더 바람직한 형태로
+reader-writer 락을 설계하는 것도 가능합니다~\cite{WilsonCHsieh92a}.
+읽기를 하기 위해서는, 쓰레드는 자신의 락만을 획득합니다.
+쓰기를 하기 위해서는, 쓰레드는 모든 락들을 획득해야만 합니다.
+쓰기를 하려는 쓰레드가 존재하지 않는 상황이라면, 각 읽기를 하는 쓰레드는 어토믹
+인스트럭션과 메모리 배리어 오버헤드만을 만들어내고, 캐시 미스도 내지 않는데,
+이는 락킹 기능에 있어 상당히 좋은 상황입니다.
+불행히도, 쓰기를 하는 쓰레드는 캐시 미스는 물론이고 어토믹 인스트럭션과 메모리
+배리어 오버헤드까지 모두 만들어내게 됩니다---그 오버헤드는 또한 쓰레드들의
+수만큼 배가 되지요.
+
+요약하자면, reader-writer 락들은 여러 상황에 상당히 유용할 수 있습니다만, 그
+구현은 각 종류마다 그 s나름의 단점을 가지고 있습니다.
+규범적인 reader-writer 락킹의 사용은 상당히 큰 읽기 쓰레드 쪽의 크리티컬 섹션을
+가지고 있을때에만 이뤄지는데 그 크리티컬 섹션의 크기는 수백 마이크로세컨드부터
+심지어 밀리세컨드까지 될수도 있습니다.
+\iffalse
 
 It is possible to design a reader-writer lock that is much more
 favorable to readers through use of per-thread exclusive
@@ -2370,6 +2409,7 @@ situations, but each type of implementation does have its drawbacks.
 The canonical use case for reader-writer locking involves very long
 read-side critical sections, preferably measured in hundreds of microseconds
 or even milliseconds.
+\fi
 
 \subsection{Beyond Reader-Writer Locks}
 \label{sec:locking:Beyond Reader-Writer Locks}
