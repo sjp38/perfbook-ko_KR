@@ -2012,6 +2012,18 @@ and scoped locking (Section~\ref{sec:locking:Scoped Locking}).
 \subsection{Exclusive Locks}
 \label{sec:locking:Exclusive Locks}
 
+배타적 락들은 이름이 말하는 그대로입니다: 한번에 하나의 쓰레드만이 그 락을 쥐고
+있을 수 있습니다.
+따라서 그런 락을 쥐고 있는 쓰레드는 그 락에 의해 보호되는 모든 데이터에 대한
+배타적인 접근을 할 수 있게 되고, 따라서 그런 이름을 갖게 되었습니다.
+
+물론, 이 모든 이야기는 이 락은 그 락에 의해 보호된다고 여겨지는 데이터에 대한
+모든 접근에 걸쳐서 잡혀 있게 된다는 가정을 하고 있습니다.
+모든 필요한 코드 수행 경로에 이 락이 잡혀져 있도록 보장하는 막대한 책임은, 비록
+그 책임의 수행을 도와주는 도구들도 있기는 하지만, 결국은 그 코드의 개발자에게
+있습니다.
+\iffalse
+
 Exclusive locks are what they say they are: only one thread may hold
 the lock at a time.
 The holder of such a lock thus has exclusive access to all data protected
@@ -2022,12 +2034,35 @@ to data purportedly protected by the lock.
 Although there are some tools that can help, the ultimate responsibility
 for ensuring that the lock is acquired in all necessary code paths
 rests with the developer.
+\fi
 
 \QuickQuiz{}
+	배타적 락을 잡고나서 곧바로 풀어버리는, 즉, 텅 빈 크리티컬 섹션과 같은
+	것을 갖는 행위가 어떤 의미를 가질 수 있을까요?
+	\iffalse
+
 	Does it ever make sense to have an exclusive lock acquisition
 	immediately followed by a release of that same lock, that is,
 	an empty critical section?
+	\fi
 \QuickQuizAnswer{
+	텅 빈 크리티컬 섹션의 사용은 드물긴 하지만, 분명히 존재합니다.
+	배타적 락의 의미적 기능은 두개의 부분으로 나뉘어진다는게 핵심입니다:
+	(1)~모두가 잘 알고 있는 데이터 보호의 기능과 (2)~주어진 락을 놓는
+	것으로 같은 락을 획득하기 위해 기다리고 있는 쓰레드에게 던져주는 공지와
+	같은 메세지 전달의 기능입니다.
+	텅 빈 크리티컬 섹션은 데이터 보호의 기능 없이 메세지 전달의 기능만을
+	사용합니다.
+
+	이 답의 나머지 부분에서는 텅 빈 크리티컬 섹션의 사용 예를 몇가지 보여
+	드릴 겁니다만, 이 예제들은 백마법이나 흑마법이 아닌, ``회색 마법''으로
+	여겨져야만 합니다.\footnote{
+		이 설명을 위해 도움 준 Alexey Roytman 에게 감사를 드립니다.}
+	텅 빈 크리티컬 섹션은 그 자체로는 실전에서는 거의 항상 사용되지
+	않습니다.
+	더도 아니고 덜도 아니고, 이 회색 영역 안으로 들어가 봅시다...
+	\iffalse
+
 	This usage is rare, but is occasionally used.
 	The point is that the semantics of exclusive locks have two
 	components: (1)~the familiar data-protection semantic and
@@ -2042,6 +2077,26 @@ rests with the developer.
 		Thanks to Alexey Roytman for this decription.}
 	As such, empty critical sections are almost never used in practice.
 	Nevertheless, pressing on into this gray area...
+	\fi
+
+	텅 빈 크리티컬 섹션이 사용된 역사적 사례 가운데 하나는 리눅스 커널 2.4
+	버전에서의 네트워킹 스택에서 발견됩니다.
+	이 사용 패턴은 Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서
+	다뤄지게 될 read-copy update (RCU) 의 효과를 비슷하게 따라하기 위한
+	방법 중 하나라고 이해될 수 있겠습니다.
+
+	텅 빈 크리티컬 섹션 이라는 관용적 코드는 일부 상황에서 락 경쟁정도를
+	줄이기 위해 사용될 수도 있습니다.
+	예를 들어, 멀티쓰레드로 동작하는 사용자 레벨 어플리케이션으로, 각
+	쓰레드가 전체 일 중에서 쓰레드별 리스트에 매달려서 관리되는 한 단위의
+	조각을 처리하게 되며, 쓰레드는 다른 쓰레드의 리스트를 건드릴 수 없는
+	경우를 생각해 봅시다.
+	이런 상황에서는 업데이트는 앞서 스케쥴 된 일의 조각들이 모두 완료된
+	후에 진행되어야 하는 업데이트가 존재할 겁니다.
+	이런 상황을 처리하는 한가지 방법은 일의 조각들을 각 쓰레드에 스케쥴
+	해서, 이 일의 조각들이 모두 완료되면, 업데이트가 진행되도록 하는
+	것입니다.
+	\iffalse
 
 	One historical use of empty critical sections appeared in the
 	networking stack of the 2.4 Linux kernel.
@@ -2061,6 +2116,26 @@ rests with the developer.
 	One way to handle this is to schedule a unit of work on each
 	thread, so that when all of these units of work complete, the
 	update may proceed.
+	\fi
+
+	일부 어플리케이션에서는 쓰레드는 나타났다가 사라졌다가 할 수 있습니다.
+	예를 들어, 개별 쓰레드는 어플리케이션의 한 사용자에 연관될 수도 있고,
+	따라서 그 사용자가 로그아웃 하거나 어떤 다른 방법으로 연결이 끊기거나
+	하게 되면 그 쓰레드 역시 사라질 겁니다.
+	많은 어플리케이션에서, 쓰레드는 어토믹하게 사라질 수 없습니다: 쓰레드는
+	사라지기 위해서는 쓰레드 자신 스스로를 특정한 일련의 동작들을 하는
+	어플리케이션의 다양한 영역들로부터 명시적으로 떨어져야만 합니다.
+	그런 동작들 중 한 예로는 다른 쓰레드들로부터 들어올 수 있는 이후의 작업
+	요청을 거절하는 것이 될 수 있겠고, 또하나 더 그런 동작의 예를 들어보면
+	쓰레드 자신의 리스트에 아직 남아있는 일거리들을 처분하는 것이 되겠는데,
+	예를 들면, 이런 남아있는 일거리들을 글로벌한 일거리 처분 리스트에
+	집어넣어 다른 남아있는 쓰레드들 가운데 하나에 의해 처분되도록 할 수
+	있겠습니다.
+	(남아있는 일들 각각을 그냥 처리함으로써 그 쓰레드의 일거리 리스트를
+	비워버리는 건 어떨까요?
+	주어진 일거리들은 또다른 일거리를 만들어낼 수도 있기 때문에, 일거리
+	보관 리스트는 적당한 시간 내에 비워지지 못할 수도 있습니다.)
+	\iffalse
 
 	In some applications, threads can come and go.
 	For example, each thread might correspond to one user of the
@@ -2078,6 +2153,22 @@ rests with the developer.
 	each item?
 	Because a given work item might generate more work items, so
 	that the list could not be drained in a timely fashion.)
+	\fi
+
+	이런 어플리케이션이 좋은 확장성과 성능을 가지기 위해선, 좋은 락킹
+	설계가 필요합니다.
+	흔하게 사용되는 해결책 중 하나는 쓰레드의 정리 과정을 전부 보호하는
+	하나의 글로벌 락 (이걸 \co{G} 라고 해보죠) 을 두고 개별적인 정리
+	동작들을 보호하는 더 잘게 쪼개진 크리티컬 섹션을 위한 락을 또 두는
+	것입니다.
+
+	이제, 사라지려 하는 쓰레드는 자신의 일거리 리스트에 있는 일거리들을
+	처분하기에 앞서서 향후의 작업 요청들을 분명하게 거절해야 하는데, 그러지
+	않으면 남아있는 일거리들을 처분한 이후에도 추가적인 일거리들이
+	들이닥쳐서 일거리 처분 과정이 무효가 되게 만들 것이기 때문입니다.
+	그런 점을 고려해 쓰레드가 사라지는 과정을 간략히 슈도코드로 표현해 보면
+	다음과 같을 것입니다:
+	\iffalse
 
 	If the application is to perform and scale well, a good locking
 	design is required.
@@ -2092,6 +2183,20 @@ rests with the developer.
 	otherwise additional work might arrive after the disposal action,
 	which would render that disposal action ineffective.
 	So simplified pseudocode for a departing thread might be as follows:
+	\fi
+
+	\begin{enumerate}
+	\item	락 \co{G} 를 잡습니다.
+	\item	커뮤니케이션을 보호하는 락을 잡습니다.
+	\item	다른 쓰레드로부터의 향후의 커뮤니케이션을 거절합니다.
+	\item	커뮤니케이션을 보호하는 락을 풀어줍니다.
+	\item	글로벌 일거리 처분 리스트를 보호하는 락을 잡습니다.
+	\item	해당 쓰레드의 일거리 리스트에 남아 있는 모든 일거리들을
+		글로벌한 처분될 일거리 리스트에 옮깁니다.
+	\item	글로벌한 처분될 일거리 리스트를 보호하는 락을 풀어줍니다.
+	\item	락 \co{G} 를 풀어줍니다.
+	\end{enumerate}
+	\iffalse
 
 	\begin{enumerate}
 	\item	Acquire lock \co{G}.
@@ -2104,6 +2209,17 @@ rests with the developer.
 	\item	Release the lock guarding the global work-item-disposal list.
 	\item	Release lock \co{G}.
 	\end{enumerate}
+	\fi
+
+	물론, 먼저 스케쥴된 일거리들이 모두 처리되기를 기다리는 쓰레드는
+	사라지는 쓰레드 역시 염두해 두어야 합니다.
+	이 상황을 보기 위해서, 어떤 사라지려 하는 쓰레드가 다른 쓰레드들과의
+	야훙의 커뮤니케이션을 거절한 직후에 모든 앞서 스케쥴된 일거리들이
+	완료되기를 기다리고 있는 쓰레드를 생각해 봅시다.
+	쓰레드들은 다른 쓰레드의 일거리 리스트에 접근할 수 없다는 점을
+	생각해보면, 이 쓰레드는 사라지려 하는 쓰레드의 일거리들이 완료되기를
+	어떻게 기다릴 수 있을까요?
+	\iffalse
 
 	Of course, a thread that needs to wait for all pre-existing work
 	items will need to take departing threads into account.
@@ -2113,6 +2229,15 @@ rests with the developer.
 	How can this thread wait for the departing thread's work items
 	to complete, keeping in mind that threads are not allowed to
 	access each others' lists of work items?
+	\fi
+
+	직선적인 한가지 방법은 이 쓰레드가 \co{G} 를 획득하고 글로벌한 처분될
+	일거리 리스트를 지키는 락을 잡고 나서, 그 리스트의 일거리들을 자신의
+	리스트로 가져오는 것입니다.
+	그러고 나서는 두 락을 모두 놓아주고, 자신의 일거리 리스트의 끝에 일거리
+	하나를 집어넣고, 각 쓰레드의 일거리 리스트 (자신의 것을 포함해) 안에
+	들어있는 일거리들이 완료되기를 기다리는 겁니다.
+	\iffalse
 
 	One straightforward approach is for this thread to acquire \co{G}
 	and then the lock guarding the global work-item-disposal list, then
@@ -2121,6 +2246,16 @@ rests with the developer.
 	places a work item on the end of it own list,
 	and then wait for all of the work items that it placed on each thread's
 	list (including its own) to complete.
+	\fi
+
+	이 방법은 많은 경우에 동작합니다만, 글로벌한 처분될 일거리 리스트로부터
+	가져오는 각각의 일거리에 대해 가져올 때마다 특별한 처리가 필요하다면
+	\co{G} 에의 경쟁도가 지나치게 될 겁니다.
+	그런 지나친 경쟁을 막기위한 한가지 방법은 \co{G} 를 획득한 직후에
+	놔버리는 것입니다.
+	그렇게 되면 앞서 스케쥴된 모든 일거리들이 완료되길 기다리는 과정은
+	다음과 같이 될 것입니다:
+	\iffalse
 
 	This approach does work well in many cases, but if special
 	processing is required for each work item as it is pulled in
@@ -2130,8 +2265,31 @@ rests with the developer.
 	immediately release it.
 	Then the process of waiting for all prior work items look
 	something like the following:
+	\fi
 
 	\begin{enumerate}
+	\item	글로벌 카운터의 값을 1로 두고 조건 변수의 값을 0으로 초기화
+		시킵니다.
+	\item	모든 쓰레드들에 메세지를 보내서 쓰레드들이 어토믹하게 글로벌
+		카운터의 값을 증가시키고 일거리를 대기열에 집어넣게 합니다.
+		그 일거리는 어토믹하게 글로벌 카운터의 값을 감소시키고 그
+		감소된 결과값이 0이라면 조건 변수의 값을 1로 만듭니다.
+	\item	\co{G} 를 잡는데, 이로 인해 사라지려 하는 쓰레드가 있다면
+		사라지는 작업이 끝날 때까지 기다리게 될 것입니다.
+		한번에 하나의 쓰레드만 사라질 수 있기 때문에, 모든 남아있는
+		쓰레드들은 이미 앞의 단계에서 보낸 메세지를 받았을 것입니다.
+	\item	\co{G} 를 놓습니다.
+	\item	글로벌한 처분할 일거리 리스트를 보호하는 락을 잡습니다.
+	\item	글로벌한 처분할 일거리 리스트의 일거리들을 이 쓰레드의 리스트로
+		옮기고, 옮기는데 필요한 일이 있다면 합니다.
+	\item	글로벌한 처분할 일거리 리스트를 보호하는 락을 놓아줍니다.
+	\item	이 쓰레드의 리스트에 추가적으로 일거리 하나를 넣습니다.
+		(앞에서와 마찬가지로, 이 일거리는 자동적으로 글로벌 카운터의
+		값을 어토믹하게 감소시킬 것이고, 그 결과가 0이라면 조건 변수의
+		값을 1로 만듭니다.)
+	\item	조건 변수가 1이 되기를 기다립니다.
+	\iffalse
+
 	\item	Set a global counter to one and initialize a condition
 		variable to zero.
 	\item	Send a message to all threads to cause them to atomically
@@ -2155,12 +2313,20 @@ rests with the developer.
 		the global counter, and if the result is zero, it will
 		set a condition variable to one.)
 	\item	Wait for the condition variable to take on the value one.
+	\fi
 	\end{enumerate}
+
+	이 과정이 완료되면, 모든 앞서 스케쥴된 일거리들은 완료되어 있을 것이
+	보장됩니다.
+	이와 같이, 텅 빈 크리티컬 섹션들은 락킹을 데이터 보호만이 아니라 메세지
+	보내는 용도로 사용하는 것입니다.
+	\iffalse
 
 	Once this procedure completes, all pre-existing work items are
 	guaranteed to have completed.
 	The empty critical sections are using locking for messaging as
 	well as for protection of data.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Reader-Writer Locks}
