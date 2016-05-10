@@ -6932,10 +6932,20 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	카운터의 값이 오버플로우 되어 초기화 되는 경우를 고려하면서 어떻게
+	하나의 카운터가 다른 카운터보다 큰지를 판단할 수 있나요?
+	\iffalse
+
 	How can you tell if one counter is greater than another,
 	while accounting for counter wrap?
+	\fi
 \QuickA{}
+	C 언어에서는 다음과 같은 macro 를 사용해서 이 문제를 정확하게 처리할 수
+	있습니다:
+	\iffalse
+
 	In the C language, the following macro correctly handles this:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -6946,6 +6956,24 @@ ret = ~ret & tmp;
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+	부호를 갖는 정수들을 간단히 빼기 연산하는게 나을 것 같아 보일 수
+	있지만, C 언어에서 부호를 갖는 것들의 오버플로우에 대한 결과는 정의되어
+	있지 않기 때문에 그 방법은 피해져야만 합니다.
+	예를 들어, 만약 컴파일러가 하나의 값은 양수이고 다른 하나는 음수란 것을
+	안다면, 컴파일러는 단순히 양수가 음수보다 크다고 판단할 권리를 갖고
+	있는데, 양수에서 음수를 빼는 결과가 오버플로우를 일으키고 따라서 음수가
+	나올 수 있더라도 그러합니다.
+
+	컴파일러가 어떻게 두 숫자의 부호를 알 수 있을까요?
+	앞의 값 할당과 비교로부터 추론해 낼 수 있습니다.
+	이 경우, CPU 별 카운터들이 부호가 존재한다면, 컴파일러는 항상 그것들이
+	값을 증가시킨다는 것을 추론할 수 있고, 그렇게 되면 이 값들은 결코
+	음수가 되지 않는다고 가정할 수 있습니다.
+	이런 가정은 컴파일러가 유감스러운 코드를 생성하는 결과를 이끌어 낼 수
+	있을
+	겁니다~\cite{PaulEMcKenney2012SignedOverflow,JohnRegehr2010UndefinedBehavior}.
+	\iffalse
 
 	Although it is tempting to simply subtract two signed integers,
 	this should be avoided because signed overflow is undefined
@@ -6965,13 +6993,23 @@ ret = ~ret & tmp;
 	then might assume that they would never go negative.
 	This assumption could well lead the compiler to generate
 	unfortunate code~\cite{PaulEMcKenney2012SignedOverflow,JohnRegehr2010UndefinedBehavior}.
+	\fi
 
 \QuickQ{}
+	카운터 사용과 플래그 사용 중 뭐가 더 나을까요?
+	\iffalse
 	Which is better, the counter approach or the flag approach?
+	\fi
 \QuickA{}
+	플래그를 사용하는 방법은 일반적으로 더 적은 캐시 미스를 낼 겁니다만, 더
+	나은 방법은 두가지 모두 시도해 보고 당장 적용해야 하는 특정한
+	워크로드에서 뭐가 더 잘 동작하는지 보는 것입니다.
+	\iffalse
+
 	The flag approach will normally suffer fewer cache misses,
 	but a better answer is to try both and see which works best
 	for your particular workload.
+	\fi
 
 \QuickQ{}
 	How can relying on implicit existence guarantees result in
