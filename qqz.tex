@@ -6853,20 +6853,47 @@ ret = ~ret & tmp;
 	\fi
 
 \QuickQ{}
+	왜 C 언어에서 기본적으로 제공하는 0으로의 초기화 메커니즘을 사용하지
+	않고 Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange} 의
+	line~2 에 보여진 것처럼 명시적으로 초기화를 하는 거죠?
+	\iffalse
+
 	Why not rely on the C language's default initialization of
 	zero instead of using the explicit initializer shown on
 	line~2 of
 	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange}?
+	\fi
 \QuickA{}
+	이 기본적인 초기화 메커니즘은 한 함수의 범위 안에서 지정된 auto 변수로
+	할당된 락에 대해서는 적용되지 않을 것이기 때문입니다.
+	\iffalse
+
 	Because this default initialization does not apply to locks
 	allocated as auto variables within the scope of a function.
+	\fi
 
 \QuickQ{}
+	왜 Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange} 의
+	line~7-8 의 안쪽 루프를 귀찮게 수행해야 하나요?
+	왜 그냥 간단하게 line~6 에서 계속해서 어토믹한 값 교환 오퍼레이션을
+	수행하지 않는거죠?
+	\iffalse
+
 	Why bother with the inner loop on lines~7-8 of
 	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange}?
 	Why not simply repeatedly do the atomic exchange operation
 	on line~6?
+	\fi
 \QuickA{}
+	락이 잡혀 있고 여러 쓰레드들이 그 락을 잡으려 시도한다고 생각해 봅시다.
+	이런 상황에서, 이 쓰레드들이 모두 어토믹 값 교환 오퍼레이션을 하면서
+	루프를 반복한다면, 이들은 그 락을 포함하고 있는 캐시 라인을 쓰레드들
+	사이에서 계속 주고받을 것이고, 이는 곧 CPU 사이의 로드를 의미합니다.
+	반면에, 이 쓰레드들이 line~7-8 의 안쪽 루프에서 루프를 돌게 되면 각자의
+	캐시만을 가지고 루프를 돌게 되어서 CPU 사이의 로드는 위협이 되지 않을
+	정도가 될 것입니다.
+	\iffalse
+
 	Suppose that the lock is held and that several threads
 	are attempting to acquire the lock.
 	In this situation, if these threads all loop on the atomic
@@ -6876,11 +6903,25 @@ ret = ~ret & tmp;
 	In contrast, if these threads are spinning in the inner
 	loop on lines~7-8, they will each spin within their own
 	caches, putting negligible load on the interconnect.
+	\fi
 
 \QuickQ{}
-	Why not simply store zero into the lock word on line 14 of
+	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange} 의
+	line~14 에서는 왜 그냥 간단하게 락에 0 값을 저장하지 않는거죠?
+	\iffalse
+
+	Why not simply store zero into the lock word on line~14 of
 	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange}?
+	\fi
 \QuickA{}
+	그렇게 하는 것도 문제 없는 구현이긴 합니다만, 그 저장 작업에
+	\co{ACCESS_ONCE()} 사용되고, 그 뒤에 메모리 배리어가 놓여질 때에만
+	그렇습니다.
+	메모리 배리어는 \co{xchg()} 오퍼레이션이 사용될 경우에는 필요치 않은데
+	이 오퍼레이션은 전의 값을 리턴해야 한다는 사실 때문에 자체적으로 전체
+	메모리 배리어를 내포하고 있기 때문입니다.
+	\iffalse
+
 	This can be a legitimate implementation, but only if
 	this store is preceded by a memory barrier and makes use
 	of \co{ACCESS_ONCE()}.
@@ -6888,6 +6929,7 @@ ret = ~ret & tmp;
 	operation is used because this operation implies a
 	full memory barrier due to the fact that it returns
 	a value.
+	\fi
 
 \QuickQ{}
 	How can you tell if one counter is greater than another,

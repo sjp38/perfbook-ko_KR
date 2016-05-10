@@ -3001,22 +3001,52 @@ environments.
 \label{fig:locking:Sample Lock Based on Atomic Exchange}
 \end{figure}
 
+이 섹션은
+Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange} 에 보인 구현을
+알아봅니다.
+이 락을 위한 데이터 구조체는 line~1 에 보여졌듯이 그저 하나의 \co{int} 인데, 그
+외에도 다른 정수형 타입이어도 상관없습니다.
+이 락의 최초 값은 0으로, line~2 에 보여졌듯이 ``락이 걸리지 않았음''을
+의미합니다.
+\iffalse
+
 This section reviews the implementation shown in
 Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange}.
 The data structure for this lock is just an \co{int}, as shown on
 line~1, but could be any integral type.
 The initial value of this lock is zero, meaning ``unlocked'',
 as shown on line~2.
+\fi
 
 \QuickQuiz{}
+	왜 C 언어에서 기본적으로 제공하는 0으로의 초기화 메커니즘을 사용하지
+	않고 Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange} 의
+	line~2 에 보여진 것처럼 명시적으로 초기화를 하는 거죠?
+	\iffalse
+
 	Why not rely on the C language's default initialization of
 	zero instead of using the explicit initializer shown on
 	line~2 of
 	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange}?
+	\fi
 \QuickQuizAnswer{
+	이 기본적인 초기화 메커니즘은 한 함수의 범위 안에서 지정된 auto 변수로
+	할당된 락에 대해서는 적용되지 않을 것이기 때문입니다.
+	\iffalse
+
 	Because this default initialization does not apply to locks
 	allocated as auto variables within the scope of a function.
+	\fi
 } \QuickQuizEnd
+
+Lock 획득은 line~4-9 의 \co{xchg_lock()} 함수에 의해 수행됩니다.
+이 함수는 중첩된 루프를 사용하는데, 바깥의 루프를 통해서는 반복적으로
+어토믹하게 락의 값을 1 (``락이 걸렸음'' 을 의미) 과 바꿉니다.
+만약 이전의 값이 이미 값 1 이었다면 (다시 말해, 누군가가 이미 락을 잡고
+있다면), 안의 루프 (line~7-8) 에서는 그 락이 풀려서 다시 잡으려 시도할 수 있을
+때까지 루프를 돌면서 기다리는데, 기다림이 끝나면 바깥 루프에서 다시 한번 락을
+잡기 위한 시도를 할 수 있게 됩니다.
+\iffalse
 
 Lock acquisition is carried out by the \co{xchg_lock()} function
 shown on lines~4-9.
@@ -3027,13 +3057,30 @@ If the old value was already the value one (in other words, someone
 else already holds the lock), then the inner loop (lines~7-8)
 spins until the lock is available, at which point the outer loop
 makes another attempt to acquire the lock.
+\fi
 
 \QuickQuiz{}
+	왜 Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange} 의
+	line~7-8 의 안쪽 루프를 귀찮게 수행해야 하나요?
+	왜 그냥 간단하게 line~6 에서 계속해서 어토믹한 값 교환 오퍼레이션을
+	수행하지 않는거죠?
+	\iffalse
+
 	Why bother with the inner loop on lines~7-8 of
 	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange}?
 	Why not simply repeatedly do the atomic exchange operation
 	on line~6?
+	\fi
 \QuickQuizAnswer{
+	락이 잡혀 있고 여러 쓰레드들이 그 락을 잡으려 시도한다고 생각해 봅시다.
+	이런 상황에서, 이 쓰레드들이 모두 어토믹 값 교환 오퍼레이션을 하면서
+	루프를 반복한다면, 이들은 그 락을 포함하고 있는 캐시 라인을 쓰레드들
+	사이에서 계속 주고받을 것이고, 이는 곧 CPU 사이의 로드를 의미합니다.
+	반면에, 이 쓰레드들이 line~7-8 의 안쪽 루프에서 루프를 돌게 되면 각자의
+	캐시만을 가지고 루프를 돌게 되어서 CPU 사이의 로드는 위협이 되지 않을
+	정도가 될 것입니다.
+	\iffalse
+
 	Suppose that the lock is held and that several threads
 	are attempting to acquire the lock.
 	In this situation, if these threads all loop on the atomic
@@ -3043,17 +3090,37 @@ makes another attempt to acquire the lock.
 	In contrast, if these threads are spinning in the inner
 	loop on lines~7-8, they will each spin within their own
 	caches, putting negligible load on the interconnect.
+	\fi
 } \QuickQuizEnd
+
+락의 해제는 line~12-15 의 \co{xchg_unlock()} 함수에 의해 이루어집니다.
+Line~14 는 어토믹하게 락의 값을 0 (``락이 걸리지 않았음'') 으로 교체해서 그
+락이 풀려 있는 상태임을 알립니다.
+\iffalse
 
 Lock release is carried out by the \co{xchg_unlock()} function
 shown on lines~12-15.
 Line~14 atomically exchanges the value zero (``unlocked'') into
 the lock, thus marking it as having been released.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange} 의
+	line~14 에서는 왜 그냥 간단하게 락에 0 값을 저장하지 않는거죠?
+	\iffalse
+
 	Why not simply store zero into the lock word on line~14 of
 	Figure~\ref{fig:locking:Sample Lock Based on Atomic Exchange}?
+	\fi
 \QuickQuizAnswer{
+	그렇게 하는 것도 문제 없는 구현이긴 합니다만, 그 저장 작업에
+	\co{ACCESS_ONCE()} 사용되고, 그 뒤에 메모리 배리어가 놓여질 때에만
+	그렇습니다.
+	메모리 배리어는 \co{xchg()} 오퍼레이션이 사용될 경우에는 필요치 않은데
+	이 오퍼레이션은 전의 값을 리턴해야 한다는 사실 때문에 자체적으로 전체
+	메모리 배리어를 내포하고 있기 때문입니다.
+	\iffalse
+
 	This can be a legitimate implementation, but only if
 	this store is preceded by a memory barrier and makes use
 	of \co{ACCESS_ONCE()}.
@@ -3061,11 +3128,17 @@ the lock, thus marking it as having been released.
 	operation is used because this operation implies a
 	full memory barrier due to the fact that it returns
 	a value.
+	\fi
 } \QuickQuizEnd
+
+이 락은 test-and-set 락~\cite{Segall84} 의 한가지 간단한 예입니다만, 실제 상용
+제품에서도 매우 비슷한 메커니즘이 순수한 스핀락을 위해 상당히 많이 사용됩니다.
+\iffalse
 
 This lock is a simple example of a test-and-set lock~\cite{Segall84},
 but very similar
 mechanisms have been used extensively as pure spinlocks in production.
+\fi
 
 \subsection{Other Exclusive-Locking Implementations}
 \label{sec:locking:Other Exclusive-Locking Implementations}
