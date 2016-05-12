@@ -3663,6 +3663,19 @@ and kernels.
 \subsection{Locking For Parallel Libraries: Just Another Tool}
 \label{sec:locking:Locking For Parallel Libraries: Just Another Tool}
 
+어플리케이션과 커널들의 경우와 달리, 라이브러리의 설계자는 라이브러리와 함께
+동작하게 될 코드의 락킹 설계에 대해서 알 수가 없습니다.
+사실, 그 코드는 몇년 이후에야 쓰여질 수도 있습니다.
+따라서 라이브러리의 설계자는 마음대로 제어할 수 있는 부분이 더 적고
+라이브러리의 동기화 설계를 만들 때 더 많은 주의를 기울여야만 합니다.
+
+Deadlock 은 물론 특별히 신경써야 하는 부분이고, 따라서
+Section~\ref{sec:locking:Deadlock} 에서 언급한 기술들이 적용되어야 합니다.
+유명한 deadlock 방지 방법 가운데 하나는 라이브러리의 락들은 라이브러리를 둘러싼
+프로그램의 락킹 계층의 독립적인 부집합이라 보장을 하는 것입니다.
+하지만, 이는 보이기보다 좀 더 어려울 수 있습니다.
+\iffalse
+
 Unlike applications and kernels, the designer of a library cannot
 know the locking design of the code that the library will be interacting
 with.
@@ -3676,6 +3689,27 @@ One popular deadlock-avoidance strategy is therefore to ensure that
 the library's locks are independent subtrees of the enclosing program's
 locking hierarchy.
 However, this can be harder than it looks.
+\fi
+
+그런 복잡한 문제들 중 하나는 Section~\ref{sec:locking:Local Locking
+Hierarchies} 에서 이야기 되었는데, \co{qsort()} 의 비교 함수를 인자로 사용해서
+라이브러리 함수가 어플리케이션 코드를 호출할때가 이 경우가 될 수 있겠습니다.
+또다른 복잡한 문제는 시그널 핸들러와의 상호작용입니다.
+어떤 어플리케이션의 시그널 핸들러가 라이브러리 함수 수행 중 받은 시그널에 의해
+호출되는 경우, 그 라이브러리 함수가 그 시그널 핸들러를 직접 호출한다면 분명
+deadlock 이 발생할 수 있습니다.
+마지막으로, 또하나의 복잡한 문제가 일어날 수 있는 경우는
+\co{fork()}/\co{exec()} 사이에서 사용될 수 있는 라이브러리 함수인데, 예를 들면
+\co{system()} 함수의 사용으로 인한 경우입니다.
+이런 경우, 라이브러리 함수가 \co{fork()} 시점에 어떤 락을 잡고 있었다면, 자식
+프로세스는 그 락을 잡은채 수행을 시작합니다.
+그런데 그 락을 놓아줄 쓰레드는 자식 프로세스가 아니라 부모 프로세스에서
+돌아가고 있으므로, 만약 자식이 라이브러리 함수를 또다시 호출하게 되면 deadlock
+이 발생할 것입니다.
+
+다음의 전략들은 이런 경우들에서 deadlock 문제를 해결하기 위해 사용될 수 있을
+것입니다:
+\iffalse
 
 One complication was discussed in
 Section~\ref{sec:locking:Local Locking Hierarchies}, namely
@@ -3695,17 +3729,31 @@ but not the child, if the child calls your library function, deadlock
 will ensue.
 
 The following strategies may be used to avoid deadlock problems in these cases:
+\fi
 
 \begin{enumerate}
+\item	콜백도 시그널도 사용하지 말 것.
+\item	콜백이나 시그널 핸들러 안에서 락을 잡지 말 것.
+\item	호출자가 동기화를 제어하도록 할 것.
+\item	락킹을 호출자에게 넘길 수 있도록 라이브러리 API 를 조정할 것.
+\item	명시적으로 콜백 deadlock 을 없앨것.
+\item	명시적으로 시그널 핸들러 deadlock 을 없앨것.
+\iffalse
+
 \item	Don't use either callbacks or signals.
 \item	Don't acquire locks from within callbacks or signal handlers.
 \item	Let the caller control synchronization.
 \item	Parameterize the library API to delegate locking to caller.
 \item	Explicitly avoid callback deadlocks.
 \item	Explicitly avoid signal-handler deadlocks.
+\fi
 \end{enumerate}
 
+이 전략들 각각이 다음 섹션들에서 설명됩니다.
+\iffalse
+
 Each of these strategies is discussed in one of the following sections.
+\fi
 
 \subsubsection{Use Neither Callbacks Nor Signals}
 \label{sec:locking:Use Neither Callbacks Nor Signals}
