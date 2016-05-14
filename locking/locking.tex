@@ -3788,6 +3788,22 @@ The strategy described in the next section can often be used in these cases.
 \subsubsection{Avoid Locking in Callbacks and Signal Handlers}
 \label{sec:locking:Avoid Locking in Callbacks and Signal Handlers}
 
+어떤 콜백도 시그널 핸들러도 락을 잡지 않는다면, 이것들은 데드락 사이클에 포함될
+수가 없는데, 이 사실은 다시 한번 일직선적인 락킹 계층에서 라이브러리 함수들을
+락킹 계층 tree 의 leaf 로 만들어주는 방법을 고려해 보게 합니다.
+이 전략은 콜백은 단순히 자신에게 넘겨진 두개의 값을 비교하기만 하는 \co{qsort}
+의 사용에 있어 매우 잘 동작합니다.
+이 전략은 또한 많은 시그널 핸들러들에 대해서도 놀라우리만큼 잘 동작하는데, 특히
+시그널 핸들러 안에서 락을 잡는 행위는 일반적으로 좋지 않은 일이라는
+사실~\cite{TheOpenGroup1997SUS}\footnote{
+	하지만 표준의 말들은 똑똑한 코더들이 어토믹 오퍼레이션을 가지고
+	자신만의 락킹 도구들을 만드는 걸 막지는 못합니다.}
+을 놓고 보면 더욱 그렇습니다만 어플리케이션이 시그널 핸들러 안에서 복잡한
+데이터 구조체를 조작해야 할 필요가 있다면 잘 동작하지 못할 수도 있습니다.
+
+복잡한 데이터 구조체를 조작해야 하는 상황에서도 시그널 핸들러에서 락을 잡는 향위를 막을 수 있는 몇가지 방법은 다음과 같습니다:
+\iffalse
+
 If neither callbacks nor signal handlers acquire locks, then they
 cannot be involved in deadlock cycles, which allows straightforward
 locking hierarchies to once again consider library functions to
@@ -3804,8 +3820,22 @@ from a signal handler.
 
 Here are some ways to avoid acquiring locks in signal handlers even
 if complex data structures must be manipulated:
+\fi
 
 \begin{enumerate}
+\item	Section~\ref{sec:advsync:Simple NBS} 에서 이야기될 non-blocking
+	동기화를 사용하는 간단한 데이터 구조체들을 사용하세요.
+\item	데이터 구조체가 non-blocking 동기화를 합리적으로 사용하기 어려울 정도로
+	너무 복잡하다면, non-blocking 한 집어넣기 오퍼레이션을 제공하는
+	대기열을 하나 만드세요.
+	시그널 핸들러에서는 그 복잡한 데이터 구조체를 직접 제어하는 대신,
+	필요한 변경사항을 의미하는 원소를 이 대기열에 집어넣으세요.
+	별도의 쓰레드는 이 큐에서 원소를 꺼내서 일반적인 락킹을 사용해서 그
+	요청된 변경을 대신 해줍니다.
+	이미 사용 가능한 동시적 대기열의 구현들이 여럿
+	있습니다~\cite{ChristophMKirsch2012FIFOisntTR,MathieuDesnoyers2009URCU,MichaelScott96}.
+\iffalse
+
 \item	Use simple data structures based on non-blocking synchronization,
 	as will be discussed in
 	Section~\ref{sec:advsync:Simple NBS}.
@@ -3820,12 +3850,21 @@ if complex data structures must be manipulated:
 	There are a number of readily available implementations of
 	concurrent
 	queues~\cite{ChristophMKirsch2012FIFOisntTR,MathieuDesnoyers2009URCU,MichaelScott96}.
+\fi
 \end{enumerate}
+
+이 전략은 임시의 매뉴얼이나 콜백들과 시그널 핸들러들의 자동화된 검사기능
+(이편이 더 좋습니다) 아래에서만 사용되어야 합니다.
+이런 검사기능을 수행할 때에는 현명한 코더들이 (지혜롭지 못하게도) 만들어낸,
+어토믹 오퍼레이션을 사용해 만들어진 그들만의 락을 사용할 수도 있다는 점에
+조심해야만 합니다.
+\iffalse
 
 This strategy should be enforced with occasional manual or (preferably)
 automated inspections of callbacks and signal handlers.
 When carrying out these inspections, be wary of clever coders who
 might have (unwisely) created home-brew locks from atomic operations.
+\fi
 
 \subsubsection{Caller Controls Synchronization}
 \label{sec:locking:Caller Controls Synchronization}
