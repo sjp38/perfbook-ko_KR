@@ -3998,9 +3998,21 @@ locks, the strategies in the next section may prove helpful.
 \subsubsection{Explicitly Avoid Signal-Handler Deadlocks}
 \label{sec:locking:Explicitly Avoid Signal-Handler Deadlocks}
 
+시그널 핸들러 데드락은 다음과 같이 명시적으로 예방될 수 있습니다:
+\iffalse
+
 Signal-handler deadlocks can be explicitly avoided as follows:
+\fi
 
 \begin{enumerate}
+\item	어플리케이션이 라이브러리 함수를 시그널 핸들러에서 실행한다면, 그
+	시그널은 시그널 핸들러 밖에서 해당 라이브러 함수가 호출될 때마다
+	블락되어야만 합니다.
+\item	어플리케이션이 어떤 시그널 핸들러 안에서 잡은 락을 쥐고 있는 채로
+	라이브러리 함수를 실행한다면, 그 시그널은 그 라이브러리 함수가 시그널
+	핸들러 밖에서 호출될 때마다 블락되어야 합니다.
+\iffalse
+
 \item	If the application invokes the library function from
 	within a signal handler, then that signal must be blocked
 	every time that the library function is invoked from outside
@@ -4009,16 +4021,41 @@ Signal-handler deadlocks can be explicitly avoided as follows:
 	while holding a lock acquired within a given signal
 	handler, then that signal must be blocked every time that the
 	library function is called outside of a signal handler.
+\fi
 \end{enumerate}
+
+이런 규칙들은 리눅스 커널의 lockdep 락 의존성 체크
+도구~\cite{JonathanCorbet2006lockdep} 와 비슷한 도구들을 사용해서 강제될 수
+있습니다.
+Lockdep 의 강력한 점 중 하나는 사람의 직관에 의해 잘못된 실수를 저지르지
+않는다는 점입니다~\cite{StevenRostedt2011locdepCryptic}.
+\iffalse
 
 These rules can be enforced by using tools similar to
 the Linux kernel's lockdep lock dependency
 checker~\cite{JonathanCorbet2006lockdep}.
 One of the great strengths of lockdep is that it is not fooled by
 human intuition~\cite{StevenRostedt2011locdepCryptic}.
+\fi
 
 \subsubsection{Library Functions Used Between fork() and exec()}
 \label{sec:locking:Library Functions Used Between fork() and exec()}
+
+앞에서 이야기 했듯이, 라이브러리 함수를 수행하는 쓰레드가 또다른 어떤 쓰레드가
+\co{fork()} 를 수행할 때 락을 쥐고 있었다면, 부모 프로세스의 메모리가 자식
+프로세스를 만들기 위해 복사된다는 사실은 이 락이 자식 프로세스의 컨텍스트에는
+잡힌 채로 자식 프로세스가 태어나게 됨을 의미합니다.
+이 락을 해제하는 쓰레드는 부모 프로세스에서 동작하고 있지 자식 프로세스에서
+동작하고 있지않으므로, 자식 프로세스의 이 락의 복사본은 결코 해제되지 않을
+것입니다.
+따라서, 자식 프로세스 쪽에서 같은 라이브러리 함수를 실행하려는 시도는 모두
+deadlock 을 초래하고 말 것입니다.
+
+이 문제를 해결하는 한가지 방법은 이 라이브러리 함수가 그 락의 소유자가 여전히
+수행중인지 보고, 만약 그렇지 않다면 그 락을 다시 초기화시킴으로써 ``깨버리고''
+다시 잡는 것입니다.
+하지만, 이 방법에는 두개의 취약점이 존재합니다:
+\iffalse
 
 As noted earlier, if a thread executing a library function is holding
 a lock at the time that some other thread invokes \co{fork()}, the
@@ -4034,8 +4071,17 @@ One approach to this problem would be to have the library function
 check to see if the owner of the lock is still running, and if not,
 ``breaking'' the lock by re-initializing and then acquiring it.
 However, this approach has a couple of vulnerabilities:
+\fi
 
 \begin{enumerate}
+\item	그 락에 의해 보호되던 데이터 구조체들은 어떤 중간 상태에 빠져 있어서
+	낙관적으로 락을 깨는 행위는 임의의 메모리 오염을 초래할 수 있습니다.
+\item	자식 프로세스가 추가적인 쓰레드들을 생성하면, 두 쓰레드들은 그 락을
+	동시에 깰 수 있고, 이렇게 되면 두 쓰레드 모두 자신이 락을 잡고 있다고
+	생각하게 될 것입니다.
+	이는 또다시 임의의 메모리 오염 상황을 초래할 수 있습니다.
+\iffalse
+
 \item	The data structures protected by that lock are likely to
 	be in some intermediate state, so that naively breaking the lock
 	might result in arbitrary memory corruption.
@@ -4043,7 +4089,22 @@ However, this approach has a couple of vulnerabilities:
 	break the lock concurrently, with the result that both
 	threads believe they own the lock.
 	This could again result in arbitrary memory corruption.
+\fi
 \end{enumerate}
+
+이런 상황을 처리하는 걸 돕기 위해 \co{atfork()} 함수가 존재합니다.
+아이디어는 세개의 함수들을 등록해 두는데, 이 함수들 중 하나는 \co{fork()} 전에
+부모 프로세스에 의해서 호출되고, 또하나는 \co{fork()} 후에 부모 프로세스에
+의해서 호출되고, 마지막 하나는 \co{fork()} 후에 자식 프로세스에 의해
+호출됩니다.
+이런 상황에서는 이 세개의 시점에서 적절한 처리를 함으로써 이 상황을 해결할 수
+있습니다.
+
+하지만, \co{atfork()} 핸들러들의 코딩은 일반적으로 상당히 섬세하게 되어야 함에
+주의하시기 바랍니다.
+\co{atfork()} 방식이 가장 잘 동작할 수 있는 경우들은 사용되는 데이터 구조체들이
+자식 프로세스에 의해 간단히 다시 초기화 될 수 있는 경우들입니다.
+\iffalse
 
 The \co{atfork()} function is provided to help deal with these situations.
 The idea is to register a triplet of functions, one to be called by the
@@ -4055,6 +4116,7 @@ Be warned, however, that coding of \co{atfork()} handlers is quite subtle
 in general.
 The cases where \co{atfork()} works best are cases where the data structure
 in question can simply be re-initialized by the child.
+\fi
 
 \subsubsection{Parallel Libraries: Discussion}
 \label{sec:locking:Parallel Libraries: Discussion}
