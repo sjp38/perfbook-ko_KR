@@ -4176,6 +4176,18 @@ sections.
 \subsubsection{Partitioning Prohibited}
 \label{sec:locking:Partitioning Prohibited}
 
+싱글 쓰레드로 해시 테이블을 구현하고 있다고 생각해 봅시다.
+해시 테이블의 모든 아이템의 정확한 갯수를 유지하는 것은 쉽고 빠르게 할 수 있을
+것이고, 또한 이 정확한 갯수를 매 원소 추가와 삭제 작업때마다 가져다 주는 것도
+쉽고 빠르게 할 수 있을 것입니다.
+그런데 왜 병렬화가 어려울까요?
+
+한가지 이유는 정확한 카운터는 Chapter~\ref{chp:Counting} 에서 봤듯이 멀티코어
+시스템에서는 성능도 확장성도 그렇게 좋지 못하다는 점입니다.
+결국, 이 해시 테이블의 병렬화된 구현은 성능도 확장성도 그다지 좋지 않을
+것입니다.
+\iffalse
+
 Suppose that you were writing a single-threaded hash-table implementation.
 It is easy and fast to maintain an exact count of the total number of items
 in the hash table, and also easy and fast to return this exact count on each
@@ -4187,6 +4199,18 @@ multicore systems, as was
 seen in Chapter~\ref{chp:Counting}.
 As a result, the parallelized implementation of the hash table will not
 perform or scale well.
+\fi
+
+이 문제를 어떻게 하면 좋을까요?
+한가지 방법은 Chapter~\ref{chp:Counting} 에서 이야기한 알고리즘들 가운데 하나를
+사용해서 대략적인 수치를 주는 것입니다.
+또다른 방법은 원소 갯수 카운트 기능을 버려버리는 겁니다.
+
+어떤 방법을 사용하든, 해시테이블에 원소를 추가하거나 삭제할 때마다 정확한 원소
+갯수를 알아야 하는 이유를 알기 위해 해시 테이블의 사용 패턴을 잘 알아볼 필요가
+있을 겁니다.
+여기 몇가지 가능한 경우를 열거해 보면:
+\iffalse
 
 So what can be done about this?
 One approach is to return an approximate count, using one of the algorithms
@@ -4196,8 +4220,24 @@ Another approach is to drop the element count altogether.
 Either way, it will be necessary to inspect uses of the hash table to see
 why the addition and deletion operations need the exact count.
 Here are a few possibilities:
+\fi
 
 \begin{enumerate}
+\item	해시 테이블의 크기를 재조정 해야할 때를 결정하기 위해.
+	이 경우, 대략적인 카운트도 상당히 잘 동작할 것입니다.
+	또한 크기 재조정 작업을 가장 긴 체인의 길이에 따라서 시작하도록 하는
+	것도 효율적일텐데, 이는 체인 별로 잘 파티셔닝 된 형태로 계산되고 관리될
+	수 있을 것입니다.
+\item	전체 해시 테이블을 돌아다니는데 필요한 시간을 계산하기 위해서.
+	대략적인 카운트는 이 경우에도 역시 잘 동작할 것입니다.
+\item	예를 들면 해시 테이블로 집어넣고 해시테이블로부터 빼내는 항목이 없어진
+	경우의 확인 등을 위한 검사의 목적을 위해서.
+	이 경우는 분명히 정확한 카운트를 필요로 합니다.
+	하지만, 이런 사용은 기본적으로 검사를 위한 것이기 때문에 해시 체인들의
+	길이를 유지하면서 가끔 가다 원소 추가와 삭제 작업을 막아 두고 그 합을
+	구하는 것만으로도 충분할 것입니다.
+\iffalse
+
 \item	Determining when to resize the hash table.
 	In this case, an approximate count should work quite well.
 	It might also be useful to trigger the resizing operation from
@@ -4213,7 +4253,23 @@ Here are a few possibilities:
 	suffice to maintain the lengths of the hash chains, then to
 	infrequently sum them
 	up while locking out addition and deletion operations.
+\fi
 \end{enumerate}
+
+이제 병렬 라이브러리 API 자체에 존재하는 성능과 확장성에 대한 일부 제약에 대한
+강한 이론적 토대가 존재함이
+밝혀졌습니다~\cite{HagitAttiya2011LawsOfOrder,Attiya:2011:LOE:1925844.1926442,PaulEMcKenney2011SNC}.
+병렬 라이브러리를 설계하는 사람들은 모두 그런 제약에 대해 깊이 알아볼 필요가
+있습니다.
+
+락킹을 동시성에 친화적이지 않은 API 라 문제라고 비난하는 것은 너무 쉬운
+일이지만 그렇게 하는게 현실적으로 큰 도움이 되지는 않습니다.
+반면에, (대략) 1985 년에 그 설계 선택을 내려야만 했던 불운한 개발자에게 공감을
+하는 소수의 선택을 할 수도 있을 것입니다.
+그당시에는 병렬성의 필요성을 예견하는 개발자는 매우 드물고 용기있는 개발자였을
+것이고, 심지어 실제로 좋은 병렬성 친화적인 API 를 만드는데에는 용기와 행운의
+조합이 필요했을 것입니다.
+\iffalse
 
 It turns out that there is now a strong theoretical basis for some of the
 constraints that performance and scalability place on a parallel library's
@@ -4229,6 +4285,19 @@ It would have been a rare and courageous developer to anticipate the
 need for parallelism at that time, and it would have required an
 even more rare combination of brilliance and luck to actually arrive
 at a good parallel-friendly API.
+\fi
+
+시간은 흐르게 마련이고, 코드도 그와 더불어 변화해 갑니다.
+그렇다고는 하나, 유명한 라이브러리라면 수많은 사용자가 존재할 수도 있고, 그런
+경우에 호환성을 잃는 변경을 그 라이브러리의 API 에 가하는 것은 매우 멍청한 짓일
+겁니다.
+이미 존재하고 매우 많이 사용되고 있는 순차적으로만 동작하는 API 를 보완하기
+위한 병렬성 친화적인 API 를 추가하는 것이 이런 상황에서는 최선의 선택일 겁니다.
+
+더도 아니고 덜도 아니고, 인간사가 그렇듯이, 우리의 불운한 개발자는 자신의
+(이해할 수 있기는 하지만) 잘못된 API 설계 선택보다는 락킹 자체를 비난할
+가능성이 더 클 것임을 예상할 수 있습니다.
+\iffalse
 
 Times change, and code must change with them.
 That said, there might be a huge number of users of a popular library,
@@ -4240,6 +4309,7 @@ situation.
 Nevertheless, human nature being what it is, we can expect our hapless
 developer to be more likely to complain about locking than about his
 or her own poor (though understandable) API design choices.
+\fi
 
 \subsubsection{Deadlock-Prone Callbacks}
 \label{sec:locking:Deadlock-Prone Callbacks}
