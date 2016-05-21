@@ -267,12 +267,30 @@ parallel programs.
 \section{Partial Data Ownership and pthreads}
 \label{sec:owned:Partial Data Ownership and pthreads}
 
+Chapter~\ref{chp:Counting} 는 데이터 소유권을 많이 사용하고 있습니다만, 한가지
+새로운 방식을 가지고 있습니다.
+쓰레드들은 다른 쓰레드들에 의해 소유되는 데이터를 수정할 수 없도록 되어있지만,
+그것들을 읽을 수는 있습니다.
+한마디로, 여기서의 공유메모리 사용은 소유권과 접근 권한들에의 더 많은, 묘한
+개념들을 허용합니다.
+\iffalse
+
 Chapter~\ref{chp:Counting} makes heavy use of data ownership,
 but adds a twist.
 Threads are not allowed to modify data owned by other threads,
 but they are permitted to read it.
 In short, the use of shared memory allows more nuanced notions
 of ownership and access rights.
+\fi
+
+예를 들어,
+page~\pageref{fig:count:Per-Thread Statistical Counters} 의
+Figure~\ref{fig:count:Per-Thread Statistical Counters} 에 있는
+쓰레드별 통계적 카운터 구현을 생각해 봅시다.
+여기서, \co{inc_count()} 는 연관된 쓰레드의 \co{counter} 인스턴스를 수정할
+뿐입니다만, \co{read_count()} 는 모든 쓰레드의 \co{counter} 인스턴스들을
+접근하되 수정하지는 않습니다.
+\iffalse
 
 For example, consider the per-thread statistical counter implementation
 shown in
@@ -282,12 +300,26 @@ Here, \co{inc_count()} updates only the corresponding thread's
 instance of \co{counter},
 while \co{read_count()} accesses, but does not modify, all
 threads' instances of \co{counter}.
+\fi
 
 \QuickQuiz{}
+	각각의 쓰레드가 자신의 쓰레드별 변수만을 읽을 수 있지만 다른 쓰레드의
+	인스턴스들에는 쓰기를 할 수도 있는 부분적 데이터 소유권도 말이 될까요?
+	\iffalse
+
 	Does it ever make sense to have partial data ownership where
 	each thread reads only its own instance of a per-thread variable,
 	but writes to other threads' instances?
+	\fi
 \QuickQuizAnswer{
+	놀랍게도, 그렇습니다.
+	한가지 예는 쓰레드들이 다른 쓰레드의 메일함에 메세지를 보내고, 각
+	쓰레드는 자신이 보낸 메세지를 일단 그 메세지가 읽혀졌다면 지워야 할
+	책임을 갖는 간단한 메세지 전달 시스템입니다.
+	그런 알고리즘의 구현은 다른 알고리즘들을 비슷한 소유권 패턴으로 구분해
+	보는 일과 함께 독자의 몫으로 남겨두겠습니다.
+	\iffalse
+
 	Amazingly enough, yes.
 	One example is a simple message-passing system where threads post
 	messages to other threads' mailboxes, and where each thread
@@ -296,7 +328,15 @@ threads' instances of \co{counter}.
 	Implementation of such an algorithm is left as an exercise for the
 	reader, as is the task of identifying other algorithms with
 	similar ownership patterns.
+	\fi
 } \QuickQuizEnd
+
+순수한 데이터 소유권은 일반적이고 할 뿐더러 유용한데,
+page~\pageref{sec:SMPdesign:Resource Allocator Caches} 부터 시작되는
+Section~\ref{sec:SMPdesign:Resource Allocator Caches} 에서 이야기된
+쓰레드별 메모리 할당자 캐시가 한 예입니다.
+이 알고리즘에서, 각 쓰레드의 캐시는 그 쓰레드에게 완전히 사유되어 있습니다.
+\iffalse
 
 Pure data ownership is also both common and useful, for example, the
 per-thread memory-allocator caches discussed in
@@ -305,6 +345,7 @@ starting on
 page~\pageref{sec:SMPdesign:Resource Allocator Caches}.
 In this algorithm, each thread's cache is completely private to that
 thread.
+\fi
 
 \section{Function Shipping}
 \label{sec:owned:Function Shipping}
