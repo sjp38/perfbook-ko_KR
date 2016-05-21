@@ -100,7 +100,12 @@ first-class citizen.
 \label{sec:owned:Multiple Processes}
 
 Section~\ref{sec:toolsoftrade:Scripting Languages}
+에서 다음의 예를 소개한 바 있습니다:
+\iffalse
+
+Section~\ref{sec:toolsoftrade:Scripting Languages}
 introduced the following example:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -115,6 +120,14 @@ introduced the following example:
 \end{minipage}
 \vspace{5pt}
 
+이 예는 \co{compute_it} 프로그램의 두개의 인스턴스를 메모리를 공유하지 않는
+별개의 프로세스들을 통해 병렬로 수행합니다.
+따라서, 해당 프로세스의 모든 데이터는 그 프로세스에 소유되어 있어서, 위 예제의
+모든 데이터는 소유되어 있습니다.
+이 방법은 거의 모든 동기화 오버헤드를 제거합니다.
+결과로 만들어지는 극단적인 단순함과 최적의 성능의 조합은 상당히 매력적입니다.
+\iffalse
+
 This example runs two instances of the \co{compute_it} program in
 parallel, as separate processes that do not share memory.
 Therefore, all data in a given process is owned by that process,
@@ -122,11 +135,38 @@ so that almost the entirety of data in the above example is owned.
 This approach almost entirely eliminates synchronization overhead.
 The resulting combination of extreme simplicity and optimal performance
 is obviously quite attractive.
+\fi
 
 \QuickQuiz{}
+	Section~\ref{sec:owned:Multiple Processes} 에서 보인 예제에 남아있는
+	동기화 작업은 무엇이 있을까요?
+	\iffalse
+
 	What synchronization remains in the example shown in
 	Section~\ref{sec:owned:Multiple Processes}?
+	\fi
 \QuickQuizAnswer{
+	\co{sh} 의 \co{&} 오퍼레이터를 통한 쓰레드들의 생성과 \co{sh} 의
+	\co{wait} 명령을 통한 쓰레드 종료 기다리기입니다.
+
+	물론, 프로세스들이 예를 들어 \co{shmget()} 이나 \co{mmap()} 시스템 콜을
+	이용해 명시적으로 메모리를 공유한다면 이 공유 메모리 영역을 접근하거나
+	업데이트하는 데에는 명시적인 동기화가 필요할 것입니다.
+	프로세스들은 또한 다음의 프로세스간 통신 메커니즘들 중 어떤 것이든
+	사용할 수도 있을 겁니다.
+	\begin{enumerate}
+	\item	System V 세마포어.
+	\item	System V 메세지 큐.
+	\item	UNIX-domain 소켓.
+	\item	TCP/IP, UDP, 그리고 모든 다른 것들의 호스트를 포함한 네트워킹
+		프로토콜.
+	\item	파일 락킹.
+	\item	\co{O_CREAT} 과 \co{O_EXCL} 플래그와 함께 사용되는 \co{open()}
+		시스템콜.
+	\item	\co{rename()} 시스템콜의 사용.
+	\end{enumerate}
+	\iffalse
+
 	The creation of the threads via the \co{sh} \co{&} operator
 	and the joining of thread via the \co{sh} \co{wait}
 	command.
@@ -148,21 +188,51 @@ is obviously quite attractive.
 		\co{O_CREAT} and \co{O_EXCL} flags.
 	\item	Use of the \co{rename()} system call.
 	\end{enumerate}
+	\fi
+	가능한 동기화 메커니즘의 전체 리스트를 만드는 것은 독자의 몫으로
+	둘텐데, 이는 굉장히 긴 리스트가 될 것입니다.
+	놀랍도록 많은 수의 예상치 못한 시스템콜들이 동기화 메커니즘으로 나타날
+	수 있습니다.
+	\iffalse
+
 	A complete list of possible synchronization mechanisms is left
 	as an exercise to the reader, who is warned that it will be
 	an extremely long list.
 	A surprising number of unassuming system calls can be pressed
 	into service as synchronization mechanisms.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Section~\ref{sec:owned:Multiple Processes} 에서 보여진 예제에 어떤
+	공유된 데이터가 있나요?
+	\iffalse
+
 	Is there any shared data in the example shown in
 	Section~\ref{sec:owned:Multiple Processes}?
+	\fi
 \QuickQuizAnswer{
+	이건 철학적인 질문입니다.
+
+	``아니오'' 라는 답을 원하는 사람들은 프로세스들이 정의에 의해 메모리를
+	공유하지 않는다고 주장할 수도 있을 겁니다.
+	\iffalse
+
 	That is a philosophical question.
 
 	Those wishing the answer ``no'' might argue that processes by
 	definition do not share memory.
+	\fi
+
+	``예'' 라고 대답하고 싶은 사람들은 공유 메모리를 필요로 하지 않는 많은
+	동기화 메커니즘들의 리스트를 나열하고 커널은 공유된 상태를 가질 것임을
+	이야기 할 수 있고, 아마도 심지어는 프로세스 ID (PID) 의 할당은 공유된
+	데이터에 해당된다고 주장할 수도 있습니다.
+
+	그런 주장들은 매우 지적인 행위이고 불행한 학교 친구나 동료들에게서
+	점수를 딸 수 있는, 지적이라는 느낌을 받을 수 있는 훌륭한 방법이기도
+	하며, (특히!) 유용한 일이 이루어지기를 막아버리는 행위입니다.
+	\iffalse
 
 	Those wishing to answer ``yes'' might list a large number of
 	synchronization mechanisms that do not require shared memory,
@@ -174,7 +244,17 @@ is obviously quite attractive.
 	also a wonderful way of feeling intelligent, scoring points
 	against hapless classmates or colleagues,
 	and (especially!) avoiding getting anything useful done.
+	\fi
 } \QuickQuizEnd
+
+\co{sh} 에서 했던 것과 똑같은 패턴을 C 로도 구현할 수 있는데,
+Figures~\ref{fig:toolsoftrade:Using the fork() Primitive}
+and~\ref{fig:toolsoftrade:Using the wait() Primitive} 에 그 구현이 그려져
+있습니다.
+
+다음 섹션은 공유 메모리 병렬 프로그램에서의 데이터 소유권의 사용에 대해 논의해
+봅니다.
+\iffalse
 
 This same pattern can be written in C as well as in \co{sh}, as illustrated by
 Figures~\ref{fig:toolsoftrade:Using the fork() Primitive}
@@ -182,6 +262,7 @@ and~\ref{fig:toolsoftrade:Using the wait() Primitive}.
 
 The next section discusses use of data ownership in shared-memory
 parallel programs.
+\fi
 
 \section{Partial Data Ownership and pthreads}
 \label{sec:owned:Partial Data Ownership and pthreads}
