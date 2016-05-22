@@ -454,6 +454,21 @@ page~\pageref{fig:count:Signal-Theft Limit Counter Subtract Function}).
 \section{Designated Thread}
 \label{sec:owned:Designated Thread}
 
+앞의 섹션들에서는 각 쓰레드가 데이터 복사본을 또는 데이터의 특정 부분을
+소유하는 여러가지 방법들을 설명했습니다.
+반대로, 이 섹션에서는 특별한 선택된 쓰레드가 프로그램이 일을 하는데 필요한
+데이터를 소유하는 함수적 분해 접근법을 설명합니다.
+Section~\ref{sec:count:Eventually Consistent Implementation} 에서 설명했던
+결과적으로 일관적인 카운터 구현이 예를 제공합니다.
+이 구현은
+Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters} 의
+line~15-32 에서 보이는 \co{eventual()} 함수를 수행하는 정해진 쓰레드를 가지고
+있습니다.
+이 \co{eventual()} 쓰레드는 주기적으로 쓰레드별 카운트를 글로벌 카운터로
+가져와서 글로벌 카운터로의 접근이 이름이 말하는 바와 같이 결과적으로는 실제
+값에 수렴하게 합니다.
+\iffalse
+
 The earlier sections describe ways of allowing each thread to keep its
 own copy or its own portion of the data.
 In contrast, this section describes a functional-decomposition approach,
@@ -467,20 +482,47 @@ Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}.
 This \co{eventual()} thread periodically pulls the per-thread counts
 into the global counter, so that accesses to the global counter will,
 as the name says, eventually converge on the actual value.
+\fi
 
 \QuickQuiz{}
+	하지만
+	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 line~15-32 에 보여진 \co{eventual()} 함수의 어떤 데이터로 실제로는
+	\co{eventual()} 쓰레드에게 소유되어 있지 않습니다!
+	이게 어떻게 데이터 소유권인가요???
+	\iffalse
+
 	But none of the data in the \co{eventual()} function shown on
 	lines~15-32 of
 	Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
 	is actually owned by the \co{eventual()} thread!
 	In just what way is this data ownership???
+	\fi
 \QuickQuizAnswer{
+	핵심 문구는 ``데이터로의 권한을 소유한다'' 입니다.
+	이 경우, 질문되는 권한은 해당 그림의 line~1 에 정의된 쓰레드별
+	\co{counter} 변수에 접근할 수 있는 권한을 말합니다.
+	이 상황은
+	Section~\ref{sec:owned:Partial Data Ownership and pthreads} 에서 설명된
+	것과 비슷한 상황입니다.
+	\iffalse
+
 	The key phrase is ``owns the rights to the data''.
 	In this case, the rights in question are the rights to access
 	the per-thread \co{counter} variable defined on line~1
 	of the figure.
 	This situation is similar to that described in
 	Section~\ref{sec:owned:Partial Data Ownership and pthreads}.
+	\fi
+
+	하지만, 정말로 \co{eventual()} 쓰레드에 의해 소유되는 데이터도
+	존재하는데, 해당 그림의 line~17 과 18 에 정의되어 있는 \co{t} 와
+	\co{sum} 변수들입니다.
+
+	정해진 쓰레드의 다른 예를 보려면, 리눅스 커널의 커널 쓰레드들을 보면
+	되는데, 예컨대 \co{kthread_create()} 와 \co{kthread_run()} 으로
+	생성되는 것들을 보시기 바랍니다.
+	\iffalse
 
 	However, there really is data that is owned by the \co{eventual()}
 	thread, namely the \co{t} and \co{sum} variables defined on
@@ -489,6 +531,7 @@ as the name says, eventually converge on the actual value.
 	For other examples of designated threads, look at the kernel
 	threads in the Linux kernel, for example, those created by
 	\co{kthread_create()} and \co{kthread_run()}.
+	\fi
 } \QuickQuizEnd
 
 \section{Privatization}
