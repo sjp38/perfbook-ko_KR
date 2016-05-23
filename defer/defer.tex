@@ -4,6 +4,27 @@
 
 \epigraph{All things come to those who wait.}{\emph{Violet Fane}}
 
+일을 뒤로 미루는 전략은 기록된 역사의 시작 전까지 이어져 있습니다.
+이것은 자주 미루기나 완전한 게으름으로 여겨져 비웃음을 받아왔습니다.
+하지만, 지난 수십년간 사람들은 병렬 알고리즘들의 단순화와 능률화에 있어서의 이
+전략의 가치를 깨달았습니다~\cite{Kung80,HMassalinPhD}.
+이걸 믿든 믿지 않든, 병렬 프로그래밍에서의 ``게으름'' 은 종종 근면성에 비해
+성능과 확장성이 좋습니다!
+이런 성능과 확장성에서의 장점은 일을 뒤로 미루는 것은 종종 동기화 기능들을
+약화시키는게 가능하게 하고, 따라서 동기화 오버헤드를 줄이게 된다는 사실에서
+기인합니다.
+일을 뒤로 미루는 일반적인 전략은
+레퍼런스 카운팅 (Section~\ref{sec:defer:Reference Counting}),
+해저드 포인터 (Section~\ref{sec:defer:Hazard Pointers}),
+순차적 락킹 (Section~\ref{sec:defer:Sequence Locks}),
+그리고 RCU (Section~\ref{sec:defer:Read-Copy Update (RCU)}) 등을 포함합니다.
+마지막으로, Section~\ref{sec:defer:Which to Choose?}
+에서는 이 챕터에서 다루어진 일 뒤로 미루기 전략들 가운데 어떻게 선택을 해야
+하는지 이야기 하고, 
+Section~\ref{sec:defer:What About Updates?} 에서는 업데이트의 역할에 대해
+논합니다.
+\iffalse
+
 The strategy of deferring work goes back before the dawn of recorded
 history. It has occasionally been derided as procrastination or
 even as sheer laziness.
@@ -23,6 +44,22 @@ Finally, Section~\ref{sec:defer:Which to Choose?}
 describes how to choose among the work-deferral schemes covered in
 this chapter and Section~\ref{sec:defer:What About Updates?}
 discusses the role of updates.
+\fi
+
+이 챕터는 이런 접근법들의 가치를 보이고 또 그것들을 서로 비교할 수 있도록 하기
+위해 단순화된 디멀티플렉싱 알고리즘을 사용할 겁니다.
+디멀티플렉싱 알고리즘들은 운영체제 커널에서 각각의 들어오는 TCP/IP 패킷들을
+전달받아야 할 프로세스에게 전달하는데에 사용됩니다.
+이 특정한 알고리즘은 고전적인 1980년대의 packet-train-optimized 알고리즘으로
+BSD UNIX~\cite{VanJacobson88} 에서 사용되었으며, 단순한 링크드 리스트로
+구성되었습니다.\footnote{
+	달리 말하자면, 이건 OpenBSD, NetBSD 도 아니고 심지어 FreeBSD 도
+아니었고 Pre-BSD 였습니다.}
+최신 디멀티플렉싱 알고리즘들은, 예를 들어 해시 테이블~\cite{McKenney92b} 같은
+더 복잡한 데이터 구조를 사용합니다만, Chapter~\ref{chp:Counting} 에서와 같이,
+극단적으로 간단한 알고리즘이 극단적으로 이해하기 쉬운 구성에서의 병렬성에
+특정된 문제들을 밝히는데 도움을 줄 것입니다.
+\iffalse
 
 This chapter will use a simplified demultiplexing algorithm to demonstrate
 the value of these approaches and to allow them to be compared.
@@ -38,6 +75,22 @@ for example, hash tables~\cite{McKenney92b}, however, as in
 Chapter~\ref{chp:Counting}, an extremely simple algorithm will
 help highlight issues specific to parallelism in an extremely
 easy-to-understand setting.
+\fi
+
+우리는 더 나아가서 출발지와 목적지 IP 주소와 포트들 네가지 정보로 구성되는 검색
+키를 간단한 정수로 교체함으로써 알고리즘을 더욱 단순화할 겁니다.
+검색되고 리턴되는 값 또한 간단한 정수로 바꿔질 것이어서, 데이터 구조는
+Figure~\ref{fig:defer:Pre-BSD Packet Demultiplexing List} 에서와 같이 될건데,
+이 그림대로라면 address~42 의 패킷을 process~1 로, address~56 의 패킷을
+process~2 로, 그리고 address~17 의 패킷을 process~10 으로 전달할 겁니다.
+프로세스들은 오랫동안 살아있을 것이고 수많은 패킷을 받을 것임을 가정하면, 이
+리스트는 매우 자주 검색되고 아주 가끔씩만 업데이트 될 것입니다.
+Chapter~\ref{chp:Hardware and its Habits} 에서 우리는, 빛의 제한된 속도와
+물질의 원자성의 자연적 법칙과 같은 물리 법칙을 회피하는 가장 좋은 방법은
+데이터를 쪼개거나 읽기가 대부분인 공유에 기대는 것임을 배웠습니다.
+이 챕터에서, 우리는 Pre-BSD 패킷 디멀티플렉싱 리스트를 사용해 읽기가 대부분인
+공유에 관련된 기법들을 평가해 보도록 하겠습니다.
+\iffalse
 
 We further simplify the algorithm by reducing the search key from
 a quadruple consisting of source and destination IP addresses and
@@ -57,6 +110,7 @@ either partition the data or to rely on read-mostly sharing.
 In this chapter, we will use the Pre-BSD packet demultiplexing
 list to evaluate a number of techniques involving read-mostly
 sharing.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
