@@ -22,7 +22,7 @@
 #include "../api.h"
 #include "hazptr.h"
 
-/* Hash-table element to be included in structures in a hash table. */
+/* Route-table entry to be included in the routing list. */
 struct route_entry {
 	struct hazptr_head hh;
 	struct route_entry *re_next;
@@ -143,7 +143,7 @@ void route_register_thread(void)
 
 #define route_unregister_thread() hazptr_thread_exit()
 
-#define quiescent_state() rcu_quiescent_state()
+#define quiescent_state() do { } while (0)
 
 #define synchronize_rcu() do { } while (0)
 

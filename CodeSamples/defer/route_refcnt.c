@@ -1,5 +1,6 @@
 /*
- * route_rcu.c: Trivial linked-list routing table protected by RCU.
+ * route_refcnt.c: Trivial linked-list routing table protected by reference
+ *	counts, but not protected very well.  To reiterate: BUGGY!!!
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,27 +19,17 @@
  * Copyright (c) 2016 Paul E. McKenney, IBM Corporation.
  */
 
-#define _GNU_SOURCE
-#define _LGPL_SOURCE
-
-// Uncomment to enable signal-based RCU.  (Need corresponding Makefile change!)
-#define RCU_SIGNAL
-#include <urcu.h>
-
-// Uncomment to enable QSBR.  (Need corresponding Makefile change!)
-//#include <urcu-qsbr.h>
-
 #include "../api.h"
 
 /* Route-table entry to be included in the routing list. */
 struct route_entry {
-	struct rcu_head rh;
-	struct cds_list_head re_next;
+	atomic_t re_refcnt;
+	struct route_entry *re_next;
 	unsigned long re_addr;
 	unsigned long re_interface;
 };
 
-CDS_LIST_HEAD(route_list);
+struct route_entry route_list;
 DEFINE_SPINLOCK(routelock);
 
 /*
@@ -46,19 +37,37 @@ DEFINE_SPINLOCK(routelock);
  */
 unsigned long route_lookup(unsigned long addr)
 {
+	int old;
+	int new;
 	struct route_entry *rep;
+	struct route_entry **repp;
 	unsigned long ret;
 
-	rcu_read_lock();
-	cds_list_for_each_entry_rcu(rep, &route_list, re_next) {
-		if (rep->re_addr == addr) {
-			ret = rep->re_interface;
-			rcu_read_unlock();
-			return ret;
-		}
-	}
-	rcu_read_unlock();
-	return ULONG_MAX;
+retry:
+	repp = &route_list.re_next;
+	rep = NULL;
+	do {
+		if (rep && atomic_dec_and_test(&rep->re_refcnt))
+			free(rep);
+		rep = ACCESS_ONCE(*repp);
+		if (rep == NULL)
+			return ULONG_MAX;
+
+		/* Acquire a reference if the count is non-zero. */
+		do {
+			old = atomic_read(&rep->re_refcnt);
+			if (old <= 0)
+				goto retry;
+			new = old + 1;
+		} while (atomic_cmpxchg(&rep->re_refcnt, old, new) != old);
+
+		/* Advance to next. */
+		repp = &rep->re_next;
+	} while (rep->re_addr != addr);
+	ret = rep->re_interface;
+	if (atomic_dec_and_test(&rep->re_refcnt))
+		free(rep);
+	return ret;
 }
 
 /*
@@ -71,19 +80,14 @@ int route_add(unsigned long addr, unsigned long interface)
 	rep = malloc(sizeof(*rep));
 	if (!rep)
 		return -ENOMEM;
+	atomic_set(&rep->re_refcnt, 1);
 	rep->re_addr = addr;
 	rep->re_interface = interface;
 	spin_lock(&routelock);
-	cds_list_add_rcu(&rep->re_next, &route_list);
+	rep->re_next = route_list.re_next;
+	route_list.re_next = rep;
 	spin_unlock(&routelock);
 	return 0;
-}
-
-static void route_cb(struct rcu_head *rhp)
-{
-	struct route_entry *rep = container_of(rhp, struct route_entry, rh);
-
-	free(rep);
 }
 
 /*
@@ -92,15 +96,22 @@ static void route_cb(struct rcu_head *rhp)
 int route_del(unsigned long addr)
 {
 	struct route_entry *rep;
+	struct route_entry **repp;
 
 	spin_lock(&routelock);
-	cds_list_for_each_entry(rep, &route_list, re_next) {
+	repp = &route_list.re_next;
+	for (;;) {
+		rep = *repp;
+		if (rep == NULL)
+			break;
 		if (rep->re_addr == addr) {
-			cds_list_del_rcu(&rep->re_next);
+			*repp = rep->re_next;
 			spin_unlock(&routelock);
-			call_rcu(&rep->rh, route_cb);
+			if (atomic_dec_and_test(&rep->re_refcnt))
+				free(rep);
 			return 0;
 		}
+		repp = &rep->re_next;
 	}
 	spin_unlock(&routelock);
 	return -ENOENT;
@@ -111,26 +122,26 @@ int route_del(unsigned long addr)
  */
 void route_clear(void)
 {
-	struct cds_list_head junk;
 	struct route_entry *rep;
 	struct route_entry *rep1;
 
-	CDS_INIT_LIST_HEAD(&junk);
 	spin_lock(&routelock);
-	cds_list_for_each_entry_safe(rep, rep1, &route_list, re_next) {
-		cds_list_del_rcu(&rep->re_next);
-		cds_list_add_rcu(&rep->re_next, &junk);
+	rep = route_list.re_next;
+	ACCESS_ONCE(route_list.re_next) = NULL;
+	while (rep != NULL) {
+		rep1 = rep->re_next;
+		if (atomic_dec_and_test(&rep->re_refcnt))
+			free(rep);
+		rep = rep1;
 	}
 	spin_unlock(&routelock);
-	synchronize_rcu();
-	cds_list_for_each_entry_safe(rep, rep1, &junk, re_next)
-		free(rep);
 }
 
-
-#define route_register_thread() rcu_register_thread()
-#define route_unregister_thread() rcu_unregister_thread()
-
 #define quiescent_state() rcu_quiescent_state()
+
+#define route_register_thread() do { } while (0)
+#define route_unregister_thread() do { } while (0)
+
+#define synchronize_rcu() do { } while (0)
 
 #include "routetorture.h"
