@@ -3,6 +3,18 @@
 \section{Reference Counting}
 \label{sec:defer:Reference Counting}
 
+레퍼런스 카운팅은 하나의 오브젝트에 대해 이 오브젝트가 너무 이르게 메모리
+해제되는 일을 방지하기 위해 존재하는 레퍼런스의 횟수를 셉니다.
+이는 컨셉적으로는 간단한 테크닉이지만, 실제 자세한 내용 안에 많은 악마들이
+숨어있습니다.
+일단, 이 오브젝트가 준비되지 않은 상황에서 폐기되더라도 문제가 없다고 하면,
+레퍼런스 카운터를 둘 이유 자체가 없을 겁니다.
+하지만 이 오브젝트가 폐기될 수 있다면, 어떻게 하면 오브젝트가 레퍼런스 획득
+처리과정 중에 폐기되는 것을 막을 수 있을까요?
+
+이 질문에는 많은 답변이 존재할 수 있는데, 다음의 것들을 포함합니다:
+\iffalse
+
 Reference counting tracks the number of references
 to a given object in order to prevent that object from being prematurely
 freed.
@@ -14,8 +26,30 @@ But if the object can be disposed of, what prevents disposal during
 the reference-acquisition process itself?
 
 There are a number of possible answers to this question, including:
+\fi
 
 \begin{enumerate}
+\item	레퍼런스 카운트를 조정하는 동안 해당 오브젝트의 밖에 존재하는 락을 잡고
+	있어야만 합니다.
+\item	이 오브젝트는 0 이 아닌 값을 갖는 레퍼런스 카운트를 가지고 생성되고,
+	레퍼런스 카운터의 현재 값이 0이 아닐 때에만 새로운 레퍼런스가 얻어질 수
+	있습니다.
+	어떤 쓰레드가 어떤 오브젝트에 레퍼런스를 가지고 있지 않다면, 해당
+	쓰레드는 이미 레퍼런스를 가지고 있는 다른 쓰레드의 도움으로 레퍼런스를
+	하나 얻을 수 있을 겁니다.
+\item	오브젝트의 존재 보장이 제공되어서, 어떤 다른 것들이 레퍼런스를 얻으려
+	시도하는 동안은 메모리 해제되는 것을 방지해 줍니다.
+	존재 보장은 많은 경우 자동화된 가비지 콜렉터에 의해 제공되기도 하고,
+	Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 보게 될테지만, RCU
+	에 의해 제공되기도 합니다.
+\item	타입 안전성 보장이 해당 오브젝트에 제공됩니다.
+	레퍼런스가 획득될 때마다 추가적인 타입 안정성 체크가 반드시 이루어져야
+	합니다.
+	타입 안정성 보장은 특수 목적의 메모리 할당자를 통해 제공될 수 있는데,
+	예를 들면 리눅스 커널의 \co{SLAB_DESTROY_BY_RCU} 기능과 같은 것으로,
+	Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 다루어질 겁니다.
+\iffalse
+
 \item	A lock residing outside of the object must be held while
 	manipulating the reference count.
 \item	The object is created with a non-zero reference count, and new
@@ -37,7 +71,15 @@ There are a number of possible answers to this question, including:
 	memory allocators, for example, by the
 	\co{SLAB_DESTROY_BY_RCU} feature within the Linux kernel,
 	as will be seen in Section~\ref{sec:defer:Read-Copy Update (RCU)}.
+\fi
 \end{enumerate}
+
+물론, 존재 보장을 제공하는 메커니즘은 모두 그 정의에 의해 타입 안정성 보장 역시
+제공합니다.
+따라서 이 섹션은 마지막의 두 답을 RCU 의 규정 아래에서 함께 묶어서 다뤄서,
+레퍼런스 획득 보호의 세가지 카테고리만을 다루도록 하겠습니다: 레퍼런스 카운팅,
+순차적 락킹, 그리고 RCU.
+\iffalse
 
 Of course, any mechanism that provides existence guarantees
 by definition also provides type-safety guarantees.
@@ -45,13 +87,31 @@ This section will therefore group the last two answers together under the
 rubric of RCU, leaving us with three general categories of
 reference-acquisition protection: Reference counting, sequence
 locking, and RCU.
+\fi
 
 \QuickQuiz{}
+	레퍼런스 획득을 레퍼런스 카운터의 값이 0이 아닐 때에만 레퍼런스를
+	획득하는 간단한 compare-and-swap 오퍼레이션을 사용해서 구현하는 건
+	어떤가요?
+	\iffalse
+
 	Why not implement reference-acquisition using
 	a simple compare-and-swap operation that only
 	acquires a reference if the reference counter is
 	non-zero?
+	\fi
 \QuickQuizAnswer{
+	이 방법은 마지막 레퍼런스의 해제와 새로운 레퍼런스의 획득 사이의 경주를
+	해결할 수 있긴 하지만, 데이터 구조체가 메모리 해제되고 그 영역이 어떤
+	전혀 다른 타입의 구조체로 재할당 되는 것을 막는데에는 어떤 일도 해주지
+	않습니다.
+	``간단한 compare-and-swap 오퍼레이션'' 이 다른 타입의 구조체에
+	적용된다면 정의되지 않은 결과를 낼 확률이 높습니다.
+
+	요약해서, compare-and-swap 과 같은 어토믹 오퍼레이션들의 사용은 분명히
+	타입 안정성이나 존재 보장을 필요로 합니다.
+	\iffalse
+
 	Although this can resolve the race between the release of
 	the last reference and acquisition of a new reference,
 	it does absolutely nothing to prevent the data structure
@@ -63,6 +123,7 @@ locking, and RCU.
 
 	In short, use of atomic operations such as compare-and-swap
 	absolutely requires either type-safety or existence guarantees.
+	\fi
 } \QuickQuizEnd
 
 \begin{table}
@@ -85,6 +146,13 @@ locking, and RCU.
 \label{tab:defer:Reference Counting and Synchronization Mechanisms}
 \end{table}
 
+레퍼런스 카운팅의 핵심 이슈는 레퍼런스의 획득과 객체의 메모리 해제 사이에서의
+동기화라는 점을 놓고 보면,
+Table~\ref{tab:defer:Reference Counting and Synchronization Mechanisms} 에
+보여진 것과 같이 아홉개의 메커니즘들의 조합이 존재함을 알 수 있습니다.
+이 표는 레퍼런스 카운팅 메커니즘을 다음과 같이 넓은 카테고리들로 나눕니다:
+\iffalse
+
 Given that the key reference-counting issue
 is synchronization between acquisition
 of a reference and freeing of the object, we have nine possible
@@ -92,7 +160,21 @@ combinations of mechanisms, as shown in
 Table~\ref{tab:defer:Reference Counting and Synchronization Mechanisms}.
 This table
 divides reference-counting mechanisms into the following broad categories:
+\fi
 \begin{enumerate}
+\item	어토믹 오퍼레이션들이나 메모리 배리어, 또는 메모리 정렬 제약 없이
+	이루어지는 간단한 카운팅 \makebox{(``-'')}.
+\item	메모리 배리어 없이 하는 어토믹하게 하는 카운팅 (``A'').
+\item	레퍼런스 해제에만 메모리 배리어를 사용하며 어토믹하게 하는 카운팅
+	(``AM'').
+\item	레퍼런스 해제에는 메모리 배리어를 사용하고 어토믹한 레퍼런스 획득에
+	검사를 결합한 어토믹한 카운팅 (``CAM'').
+\item	어토믹한 레퍼런스 획득 오퍼레이션에 검사를 결합한 어토믹 카운팅
+	(``CA'').
+\item	레퍼런스 해제와 획득 모두에 메모리 배리어를 사용하며 어토믹한 레퍼런스
+	획득에 검사를 결합한 어토믹한 카운팅 (``MCA'').
+\iffalse
+
 \item	Simple counting with neither atomic operations, memory
 	barriers, nor alignment constraints \makebox{(``-'')}.
 \item	Atomic counting without memory barriers (``A'').
@@ -106,7 +188,24 @@ divides reference-counting mechanisms into the following broad categories:
 \item	Atomic counting with a check combined with the atomic acquisition
 	operation, and with memory barriers also required on acquisition
 	(``MCA'').
+\fi
 \end{enumerate}
+하지만, 리눅스 커널의 값을 리턴하는 모든 어토믹 오퍼레이션들은 메모리 배리어를
+포함하도록 되어 있기 때문에,\footnote{
+	\co{atomic_read()} 와 \co{ATOMIC_INIT()} 는 이 규칙의 예외입니다.}
+모든 레퍼런스 해제 오퍼레이션들은 메모리 배리어들을 내포하고 있고, 모든 검사를
+하는 레퍼런스 획득 오퍼레이션들 역시 메모리 배리어들을 포함하고 있습니다.
+따라서, ``CA'' 와 ``MCA'' 케이스는 ``CAM'' 과 동일해서 실제로는 앞의 네가지
+경우만 존재합니다:
+\makebox{``-''}, ``A'', ``AM'', 그리고 ``CAM''.
+레퍼런스 카운팅을 지원하는 리눅스의 도구들은
+Section~\ref{sec:defer:Linux Primitives Supporting Reference Counting} 에 나와
+있습니다.
+뒤의 섹션들은 레퍼런스 획득과 해제가 매우 빈번하게 이루어지고 레퍼런스 카운트가
+0인지의 검사가 매우 가끔씩 이루어질 때 성능을 개선할 수 있는 최적화들을
+인용합니다.
+\iffalse
+
 However, because all Linux-kernel atomic operations that return a
 value are defined to contain memory barriers,\footnote{
 	With \co{atomic_read()} and \co{ATOMIC_INIT()} being the
@@ -122,6 +221,7 @@ Section~\ref{sec:defer:Linux Primitives Supporting Reference Counting}.
 Later sections cite optimizations that can improve performance
 if reference acquisition and release is very frequent, and the
 reference count need be checked for zero only very rarely.
+\fi
 
 \subsection{Implementation of Reference-Counting Categories}
 \label{sec:defer:Implementation of Reference-Counting Categories}
