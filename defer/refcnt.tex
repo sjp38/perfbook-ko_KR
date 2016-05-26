@@ -596,12 +596,21 @@ Otherwise, \co{kref_put()} returns zero, informing the caller that
 \subsubsection{Atomic Counting With Release Memory Barrier}
 \label{sec:defer:Atomic Counting With Release Memory Barrier}
 
+이런 형태의 레퍼런스는 리눅스 커널의 네트워킹 레이어에서 패킷 라우팅에 사용되는
+목표지 캐시들을 추적하는데 사용됩니다.
+실제 구현은 상당히 더 관련되어 있습니다; 이 섹션에서는
+Figure~\ref{fig:defer:Linux Kernel dst-clone API} 에 보여져 있는,
+이런 사용 케이스에 부합하는 \co{struct dst_entry} 레퍼런스 카운트의 관점에 좀
+더 주목해 봅니다.
+\iffalse
+
 This style of reference is used in the Linux kernel's networking
 layer to track the destination caches that are used in packet routing.
 The actual implementation is quite a bit more involved; this section
 focuses on the aspects of \co{struct dst_entry} reference-count
 handling that matches this use case,
 shown in Figure~\ref{fig:defer:Linux Kernel dst-clone API}.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -629,6 +638,16 @@ shown in Figure~\ref{fig:defer:Linux Kernel dst-clone API}.
 \label{fig:defer:Linux Kernel dst-clone API}
 \end{figure}
 
+\co{dst_clone()} 함수는 호출자가 커널 내에서 어떤 다른 것으로부터 건네 받은
+다른 레퍼런스를 얻은 경우와 같이 이미 특정 \co{dst_entry} 에 레퍼런스를 가지고
+있다면 사용될 수 있습니다.
+이미 호출자에게 레퍼런스가 잡혀 있으므로, \co{dst_clone()} 은 어떤 메모리
+배리어를 사용할 필요가 없습니다.
+\co{dst_entry} 를 다루는 어떤 다른 것은 메모리 배리어를 요구할 수도 안할 수도
+있습니다만, 그런 메모리 배리어가 요구된다면, 그것은 \co{dst_entry} 를
+건네주는데 사용되는 메커니즘에 삽입될 것입니다.
+\iffalse
+
 The \co{dst_clone()} primitive may be used if the caller
 already has a reference to the specified \co{dst_entry},
 in which case it obtains another reference that may be handed off
@@ -639,6 +658,18 @@ The act of handing the \co{dst_entry} to some other entity might
 or might not require a memory barrier, but if such a memory barrier
 is required, it will be embedded in the mechanism used to hand the
 \co{dst_entry} off.
+\fi
+
+\co{dst_release()} 함수는 어떤 환경에서도 호출될 수 있고, 호출자는
+\co{dst_entry} 구조체의 원소를 \co{dst_release()} 호출 직전에 참조할 수도
+있습니다.
+따라서 \co{dst_release()} 함수는 line~14 에서 메모리 배리어를 넣어서 컴파일러나
+CPU 가 이런 액세스를 잘못 순서잡는 것을 방지합니다.
+
+\co{dst_clone()} 과 \co{dst_release()} 함수를 사용하는 프로그래머는 이 메모리
+배리어들에 대해 신경쓸 필요가 없고, 그저 규칙은 이 두개의 함수를 사용할 것
+뿐이란 점을 기억해 두시기 바랍니다.
+\iffalse
 
 The \co{dst_release()} primitive may be invoked from any environment,
 and the caller might well reference elements of the \co{dst_entry}
@@ -650,6 +681,7 @@ from misordering accesses.
 Please note that the programmer making use of \co{dst_clone()} and
 \co{dst_release()} need not be aware of the memory barriers, only
 of the rules for using these two primitives.
+\fi
 
 \subsubsection{Atomic Counting With Check and Release Memory Barrier}
 \label{sec:defer:Atomic Counting With Check and Release Memory Barrier}
