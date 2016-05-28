@@ -922,13 +922,41 @@ for memory-map structures.
 \subsection{Linux Primitives Supporting Reference Counting}
 \label{sec:defer:Linux Primitives Supporting Reference Counting}
 
+앞의 예제들에서 사용된 리눅스 커널의 도구들이 다음의 리스트에 요약되어
+있습니다.
+\IfInBook{}{RCU 기능들은 어떤 독자들에게는 좀 익숙지 않을수도 있을텐데, 그래서
+	    인용들과 함께 간단한 개요를
+	    Section~\ref{sec:defer:Background on RCU} 에 포함시켜 두었습니다.}
+\iffalse
+
 The Linux-kernel primitives used in the above examples are
 summarized in the following list.
 \IfInBook{}{The RCU primitives may be unfamiliar to some readers,
 	    so a brief overview with citations is included in
 	    Section~\ref{sec:defer:Background on RCU}.}
+\fi
 
 \begin{itemize}
+\item	\co{atomic_t}
+	어토믹하게 다루어질 32 비트 크기의 것을 위한 타입 정의.
+\item	\co{void atomic_dec(atomic_t *var);}
+	레퍼런스된 변수를 메모리 배리어를 치거나 컴파일러 최적화의 방지를 하지
+	않은 채 어토믹하게 값 감소시킴.
+\item	\co{int atomic_dec_and_test(atomic_t *var);}
+	레퍼런스된 변수를 어토믹하게 값 감소시키고 그 결과가 0 이 된다면
+	\co{true} (0 이 아닌 값) 를 리턴함.
+	메모리 배리어를 사용하고, 방지하지 않으면 이 기능의 앞뒤로 메모리
+	레퍼런스들을 옮길 수 있는 컴파일러 최적화를 방지시킴.
+\item	\co{void atomic_inc(atomic_t *var);}
+	레퍼런스된 변수를 메모리 배리어를 치거나 컴파일러 최적화의 방지를 하지
+	않은 채 어토믹하게 값 증가시킴.
+\item	\co{int atomic_inc_not_zero(atomic_t *var);}
+	레퍼런스된 변수의 값이 0이 아닐 때에만 어토믹하게 값 증가시키고, 값
+	증가를 실행했다면 \co{true} (0 이 아닌 값) 를 리턴함.
+	메모리 배리어를 사용하고, 방지하지 않으면 이 기능의 앞뒤로 메모리
+	레퍼런스들을 옮길 수 있는 컴파일러 최적화를 방지시킴.
+\iffalse
+
 \item	\co{atomic_t}
 	Type definition for 32-bit quantity to be manipulated atomically.
 \item	\co{void atomic_dec(atomic_t *var);}
@@ -948,6 +976,21 @@ summarized in the following list.
 	increment occurred.
 	Issues a memory barrier and disables compiler optimizations that
 	might otherwise move memory references across this primitive.
+\fi
+\item	\co{int atomic_read(atomic_t *var);}
+	레퍼런스된 변수의 정수 값을 리턴함.
+	이 기능은 어토믹 오퍼레이션이 되어야 할 필요가 없고, 어떤 메모리 배리어
+	명령어를 내지 않음.
+	``하나의 어토믹한 읽기'' 로 생각하는게 아니라 ``어토믹한 변수로부터의
+	평범한 읽기'' 라고 생각해야 함.
+\item	\co{void atomic_set(atomic_t *var, int val);}
+	레퍼런스된 어토믹 변수의 값을 ``val'' 로 설정함.
+	이 기능은 어토믹 오퍼레이션이 되어야 할 필요가 없고, 내부적으로 메모리
+	배리어를 요청할 필요도 컴파일러 최적화를 방지할 필요도 없음.
+	이 기능을 ``하나의 어토믹한 값 할당'' 으로 생각하는게 아니라 ``어토믹
+	변수에의 평범한 값 할당'' 으로 생각해야 함.
+\iffalse
+
 \item	\co{int atomic_read(atomic_t *var);}
 	Returns the integer value of the referenced variable.
 	This need not be an atomic operation, and it need not issue any
@@ -961,6 +1004,22 @@ summarized in the following list.
 	barriers or disable compiler optimizations.
 	Instead of thinking of as ``an atomic set,'' think of it as
 	``a normal set of an atomic variable.''
+\fi
+\item	\co{void call_rcu(struct rcu_head *head, void (*func)(struct rcu_head *head));}
+	현재 수행중인 RCU read-side 크리티컬 섹션들이 모두 완료된 후에
+	\co{func(head)} 를 실행하지만, \co{call_rcu()} 기능 자체는 곧바로
+	리턴함.
+	\co{head} 는 일반적으로 RCU 로 보호되는 데이터 구조체의 안에 존재하며,
+	\co{func} 는 이 데이터 구조체를 메모리 해제시키는 함수임을 알아 둘 것.
+	\co{call_rcu()} 의 호출과 \co{func} 의 호출 사이의 시간 간격을
+	``grace period'' 라 칭함.
+	하나의 grace period 를 포함한 모든 시간 간격은 그 자체로도 grace period
+	임.
+\item	\co{type *container_of(p, type, f);}
+	주어진 타임의 구조체의 하나의 필드 \co{f} 로의 포인터\co{p} 를 받아서
+	그 구조체로의 포인터를 리턴함.
+\iffalse
+
 \item	\co{void call_rcu(struct rcu_head *head, void (*func)(struct rcu_head *head));}
 	Invokes \co{func(head)} some time after all currently executing RCU
 	read-side critical sections complete, however, the \co{call_rcu()}
@@ -975,6 +1034,23 @@ summarized in the following list.
 \item	\co{type *container_of(p, type, f);}
 	Given a pointer \co{p} to a field \co{f} within a structure
 	of the specified type, return a pointer to the structure.
+\fi
+\item	\co{void rcu_read_lock(void);}
+	RCU read-side 크리티컬 섹션의 시작을 기록함.
+\item	\co{void rcu_read_unlock(void);}
+	RCU read-side 크리티컬 섹션의 종료를 기록함.
+	RCU read-side 크리티컬 섹션들은 중첩될 수도 있음.
+\item	\co{void smp_mb__before_atomic_dec(void);}
+	메모리 배리어를 요청하고, 플랫폼의 \co{atomic_dec()} 기능이 코드를
+	움직이는 컴파일러 최적화를 방지하지 않는다면 코드를 움직이는 컴파일러
+	최적화를 방지함.
+\item	\co{struct rcu_head}
+	RCU 기반기능에 의해 grace period 를 기다리는 객체를 쫓아다니기 위해
+	사용되는 데이터 구조체.
+	일반적으로 RCU 로 보호되는 데이터 구조체의 필드들 중 하나로 포함되어
+	있음.
+\iffalse
+
 \item	\co{void rcu_read_lock(void);}
 	Marks the beginning of an RCU read-side critical section.
 \item	\co{void rcu_read_unlock(void);}
@@ -989,18 +1065,32 @@ summarized in the following list.
 	objects awaiting a grace period.
 	This is normally included as a field within an RCU-protected
 	data structure.
+\fi
 \end{itemize}
 
 \QuickQuiz{}
+	\co{atomic_read()} 와 \co{atomic_set()} 이 어토믹하지 않다?
+	이건 무슨 농담인가요???
+	\iffalse
+
 	An \co{atomic_read()} and an \co{atomic_set()} that are
 	non-atomic?
 	Is this some kind of bad joke???
+	\fi
 \QuickQuizAnswer{
+	그렇게 보일 수도 있을 겁니다만, 어떤 다른 CPU 도 여기서 우리가
+	이야기하는 어토믹 변수에 접근을 하지 않는 상황이라면, 실제로 어토믹
+	명령을 수행하는 행위의 오버헤드는 낭비에 불과할 겁니다.
+	다른 CPU 들이 접근하지 않는 상황에 대한 두개의 예가 있는데, 초기화와
+	정리작업 때입니다.
+	\iffalse
+
 	It might well seem that way, but in situations where no other
 	CPU has access to the atomic variable in question, the overhead
 	of an actual atomic instruction would be wasteful.
 	Two examples where no other CPU has access are
 	during initialization and cleanup.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Counter Optimizations}
