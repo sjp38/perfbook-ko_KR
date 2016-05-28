@@ -1096,6 +1096,21 @@ summarized in the following list.
 \subsection{Counter Optimizations}
 \label{sec:defer:Counter Optimizations}
 
+값 증가와 값 감소가 흔하지만 그 값이 0인지 검사하는 건 흔치 않은 일부 경우에는
+Chapter~\ref{chp:Counting} 에서 그랬듯이 CPU 별 또는 task 별 카운터들을 두는 게
+의미가 있을 겁니다.
+RCU 에 적용된, 이런 기법의 한 예제를 위해서는 잠들 수 있는 read-copy update
+(SRCU) 에 대한 논문을 참고하세요~\cite{PaulEMcKenney2006c}.
+이 방법은 값 증가와 값 감소 기능에서의 어토믹 인스트럭션들이나 메모리
+배리어들을 제거합니다만, 여전히 코드를 움직이는 컴파일러 최적화는 방지되어야
+합니다.
+또한, \co{synchronize_srcu()} 와 같은, 전체 레퍼런스 카운트의 합이 0에 닿았는지
+확인하는 기능들은 상당히 느릴 수 있습니다.
+이런 점이 이런 기법들은 레퍼런스들이 빈번하게 획득되고 해제되지만 레퍼런스
+카운트가 0인지 확인하는 일은 아주 가끔 생기는 경우를 위해 설계되었다는 사실을
+강조합니다.
+\iffalse
+
 In some cases where increments and decrements are common, but checks
 for zero are rare, it makes sense to maintain per-CPU or per-task
 counters, as was discussed in Chapter~\ref{chp:Counting}.
@@ -1112,8 +1127,21 @@ This underscores the fact that these techniques are designed
 for situations where the references are frequently acquired and
 released, but where it is rarely necessary to check for a zero
 reference count.
+\fi
 
 % @@@ Difficulty of managing reference counts: leaks, premature freeing.
+
+하지만, 레퍼런스 카운트의 사용이, 레퍼런스 카운트를 사용하지 않았다면 읽기만
+했을 데이터 구조체에 쓰기 (대부분의 경우 어토믹한) 작업을 요청하게 된다는 점이
+문제가 되고는 합니다.
+이런 경우, 레퍼런스 카운트들은 읽기를 하는 쪽에 비싼 캐시 미스들을 가질 수 있게
+합니다.
+
+따라서 읽기를 요청하는 쪽에 실제 읽기를 하게 되는 데이터 구조체에 쓰기를 하지
+않는 동기화 메커니즘을 찾아보는 것도 가치가 있을 겁니다.
+그런 동기화 메커니즘들 중의 하나로 해저드 포인터가 있는데, 다음 섹션에서
+다뤄봅니다.
+\iffalse
 
 However, it is usually the case that use of reference counts requires
 writing (often atomically) to a data structure that is otherwise
@@ -1126,3 +1154,4 @@ that do not require readers to write to the data structure being
 traversed.
 One such synchronization mechanism, hazard pointers, is covered in
 the next section.
+\fi
