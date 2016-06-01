@@ -110,8 +110,8 @@ primitives, so this approach is quite suitable for real-time use.\footnote{
 \label{fig:defer:Deletion From Linked List With Concurrent Readers}
 \end{figure}
 
-하지만 금방이든 나중이든, 동시에 읽기를 하고 있는 쓰레드들에 의해 레퍼런스 되고
-있는 데이터는 없어져야 할 겁니다.
+하지만 동시에 읽기 쓰레드들에 의해 레퍼런스 되고
+있는 데이터는 언젠가는 없어져야 할 겁니다.
 Figure~\ref{fig:defer:Deletion From Linked List With Concurrent Readers} 와
 같이 링크드 리스트에서 원소들을 삭제하는, 더 복잡한 예제를 봅시다.
 이 리스트는 초기에 원소~\co{A}, \co{B}, 그리고 \co{C} 를 가지고 있으며, 여기서
@@ -120,11 +120,11 @@ Figure~\ref{fig:defer:Deletion From Linked List With Concurrent Readers} 와
 	역시 앞서 말했듯 이는 추상화된 예이고,
 	Section~\ref{sec:defer:RCU Fundamentals} 에서 이에 관련해서 더 이야기
 합니다.}
-모든 새로운 읽기 쓰레드들은 언제부턴가는 원소~\co{B} 를 리스트에서 삭제된
+모든 새로운 읽기 쓰레드들은 원소~\co{B} 를 리스트에서 삭제된
 것으로 보게 될 겁니다.
-하지만, 이 원소를 여전히 레퍼런스 하고 있는 오래된 읽기 쓰레드들도 있을 수
+하지만, 이 원소를 여전히 보고 있는 오래된 읽기 쓰레드들도 있을 수
 있습니다.
-일단 이 오래된 읽기 쓰레드들이 종료되고 나면, 안전하게 원소~\co{B} 를 메모리
+이 오래된 읽기 쓰레드들이 종료되고 나면, 원소~\co{B} 를 안전히 메모리
 해제시켜서 그림의 아래쪽에 그려진 상태를 만들 수 있을 겁니다.
 \iffalse
 
@@ -146,21 +146,21 @@ element~\co{B}, resulting in the situation shown at the bottom of
 the figure.
 \fi
 
-하지만 읽기 쓰레드들이 종료된 시점을 어떻게 말할수 있을까요?
+하지만, 그 종료 시점을 어떻게 알까요?
 
-레퍼런스 카운팅 방법이 먼저 생각나겠지만,
+레퍼런스 카운팅 방법의 경우는,
 Chapter~\ref{chp:Counting} 의
 Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem}
-는 이 방법은 이미 기각된 락킹과 시퀀스 락킹처럼 긴 딜레이를 가져올 수
-있음을 보입니다.
+가 락킹과 시퀀스 락킹처럼 긴
+딜레이를 가져올 수 있음을 보이므로 어렵습니다.
 
-읽기를 하는 쓰레드들이 그 존재를 알리기 위한 일을 아예 아무것도 하지 않는,
-논리적으로 극단적인 상황을 생각해 봅시다.
-이 방법은 읽기를 하는 쓰레드들은 분명 최적의 성능을 가능하게 하겠지만
-(어쨌건, 아무것도 안해도 된다는 건 매우 좋은 가격입니다), 업데이트를 하는
-쓰레드는 어떻게 모든 예전 읽기 쓰레드들이 종료 되었는지 알지에 대한 질문은
-여전히 남아있습니다.
-이 질문에 합리적인 답을 하기 위해서는 어떤 추가적인 제약 사항이 분명하게
+읽기 쓰레드들이 그 존재를 알리기 위한 일을 전혀 안하는,
+극단적인 상황을 생각해 봅시다.
+이는 읽기 쓰레드들에 최적의 성능을 가능하게 하겠지만
+(아무것도 안해도 되니까요), 업데이트
+쓰레드는 어떻게 모든 예전 읽기 쓰레드들의 종료를 알지에 대한 질문이
+남습니다.
+여기에 합리적 답을 하기 위해서는 추가적인 제약이 분명
 필요합니다.
 \iffalse
 
@@ -183,17 +183,14 @@ We clearly need some additional constraints if we are to provide
 a reasonable answer to this question.
 \fi
 
-일부 운영체제 커널들과 조건이 잘 들어맞는 제약점 하나는 쓰레드들이 CPU 를
-빼앗길 수 없는 상황 (non-preemptible) 을 고려하는 것입니다.
-이와 같이 CPU 를 빼앗길 수 없는 환경에서, 각 쓰레드는 명시적으로, 그리고
-자발적으로 블락킹 되기 전까지는 수행을 계속합니다.
-이 말은 블락킹 없이 반복되는 무한루프는 CPU 를 이 무한루프의 시작점부터는
-무한루프 이외의 어떤 다른 목적으로는 전혀 사용될 수가 없게 만들어 버린다는 것을
-의미합니다.\footnote{
-	반면, cpu 를 빼앗을 수 있는 환경에서의 무한루프는 cpu 를 빼앗길 수
-	있습니다.
-	이 무한 루프는 여전히 주목할만한 CPU 시간을 낭비하고 있긴 하지만, 이
-	CPU 는 다른 일을 할 수 있을 겁니다.}
+일부 운영체제에 적합한 제약은 쓰레드가 CPU 를
+빼앗기지 않는 상황 (non-preemptible) 입니다.
+CPU 를 빼앗길 수 없는 환경에서 쓰레드는 명시적이고 자발적으로
+블락킹 되기 전까지는 수행을 계속합니다.
+즉, 블락킹 없이 반복되는 무한루프는 CPU 를
+무한루프 이외의 목적으로는 사용될 수 없게 하다는 의미입니다.\footnote{
+	반면, CPU 를 빼앗길 수 있는 환경에서의 무한루프는 여전히 CPU 시간을
+	낭비하고 있긴 하지만, 이 CPU 는 다른 일을 할 수 있을 겁니다.}
 CPU 를 뺏길 수 없다는 특성은 또한 쓰레드들이 스핀락을 잡고 있는 동안은 블락킹
 되지 않아야 할 것을 필요로 합니다.
 이런 금지사항이 없다면, 블락된 쓰레드에 의해 잡혀 있는 스핀락을 획득하려
@@ -202,7 +199,6 @@ CPU 를 뺏길 수 없다는 특성은 또한 쓰레드들이 스핀락을 잡�
 락을 잡고 있는 쓰레드는 이 루프를 돌고 있는 쓰레드들이 CPU 를 놓기 전까지는 그
 락을 놓을 수가 없습니다.
 이는 고전적인 deadlock 상황입니다.
-
 \iffalse
 One constraint that fits well with some operating-system kernels is to
 consider the case where threads are not subject to preemption.
@@ -276,6 +272,7 @@ Figure~\ref{fig:defer:Waiting for Pre-Existing Readers} 에 그림의 꼭대기�
 
 이런 방법의 상품 품질 구현은 상당히 복잡할 수 있지만, 장난감 수준 구현은 상당히
 간단합니다:
+\iffalse
 
 A schematic of this approach is shown in
 Figure~\ref{fig:defer:Waiting for Pre-Existing Readers},
@@ -283,6 +280,7 @@ with time advancing from the top of the figure to the bottom.
 
 Although production-quality implementations of this approach can be
 quite complex, a toy implementation is exceedingly simple:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
