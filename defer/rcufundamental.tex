@@ -6,6 +6,28 @@
 
 Authors: Paul E. McKenney and Jonathan Walpole
 
+Read-copy update (RCU) 는 2002년 10월에 리눅스 커널에 추가된, 하나의 동기화
+메커니즘입니다.
+RCU 는 읽기 작업들이 업데이트 작업들과 동시에 일어날 수 있도록 함으로써 확장성
+개선을 달성합니다.
+기존에 일반적으로 사용되어온, 동시에 수행되는 쓰레드들에 대해 그것들이 읽기를
+하는지 업데이트를 하는지와 상관없이 상호 배제를 보장하는 락킹 기능들 또는
+동시의 읽기 작업은 허용하지만 업데이트가 함께 수행되는 것은 막는 reader-writer
+락들과는 대조적으로 RCU 는 하나의 업데이트 쓰레드와 여러 읽기 쓰레드들 사이의
+동시성을 지원합니다.
+RCU 는 오브젝트들의 여러 버전들을 유지하고 그것들이 이전부터 존재해온 모든
+읽기쪽 크리티컬 섹션들이 완료되기 전까지는 메모리에서 해제하지 않음으로써 읽기
+작업들이 일관적임을 보장합니다.
+RCU 는 오브젝트의 새 버전을 공개하고 읽는데, 그리고 예전 버전들의 정리 작업을
+뒤로 미루어 한번에 처리하는데에 효과적이고 확장성 있는 메커니즘을 정의하고
+사용합니다.
+이런 메커니즘들은 작업을 읽기와 업데이트쪽 수행경로로 분산시키되 읽기 쪽
+수행경로가 극단적으로 빠르게 하는데에 해저드 포인터와 유사한 복사와 규칙 완화를
+골자로 하는 최적화 기술을 사용하지만, 읽기 쪽의 재시도는 필요 없게 합니다.
+일부 경우에는 (CPU 를 뺏기지 않는 커널들), RCU 의 읽기 쪽 기능들은 아예
+오버헤드가 없습니다.
+\iffalse
+
 Read-copy update (RCU) is a synchronization mechanism that was added to
 the Linux kernel in October of 2002.
 RCU achieves scalability
@@ -27,11 +49,31 @@ replication and weakening optimizations in a manner similar to
 hazard pointers, but without the need for read-side retries.
 In some cases (non-preemptible kernels), RCU's read-side primitives have
 zero overhead.
+\fi
 
 \QuickQuiz{}
+	하지만 Section~\ref{sec:defer:Sequence Locks} 의 시퀀스 락 역시 읽기
+	쓰레드들과 업데이트 쓰레드들이 동시에 일을 할 수 있도록 하지 않던가요?
+	\iffalse
+
 	But doesn't Section~\ref{sec:defer:Sequence Locks}'s seqlock
 	also permit readers and updaters to get work done concurrently?
+	\fi
 \QuickQuizAnswer{
+	맞는 말이고 아닌 말이기도 합니다.
+	시퀀스 락의 읽기 쓰레드들은 쓰기 쓰레드들과 동시에 수행될 수 있지만,
+	이런 상황이 발생할 때마다, {\tt read\_seqretry()} 기능이 읽기 쓰레드는
+	다시 수행을 시도하도록 강제할 겁니다.
+	이는 시퀀스 락을 사용하명 업데이트 쓰레드와 동시에 수행되는 읽기
+	쓰레드가 하는 일은 모두 취소되고 다시 수행될 것을 의미합니다.
+	따라서 시퀀스 락을 사용하는 읽기 작업은 업데이트 작업과 동시에
+	\emph{수행} 될 수 있지만, 이런 경우에 실제로는 어떤 일도 만들어내지
+	못합니다.
+
+	반면에, RCU 읽기 쓰레드들은 동시에 RCU 업데이트 쓰레드들이 존재하더라도
+	의미있는 일을 처리해낼 수 있습니다.
+	\iffalse
+
 	Yes and no.
 	Although seqlock readers can run concurrently with
 	seqlock writers, whenever this happens, the {\tt read\_seqretry()}
@@ -43,7 +85,31 @@ zero overhead.
 
 	In contrast, RCU readers can perform useful work even in presence
 	of concurrent RCU updaters.
+	\fi
 } \QuickQuizEnd
+
+이는 ``RCU 는 정확히 무엇인가?'' 하는 질문과, 아마도 ``RCU 는 어떻게 동작할 수
+\emph{있는가}?'' 하는 질문을 이끌어낼 수 있을 겁니다 (또는, 드물지 않게, RCU 는
+동작할 수 없을 것이라는 단정을).
+이 문서는 이런 질문들을 기본적 관점에서부터 다룹니다; 뒤의 일부는 RCU 를
+사용법과 API 관점에서 살펴봅니다.
+마지막 부분은 또한 참고할 문서 목록을 포함합니다.
+
+RCU 는 세개의 기본적 메커니즘으로 만들어지는데, 첫번째는 항목 삽입에 사용되고,
+두번째 것은 항목 삭제에, 그리고 세번째 것은 읽기 쓰레드들이 동시의 항목 추가와
+삭제에 문제 없이 동작하도록 하는데 사용됩니다.
+Section~\ref{sec:defer:Publish-Subscribe Mechanism}
+은 항목 추가를 위한 publish-subscribe 메커니즘을 설명하고,
+Section~\ref{sec:defer:Wait For Pre-Existing RCU Readers to Complete}
+에서는 먼저 시작된 RCU 읽기 쓰레드들을 어떻게 기다려서 항목 삭제가 가능하게
+하는지 설명하며,
+Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
+에서는 최근에 업데이트된 오브젝트들의 여러 버전들을 어떻게 관리해서 동시의 항목
+추가와 삭제를 가능하게 하는지 설명합니다.
+마지막으로,
+Section~\ref{sec:defer:Summary of RCU Fundamentals}
+에서는 RCU 기본사항을 요약합니다.
+\iffalse
 
 This leads to the question ``what exactly is RCU?'', and perhaps also
 to the question ``how can RCU \emph{possibly} work?'' (or, not
@@ -66,6 +132,7 @@ permits concurrent insertions and deletions.
 Finally,
 Section~\ref{sec:defer:Summary of RCU Fundamentals}
 summarizes RCU fundamentals.
+\fi
 
 \subsubsection{Publish-Subscribe Mechanism}
 \label{sec:defer:Publish-Subscribe Mechanism}
