@@ -873,6 +873,15 @@ This question is addressed in the following section.
 \subsubsection{Maintain Multiple Versions of Recently Updated Objects}
 \label{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
 
+이 섹션은 RCU 가 동기화로부터 자유로운 읽기 작업들을 허용하기 위해 리스트의
+여러 버전들을 어떻게 관리하는지 보입니다.
+주어진 읽기 쓰레드에 의해 레퍼런스될 수도 있는 원소가 해당 읽기 쓰레드가 자신의
+RCU read-side 크리티컬 섹션을 유지하고 있는 동안에도 손상되지 않은채로 어떻게
+유지될 수 있는지를 두개의 예제로 보일 겁니다.
+첫번째 예제는 리스트 원소의 삭제를 보이고, 두번째 예제는 원소의 교체를 보이도록
+하겠습니다.
+\iffalse
+
 This section demonstrates how RCU maintains multiple versions of
 lists to accommodate synchronization-free readers.
 Two examples are presented showing how an element
@@ -880,9 +889,18 @@ that might be referenced by a given reader must remain intact
 while that reader remains in its RCU read-side critical section.
 The first example demonstrates deletion of a list element,
 and the second example demonstrates replacement of an element.
+\fi
 
 \paragraph{Example 1: Maintaining Multiple Versions During Deletion}
 \label{sec:defer:Example 1: Maintaining Multiple Versions During Deletion}
+
+이제 Section~\ref{sec:defer:Introduction to RCU} 에서의 원소 삭제 예제를 다시
+들여다 보되, 이번에는 그 아래의 RCU 에 있는 기본적인 개념에 대한 확실한 이해와
+함께입니다.
+이 새로운 버전의 삭제 예제를 시작하기 위해,
+Figure~\ref{fig:defer:Canonical RCU Replacement Example} 의 line~11-21 을
+다음과 같이 보이게 수정할 겁니다:
+\iffalse
 
 We can now revisit the deletion example from
 Section~\ref{sec:defer:Introduction to RCU},
@@ -892,6 +910,7 @@ To begin this new version of the deletion example,
 we will modify lines~11-21 in
 Figure~\ref{fig:defer:Canonical RCU Replacement Example}
 to read as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -915,6 +934,17 @@ to read as follows:
 \label{fig:defer:RCU Deletion From Linked List}
 \end{figure}
 
+이 코드는
+Figure~\ref{fig:defer:RCU Deletion From Linked List} 에 보인 것처럼 리스트를
+업데이트 할 겁니다.
+각 원소의 세개의 숫자는 필드 \co{a}, \co{b}, \co{c} 의 값들을 각각 나타냅니다.
+빨간색으로 칠해진 원소들은 RCU 읽기 쓰레드들이 그것들로의 레퍼런스를 가질 수
+있음을 나타내는데, 따라서 다이어그램의 꼭대기에 있는 최초의 상태에서는 모든
+원소들이 빨간색으로 칠해져 있습니다.
+뒤로의 포인터들과 리스트의 tail 로부터 head 로의 링크는 가독성을 위해 삭제해
+둔점을 알아 두시기 바랍니다.
+\iffalse
+
 This code will update the list as shown in
 Figure~\ref{fig:defer:RCU Deletion From Linked List}.
 The triples in each element represent the values of fields \co{a},
@@ -926,6 +956,25 @@ are shaded red.
 Please note that
 we have omitted the backwards pointers and the link from the tail
 of the list to the head for clarity.
+\fi
+
+Line~3 에서의 \co{list_del_rcu()} 가 완료된 후에, \co{5,6,7}~원소는
+Figure~\ref{fig:defer:RCU Deletion From Linked List} 의 두번째 줄에 보여진
+것처럼 리스트에서 삭제되어 있습니다.
+읽기 쓰레드들은 업데이트 쓰레드들과 직접적으로 동기화를 하지 않으므로, 읽기
+쓰레드들은 동시에 이 리스트를 스캔 하고 있을 수 있습니다.
+이런 동시의 읽기 쓰레드들은 이번에 삭제된 원소를 타이밍에 따라서는 볼수도, 보지
+않을 수도 있습니다.
+하지만, 이번에 삭제된 원소로의 포인터를 가져온 후에 한동안 지연된 (ex:
+인터럽트나 ECC 메모리 에러, 또는 \co{CONFIG_PREEMPT_RT} 커널에서라면 preemption
+으로 인해서) 읽기 쓰레드들은 이 삭제로부터 상당한 시간이 흐른 후에도 이
+리스트의 과거 버전을 보게 될 수도 있습니다.
+따라서, 이 리스트의 두개의 버전이 있는 셈인데, 하나는 \co{5,6,7} 원소를 가지고
+있고 또다른 하나는 가지고 있지 않습니다.
+이 그림에서 두번째 줄의 \co{5,6,7}~원소는 노란색으로 칠해져 있는데, 오래된 읽기
+쓰레드들은 여전히 레퍼런스를 가지고 있을 수 있지만, 새로 시작된 읽기 쓰레드들은
+그로의 레퍼런스를 얻을 수 없음을 의미합니다.
+\iffalse
 
 After the \co{list_del_rcu()} on
 line~3 has completed, the \co{5,6,7}~element
@@ -946,6 +995,22 @@ The \co{5,6,7}~element in the second row of the figure is now
 shaded yellow, indicating
 that old readers might still be referencing it, but that new
 readers cannot obtain a reference to it.
+\fi
+
+읽기 쓰레드들은 각자의 RCU read-side 크리티컬 섹션들에서 빠져나온 후에는
+element~\co{5,6,7} 로의 레퍼런스를 얻을 수 없음을 기억하기 바랍니다.
+따라서, 일단 line~4 에서의 \co{synchronize_rcu()} 가 완료되면, 모든 앞서
+존재하던 읽기 쓰레드들은 완료된 것이 보장되므로, 이 원소를 레퍼런스 하는 읽기
+쓰레드들은 존재할 수 없어지는데
+Figure~\ref{fig:defer:RCU Deletion From Linked List} 의 세번째 줄에 녹색으로
+색칠됨으로써 이 상황이 나타내어져 있습니다.
+
+이 시점에서, \co{5,6,7}~원소는
+Figure~\ref{fig:defer:RCU Deletion From Linked List} 의 마지막 줄에 나타나
+있듯이 안전하게 메모리 해제될 수 있습니다.
+이 시점에서, 원소~\co{5,6,7} 의 삭제가 완료되었습니다.
+다음 섹션에서는 교체를 다룹니다.
+\iffalse
 
 Please note that readers are not permitted to maintain references to
 element~\co{5,6,7} after exiting from their RCU read-side
@@ -965,14 +1030,21 @@ Figure~\ref{fig:defer:RCU Deletion From Linked List}.
 At this point, we have completed the deletion of
 element~\co{5,6,7}.
 The following example covers replacement.
+\fi
 
 \paragraph{Example 2: Maintaining Multiple Versions During Replacement}
 \label{sec:defer:Example 2: Maintaining Multiple Versions During Replacement}
+
+교체의 예제 설명을 위해, 여기
+Figure~\ref{fig:defer:Canonical RCU Replacement Example} 예제의
+마지막 몇줄의 코드를 붙여넣습니다:
+\iffalse
 
 To start the replacement example,
 here are the last few lines of the
 example shown in
 Figure~\ref{fig:defer:Canonical RCU Replacement Example}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -997,6 +1069,19 @@ Figure~\ref{fig:defer:Canonical RCU Replacement Example}:
 \label{fig:defer:RCU Replacement in Linked List}
 \end{figure}
 
+리스트의 초기의 상태는 \co{p} 포인터를 포함해서 삭제 예제와 동일한데,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 첫번째 줄에 보여져
+있습니다.
+
+앞에서와 마찬가지로, 각 원소의 세개의 숫자는 필드 \co{a}, \co{b}, \co{c} 를
+각각 나타냅니다.
+빨간 원소들은 읽기 쓰레드들에 의해 레퍼런스 될 수도 있고, 읽기
+쓰레드들은 업데이트 쓰레드들과 직접 동기화를 하지 않기 때문에 읽기
+쓰레드들은 이 전체 교체 프로세스와 동시에 수행될 수 있습니다.
+이번에도 뒤쪽으로의 포인터들과 리스트의 tail 에서 head 로의 링크는 가독성을
+위해 제거되었음을 참고 바랍니다.
+\iffalse
+
 The initial state of the list, including the pointer \co{p},
 is the same as for the deletion example, as shown on the
 first row of
@@ -1011,6 +1096,18 @@ readers might run concurrently with this entire replacement process.
 Please note that
 we again omit the backwards pointers and the link from the tail
 of the list to the head for clarity.
+\fi
+
+아래의 글은 \co{5,6,7} 원소를 \co{5,2,3} 으로 모든 읽기 쓰레드가 이 두 값들 중
+하나만 보도록 하면서 어떻게 교체해야 하는지 설명합니다.
+
+Line~1 은 교체할 원소를 \co{kmalloc()} 해서
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 두번째 줄에 보여진
+것과 같은 상태가 만들어지게 합니다.
+이 시점에서는, 어떤 릭기 쓰레드도 이 새로 만들어진 원소로의 레퍼런스를 가질 수
+없고 (녹색 색깔로 이를 나타냅니다), 이 원소는 아직 초기화되지 않았습니다
+(물음표로 나타내어집니다).
+\iffalse
 
 The following text describes how to replace the \co{5,6,7} element
 with \co{5,2,3} in such a way that any given reader sees one of these
@@ -1022,6 +1119,19 @@ Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 At this point, no reader can hold a reference to the newly allocated
 element (as indicated by its green shading), and it is uninitialized
 (as indicated by the question marks).
+\fi
+
+Line~2 에서는 예전 원소의 값을 새 원소로 복사해서
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 세번째 줄에 보여진
+상태를 만듭니다.
+이 새로 만들어진 원소는 여전히 읽기 쓰레드들에 의해 레퍼런스될 수는 없지만,
+이제 초기화는 되었습니다.
+
+Line~3 는
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 네번째 줄에 보여진
+것처럼 \co{q->b} 를 값 ``2'' 로, 그리고 line~4 는 \co{q->c} 를 값 ``3'' 으로
+바꿉니다.
+\iffalse
 
 Line~2 copies the old element to the new one, resulting in the
 state as shown in the third row of
@@ -1032,6 +1142,18 @@ it is now initialized.
 Line~3 updates \co{q->b} to the value ``2'', and
 line~4 updates \co{q->c} to the value ``3'', as shown on the fourth row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+\fi
+
+이제, line~5 는 교체를 행해서 새 원소가 읽혀질 수 있게
+만드는데, 따라서
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 다섯번째 줄에
+빨간색으로 칠해져 있습니다.
+이 시점에서는 앞에서와 같이, 두가지 버전의 리스트가 존재합니다.
+전부터 있던 읽기 쓰레드들은 \co{5,6,7} 원소를 볼 수 있지만 (따라서
+노란색으로 칠해져 있습니다), 새 읽기 쓰레드들은 그대신 \co{5,2,3} 원소를
+볼겁니다.
+하지만 어떤 읽기 쓰레드들이든 제대로 형태를 갖춘 리스트만을 볼 것이 보장됩니다.
+\iffalse
 
 Now, line~5 does the replacement, so that the new element is
 finally visible to readers, and hence is shaded red, as shown on
@@ -1042,6 +1164,20 @@ Pre-existing readers might see the \co{5,6,7} element (which is
 therefore now shaded yellow), but
 new readers will instead see the \co{5,2,3} element.
 But any given reader is guaranteed to see some well-defined list.
+\fi
+
+Line~6 의 \co{synchronize_rcu()} 가 리턴한 후에는, grace period 는 지나갔고,
+따라서 \co{list_replace_rcu()} 전에 시작된 모든 읽기는 완료된 상태입니다.
+특히, \co{5,6,7} 원소로의 레퍼런스를 가지고 있는 모든 읽기 쓰레드들은 각자의
+RCU read-side 크리티컬 섹션들을 빠져나왔음이 보장되고, 따라서 레퍼런스를
+계속해서 잡고 있을 수 없습니다.
+따라서, 과거의 원소로의 레퍼런스를 여전히 잡고 있는 읽기 쓰레드는 더이상 있을
+수 없는데, 이 상황이
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 여섯번째 줄에
+초록색으로 나타내어져 있습니다.
+읽기 쓰레드들의 관점에서 리스트의 단일 버전만이 존재하는데, 예전 원소는 새
+원소로 바뀌어 있습니다.
+\iffalse
 
 After the \co{synchronize_rcu()} on line~6 returns,
 a grace period will have elapsed, and so all reads that started before the
@@ -1055,6 +1191,17 @@ to the old element, as indicated its green shading in the sixth row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 As far as the readers are concerned, we are back to having a single version
 of the list, but with the new element in place of the old.
+\fi
+
+Line~7 에서의 \co{kfree()} 후에 이 리스트는
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 마지막 줄에 보여진
+것처럼 됩니다.
+
+RCU 는 교체의 경우에 의해서 이름지어졌다는 사실에도 불구하고, 리눅스 커널
+안에서의 RCU 사용예의 대다수는
+Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}.
+의 간단한 삭제의 케이스에 기반해 있습니다.
+\iffalse
 
 After the \co{kfree()} on line~7 completes, the list will
 appear as shown on the final row of
@@ -1064,20 +1211,38 @@ Despite the fact that RCU was named after the replacement case,
 the vast majority of RCU usage within the Linux kernel relies on
 the simple deletion case shown in
 Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}.
+\fi
 
 \paragraph{Discussion}
 \label{sec:defer:Discussion}
 
+이 예제들은 모든 업데이트 오퍼레이션들에 뮤텍스가 잡혀 있다고 가정을 하고
+있는데, 이 말은 한번에 리스트의 버전은 최대 두개까지만 존재할 수 있음을
+의미합니다.
+\iffalse
+
 These examples assumed that a mutex was held across the entire
 update operation, which would mean that there could be at most two
 versions of the list active at a given time.
+\fi
 
 \QuickQuiz{}
+	리스트의 버전이 두개보다 많을 수 있도록 하기 위해서는 삭제 예제를
+	어떻게 수정해야 할까요?
+	\iffalse
+
 	How would you modify the deletion example to permit more than two
 	versions of the list to be active?
+	\fi
 \QuickQuizAnswer{
+	이를 가능하게 하는 한가지 방법은
+	Figure~\ref{fig:defer:Concurrent RCU Deletion} 에 보인 것처럼 하는
+	것입니다.
+	\iffalse
+
 	One way of accomplishing this is as shown in
 	Figure~\ref{fig:defer:Concurrent RCU Deletion}.
+	\fi
 
 \begin{figure}[htbp]
 { \centering
@@ -1098,14 +1263,36 @@ versions of the list active at a given time.
 \label{fig:defer:Concurrent RCU Deletion}
 \end{figure}
 
+	이 코드는 여러개의 동시에 수행되는 삭제 작업들이 \co{synchronize_rcu()}
+	에서 기다리게 될수도 있음을 의미합니다.
+	\iffalse
+
 	Note that this means that multiple concurrent deletions might be
 	waiting in \co{synchronize_rcu()}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	어떤 시점에 하나의 리스트는 RCU 버전들을 몇개까지 가질 수 있을까요?
+	\iffalse
+
 	How many RCU versions of a given list can be
 	active at any given time?
+	\fi
 \QuickQuizAnswer{
+	동기화 설계에 따라 달라집니다.
+	업데이트를 보호하는 세마포어가 grace period 에 걸쳐 잡혀 있다면, 옛날
+	버전과 새로운 버전, 최대 두개의 버전이 있을 수 있을 겁니다.
+
+	하지만, 검색, 업데이트, 그리고 \co{list_replace_rcu()} 만이 락으로
+	보호되고 있어서
+	Figure~\ref{fig:defer:Concurrent RCU Deletion} 보인 코드에서처럼
+	\co{synchronize_rcu()} 가 락의 바깥에 있다고 생각해 봅시다.
+	더 나아가서 수많은 쓰레드들이 거의 동시에 RCU 교체 기능을 수행했고, 이
+	읽기 쓰레드들은 또한 데이터 구조를 계속해서 지나다니고 있다고 생각해
+	봅시다.
+	\iffalse
+
 	That depends on the synchronization design.
 	If a semaphore protecting the update is held across the grace period,
 	then there can be at most two versions, the old and the new.
@@ -1118,12 +1305,38 @@ versions of the list active at a given time.
 	Suppose further that a large number of threads undertook an
 	RCU replacement at about the same time, and that readers
 	are also constantly traversing the data structure.
+	\fi
+
+	그러면 다음과 같은 일련의 이벤트들이
+	Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 마지막
+	상태로부터 발생할 수 있습니다.
+	\iffalse
 
 	Then the following sequence of events could occur, starting from
 	the end state of
 	Figure~\ref{fig:defer:RCU Replacement in Linked List}:
+	\fi
 
 	\begin{enumerate}
+	\item	쓰레드~A 가 리스트를 지나가면서 5,2,3 원소로의 레퍼런스를
+		얻습니다.
+	\item	쓰레드~B 가 5,2,3 원소를 새로운 5,2,4 원소로 교체하고, 자신의
+		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
+	\item	쓰레드~C 가 리스트를 지나가면서 5,2,4 원소로의 레퍼런스를
+		얻습니다.
+	\item	쓰레드~D 가 5,2,4 원소를 새로운 5,2,5 원소로 교체하고, 자신의
+		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
+	\item	쓰레드~E 가 리스트를 지나가면서 5,2,5 원소로의 레퍼런스를
+		얻습니다.
+	\item	쓰레드~F 가 5,2,5 원소를 새로운 5,2,6 원소로 교체하고, 자신의
+		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
+	\item	쓰레드~G 가 리스트를 지나가면서 5,2,6 원소로의 레퍼런스를
+		얻습니다.
+	\item	그리고 앞의 두 스텝들이 빠르게 계속해서 반복되어서 모든
+		쓰레드들이 \co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
+	\end{enumerate}
+	\iffalse
+
 	\item	Thread~A traverses the list, obtaining a reference to
 		the 5,2,3 element.
 	\item	Thread~B replaces the 5,2,3 element with a new
@@ -1145,6 +1358,16 @@ versions of the list active at a given time.
 		of them happen before any of the \co{synchronize_rcu()}
 		calls return.
 	\end{enumerate}
+	\fi
+
+	따라서, 얼마든지 많은 버전들이 존재할 수 있는데, 다만 메모리 크기와
+	얼마나 많은 업데이트들이 하나의 grace period 안에 완료될 수 있느냐에 그
+	수가 제한됩니다.
+	하지만 그렇게 자주 업데이트 되는 데이터 구조체들은 RCU 를 사용하기에
+	적합한 후보가 아닐 수 있음을 알아두시기 바랍니다.
+	그렇다곤 해도, RCU 는 필요할 때에는 높은 비율의 업데이트를 처리할 수
+	있습니다.
+	\iffalse
 
 	Thus, there can be an arbitrary number of versions active,
 	limited only by memory and by how many updates could be completed
@@ -1152,7 +1375,15 @@ versions of the list active at a given time.
 	But please note that data structures that are updated so frequently
 	probably are not good candidates for RCU.
 	That said, RCU can handle high update rates when necessary.
+	\fi
 } \QuickQuizEnd
+
+이 일련의 이벤트들은 RCU 업데이트들이 어떻게 여러 버전들을 사용해 동시에
+수행중인 읽기 작업들에도 불구하고 안전하게 변경을 처리하는지 보입니다.
+물론, 일부 알고리즘들은 여러 버전들을 잘 처리하지 못합니다.
+그런 알고리즘을 RCU 에 적용하는 테크닉~\cite{PaulEdwardMcKenneyPhD} 들이
+있지만, 이것들은 이 섹션의 범위를 넘어섭니다.
+\iffalse
 
 This sequence of events shows how RCU updates use multiple versions
 to safely carry out changes in presence of concurrent readers.
@@ -1160,6 +1391,7 @@ Of course, some algorithms cannot gracefully handle multiple versions.
 There are techniques
 for adapting such algorithms to RCU~\cite{PaulEdwardMcKenneyPhD},
 but these are beyond the scope of this section.
+\fi
 
 \subsubsection{Summary of RCU Fundamentals}
 \label{sec:defer:Summary of RCU Fundamentals}
