@@ -683,6 +683,15 @@ These questions are addressed in the following section.
 \subsubsection{Wait For Pre-Existing RCU Readers to Complete}
 \label{sec:defer:Wait For Pre-Existing RCU Readers to Complete}
 
+가장 기본적인 형태에서, RCU 는 일들이 끝나기를 기다리는 방법입니다.
+물론, RCU 외에도 일들이 끝나길 기다리는 훌륭한 방법들이 여럿 있는데, 레퍼런스
+카운트, reader-writer lock, 이벤트 등등이 포함됩니다.
+RCU 의 커다란 장점은 각각의 (대략) 20,000 개의 서로 다른 일들을 명시적으로 그
+모든 것들을 각각 정보를 쫓아가지 않고, 성능 하락, 확장성 제한, 복잡한 데드락
+시나리오, 그리고 명시적으로 정보 쫓는 방법에서 필연적인 메모리 누수 문제들을
+걱정할 필요 없이 기다릴 수 있다는 겁니다.
+\iffalse
+
 In its most basic form, RCU is a way of waiting for things to finish.
 Of course, there are a great many other ways of waiting for things to
 finish, including reference counts, reader-writer locks, events, and so on.
@@ -692,6 +701,19 @@ track each and every one of them, and without having to worry about
 the performance degradation, scalability limitations, complex deadlock
 scenarios, and memory-leak hazards that are inherent in schemes
 using explicit tracking.
+\fi
+
+RCU 의 경우에, 기다려지고 있는 일들은 ``RCU read-side 크리티컬 섹션'' 이라
+불립니다.
+하나의 RCU read-side 크리티컬 섹션은 \co{rcu_read_lock()} 함수로 시작되고, 그에
+연관되는 \co{rcu_read_unlock()} 함수로 종료됩니다.
+RCU read-side 크리티컬 섹션들은 중첩될 수 있고, 어떤 코드든 그 코드가
+명시적으로 블락하거나 잠들지 않는 한 (SRCU~\cite{PaulEMcKenney2006c} 라고
+불리는 특별한 형태의 RCU 가 SRCU read-side 크리티컬 섹션 내에서의 일반적인
+잠들기를 가능하게 하긴 하지만), 그 안에 얼마든지 들어갈 수 있습니다.
+이런 규칙에 동의한다면, 코드에서 원하는 부분이라면 \emph{어떤 부분이든}
+완료되기를 기다리는데에 RCU 를 사용할 수 있습니다.
+\iffalse
 
 In RCU's case, the things waited on are called
 ``RCU read-side critical sections''.
@@ -704,10 +726,17 @@ much any code, as long as that code does not explicitly block or sleep
 does permit general sleeping in SRCU read-side critical sections).
 If you abide by these conventions, you can use RCU to wait for \emph{any}
 desired piece of code to complete.
+\fi
+
+RCU 는 언제 이런 기다리는 중인 일들이 종료되었는지를 간접적으로 판단해내는
+것으로 이 기능을 구현합니다~\cite{PaulEMcKenney2007whatisRCU,
+PaulEMcKenney2007PreemptibleRCU}.
+\iffalse
 
 RCU accomplishes this feat by indirectly determining when these
 other things have finished~\cite{PaulEMcKenney2007whatisRCU,
 PaulEMcKenney2007PreemptibleRCU}.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -716,6 +745,17 @@ PaulEMcKenney2007PreemptibleRCU}.
 \caption{Readers and RCU Grace Period}
 \label{fig:defer:Readers and RCU Grace Period}
 \end{figure}
+
+자세히 말하자면,
+Figure~\ref{fig:defer:Readers and RCU Grace Period} 에 보여진 것처럼, RCU 는
+전부터 존재했던 RCU read-side 크리티컬 섹션들이 그 크리티컬 센션들에서 수행되는
+메모리 오퍼레이션 등이 완전히 끝나기를 기다리는 한가지 방법입니다.
+하지만, 주어진 grace period 의 시작 후에 시작된 RCU read-side 크리티컬 섹션들은
+그 grace period 의 종료 이후까지 수행될 수도 있음을 기억해 두십시오.
+
+다음의 슈도코드는 RCU 를 이용해 읽기 작업들을 기다리는 알고리즘들의 기본적
+형태를 보입니다:
+\iffalse
 
 In particular, as shown in
 Figure~\ref{fig:defer:Readers and RCU Grace Period},
@@ -729,8 +769,18 @@ period.
 
 The following pseudocode shows the basic form of algorithms that use
 RCU to wait for readers:
+\fi
 
 \begin{enumerate}
+\item	링크드 리스트에서 한 원소를 바꿔치기 하거나 하는 식으로 변경을
+	만듭니다.
+\item	전부터 존재했던 RCU read-side 크리티컬 섹션들이 완전히 종료되길
+	기다립니다 (예를 들어, \co{synchronize_rcu()} 기능을 이용해서).
+	여기서의 핵심은 뒤이어지는 RCU read-side 크리티컬 섹션들은 이제는
+	제거된 원소로의 레퍼런스를 얻을 수 없다는 점입니다.
+\item	예를 들어 앞서 교체된 원소를 메모리에서 해제하는 식으로 정리를 합니다.
+\iffalse
+
 \item	Make a change, for example, replace an element in a linked list.
 \item	Wait for all pre-existing RCU read-side critical sections to
 	completely finish (for example, by using the
@@ -739,6 +789,7 @@ RCU to wait for readers:
 	sections have no way to gain a reference to the newly removed
 	element.
 \item	Clean up, for example, free the element that was replaced above.
+\fi
 \end{enumerate}
 
 \begin{figure}[tbp]
@@ -771,6 +822,16 @@ RCU to wait for readers:
 \label{fig:defer:Canonical RCU Replacement Example}
 \end{figure}
 
+Figure~\ref{fig:defer:Canonical RCU Replacement Example} 에 보여진 코드 조각은
+Section~\ref{sec:defer:Publish-Subscribe Mechanism} 에서 가져와진 것으로, 이
+프로세스를 보여주는데,  필드 \co{a} 는 검색을 위한 키로 사용됩니다.
+
+Line~19, 20, 21 은 앞에서 이야기한 세개의 스텝을 보입니다.
+Line~16-19 이 RCU (``read-copy update'') 에 그 이름을 줍니다: 동시의
+\emph{read} 를 허용하면서, line~16 은 \emph{copy} 를 하고 line~17-19 에서 실제
+\emph{update} 를 합니다.
+\iffalse
+
 The code fragment shown in
 Figure~\ref{fig:defer:Canonical RCU Replacement Example},
 adapted from those in Section~\ref{sec:defer:Publish-Subscribe Mechanism},
@@ -780,6 +841,20 @@ Lines~19, 20, and 21 implement the three steps called out above.
 Lines~16-19 gives RCU (``read-copy update'') its name: while permitting
 concurrent \emph{reads}, line~16 \emph{copies} and lines~17-19
 do an \emph{update}.
+\fi
+
+Section~\ref{sec:defer:Introduction to RCU} 에서 이야기된 것처럼,
+\co{synchronize_rcu()} 기능은 매우 간단할 수 있습니다 (``장난감'' RCU 구현을 더
+보기 위해선 Section~\ref{sec:defer:``Toy'' RCU Implementations} 을 참고하시기
+바랍니다).
+하지만, 상품 수준의 구현들은 복잡하고 희귀한 경우들을 처리해야 하고 강력한
+최적화를 포함해야 하는데, 둘 다 상당한 복잡도가 생기게 하고 맙니다.
+\co{synchronize_rcu()} 의 간단한 개념적 구현이 있음을 알게 된 건 좋지만, 다른
+질문들이 남습니다.
+예를 들어, RCU 읽기 작업들은 동시에 업데이트 되는 리스트를 돌아다니면서 정확히
+뭘 보게 되는 걸까요?
+이 질문을 다음 섹션에서 다루도록 합니다.
+\iffalse
 
 As discussed in Section~\ref{sec:defer:Introduction to RCU},
 the \co{synchronize_rcu()} primitive can be quite simple
@@ -793,6 +868,7 @@ implementation of \co{synchronize_rcu()}, other questions remain.
 For example, what exactly do RCU
 readers see when traversing a concurrently updated list?
 This question is addressed in the following section.
+\fi
 
 \subsubsection{Maintain Multiple Versions of Recently Updated Objects}
 \label{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
