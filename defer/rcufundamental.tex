@@ -1385,10 +1385,9 @@ versions of the list active at a given time.
 있지만, 이것들은 이 섹션의 범위를 넘어섭니다.
 \iffalse
 
-This sequence of events shows how RCU updates use multiple versions
-to safely carry out changes in presence of concurrent readers.
-Of course, some algorithms cannot gracefully handle multiple versions.
-There are techniques
+This sequence of events shows how RCU updates use multiple versions to safely
+carry out changes in presence of concurrent readers.  Of course, some
+algorithms cannot gracefully handle multiple versions.  There are techniques
 for adapting such algorithms to RCU~\cite{PaulEdwardMcKenneyPhD},
 but these are beyond the scope of this section.
 \fi
@@ -1396,23 +1395,52 @@ but these are beyond the scope of this section.
 \subsubsection{Summary of RCU Fundamentals}
 \label{sec:defer:Summary of RCU Fundamentals}
 
+이 섹션에서는 RCU 기반 알고리즘들의 세가지 기본 컴포넌트들을 설명했습니다:
+\iffalse
+
 This section has described the three fundamental components of RCU-based
 algorithms:
+\fi
 
 \begin{enumerate}
+\item	새로운 데이터의 추가를 위한 공개-구독 메커니즘,
+
+\item	전부터 존재했던 RCU 읽기 쓰레드들이 종료되기를 위해 기다리는 방법,
+	그리고
+
+\item	동시에 수행중인 RCU 읽기 쓰레드들에 피해를 주거나 지나치게 대기하도록
+	만들지 않고 변화를 가할 수 있도록 여러 버전들을 관리하는 방법.
+\iffalse
+
 \item	a publish-subscribe mechanism for adding new data,
 
 \item	a way of waiting for pre-existing RCU readers to finish, and
 
 \item	a discipline of maintaining multiple versions to permit
 	change without harming or unduly delaying concurrent RCU readers.
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	{\tt rcu\_read\_lock()} 과 {\tt rcu\_read\_unlock()} 함수는 스핀하지도
+	블락하지도 않는데 어떻게 RCU 업데이트 쓰레드들이 RCU 읽기 쓰레드들을
+	대기시킬 수가 있나요?
+	\iffalse
+
 	How can RCU updaters possibly delay RCU readers, given that the
 	{\tt rcu\_read\_lock()} and {\tt rcu\_read\_unlock()}
 	primitives neither spin nor block?
+	\fi
 \QuickQuizAnswer{
+	특정 RCU 업데이터에 의해서 가해진 수정사항은 연관된 CPU 가 해당
+	데이터를 포함하는 캐시 라인들을 무효화 하도록 만들 것이고, 동시에
+	수행중인 RCU 읽기 쓰레드들을 수행중인 해당 CPU 들이 비싼 캐시 미스를
+	마주하도록 만들 것입니다.
+	(동시에 수행중인 읽기 쓰레드들에게 비싼 캐시 미스를 만들지 않고 데이터
+	구조에 변경을 가할 수 있는 알고리즘을 설계할 수 있을까요?
+	또는 뒤따르는 읽기 쓰레드들에게?)
+	\iffalse
+
 	The modifications undertaken by a given RCU updater will cause the
 	corresponding CPU to invalidate cache lines containing the data,
 	forcing the CPUs running concurrent RCU readers to incur expensive
@@ -1421,10 +1449,18 @@ algorithms:
 	\emph{without}
 	inflicting expensive cache misses on concurrent readers?
 	On subsequent readers?)
+	\fi
 } \QuickQuizEnd
+
+이 세개의 RCU 컴포넌트들은 데이터가 동시에 수행되는 읽기 쓰레드들에 상관 없이
+업데이트 되도록 하고, 놀랍도록 다양한, 다른 종류의 RCU 기반의 알고리즘들을
+구현하는 다른 방법들로 조합될 수 있는데, 그 중 일부는 다음 섹션에서
+설명하겠습니다.
+\iffalse
 
 These three RCU components
 allow data to be updated in face of concurrent readers, and
 can be combined in different ways to
 implement a surprising variety of different types of RCU-based algorithms,
 some of which are described in the following section.
+\fi
