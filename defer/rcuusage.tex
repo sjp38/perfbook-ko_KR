@@ -124,18 +124,35 @@ These advantages and limitations are discussed in the following sections.
 \label{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking}
 \end{figure}
 
+RCU 의 reader-writer 락킹에 대비한 읽기 작업 성능의 이점이
+Figure~\ref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking}
+에 그려져 있습니다.
+\iffalse
+
 The read-side performance advantages of RCU over reader-writer locking
 are shown in
 Figure~\ref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking}.
+\fi
 
 \QuickQuiz{}
+	이게 뭐죠?
+	3GHz 에서의 클락 시간이 300 \emph{피코세컨드} 가 넘는데 대체 어떻게 RCU
+	는 100 펜토세컨드의 오버헤드를 갖는다고 제가 믿을 수 있을 거라고
+	생각하세요?
+	\iffalse
+
 	WTF?
 	How the heck do you expect me to believe that RCU has a
 	100-femtosecond overhead when the clock period at 3GHz is more than
 	300 \emph{picoseconds}?
+	\fi
 \QuickQuizAnswer{
+	먼저, 이 측정을 위해 사용된 내부의 루프가 다음과 같다고 생각해 보세요:
+	\iffalse
+
 	First, consider that the inner loop used to
 	take this measurement is as follows:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -149,8 +166,13 @@ Figure~\ref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking}.
 \end{minipage}
 \vspace{5pt}
 
+	다음으로, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 이 실질적으로
+	수행하는 코드가 다음과 같다고 생각해 봅시다: 
+	\iffalse
+
 	Next, consider the effective definitions of \co{rcu_read_lock()}
 	and \co{rcu_read_unlock()}:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -162,8 +184,13 @@ Figure~\ref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking}.
 \end{minipage}
 \vspace{5pt}
 
+	그리고 컴파일러가 이 루프를 다음과 같이 바뀌게 하는 간단한 최적화를
+	한다고 생각해 보세요:
+	\iffalse
+
 	Consider also that the compiler does simple optimizations,
 	allowing it to replace the loop with:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -173,6 +200,18 @@ i = CSCOUNT_SCALE;
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+	따라서 100 펨토세컨드의 ``측정'' 은 단순히 고정된 시간 측정 오버헤드를
+	\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 호출을 담고 있는 루프의
+	수행 횟수로 나눈 값일 뿐입니다.
+	그리고 따라서, 이 측정은 실제로 에러인데, 실제로 수십수백배의
+	에러율입니다.
+	앞의 \co{rcu_read_lock()} 와 \co{rcu_read_unlock()} 의 정의에서 알 수
+	있듯이, 실제 오버헤드는 정확히 제로입니다.
+
+	100 펨토세컨드의 시간 측정이 과하게 추측된걸로 판명되는 건 모든
+	케이스가 아닐 것은 분명합니다!
+	\iffalse
 
 	So the ``measurement'' of 100 femtoseconds is simply the fixed
 	overhead of the timing measurements divided by the number of
@@ -186,7 +225,14 @@ i = CSCOUNT_SCALE;
 
 	It certainly is not every day that a timing measurement of
 	100 femtoseconds turns out to be an overestimate!
+	\fi
 } \QuickQuizEnd
+
+reader-writer 락킹은 단일 CPU 위에서 RCU 보다 열배가량 느리고 16개의 CPU
+위에서는 100배가 \emph{더} 느리다는 점을 알아두세요.
+반면, RCU 는 상당히 잘 확장됩니다.
+두 케이스 모두, 에러바들은 양쪽으로 표준편차만큼의 크기를 갖습니다.
+\iffalse
 
 Note that reader-writer locking is orders of magnitude slower than RCU
 on a single CPU, and is almost two \emph{additional} orders of magnitude
@@ -194,6 +240,7 @@ slower on 16 CPUs.
 In contrast, RCU scales quite well.
 In both cases, the error bars span a single standard deviation in either
 direction.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -203,12 +250,22 @@ direction.
 \label{fig:defer:Performance Advantage of Preemptible RCU Over Reader-Writer Locking}
 \end{figure}
 
+더 완화된 그림은 \co{CONFIG_PREEMPT} 커널에서 볼 수 있을텐데, 그렇다 하더라도
+Figure~\ref{fig:defer:Performance Advantage of Preemptible RCU Over Reader-Writer Locking}
+에서 볼 수 있듯이 RCU 는 여전히 reader-writer 락킹을 10배에서 1000배까지
+압도하는 모습을 보입니다.
+많은 수의 CPU 들에서의 reader-writer 락킹의 오버헤드의 성능이 높은 가변성을
+보세요.
+그림의 에러바들은 양쪽으로 표준편차만큼의 크기를 갖습니다.
+\iffalse
+
 A more moderate view may be obtained from a \co{CONFIG_PREEMPT}
 kernel, though RCU still beats reader-writer locking by between one and
 three orders of magnitude, as shown in
 Figure~\ref{fig:defer:Performance Advantage of Preemptible RCU Over Reader-Writer Locking}.
 Note the high variability of reader-writer locking at larger numbers of CPUs.
 The error bars span a single standard deviation in either direction.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -217,6 +274,16 @@ The error bars span a single standard deviation in either direction.
 \caption{Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}
 \label{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}
 \end{figure}
+
+물론,
+Figure~\ref{fig:defer:Performance Advantage of Preemptible RCU Over Reader-Writer Locking}
+에 보인 reader-writer 락킹의 낮은 성능은 비현실적이게 짧은 크리티컬 섹션들로
+인해 상당히 과장되었습니다.
+RCU 의 성능상 이점은 16-CPU 환경에서 y 축은 read-side 기능들의 오버헤드와
+크리티컬 섹션의 오버헤드의 합을 나타내는
+Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}
+에서 보인 것처럼, 크리티컬 섹션의 오버헤드가 늘어날수록 덜 뚜렷해집니다.
+\iffalse
 
 Of course, the low performance of reader-writer locking in
 Figure~\ref{fig:defer:Performance Advantage of Preemptible RCU Over Reader-Writer Locking}
@@ -227,17 +294,38 @@ Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of 
 for a 16-CPU system,
 in which the y-axis represents the sum of the overhead
 of the read-side primitives and that of the critical section.
+\fi
 
 \QuickQuiz{}
+	크리티컬 섹션 오버헤드가 늘어나면 왜 rwlock 의 오버헤드와 가변성이 모두
+	줄어드는 거죠?
+	\iffalse
+
 	Why does both the variability and overhead of rwlock decrease as the
 	critical-section overhead increases?
+	\fi
 \QuickQuizAnswer{
+	크리티컬 섹션오버헤드가 증가하면 그 아래에 위치한 \co{rwlock_t} 를 얻기
+	위한 경쟁이 줄어들기 때문입니다.
+	하지만, 이 rwlock 오버헤드는 단일 CPU 에서는 캐시 쓰래싱 오버헤드
+	때문에 그렇게 크게 떨어지지는 않을 겁니다.
+	\iffalse
+
 	Because the contention on the underlying
 	\co{rwlock_t} decreases as the critical-section overhead
 	increases.
 	However, the rwlock overhead will not quite drop to that on a single
 	CPU because of cache-thrashing overhead.
+	\fi
 } \QuickQuizEnd
+
+하지만, 이 관측은 여러 시스템 콜들이 (그리고 따라서 그것들이 포함하고 있는 모든
+RCU read-side 크리티컬 섹션들도) 수 마이크로세컨드 내에 완료될 수 있다는 사실로
+좀 완화되어야만 합니다.
+
+또한, 다음 섹션에서 이야기 되겠지만, RCU read-side 기능들은 거의 전부 데드락에
+내성을 가지고 있습니다.
+\iffalse
 
 However, this observation must be tempered by the fact that
 a number of system calls (and thus any RCU read-side critical sections
@@ -245,6 +333,7 @@ that they contain) can complete within a few microseconds.
 
 In addition, as is discussed in the next section,
 RCU read-side primitives are almost entirely deadlock-immune.
+\fi
 
 
 \paragraph{Deadlock Immunity}
