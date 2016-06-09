@@ -338,6 +338,13 @@ RCU read-side primitives are almost entirely deadlock-immune.
 
 \paragraph{Deadlock Immunity}
 
+RCU 가 읽기가 대부분인 워크로드들에게 상당한 성능 이득을 제공하긴 하지만, 사실
+RCU 를 만들게 된 첫번째 목적은 read-side 의 데드락에 대한 내성입니다.
+이 내성은 RCU 의 read-side 기능들은 블락도, 스피닝도, 심지어 뒤로 돌아가기도
+하지 않으며, 따라서 그것들의 수행 시간이 결정론적이라는 사실에서 기인합니다.
+따라서 이것들이 데드락 사이클에 연관되는 것은 불가능합니다.
+\iffalse
+
 Although RCU offers significant performance advantages for
 read-mostly workloads, one of the primary reasons for creating
 RCU in the first place was in fact its immunity to read-side
@@ -347,14 +354,25 @@ RCU read-side primitives do not block, spin, or even
 do backwards branches, so that their execution time is deterministic.
 It is therefore impossible for them to participate in a deadlock
 cycle.
+\fi
 
 \QuickQuiz{}
+	이 데드락 내성에 어떤 예외가 있을까요, 그리고 만약 그렇다면, 어떤
+	일련의 이벤트들이 데드락을 이끌어 낼 수 있을가요?
+	\iffalse
+
 	Is there an exception to this deadlock immunity, and if so,
 	what sequence of events could lead to deadlock?
+	\fi
 \QuickQuizAnswer{
+	RCU read-side 기능들이 연관된 데드락 사이클을 만들어내는 한가지 방법은
+	다음과 같은 (불법적인) 일련의 코드들을 통해 가능합니다:
+	\iffalse
+
 	One way to cause a deadlock cycle involving
 	RCU read-side primitives is via the following (illegal) sequence
 	of statements:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -366,6 +384,26 @@ srcu_read_unlock(&srcucb, idx);
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+	여기서의 \co{synchronize(srcu()} 는 모든 전부터 존재한 SRCU read-side
+	크리티컬 섹션들이 완료되기 전까지 리턴할 수 없습니다만, 이 자체가 SRCU
+	read-side 크리티컬 섹션 안에 들어가 있고 그 크리티컬 섹션은
+	\co{synchronize_srcu()} 가 리턴하기 전까지 끝날 수 없습니다.
+	결국 이건 고전적인 self-deadlock 의 결과를 이끌어냅니다--읽기 모드로
+	reader-writer 락을 잡은채로 쓰기 모드로 락을 잡으려 하면 똑같은 효과가
+	나타날 겁니다.
+
+	이 self-deadlock 시나리오는 RCU Classic 에는 적용되지 않는다는 점을
+	알아두셔야 하는데, 이는 \co{synchronize_rcu()} 에 의해 수행되는
+	컨텍스트 스위치는 이 CPU 에 정지한 상태처럼 행동할 것이어서 grace
+	period 가 완료되게 할 것이기 때문입니다.
+	하지만, 이는 오히려 더 안좋은 케이스로, 이 RCU read-side 크리티컬
+	섹션에 의해 사용되던 데이터가 해당 grace period 의 완료로 인해
+	메모리에서 해제될 수 있기 때문입니다.
+
+	짧게 말하자면, RCU read-side 크리티컬 섹션 내에서 동기적인 RCU
+	update-side 기능들을 실행하지 마세요.
+	\iffalse
 
 	The \co{synchronize_srcu()} cannot return until all
 	pre-existing SRCU read-side critical sections complete, but
@@ -385,7 +423,14 @@ srcu_read_unlock(&srcucb, idx);
 
 	In short, do not invoke synchronous RCU update-side primitives
 	from within an RCU read-side critical section.
+	\fi
 } \QuickQuizEnd
+
+RCU 의 read-side 데드락 내성의 흥미로운 결론은 무조건적으로 RCU 읽기 쓰레드를
+RCU 업데이트 쓰레드로 업그레이드 시키는게 가능하다는 것입니다.
+Reader-writer 락킹을 사용해서 그런 업그레이드를 하려 하면 데드락이 날 것입니다.
+RCU read-to-update 업그레이드를 하는 예제 코드 조각은 다음과 같습니다:
+\iffalse
 
 An interesting consequence of RCU's read-side deadlock immunity is
 that it is possible to unconditionally upgrade an RCU
@@ -393,6 +438,7 @@ reader to an RCU updater.
 Attempting to do such an upgrade with reader-writer locking results
 in deadlock.
 A sample code fragment that does an RCU read-to-update upgrade follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -412,6 +458,17 @@ A sample code fragment that does an RCU read-to-update upgrade follows:
 \end{minipage}
 \vspace{5pt}
 
+\co{do_update()} 는 락의 보호 하에 실행되었다는 점, \emph{그리고} RCU read-side
+보호 하에 실행되었다는 점에 주의하세요.
+
+RCU 의 데드락 내성의 또다른 흥미로운 결론은 우선순위 역전 문제의 커다란
+클래스에의 내성입니다.
+예를 들어, 낮은 우선순위 RCU 읽기 쓰레드들은 높은 우선순위의 RCU 업데이트
+쓰레드이 update-side 락을 잡는 걸 막을 수 없습니다.
+유사하게, 낮은 우선순위 RCU 업데이트 쓰레드는 높은 우선순위 RCU 읽기 쓰레드들이
+RCU read-side 크리티컬 섹션에 들어가는걸 막을 수 없습니다.
+\iffalse
+
 Note that \co{do_update()} is executed under
 the protection of the lock \emph{and} under RCU read-side protection.
 
@@ -421,14 +478,26 @@ For example, low-priority RCU readers cannot prevent a high-priority
 RCU updater from acquiring the update-side lock.
 Similarly, a low-priority RCU updater cannot prevent high-priority
 RCU readers from entering an RCU read-side critical section.
+\fi
 
 \QuickQuiz{}
+	데드락과 우선순위 역전 모두에 내성이 있다고요???
+	사실이라기엔 너무 좋은 이야기 같은데요.
+	제가 이게 가능하다는걸 어떻게 믿을 수 있을까요?
+	\iffalse
+
 	Immunity to both deadlock and priority inversion???
 	Sounds too good to be true.
 	Why should I believe that this is even possible?
+	\fi
 \QuickQuizAnswer{
+	정말로 잘 동작합니다.
+	무엇보다, 이게 동작하지 않는다면, 리눅스 커널은 동작하지 못하겠죠.
+	\iffalse
+
 	It really does work.
 	After all, if it didn't work, the Linux kernel would not run.
+	\fi
 } \QuickQuizEnd
 
 \paragraph{Realtime Latency}
