@@ -532,12 +532,20 @@ boosting~\cite{PaulEMcKenney2007BoostRCU,DinakarGuniguntala2008IBMSysJ}.
 
 \paragraph{RCU Readers and Updaters Run Concurrently}
 
+RCU 읽기 쓰레드들은 스핀도 블락도 하지 않고, 업데이트 쓰레드들은 rollback 이나
+abort 비슷한 것을 하지 않기 때문에, RCU 읽기 쓰레드들과 업데이트 쓰레드들은
+동시에 수행될 수 있습니다.  이는 RCU 읽기 쓰레드들은 낡은 데이터에 접근할 수
+있고, 비일관적인 상태를 보게 될수 있어서, reader-writer 락킹에서 RCU 로의
+변환이 간단하지 않을 것임을 의미합니다.
+\iffalse
+
 Because RCU readers never spin nor block, and because updaters are not
 subject to any sort of rollback or abort semantics, RCU readers and
 updaters must necessarily run concurrently.
 This means that RCU readers might access stale data, and might even
 see inconsistencies, either of which can render conversion from reader-writer
 locking to RCU non-trivial.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -546,6 +554,20 @@ locking to RCU non-trivial.
 \caption{Response Time of RCU vs. Reader-Writer Locking}
 \label{fig:defer:Response Time of RCU vs. Reader-Writer Locking}
 \end{figure}
+
+하지만, 놀랍도록 많은 상황에서 비일관성과 낡은 데이터는 문제가 되지 않습니다.
+그런 고전적인 예는 네트워킹 라우팅 테이블입니다.
+라우팅 업데이트는 시스템에 가해지는데 상당한 시간 (몇초에서 심지어 몇분까지도)
+을 필요로 할 수 있기 때문에, 시스템은 업데이트가 도착했을 때 상당한 시간동안은
+패킷들을 잘못된 방향으로 보낼 수도 있습니다.
+몇 밀리세컨드동안 잘못된 방향으로 업데이트를 보내는 건 일반적으로 문제가 되지
+않습니다.
+더욱이, RCU 업데이트 쓰레드들은 RCU 읽기 쓰레드들이 끝나기를 기다리지 않고
+변경을 가하기 때문에, RCU 읽기 쓰레드들은 이 변경을 reader-writer 락킹의 읽기
+쓰레드들보다 빠르게 볼 수 있게 되는데,
+Figure~\ref{fig:defer:Response Time of RCU vs. Reader-Writer Locking} 에 이
+점이 그려져 있습니다.
+\iffalse
 
 However, in a surprisingly large number of situations, inconsistencies and
 stale data are not problems.
@@ -561,6 +583,16 @@ the RCU readers might well see the change more quickly than would
 batch-fair
 reader-writer-locking readers, as shown in
 Figure~\ref{fig:defer:Response Time of RCU vs. Reader-Writer Locking}.
+\fi
+
+일단 업데이트가 도착하면, rwlock 쓰기 쓰레드는 마지막 읽기 쓰레드가 완료되기
+전까지, 뒤따르는 읽기 쓰레드들은 쓰기가 완료되기 전까지 진행될
+수 없습니다.
+하지만, 뒤의 읽기 쓰레드들은 새로운 값을 볼것이 보장되는데, 가장 오른쪽 박스들의 녹색 색깔로 표시되어 있습니다.
+반면, RCU 읽기 쓰레드들과 업데이트 쓰레드들은 서로를 막지 않아, RCU 읽기 쓰레드들이 업데이트된 값을 더 빨리 볼 수 있게 합니다.
+물론, RCU 업데이트 쓰레드와 겹쳐 수행되기 때문에, 업데이트 전에 시작된 세개의 읽기 쓰레드들을 포함해 \emph{모든} RCU 읽기 쓰레드들은 업데이트된 값을 보게 될수도 있을겁니다.
+오로지 가장 오른쪽의 녹색으로 칠해진 RCU 읽기 쓰레드들만이 업데이트된 값을 볼 것이 \emph{보장됩니다}.
+\iffalse
 
 Once the update is received, the rwlock writer cannot proceed until the
 last reader completes, and subsequent readers cannot proceed until the
@@ -574,6 +606,12 @@ Of course, because their execution overlaps that of the RCU updater,
 the three readers that started before the update.
 Nevertheless only the green-shaded rightmost RCU readers
 are \emph{guaranteed} to see the updated values.
+\fi
+
+Reader-writer 락킹과 RCU 는 단순히 다른 보장을 제공합니다.
+Reader-writer 락킹에서는, 쓰기 쓰레드보다 늦게 시작을 늦게 한 읽기 쓰레드는 모두 새 값을 볼 것이 보장되고, 쓰기 쓰레드가 스피닝 하는중에 시작되려 시도하는 읽기 쓰레드는 rwlock 의 읽기/쓰기 우선권 구현에 따라 새 값을 볼수도 못볼수도 있습니다.
+반면에, RCU 에서는 업데이트 쓰레드가 완료된 후에 시작된 읽기 쓰레드는 모두 새 값을 볼것이 보장되고, 업데이트가 시작된 후에 완료된 모든 읽기 쓰레드는 타이밍에 따라 새 값을 볼수도 못볼수도 있습니다.
+\iffalse
 
 Reader-writer locking and RCU simply provide different guarantees.
 With reader-writer locking, any reader that begins after the writer begins
@@ -584,6 +622,14 @@ question.
 In contrast, with RCU, any reader that begins after the updater completes
 is guaranteed to see new values, and any reader that completes after the
 updater begins might or might not see new values, depending on timing.
+\fi
+
+여기서의 핵심은, reader-writer 락킹이 컴퓨터 시스템에 국한해서는 실제로
+일관성을 보장하지만, 이 일관성이 그 바깥 세계에서는 더 증가된 \emph{비일관성}
+이라는 비용이 되는 상황이 존재한다는 것입니다.
+달리 말해, reader-writer 락킹은 바깥 세계의 관점에서는 조용히 망가져버린
+데이터의 비용으로 내부의 일관성을 얻습니다.
+\iffalse
 
 The key point here is that, although reader-writer locking does
 indeed guarantee consistency within the confines of the computer system,
@@ -591,6 +637,15 @@ there are situations where this consistency comes at the price of
 increased \emph{inconsistency} with the outside world.
 In other words, reader-writer locking obtains internal consistency at the
 price of silently stale data with respect to the outside world.
+\fi
+
+더도 아니고 덜도 아니고, 시스템에 국한된 비일관성과 망가진 데이터가 허용될 수
+없는 상황은 존재합니다.
+다행히도, 비일관성과 망가진 데이터를 방지하는 방법들이
+여럿~\cite{PaulEdwardMcKenneyPhD,Arcangeli03} 있고, 일부 방법은
+Section~\ref{sec:defer:Reference Counting} 에서 논의한 레퍼런스 카운팅에
+기반합니다.
+\iffalse
 
 Nevertheless, there are situations where inconsistency and stale
 data within the confines of the system cannot be tolerated.
@@ -599,6 +654,7 @@ there are a number of approaches that avoid inconsistency and stale
 data~\cite{PaulEdwardMcKenneyPhD,Arcangeli03}, and some
 methods based on reference counting are discussed in
 Section~\ref{sec:defer:Reference Counting}.
+\fi
 
 \paragraph{Low-Priority RCU Readers Can Block High-Priority Reclaimers}
 
