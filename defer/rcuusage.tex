@@ -1031,6 +1031,14 @@ some cases.
 \subsubsection{RCU is a Bulk Reference-Counting Mechanism}
 \label{sec:defer:RCU is a Bulk Reference-Counting Mechanism}
 
+앞의 섹션에서 이야기 했듯, 전통적인 레퍼런스 카운터들은 보통 특정 데이터 구조
+또는 데이터 구조체들의 특정 그룹과 연관되어 있습니다.
+하지만, 매우 다양한 데이터 구조체들에 하나의 글로벌한 레퍼런스 카운터를
+사용하는 것은 이 레퍼런스 카운트를 담고 있는 캐시 라인 바운싱 (cache line
+bouncing) 을 초래합니다.
+그런 캐시 라인 바운싱은 성능을 심각하게 저하시킬 수 있습니다.
+\iffalse
+
 As noted in the preceding section,
 traditional reference counters are usually associated with a specific
 data structure, or perhaps a specific group of data structures.
@@ -1038,6 +1046,20 @@ However, maintaining a single global reference counter for a large
 variety of data structures typically results in bouncing
 the cache line containing the reference count.
 Such cache-line bouncing can severely degrade performance.
+\fi
+
+반면, RCU 의 가벼운 read-side 기능들은 무시해도 좋을 만한 성능 저하만을
+가지면서 굉장히 빈번한 read-side 실행이 가능하게 해서 적거나 아예 없는 퍼포먼스
+저하를 갖는 ``벌크 레퍼런스 카운팅'' 메커니즘으로 RCU 가 사용될 수 있습니다.
+블록을 하는 코드 섹션들을 가로질러 하나의 태스크가 하나의 레퍼런스를 쥐고
+있어야만 하는 상황에는 Sleepable RCU (SRCU)~\cite{PaulEMcKenney2006c} 가 사용될
+수 있을 겁니다.
+이는 레퍼런스가 한 태스크에서 다른 태스크로 ``전달'' 되는, 예를 들어 레퍼런스가
+I/O 의 시작에 획득되어지고 연관된 완료 인터럽트 핸들러에서 해제되는, 희귀하지
+않은 상황들을 처리하지는 못할 겁니다.
+(원칙적으로, 이는 SRCU 구현으로 처리될 수도 있지만, 실제로 이게 좋은
+트레이드오프인지가는 아직 명확하지 않습니다.)
+\iffalse
 
 In contrast, RCU's light-weight read-side primitives permit
 extremely frequent read-side usage with negligible performance
@@ -1052,6 +1074,15 @@ when starting an I/O and released in the corresponding completion
 interrupt handler.
 (In principle, this could be handled by the SRCU implementation,
 but in practice, it is not yet clear whether this is a good tradeoff.)
+\fi
+
+물론, SRCU 는 그 자신의 제약을 가지는데, \co{srcu_read_lock()} 의 리턴값은
+연관된 \co{srcu_read_unlock()} 으로 전달되고, 어떤 SRCU 기능도 하드웨어
+인터럽트 핸들러나 non-maskable interrupt (NMI) 핸들러 안에서 실행될 수 없다는
+것입니다.
+이런 제약들에 의해 얼마나 많은 문제들이 존재하게 되는지, 그리고 그것들이 어떻게
+가장 잘 처리될 수 있는지에 대한 판단은 아직 진행 중입니다.
+\iffalse
 
 Of course, SRCU brings restrictions of its own, namely that the
 return value from \co{srcu_read_lock()} be passed into the
@@ -1060,6 +1091,7 @@ be invoked from hardware interrupt handlers or from non-maskable interrupt
 (NMI) handlers.
 The jury is still out as to how much of a problem is presented by
 these restrictions, and as to how they can best be handled.
+\fi
 
 \subsubsection{RCU is a Poor Man's Garbage Collector}
 \label{sec:defer:RCU is a Poor Man's Garbage Collector}
