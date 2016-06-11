@@ -821,11 +821,18 @@ are beyond the scope of this document.
 \subsubsection{RCU is a Restricted Reference-Counting Mechanism}
 \label{sec:defer:RCU is a Restricted Reference-Counting Mechanism}
 
+RCU read-side 크리티컬 섹션이 진행중인 동안은 grace period 들이 완료될 수 없기
+때문에, RCU read-side 기능들은 제한적인 레퍼런스 카운팅 메커니즘으로 사용될수도
+있습니다.
+예를 들어, 다음과 같은 코드 조각을 생각해 봅시다:
+\iffalse
+
 Because grace periods are not allowed to complete while
 there is an RCU read-side critical section in progress,
 the RCU read-side primitives may be used as a restricted
 reference-counting mechanism.
 For example, consider the following code fragment:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -839,6 +846,17 @@ For example, consider the following code fragment:
 \end{minipage}
 \vspace{5pt}
 
+이 \co{rcu_read_lock()} 는 \co{p} 로의 레퍼런스를 얻어오는 것으로 볼 수
+있는데, \co{rcu_dereference()} 를 통한 \co{p} 로의 할당 후 시작되는 grace
+period 는 연관되는 \co{rcu_read_unlock()} 전까지는 끝나지 않을
+것이기 때문입니다.
+이 레퍼런스 카운팅 방식은 RCU read-side 크리티컬 섹션 안에서는
+블락이 허용되지 않고, 다른 태스크로 RCU read-side 크리티컬
+섹션을 넘겨줄 수도 없다는 점에서 제한적입니다.
+
+그런 제한에도 불구하고, 다음의 코드는 안전하게 \co{p} 를 삭제할 수 있습니다:
+\iffalse
+
 The \co{rcu_read_lock()} primitive can be thought of as
 acquiring a reference to \co{p}, because a grace period
 starting after the \co{rcu_dereference()} assigns to \co{p}
@@ -851,6 +869,7 @@ from one task to another.
 
 Regardless of these restrictions,
 the following code can safely delete \co{p}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -867,16 +886,41 @@ the following code can safely delete \co{p}:
 \end{minipage}
 \vspace{5pt}
 
+\co{head} 로의 할당은 뒤이은 \co{p} 로의 레퍼런스 획득을 방지하고,
+\co{synchronize_rcu()} 는 앞서 획득된 레퍼런스들이 해제되기를 기다립니다.
+\iffalse
+
 The assignment to \co{head} prevents any future references
 to \co{p} from being acquired, and the \co{synchronize_rcu()}
 waits for any previously acquired references to be released.
+\fi
 
 \QuickQuiz{}
+	근데 잠깐만요!
+	이건 RCU 를 reader-writer 락킹 대용으로 하려 할 때 쓸법한 코드와 완전
+	똑같잖아요!
+	뭐가 새로운 거죠?
+	\iffalse
+
 	But wait!
 	This is exactly the same code that might be used when thinking
 	of RCU as a replacement for reader-writer locking!
 	What gives?
+	\fi
 \QuickQuizAnswer{
+	이는 장난감 예제의 법칙의 효과입니다:
+	어떤 특정 포인트 이후로는 해당 코드는 똑같아 보일 겁니다.
+	이 코드를 어떻게 생각하느냐가 단 하나의 차이입니다.
+	하지만, 이 차이점은 매우 중요할 수 있습니다.
+	이 중요성에 대해 한가지만 예를 들어, RCU 를 레퍼런스 카운팅 방법으로
+	생각하고 있다고 치면, 업데이트들이 RCU read-side 크리티컬 섹션들을
+	배제할거라 생각하는 실수를 하지 않을 겁니다.
+
+	더도 아니고 덜도 아니고 RCU 를 reader-writer 락킹의 대체제로 생각하는
+	건 종종 쓸모있는데, 예를 들면 reader-writer 락킹을 RCU 로 대체할
+	때입니다.
+	\iffalse
+
 	This is an effect of the Law of Toy Examples:
 	beyond a certain point, the code fragments look the same.
 	The only difference is in how we think about the code.
@@ -889,11 +933,17 @@ waits for any previously acquired references to be released.
 	It nevertheless is often useful to think of RCU as a replacement
 	for reader-writer locking, for example, when you are replacing
 	reader-writer locking with RCU.
+	\fi
 } \QuickQuizEnd
+
+물론, RCU 는 LKML 에서 논의되고 Section~\ref{sec:defer:Reference Counting} 에
+요약되어 있는 것처럼, 전통적인 레퍼런스 카운팅과 함께 조합될 수도 있습니다.
+\iffalse
 
 Of course, RCU can also be combined with traditional reference counting,
 as has been discussed on LKML and as summarized in
 Section~\ref{sec:defer:Reference Counting}.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -903,20 +953,39 @@ Section~\ref{sec:defer:Reference Counting}.
 \label{fig:defer:Performance of RCU vs. Reference Counting}
 \end{figure}
 
+하지만 왜 이런 신경을 쓰는 걸까요?
+다시 말하지만, 답 중 하나는 성능으로, 16-CPU 3GHz Intel x86 시스템에서의
+데이터가
+Figure~\ref{fig:defer:Performance of RCU vs. Reference Counting} 에 있습니다.
+\iffalse
+
 But why bother?
 Again, part of the answer is performance, as shown in
 Figure~\ref{fig:defer:Performance of RCU vs. Reference Counting},
 again showing data taken on a 16-CPU 3GHz Intel x86 system.
+\fi
 
 \QuickQuiz{}
+	6 CPU 근처에서 refcnt 오버헤드가 확 떨어지는건 왜그렇죠?
+	\iffalse
+
 	Why the dip in refcnt overhead near 6 CPUs?
+	\fi
 \QuickQuizAnswer{
+	NUMA 효과 때문일 겁니다.
+	하지만, 에러 바들로 보여진 것처럼, refcnt 선을 측정하는데 사용된 값들은
+	상당한 편차를 가지고 있습니다.
+	사실, 일부 케이스에 있어서 표준편차는 측정된 값의 10\% 를 초과합니다.
+	따라서 해당 오버헤드의 큰 차이는 통계적 탈선일 수도 있습니다.
+	\iffalse
+
 	Most likely NUMA effects.
 	However, there is substantial variance in the values measured for the
 	refcnt line, as can be seen by the error bars.
 	In fact, standard deviations range in excess of 10\% of measured
 	values in some cases.
 	The dip in overhead therefore might well be a statistical aberration.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tb]
@@ -927,6 +996,14 @@ again showing data taken on a 16-CPU 3GHz Intel x86 system.
 \label{fig:defer:Response Time of RCU vs. Reference Counting}
 \end{figure}
 
+그리고, reader-writer 락킹 때처럼, RCU 의 성능상 이득은
+Figure~\ref{fig:defer:Response Time of RCU vs. Reference Counting} 에 16-CPU
+시스템에서의 결과로 보여지듯 짧은 길이의 크리티컬 섹션들에서 가장 효과를
+발합니다.
+또한, reader-writer 락킹에서처럼, 많은 시스템 콜들은 (그리고 그것들을 포함하는
+RCU read-side 크리티컬 섹션들은) 수 마이크로세컨드 내에 끝납니다.
+\iffalse
+
 And, as with reader-writer locking, the performance advantages
 of RCU are most pronounced for short-duration critical sections, as shown
 Figure~\ref{fig:defer:Response Time of RCU vs. Reference Counting}
@@ -934,6 +1011,12 @@ for a 16-CPU system.
 In addition, as with reader-writer locking, many system calls (and thus
 any RCU read-side critical sections that they contain) complete in
 a few microseconds.
+\fi
+
+하지만, RCU 에 따라오는 이 제약들은 상당히 성가십니다.
+예를 들어, 많은 경우에 RCU read-side 크리티컬 섹션 내에서 잠들기가 금지된다는 점은 목표 달성을 불가하게 할 수 있습니다.
+다음 섹션에서는 적어도 일부 경우에서는 전통적 레퍼런스 카운팅의 복잡도를 낮추면서도 이 문제를 해결하는 방법들을 알아보겠습니다.
+\iffalse
 
 However, the restrictions that go with RCU can be quite onerous.
 For example, in many cases, the prohibition against sleeping while in an RCU
@@ -941,6 +1024,7 @@ read-side critical section would defeat the entire purpose.
 The next section looks at ways of addressing this problem, while also
 reducing the complexity of traditional reference counting, at least in
 some cases.
+\fi
 
 \subsubsection{RCU is a Bulk Reference-Counting Mechanism}
 \label{sec:defer:RCU is a Bulk Reference-Counting Mechanism}
