@@ -1144,6 +1144,16 @@ following section.
 \subsubsection{RCU is a Way of Providing Existence Guarantees}
 \label{sec:defer:RCU is a Way of Providing Existence Guarantees}
 
+Gamsa 등~\cite{Gamsa99} 은 존재 보장에 대해 논하고 어떻게 RCU 를 닮은
+메커니즘이 이런 존재 보장을 제공하기 위해 사용되는지 설명 (해당 PDF 의 7
+페이지의 section~5 를 보세요) 했고,
+Section~\ref{sec:locking:Lock-Based Existence Guarantees} 에서는 존재 보장을
+락킹을 사용해서 어떻게 하는지를 그렇게 하는 것의 단점과 함께 이야기했습니다.
+만약 RCU 로 보호되는 데이터 원소가 RCU read-side 크리티컬 섹션 내에서
+접근된다면, 그 데이터 항목은 그 RCU read-side 크리티컬섹션 기간 동안은 존재하는
+상태로 유지되는 것이 보장됩니다.
+\iffalse
+
 Gamsa et al.~\cite{Gamsa99}
 discuss existence guarantees and describe how a mechanism
 resembling RCU can be used to provide these existence guarantees
@@ -1155,6 +1165,7 @@ The effect is that if any RCU-protected data element is accessed
 within an RCU read-side critical section, that data element is
 guaranteed to remain in existence for the duration of that RCU
 read-side critical section.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1191,6 +1202,16 @@ read-side critical section.
 \end{figure}
 
 Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}
+는 RCU 기반의 존재 보장이 어떻게 원소별 락킹을 가능하게 하는지를 해시
+테이블에서 원소를 하나 삭제하는 함수를 통해 보이고 있습니다.
+Line~6 는 해시 함수를 수행하고, line~7 에서 RCU read-side 크리티컬 섹션에
+들어갑니다.
+Line~9 에서 연관된 해시 테이블의 버킷이 비어있거나 버킷에 있는 항목이 우리가
+삭제하려 하는 것이 아니라고 판단되면 line~10 에서 RCU read-side 크리티컬 섹션을
+빠져나오고 line~11 에서 실패했음을 알립니다.
+\iffalse
+
+Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}
 demonstrates how RCU-based existence guarantees can enable
 per-element locking via a function that deletes an element from
 a hash table.
@@ -1200,19 +1221,47 @@ If line~9 finds that the corresponding bucket of the hash table is
 empty or that the element present is not the one we wish to delete,
 then line~10 exits the RCU read-side critical section and line~11
 indicates failure.
+\fi
 
 \QuickQuiz{}
+	우리가 삭제하려는 원소가
+	Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}
+	의 line~9 의 리스트의 첫번째 원소가 아니라면 어떡하죠?
+	\iffalse
+
 	What if the element we need to delete is not the first element
 	of the list on line~9 of
 	Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}?
+	\fi
 \QuickQuizAnswer{
+	Figure~\ref{fig:locking:Per-Element Locking Without Existence Guarantees}
+	에서와 마찬가지로, 이건 체이닝을 하지 않는 매우 간단한 해시
+	테이블이어서 하나의 버킷에 들어갈 수 있는 원소는 첫번째 원소 뿐입니다.
+	다시 한번 이 해시 테이블을 완전한 체이닝을 사용하도록 바꿔보는 건 독자
+	여러분의 몫으로 두겠습니다.
+	\iffalse
+
 	As with
 	Figure~\ref{fig:locking:Per-Element Locking Without Existence Guarantees},
 	this is a very simple hash table with no chaining, so the only
 	element in a given bucket is the first element.
 	The reader is again invited to adapt this example to a hash table with
 	full chaining.
+	\fi
 } \QuickQuizEnd
+
+\iffalse
+그렇지 않다면, line~13 에서 update-side 스핀락을 얻어오고, line~14 에서 해당
+원소가 여전히 지우려는 원소인지 확인합니다.
+맞다면, line~15 에서 RCU read-side 크리티컬 섹션을 나오고 line~16
+에서 해당 원소를 테이블에서 삭제하고 line~17 에서 락을 놓은 후, line~18
+에서 모든 앞서 존재한 RCU read-side 크리티컬 섹션들이 완료되길 기다리고,
+line~19 에서 새로 삭제된 원소를 메모리 해제시키고서 line~20 에서 성공을
+알립니다.
+만약 그 원소가 더이상 원하던 원소가 아니라면, line~22 에서 락을 놓고
+line~23 에서 RCU read-side 크리티컬 섹션을 나온 후, line~24 에서
+삭제에 실패했음을 알립니다.
+\fi
 
 Otherwise, line~13 acquires the update-side spinlock, and
 line~14 then checks that the element is still the one that we want.
@@ -1226,11 +1275,30 @@ the lock, line~23 leaves the RCU read-side critical section,
 and line~24 indicates failure to delete the specified key.
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}
+	의 line~17 에서 락을 놓기 전에 line~15 에서 RCU read-side 크리티컬
+	섹션을 빠지는게 왜 안전한거죠?
+	\iffalse
+
 	Why is it OK to exit the RCU read-side critical section on
 	line~15 of
 	Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}
 	before releasing the lock on line~17?
+	\fi
 \QuickQuizAnswer{
+	첫째로, line~14 에서의 두번째 체크는 어떤 다른 CPU 가 이 원소를 우리가
+	락을 잡는 동안 삭제했을 수 있기 때문에 필요합니다.
+	하지만, 우리가 이 락을 잡는 동안 RCU read-side 크리티컬 섹션에 들어와
+	있다는 사실은 이 원소가 재할당되고 이 해시 테이블에 다시 삽입되지는
+	못함을 보장합니다.
+	더 나아가서, 일단 우리가 락을 잡았다면, 그 락 자체는 이 원소의 존재를
+	보장하게 되고, 따라서 우리는 더이상 RCU read-side 크리티컬 섹션 안에
+	머무를 필요가 없습니다.
+
+	원소의 키를 다시 체크해 볼 필요가 있을까라는 질문에 대한 답은 독자
+	여러분의 몫으로 남겨두겠습니다.
+	\iffalse
+
 	First, please note that the second check on line~14 is
 	necessary because some other
 	CPU might have removed this element while we were waiting
@@ -1245,21 +1313,55 @@ and line~24 indicates failure to delete the specified key.
 
 	The question as to whether it is necessary to re-check the
 	element's key is left as an exercise to the reader.
+	\fi
 	% A re-check is necessary if the key can mutate or if it is
 	% necessary to reject deleted entries (in cases where deletion
 	% is recorded by mutating the key.
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}
+	의 line~23 에서 RCU read-side 크리티컬 섹션을 빠져나가는 건 왜 line~22
+	에서 락을 내려놓기 전에 될 수 없나요?
+	\iffalse
+
 	Why not exit the RCU read-side critical section on
 	line~23 of
 	Figure~\ref{fig:defer:Existence Guarantees Enable Per-Element Locking}
 	before releasing the lock on line~22?
+	\fi
 \QuickQuizAnswer{
+	우리가 이 두 라인의 순서를 뒤집는다고 생각해 봅시다.
+	그러면 이 코드는 다음의 일련의 이벤트들에 취약해집니다:
+	\iffalse
+
 	Suppose we reverse the order of these two lines.
 	Then this code is vulnerable to the following sequence of
 	events:
+	\fi
 	\begin{enumerate}
+	\item	CPU~0 가 \co{delete()} 를 실행하고, 삭제될 원소를 찾아낸 후
+		line~15 를 수행합니다.
+		아직 항목의 삭제를 살제로 하지는 않았고, 이제 곧 할 참입니다.
+	\item	CPU~1 이 동시에 \co{delete()} 를 실행하고 같은 원소를 삭제하려
+		합니다.
+		하지만, CPU~0 는 아직 락을 잡고 있으므로, CPU~1 은 line~13 에서
+		기다립니다.
+	\item	CPU~0 이 line~16 과 17 을 수행하고 line~18 에서 CPU~1 이 RCU
+		read-side 크리티컬 섹션을 나오기를 기다립니다.
+	\item	CPU~1 은 이제 락을 획득하지만 CPU~0 가 이미 해당 원소를
+		삭제했으므로 line~14 에서의 테스트가 실패합니다.
+		CPU~1 은 이제 line~22 (line~23 과 이 Quick Quiz 를 위해 바꾼)
+		를 수행해서 RCU read-side 크리티컬 섹션을 나옵니다.
+	\item	CPU~0 는 이제 \co{synchronize_rcu()} 로부터 리턴하고 따라서
+		line~19 를 수행해서 이 항목을 메모리 해제하고 재사용 가능
+		리스트로 옮깁니다.
+	\item	CPU~1 이 이제 이미 재사용이 가능한, 다른 종류의 데이터 구조체에
+		사용되기 위해 재할당 될수도 있는 항목을 위한 락을 놓으려
+		합니다.
+		이건 치명적인 메모리 오염 에러입니다.
+	\iffalse
+
 	\item	CPU~0 invokes \co{delete()}, and finds the element
 		to be deleted, executing through line~15.
 		It has not yet actually deleted the element, but
@@ -1283,8 +1385,18 @@ and line~24 indicates failure to delete the specified key.
 		that has been freed, and, worse yet, possibly
 		reallocated as some other type of data structure.
 		This is a fatal memory-corruption error.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
+
+기민한 독자들은 이게
+Section~\ref{sec:defer:RCU is a Way of Waiting for Things to Finish} 에서
+다뤄진, ``RCU 는 일들이 끝나길 기다리는 한가지 방법이다'' 테마의 사소한
+변종이라는 걸 눈치챘을 겁니다.
+그런 독자들은 또한
+Section~\ref{sec:locking:Lock-Based Existence Guarantees} 에서 이야기한 락
+기반의 존재 보장에 비해서 얻어지는 데드락 내성의 장점도 알 것입니다.
+\iffalse
 
 Alert readers will recognize this as only a slight variation on
 the original ``RCU is a way of waiting for things to finish'' theme,
@@ -1293,6 +1405,7 @@ Section~\ref{sec:defer:RCU is a Way of Waiting for Things to Finish}.
 They might also note the deadlock-immunity advantages over the lock-based
 existence guarantees discussed in
 Section~\ref{sec:locking:Lock-Based Existence Guarantees}.
+\fi
 
 \subsubsection{RCU is a Way of Providing Type-Safe Memory}
 \label{sec:defer:RCU is a Way of Providing Type-Safe Memory}
