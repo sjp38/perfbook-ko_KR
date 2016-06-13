@@ -1537,6 +1537,14 @@ Simpler is after all almost always better!
 \subsubsection{RCU is a Way of Waiting for Things to Finish}
 \label{sec:defer:RCU is a Way of Waiting for Things to Finish}
 
+Section~\ref{sec:defer:RCU Fundamentals} 에서 이야기했듯이, RCU 의 중요한
+요소는, RCU 읽기 쓰레드들이 끝나기를 기다리는 방법입니다.
+RCU 의 큰 장점 가운데 하나는 수천개의 서로 다른 것들이 각자 끝나기를 명시적으로
+그것들 각각의 정보를 추적할 필요없이, 그리고 명시적인 정보 추적 방식에서 심각한
+성능 저하, 확장성 제한, 복잡한 데드락 시나리오, 그리고 메모리 누수 문제를
+걱정할 필요 없이 기다릴 수 있다는 것입니다.
+\iffalse
+
 As noted in Section~\ref{sec:defer:RCU Fundamentals}
 an important component
 of RCU is a way of waiting for RCU readers to finish.
@@ -1547,6 +1555,18 @@ track each and every one of them, and without having to worry about
 the performance degradation, scalability limitations, complex deadlock
 scenarios, and memory-leak hazards that are inherent in schemes that
 use explicit tracking.
+\fi
+
+이 섹션에서는 read-side 쪽의 (하드웨어 오퍼레이션들과 인터럽트를 불가능하게
+하는 기능들을 사용해서 preemption 을 불가능하게 하는 기능을 포함하는)
+\co{synchronize_sched()} 비슷한 기능이 락킹을 사용한다면 상당히 어려울
+non-maskable interrupt (NMI) 핸들러들과의 상호작용을 어떻게 할 수 있게 하는지
+알아보겠습니다.
+이 방법은 ``Pure RCU''~\cite{PaulEdwardMcKenneyPhD} 라 불렸으며, 리눅스 커널의
+여러 곳에서 사용됩니다.
+
+그런 ``Pure RCU'' 디자인의 기본적인 형태는 다음과 같습니다:
+\iffalse
 
 In this section, we will show how \co{synchronize_sched()}'s
 read-side counterparts (which include anything that disables preemption,
@@ -1558,8 +1578,18 @@ This approach has been called ``Pure RCU''~\cite{PaulEdwardMcKenneyPhD},
 and it is used in a number of places in the Linux kernel.
 
 The basic form of such ``Pure RCU'' designs is as follows:
+\fi
 
 \begin{enumerate}
+\item	예를들어 OS 가 NMI 에 반응하는 것과 같은 방식으로 변경을 만듭니다.
+\item	모든 앞서 존재한 read-side 크리티컬 섹션들이 완전히 종료되기를
+	기다립니다 (예를 들어, \co{synchronize_sched()} 기능을 사용해서).
+	여기서의 핵심은 뒤따르는 RCU read-side 크리티컬 섹션들은 만들어진
+	변경을 볼 수 있게 보장된다는 것입니다.
+\item	예를 들어 변경이 성공적으로 만들어졌음을 알리는 상태를 반환하는 식으로
+	정리를 합니다.
+\iffalse
+
 \item	Make a change, for example, to the way that the OS reacts to an NMI.
 \item	Wait for all pre-existing read-side critical sections to
 	completely finish (for example, by using the
@@ -1568,7 +1598,16 @@ The basic form of such ``Pure RCU'' designs is as follows:
 	sections are guaranteed to see whatever change was made.
 \item	Clean up, for example, return status indicating that the
 	change was successfully made.
+\fi
 \end{enumerate}
+
+이 섹션의 나머지 부분은 리눅스 커널에서 가져온 예제 코드를 선보입니다.
+이 예제에서, \co{timer_stop} 함수는 모든 NMI 노티피케이션들이 연관된 리소스들을
+반환하기 전에 완료되었음을 보장하기 위해 \co{synchronize_sched()} 를
+사용합니다.
+이 코드의 간략화된 버전이
+Figure~\ref{fig:defer:Using RCU to Wait for NMIs to Finish} 에 있습니다.
+\iffalse
 
 The remainder of this section presents example code adapted from
 the Linux kernel.
@@ -1577,6 +1616,7 @@ In this example, the \co{timer_stop} function uses
 notifications have completed before freeing the associated resources.
 A simplified version of this code is shown
 Figure~\ref{fig:defer:Using RCU to Wait for NMIs to Finish}.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1614,11 +1654,32 @@ Figure~\ref{fig:defer:Using RCU to Wait for NMIs to Finish}.
 \label{fig:defer:Using RCU to Wait for NMIs to Finish}
 \end{figure}
 
+Line~1-4 는 크기와 애매한 원소들의 배열을 갖는 \co{profile_buffer} 구조체를
+정의합니다.
+Line~5 는 profile buffer 로의 포인터를 정의하는데, 아마 어디선가 동적으로
+할당된 메모리의 영역을 가리키게 될겁니다.
+\iffalse
+
 Lines~1-4 define a \co{profile_buffer} structure, containing a
 size and an indefinite array of entries.
 Line~5 defines a pointer to a profile buffer, which is
 presumably initialized elsewhere to point to a dynamically allocated
 region of memory.
+\fi
+
+Line~7-16 은 NMI 핸들러 안에서 호출되는 \co{nmi_profile()} 함수를 정의합니다.
+그런 것들이 그러하듯, 이 함수는 preemption 당할 수 없고, 평범한 인터럽트
+핸들러에 인터럽트될 수도 없습니다만, 캐시 미스, ECC 에러, 그리고 같은 코어에
+위치한 다른 하드웨어 쓰레드에 의한 cycle stealing 에는 취약합니다.
+Line~9 는 DEC Alpha 에서도 메모리 순서를 강제하기 위해 \co{rcu_dereference()}
+함수를 이용해 profile buffer 로의 지역 포인터를 가져오고, line~11 과 12 에서
+현재 할당된 profile buffer 가 없다면 이 함수에서 빠져나가며, line~13 과 14
+에서는 \co{pcvalue} 인자가 범위 밖이라면 이 함수에서 빠져나갑니다.
+그렇지 않다면, line~15 에서  \co{pcvalue} 인자로 색인된 profile-buffer 원소의
+값을 증가시킵니다.
+버퍼와 그 크기를 함께 저장하는 것은 설령 커다란 버퍼가 갑자기 작은 것으로
+바뀌더라도 크기 검사로 버퍼를 맞출 수 있음을 보장한다는 것을 기억해 두세요.
+\iffalse
 
 Lines~7-16 define the \co{nmi_profile()} function,
 which is called from within an NMI handler.
@@ -1638,6 +1699,22 @@ by the \co{pcvalue} argument.
 Note that storing the size with the buffer guarantees that the
 range check matches the buffer, even if a large buffer is suddenly
 replaced by a smaller one.
+\fi
+
+Line~18-27 은 \co{nmi_stop()} 을 정의하는데, 이 함수의 호출자는 알아서 상호
+배제를 지켜야 합니다 (예를 들면, 올바른 락을 잡는식으로).
+Line~20 은 profile buffer 로의 포인터를 가져오고, line~22 와 23 은 버퍼가
+없다면 이 함수를 빠져나갑니다.
+그렇지 않다면, line~24 는 profile-buffer 포인터를 \co{NULL} 로 만들고 (완화된
+순서규칙의 기계에서 메모리 순서를 유지하기 위해 \co{rcu_assign_pointer()} 를
+사용합니다) line~25 에서 RCU Sched grace period 가 지나가기를 기다리는데,
+정확히는 NMI 핸들러를 포함해서 모든 preemption 불가능 영역의 코드들이 완료되길
+기다립니다.
+일단 line~26 으로 수행이 이어지면, 예전 버퍼로의 포인터를 가진
+\co{nmi_profile()} 인스턴스는 모두 종료되었음이 보장됩니다.
+따라서 이 버퍼를 메모리 해제해도 안전하며, 여기서는 \co{kfree()} 함수를
+사용했습니다.
+\iffalse
 
 Lines~18-27 define the \co{nmi_stop()} function,
 where the caller is responsible for mutual exclusion (for example,
@@ -1655,17 +1732,31 @@ any instance of \co{nmi_profile()} that obtained a
 pointer to the old buffer has returned.
 It is therefore safe to free the buffer, in this case using the
 \co{kfree()} primitive.
+\fi
 
 \QuickQuiz{}
+	\co{nmi_profile()} 함수가 preemption 당할 수 있다고 해봅시다.
+	이 예제가 제대로 동작하도록 하기 위해 뭘 바꿔야 할까요?
+	\iffalse
+
 	Suppose that the \co{nmi_profile()} function was preemptible.
 	What would need to change to make this example work correctly?
+	\fi
 \QuickQuizAnswer{
+	한가지 가능한 방법은 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을
+	\co{nmi_profile()} 내에서 사용하고, \co{synchronize_sched()} 를
+	\co{synchronize_rcu()} 로 바꾸는 것으로, 아마도
+	Figure~\ref{fig:defer:Using RCU to Wait for Mythical Preemptible NMIs to Finish}
+	와 같은 모습이 될겁니다.
+	\iffalse
+
 	One approach would be to use
 	\co{rcu_read_lock()} and \co{rcu_read_unlock()}
 	in \co{nmi_profile()}, and to replace the
 	\co{synchronize_sched()} with \co{synchronize_rcu()},
 	perhaps as shown in
 	Figure~\ref{fig:defer:Using RCU to Wait for Mythical Preemptible NMIs to Finish}.
+	\fi
 
 \begin{figure}[tbp]
 { \tt \scriptsize
@@ -1712,11 +1803,19 @@ It is therefore safe to free the buffer, in this case using the
 
 } \QuickQuizEnd
 
+짧게 말해서, RCU 는 동적으로 profile buffer 들 사이를 옮겨다니는 것을 쉽게
+해줍니다 (그냥 효율적이도록 어토믹 오퍼레이션들을 \emph{시도} 해보거나, 그냥
+락킹을 사용할 수도 있습니다!).
+하지만, RCU 는 일반적으로 앞의 섹션들에서 봤듯이 더 높은 수준의 추상화에서
+사용됩니다.
+\iffalse
+
 In short, RCU makes it easy to dynamically switch among profile
 buffers (you just \emph{try} doing this efficiently with atomic
 operations, or at all with locking!).
 However, RCU is normally used at a higher level of abstraction, as
 was shown in the previous sections.
+\fi
 
 \subsubsection{RCU Usage Summary}
 \label{sec:defer:RCU Usage Summary}
