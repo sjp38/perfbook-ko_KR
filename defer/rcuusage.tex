@@ -1820,6 +1820,17 @@ was shown in the previous sections.
 \subsubsection{RCU Usage Summary}
 \label{sec:defer:RCU Usage Summary}
 
+핵심적으로, RCU 는 다음을 제공하는 API 이상도 이하도
+아닙니다:
+
+\begin{enumerate}
+\item	데이터 추가를 위한 publish-subscribe 메커니즘,
+\item	앞서 존재한 RCU 읽기 쓰레드들이 끝나길 기다리는 방법, 그리고
+\item	동시의 RCU 읽기 쓰레드들에 해를 끼치거나 지연시키지 않고 변경을 가할 수
+	있도록 여러 버전들을 관리하는 규칙.
+\end{enumerate}
+\iffalse
+
 At its core, RCU is nothing more nor less than an API that provides:
 
 \begin{enumerate}
@@ -1828,6 +1839,13 @@ At its core, RCU is nothing more nor less than an API that provides:
 \item	a discipline of maintaining multiple versions to permit change
 	without harming or unduly delaying concurrent RCU readers.
 \end{enumerate}
+\fi
+
+그렇다곤 하나, RCU 위에 앞의 섹션들에서 선보인 reader-writer 락킹, 레퍼런스
+카운팅, 그리고 존재 보장 등의 더 높은 수준의 것을 만드는 것은 가능합니다.
+더 나아가서, 저는 리눅스 커뮤니티가 다른 동기화 기능들과 함께, RCU 의 새롭고
+흥미로운 사용처들을 찾아나갈 것이라 믿습니다.
+\iffalse
 
 That said, it is possible to build higher-level constructs
 on top of RCU, including the reader-writer-locking, reference-counting,
@@ -1835,6 +1853,7 @@ and existence-guarantee constructs listed in the earlier sections.
 Furthermore, I have no doubt that the Linux community will continue to
 find interesting new uses for RCU,
 as well as for any of a number of other synchronization primitives.
+\fi
 
 \begin{figure}[tbh]
 \begin{center}
@@ -1843,6 +1862,21 @@ as well as for any of a number of other synchronization primitives.
 \caption{RCU Areas of Applicability}
 \label{fig:defer:RCU Areas of Applicability}
 \end{figure}
+
+그전까지는,
+Figure~\ref{fig:defer:RCU Areas of Applicability}
+이 RCU 가 가장 도움되는 곳들에 대한 대략적인 규칙을 보입니다.
+
+그림의 꼭대기의 파란 박스가 보이듯, RCU 는 낡고 비일관적인 데이터가 허용되고
+읽기가 대부분인 데이터를 가지고 있을 때 가장 잘 동작합니다 (하지만 낡고
+비일관적인 데이터에 대한 더 많은 정보를 위해 아래를 읽으세요).
+리눅스 커널에서의 이런 케이스의 표준적 예제는 라우팅 테이블입니다.
+라우팅 경로 업데이트가 인터넷을 통해 전파되기까지는 수초에서 심지어
+분단위까지도 걸릴 수 있기 때문에, 시스템은 상당히 가끔 패킷들을 잘못된 방향으로
+보낼 겁니다.
+일부 패킷들을 잘못된 방향으로 보내는 작은 가능성을 수 밀리세컨드 동안 갖는 것은
+결코 문제가 되지 않습니다.
+\iffalse
 
 In the meantime,
 Figure~\ref{fig:defer:RCU Areas of Applicability}
@@ -1858,6 +1892,21 @@ routing updates to propagate across Internet, the system
 has been sending packets the wrong way for quite some time.
 Having some small probability of continuing to send some of them the wrong
 way for a few more milliseconds is almost never a problem.
+\fi
+
+일관적인 데이터가 필요한 읽기가 대부분인 워크로드라면, RCU 는 초록색의
+``read-mostly, need consistent data'' 박스로 보인 것처럼 잘 동작합니다.
+이런 케이스의 한가지 예는 리눅스 커널의 사용자 레벨 System-V 세마포어 ID 들부터
+연관된 커널 내부 데이터 구조체들로의 매핑이 되겠습니다.
+세마포어들은 그것들이 생성되고 사라지는 것보다 훨씬 더 빈번하게 사용되고,
+따라서 이 매핑은 읽기가 대부분입니다.
+하지만, 이미 삭제된 세마포어를 가지고 세마포어 오퍼레이션을 수행하는건 에러를
+내기 쉬울겁니다.
+이런 일관성의 필요는 커널 내 세마포어 데이터 구조체 내에 있는 락과 세마포어가
+지워질 때 세워지는 ``deleted'' 플래그를 사용해 처리됩니다.
+어떤 사용자 ID 가 ``deleted'' 플래그가 세워진 채 커널 내부 데이터 구조체에
+매핑되면, 그 데이터 구조체는 무시되어서 그 사용자 ID 는 무효로 처리됩니다.
+\iffalse
 
 If you have a read-mostly workload where consistent data is required,
 RCU works well, as shown by the green ``read-mostly, need consistent data''
@@ -1874,6 +1923,14 @@ flag that is set when deleting a semaphore.
 If a user ID maps to an in-kernel data structure with the
 ``deleted'' flag set, the data structure is ignored, so that
 the user ID is flagged as invalid.
+\fi
+
+이런 방법은 읽기 쓰레드들이 세마포어 자체를 나타내는 데이터 구조체의 락을
+잡아야 하게 하지만, 데이터 구조체의 매핑에는 락킹이 필요없게 해줍니다.
+읽기 쓰레드들은 따라서 락을 사용하지 않고 ID 에서 데이터 구조체로의 매핑을 위해
+사용된 트리를 횡단할 수 있는데, 이는 훨씬 향상된 성능, 확장성, 그리고 real-time
+반응속도를 가져옵니다.
+\iffalse
 
 Although this requires that the readers acquire a lock for the
 data structure representing the semaphore itself,
@@ -1883,6 +1940,17 @@ The readers therefore locklessly
 traverse the tree used to map from ID to data structure,
 which in turn greatly improves performance, scalability, and
 real-time response.
+\fi
+
+노란색의 ``read-write' 박스로 보인 것처럼, RCU 는 일관적인 데이터가 필요한
+read-write 워크로드에서도 유용하지만, 보통은 다른 동기화 도구들과 함게 사용될
+때에 그렇습니다.
+예를 들어, 최근의 리눅스 커널들의 디렉토리 엔트리 캐시는 시퀀스 락, CPU 별
+락, 그리고 데이터 구조체별 락과 함께 RCU 를 사용해서 일반적인 경우의
+pathname 들의 횡단을 락을 사용하지 않고 가능하게 합니다.
+비록 RCU 가 이 read-write 케이스에는 많은 이득을 가져다 줄 수 있지만, 그런
+사용은 읽기가 대부분인 경우에 비해 많은 경우 더 복잡합니다.
+\iffalse
 
 As indicated by the yellow ``read-write'' box, RCU can also be useful
 for read-write
@@ -1893,6 +1961,19 @@ conjunction with sequence locks, per-CPU locks, and per-data-structure
 locks to allow lockless traversal of pathnames in the common case.
 Although RCU can be very beneficial in this read-write case, such
 use is often more complex than that of the read-mostly cases.
+\fi
+
+마지막으로, 그림 바닥의 빨간 박스가 나타내듯이, 일관적인 데이터를 필요로 하고
+업데이트가 대부분인 워크로드는 일부 예외가 있긴
+하지만~\cite{MathieuDesnoyers2012URCU} RCU 를 사용하기 좋은 곳이 아닐 확률이
+높습니다.
+또한,
+Section~\ref{sec:defer:RCU is a Way of Providing Type-Safe Memory} 에서
+이야기했듯, 리눅스 커널 내에서 \co{SLAB_DESTROY_BY_RCU} 슬랩 얼로케이터
+플래그는 RCU 읽기 쓰레드들에게 type-safe 메모리를 제공하는데, 이는 non-blocking
+동기화와 다른 락을 사용하지 않은 알고리즘들을 매우 간단하게 만들어줄 수
+있습니다.
+\iffalse
 
 Finally, as indicated by the red box at the bottom of the figure,
 update-mostly workloads requiring
@@ -1904,6 +1985,15 @@ within the Linux kernel, the \co{SLAB_DESTROY_BY_RCU}
 slab-allocator flag provides type-safe memory to RCU readers, which can
 greatly simplify non-blocking synchronization and other lockless
 algorithms.
+\fi
+
+짧게 말해서, RCU 는 데이터 추가를 위한 publish-subscribe 메커니즘, 앞서 존재한
+RCU 읽기 쓰레드들이 끝나길 기다리는 방법, 그리고 동시의 RCU 읽기 쓰레드들에
+해를 끼치거나 지연시키지 않고 업데이트를 할 수 있도록 여러 버전들을 관리하는
+규칙을 포함한 API 입니다.
+이 RCU API 는 읽기가 대부분인 상황에 가장 잘 맞는데, 낡고 비일관적인 데이터가
+허용되는 어플리케이션에서 특히 적합합니다.
+\iffalse
 
 In short, RCU is an API that includes a publish-subscribe mechanism for
 adding new data, a way of waiting for pre-existing RCU readers to finish,
@@ -1911,6 +2001,7 @@ and a discipline of maintaining multiple versions to allow updates to
 avoid harming or unduly delaying concurrent RCU readers.
 This RCU API is best suited for read-mostly situations, especially if
 stale and inconsistent data can be tolerated by the application.
+\fi
 
 % <h3>Acknowledgements</h3> @@@
 %
