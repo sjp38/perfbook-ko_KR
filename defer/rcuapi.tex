@@ -201,6 +201,16 @@ Non-\co{PREEMPT_RT} implementation &
 \label{tab:defer:Sleepable RCU Wait-to-Finish APIs}
 \end{table*}
 
+``RCU 는 무엇인가'' 에 대한 가장 직접적인 답변은 RCU 는 리눅스 커널에서
+사용되는 API 라는 것으로, 각각 잠들 수 없는 버전과 잠들 수 있는 버전 API 들의
+RCU 읽기 쓰레드 기다리기 부분을 보이는
+Table~\ref{tab:defer:RCU Wait-to-Finish APIs} 와
+\ref{tab:defer:Sleepable RCU Wait-to-Finish APIs},
+그리고 그 API 의 publish/subscribe 부분을 보이는
+Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs} 에
+요약되어 있습니다.
+\iffalse
+
 The most straightforward answer to ``what is RCU'' is that RCU is
 an API used in the Linux kernel, as summarized by
 Tables~\ref{tab:defer:RCU Wait-to-Finish APIs} and
@@ -210,6 +220,21 @@ sleepable APIs, respectively,
 and by
 Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs},
 which shows the publish/subscribe portions of the API.
+\fi
+
+RCU 가 처음이라면
+Table~\ref{tab:defer:RCU Wait-to-Finish APIs} 의 행들 중 하나에만 집중해 볼
+것을 고려해 볼만 한데, 각각의 행은 리눅스 커널의 RCU API 패밀리 중 하나의
+멤버를 요약하고 있습니다.
+예를 들어, 리눅스 커널에서 RCU 가 어떻게 사용되는지를 이해하고자 하는게 주된
+목표라면, ``RCU Classic'' 가장 자주 사용되므로 여기서부터 시작하는게 좋을
+것입니다.
+반면에, 자신의 이익을 위해 RCU 를 이해하고자 한다면 ``SRCU'' 가 가장 간단한 API
+를 제공합니다.
+나중에도 언제든 다른 행을 볼 수 있습니다.
+
+이미 RCU 에 친숙하다면, 이 표들은 유용한 레퍼런스로 사용될 수 있을 겁니다.
+\iffalse
 
 If you are new to RCU, you might consider focusing on just one
 of the columns in
@@ -224,19 +249,52 @@ You can always come back for the other columns later.
 
 If you are already familiar with RCU, these tables can
 serve as a useful reference.
+\fi
 
 \QuickQuiz{}
+	Table~\ref{tab:defer:RCU Wait-to-Finish APIs} 의 일부 셀들은 왜 느낌표
+	(``!'') 를 가지고 있나요?
+	\iffalse
+
 	Why do some of the cells in
 	Table~\ref{tab:defer:RCU Wait-to-Finish APIs}
 	have exclamation marks (``!'')?
+	\fi
 \QuickQuizAnswer{
+	느낌표와 함께 표시된 API 멤버들 (\co{rcu_read_lock()},
+	\co{rcu_read_unlock()}, 그리고 \co{call_rcu()}) 만이 과거 90년대 중반에
+	Paul E. McKenney 가 신경썼던 리눅스 RCU API 의 멤버들입니다.
+	이 시절에는, 그는 그가 RCU 에 대해 알아야 할 것들을 모두 알고 있다는
+	잘못된 인상을 가지고 있었습니다.
+	\iffalse
+
 	The API members with exclamation marks (\co{rcu_read_lock()},
 	\co{rcu_read_unlock()}, and \co{call_rcu()}) were the
 	only members of the Linux RCU API that Paul E. McKenney was aware
 	of back in the mid-90s.
 	During this timeframe, he was under the mistaken impression that
 	he knew all that there is to know about RCU.
+	\fi
 } \QuickQuizEnd
+
+이 ``RCU Classic'' 행은 RCU read-side 크리티컬 섹션들은 \co{rcu_read_lock()} 과
+\co{rcu_read_unlock()} 으로 구분지어지고 중첩될수도 있는, 최초의 RCU 구현에
+해당합니다.
+여기에 연관되는 동기적인 업데이트 쪽 기능들인 \co{synchronize_rcu()} 와 그것과
+같은 의미인 \co{synchronize_net()} 은 동시에 실행중인 RCU read-side 크리티컬
+섹션들이 모두 완료되기를 기다립니다.
+이 기다림의 길이는 ``grace period'' 라고 알려져 있습니다.
+비동기적인 업데이트 쪽 기능인 \co{call_rcu()} 는 뒤따르는 grace period 후에
+특정 함수를 특정 인자와 함께 호출해 줍니다.
+예를 들어, \co{call_rcu(p,f);} 는 다음의 grace period 후에 ``RCU callback''
+\co{f(p)} 의 호출이 이뤄지게 합니다.
+\co{call_rcu()} 를 사용하는 리눅스 커널 모듈을 언로딩 한다던가 해서 모든 RCU
+callback 들이 완료되기를 기다려야만 하는 상황도
+존재합니다~\cite{PaulEMcKenney2007rcubarrier}.
+\co{rcu_barrier()} 기능이 그 일을 합니다.
+더 최신의 계층적 RCU~\cite{PaulEMcKenney2008HierarchicalRCU} 구현 또한 ``RCU
+Classic'' 시맨틱을 고수함을 알아두세요.
+\iffalse
 
 The ``RCU Classic'' column corresponds to the original RCU implementation,
 in which RCU read-side critical sections are delimited by
@@ -261,6 +319,27 @@ The \co{rcu_barrier()} primitive does this job.
 Note that the more recent hierarchical
 RCU~\cite{PaulEMcKenney2008HierarchicalRCU}
 implementation also adheres to ``RCU Classic'' semantics.
+\fi
+
+마지막으로, RCU 는
+Section~\ref{sec:defer:RCU is a Way of Providing Type-Safe Memory} 에서 설명한
+것처럼 type-safe 메모리~\cite{Cheriton96a} 를 제공하는데 사용될 수도 있습니다.
+RCU 의 문맥에서, type-safe 메모리는 주어진 데이터 원소가 그것에 접근하는 모든
+RCU read-side 크리티컬 섹션 사이에서 그 타입이 바뀌지 않는다는 것을 보장합니다.
+RCU 기반의 type-safe 메모리를 사용하기 위해서는 \co{SLAB_DESTROY_BY_RCU} 를
+\co{kmem_cache_create()} 에 넘겨야 합니다.
+\co{SLAB_DESTROY_BY_RCU} 는 \co{kmem_cache_alloc()} 이 \co{kmem_cache_free()}
+로 자유가 된 메모리를 즉시 재할당 하는 것을 막는 일은 \emph{결코} 하지 않음을
+알아두는 게 중요합니다!
+사실, \co{rcu_dereference} 로 리턴된, \co{SLAB_DESTROY_RCU} 로 보호되는 데이터
+구조체는 상당히 여러번 메모리 해제되고 재할당 될 수 있는데, 심지어
+\co{rcu_read_lock()} 으로 보호되고 있을 때도 그러합니다.
+대신, \co{SLAB_DESTROY_BY_RCU} 는 RCU grace period 가 끝나기 전까지는
+\co{kmem_cache_free()} 가 완전히 해제된 데이터 구조체들의 slab 을 시스템에
+반납하는 것을 방지해 줍니다.
+짧게 말해서, 비록 데이터 원소가 굉장히 자주 해제되고 재할당될 수 있지만, 최소한
+그것의 타입은 똑같이 남아있을 겁니다.
+\iffalse
 
 Finally, RCU may be used to provide
 type-safe memory~\cite{Cheriton96a}, as described in
@@ -285,12 +364,26 @@ from returning a completely freed-up slab of data structures
 to the system until after an RCU grace period elapses.
 In short, although the data element might be freed and reallocated arbitrarily
 often, at least its type will remain the same.
+\fi
 
 \QuickQuiz{}
+	많은 수의 RCU read-side 크리티컬 섹션들이 \co{synchronize_rcu()} 실행을
+	무기한 블록시키는 걸 어떻게 막을 수 있나요?
+	\iffalse
+
 	How do you prevent a huge number of RCU read-side critical
 	sections from indefinitely blocking a \co{synchronize_rcu()}
 	invocation?
+	\fi
 \QuickQuizAnswer{
+	RCU read-side 크리티컬 섹션들이 \co{synchronize_rcu()} 실행을 무기한
+	블록하는걸 막을 필요가 전혀 없는데, \co{synchronize_rcu()} 실행은
+	\emph{전부터 존재한} RCU read-side 크리티컬 섹션들만 기다리면 되기
+	때문입니다.
+	따라서 각 RCU read-side 크리티컬 섹션이 한정된 길이를 갖는다면, 아무
+	문제가 없습니다.
+	\iffalse
+
 	There is no need to do anything to prevent RCU read-side
 	critical sections from indefinitely blocking a
 	\co{synchronize_rcu()} invocation, because the
@@ -298,19 +391,40 @@ often, at least its type will remain the same.
 	\emph{pre-existing} RCU read-side critical sections.
 	So as long as each RCU read-side critical section is
 	of finite duration, there should be no problem.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	\co{synchronize_rcu()} API 는 전부터 존재한 인터럽트 핸들러들이 모두
+	완료되길 기다리죠, 맞죠?
+	\iffalse
+
 	The \co{synchronize_rcu()} API waits for all pre-existing
 	interrupt handlers to complete, right?
+	\fi
 \QuickQuizAnswer{
+	전혀 그렇지 않아요!
+	그리고 preemption 가능한 RCU 를 사용하고 있다면 특히나 그렇지 않습니다!
+	대안으로, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 를
+	\co{synchronize_rcu()} 기다리기를 바라는 인터럽트 핸들러 안에 위치시킬
+	수 있겠습니다.
+	\iffalse
+
 	Absolutely not!
 	And especially not when using preemptible RCU!
 	You instead want \co{synchronize_irq()}.
 	Alternatively, you can place calls to \co{rcu_read_lock()}
 	and \co{rcu_read_unlock()} in the specific interrupt handlers that
 	you want \co{synchronize_rcu()} to wait for.
+	\fi
 } \QuickQuizEnd
+
+``RCU BH'' 행에서, \co{rcu_read_lock_bh()} 와 \co{rcu_read_unlock_bh()} 는
+크리티컬 섹션을 구분짓고, \co{call_rcu_bh()} 는 다음의 grace period 후에 특정
+함수를 특정 인자와 함께 호출해 줍니다.
+RCU BH 는 필요한 사람은 쉽게 구현할 수 있겠지만, 동기적인
+\co{synchronize_rcu_bh()} 인터페이스를 갖지 않는다는데 주의하세요.
+\iffalse
 
 In the ``RCU BH'' column, \co{rcu_read_lock_bh()} and
 \co{rcu_read_unlock_bh()} delimit RCU read-side critical
@@ -319,14 +433,36 @@ function and argument after a subsequent grace period.
 Note that RCU BH does not have a synchronous \co{synchronize_rcu_bh()}
 interface,
 though one could easily be added if required.
+\fi
 
 \QuickQuiz{}
+	이것들을 섞어서 활용하면 어떻게 되나요?
+	예를 들어, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을 RCU
+	read-side 크리티컬 섹션을 구분하는데 사용하지만 \co{call_rcu_bh()} 를
+	RCU callback 을 위해 사용한다고 하면요?
+	\iffalse
+
 	What happens if you mix and match?
 	For example, suppose you use \co{rcu_read_lock()} and
 	\co{rcu_read_unlock()} to delimit RCU read-side critical
 	sections, but then use \co{call_rcu_bh()} to post an
 	RCU callback?
+	\fi
 \QuickQuizAnswer{
+	\co{call_rcu_bh()} 가 실행되는 시점에 \co{rcu_read_lock_bh()} 와
+	\co{rcu_read_unlock_bh()} 로 구분된 RCU read-side 크리티컬 섹션들이
+	존재하지 않는다면 RCU 는 이 콜백을 곧바로 수행해도 되는 권한을 갖게
+	되어서, 해당 RCU read-side 크리티컬 섹션이 사용중인 데이터 구조체를
+	메모리에서 해제해버릴 수도 있습니다!
+	이건 단순히 이론적인 가능성이 아닙니다: \co{rcu_read_lock()} 과
+	\co{rcu_read_unlock()} 으로 구분지어졌고 오랫동안 동작중인 RCU
+	read-side 크리티컬 섹션은 이런 실패에 취약합니다.
+
+	하지만, \co{rcu_dereference()} 함수들은 모든 RCU 변종들에 적용됩니다.
+	(변종별 \co{rcu_dereference()} 를 만들려는 시도도 있었지만, 그건 너무
+	혼란스러웠습니다.)
+	\iffalse
+
 	If there happened to be no RCU read-side critical
 	sections delimited by \co{rcu_read_lock_bh()} and
 	\co{rcu_read_unlock_bh()} at the time \co{call_rcu_bh()}
@@ -341,19 +477,46 @@ though one could easily be added if required.
 	to all flavors of RCU.
 	(There was an attempt to have per-flavor variants of
 	\co{rcu_dereference()}, but it was just too messy.)
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하드웨어 인터럽트 핸들러들은 묵시적인 \co{rcu_read_lock_bh()} 의 보호
+	아래 있다고 생각되어도 되겠죠?
+	\iffalse
+
 	Hardware interrupt handlers can be thought of as being
 	under the protection of an implicit \co{rcu_read_lock_bh()},
 	right?
+	\fi
 \QuickQuizAnswer{
+	전혀 그렇지 않아요!
+	그리고 preemption 가능한 RCU 를 사용중일 때에는 특히나 그렇지 않습니다!
+	``rcu\_bh'' 로 보호되는 데이터 구조체를 인터럽트 핸들러 내에서 접근하려
+	한다면, 명시적으로 \co{rcu_read_lock_bh()} 와 \co{rcu_read_unlock_bh()}
+	를 사용해야 합니다.
+	\iffalse
+
 	Absolutely not!
 	And especially not when using preemptible RCU!
 	If you need to access ``rcu\_bh''-protected data structures
 	in an interrupt handler, you need to provide explicit calls to
 	\co{rcu_read_lock_bh()} and \co{rcu_read_unlock_bh()}.
+	\fi
 } \QuickQuizEnd
+
+``RCU Sched'' 행에서, preemption 을 불가능하게 하는 모든 동작은 RCU read-side
+크리티컬 섹션처럼 동작되고, \co{synchronize_sched()} 는 연관된 RCU grace period
+를 기다립니다.
+이 RCU API 패밀리는 2.6.12 커널에서 들어왔는데, 이것이 과거의
+\co{synchronize_kernel()} API 를 (RCU Classic 을 위한) 지금의
+\co{synchronize_rcu()} 와 (RCU Sched 를 위한) \co{synchronize_sched()} 로
+나눴습니다.
+RCU Sched 는 처음부터 비동기적인 \co{call_rcu_sched()} 인터페이스를 가지고 있진
+않았다가 2.6.26 에서 추가되었음을 알아두세요.
+리눅스 커뮤니티의 어떤 의미에서의 minimalist 철학에 의해, API 들은 필요한
+경우에 기반해서 추가됩니다.
+\iffalse
 
 In the ``RCU Sched'' column, anything that disables preemption
 acts as an RCU read-side critical section, and \co{synchronize_sched()}
@@ -366,10 +529,30 @@ Note that RCU Sched did not originally have an asynchronous
 \co{call_rcu_sched()} interface, but one was added in 2.6.26.
 In accordance with the quasi-minimalist philosophy of the Linux
 community, APIs are added on an as-needed basis.
+\fi
 
 \QuickQuiz{}
+	RCU Classic 과 RCU Sched 를 섞어서 사용하면 어떻게 되나요?
+	\iffalse
+
 	What happens if you mix and match RCU Classic and RCU Sched?
+	\fi
 \QuickQuizAnswer{
+	Non-\co{PREEMPT} 나 \co{PREEMPT} 커널에서는 이 두개의 일은 우연히
+	섞이게 되는데, 그런 커널 빌드에서 RCU Classic 과 RCU Sched 는 같은
+	구현으로 매핑되기 때문입니다.
+	하지만, 이런 조합은 -rt 패치셋을 사용하는 \co{PREEMPT_RT} 빌드에서는
+	치명적인데 Realtime RCU 의 read-side 크리티컬 섹션들은 preemption 당할
+	수 있어서 \co{synchronize_sched()} 가 RCU read-side 크리티컬 섹션이
+	\co{rcu_read_unlock()} 호출을 하기 전에 리턴할 수 있기 때문입니다.
+	이는 데이터 구조체가 그 구조체를 사용하는 read-side 크리티컬 섹션이
+	끝나기 전에 메모리 해제될 수 있게 해서 커널의 보험 통계적 리스크를 무척
+	증가시킬 수 있습니다.
+
+	실제로, RCU Classic 과 RCU Sched 의 분리는 preemption 가능해야 하는 RCU
+	read-side 크리티컬 섹션들로부터 영감을 받았습니다.
+	\iffalse
+
 	In a non-\co{PREEMPT} or a \co{PREEMPT} kernel, mixing these
 	two works ``by accident'' because in those kernel builds, RCU Classic
 	and RCU Sched map to the same implementation.
@@ -386,13 +569,31 @@ community, APIs are added on an as-needed basis.
 
 	In fact, the split between RCU Classic and RCU Sched was inspired
 	by the need for preemptible RCU read-side critical sections.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	일반적으로, 모든 전부터 존재한 인터럽트 핸들러들을 기다리는데에
+	\co{synchronize_sched()} 에 의존해선 안됩니다, 맞죠?
+	\iffalse
+
 	In general, you cannot rely on \co{synchronize_sched()} to
 	wait for all pre-existing interrupt handlers,
 	right?
+	\fi
 \QuickQuizAnswer{
+	맞습니다!
+	-rt 리눅스는 쓰레드로 도는 인터럽트 핸들러들을 사용하기 때문에,
+	인터럽트 핸들러 내부에서의 컨텍스트 스위치가 있을 수 있습니다.
+	\co{synchronize_sched()} 는 각 CPU 가 컨텍스트 스위치를 할 때까지만
+	기다리기 때문에, 특정 인터럽트 핸들러가 완료되기 전에 리턴을 할수도
+	있습니다.
+
+	특정 인터럽트 핸들러가 완료되기까지 기다려야 한다면, 그대신
+	\co{synchronize_irq()} 를 사용하거나 명시적으로 RCU read-side 크리티컬
+	섹션들을 기다리기 원하는 인터럽트 핸들러들 안에 위치시켜야 합니다.
+	\iffalse
+
 	That is correct!
 	Because -rt Linux uses threaded interrupt handlers, there can
 	be context switches in the middle of an interrupt handler.
@@ -404,18 +605,40 @@ community, APIs are added on an as-needed basis.
 	you should instead use \co{synchronize_irq()} or place
 	explicit RCU read-side critical sections in the interrupt
 	handlers that you wish to wait on.
+	\fi
 } \QuickQuizEnd
+
+``Realtime RCU'' 행은 RCU Classic 과 똑같은 API 를 가지고 있는데, 차이점은 RCU
+read-side 크리티컬 섹션들이 preemption 당할 수 있고 spinlock 을 획득하는 사이
+블락될 수 있다는 점 뿐입니다.
+Realtime RCU 의 설계는 다른곳에도 설명되어
+있습니다~\cite{PaulEMcKenney2007PreemptibleRCU}.
+\iffalse
 
 The ``Realtime RCU'' column has the same API as does
 RCU Classic, the only difference being that RCU read-side critical
 sections may be preempted and may block while acquiring spinlocks.
 The design of Realtime RCU is described
 elsewhere~\cite{PaulEMcKenney2007PreemptibleRCU}.
+\fi
 
 \QuickQuiz{}
+	왜 SRCU 와 QRCU 둘 다 비동기적인 \co{call_srcu()} 나 \co{call_qrcu()}
+	인터페이스가 없나요?
+	\iffalse
+
 	Why do both SRCU and QRCU lack asynchronous \co{call_srcu()}
 	or \co{call_qrcu()} interfaces?
+	\fi
 \QuickQuizAnswer{
+	비동기 인터페이스가 있다면, 하나의 태스크는 무수히 많은 SRCU 나 QRCU
+	콜백들을 가질 수 있고, 따라서 무한히 큰 메모리를 소모할 수 있습니다.
+	반면에, 현재의 동기적인 \co{synchronize_srcu()} 와
+	\co{synchronize_qrcu()} 인터페이스들을 가지고는 특정 태스크는 다음
+	grace period 를 기다리기 시작하기 전에 현재 grace period 를 기다리기를
+	끝내야만 합니다.
+	\iffalse
+
 	Given an asynchronous interface, a single task
 	could register an arbitrarily large number of SRCU or QRCU callbacks,
 	thereby consuming an arbitrarily large quantity of memory.
@@ -423,7 +646,21 @@ elsewhere~\cite{PaulEMcKenney2007PreemptibleRCU}.
 	\co{synchronize_srcu()} and \co{synchronize_qrcu()}
 	interfaces, a given task must finish waiting for a given grace period
 	before it can start waiting for the next one.
+	\fi
 } \QuickQuizEnd
+
+Table~\ref{tab:defer:Sleepable RCU Wait-to-Finish APIs} ``SRCU'' 행은 RCU
+read-side 크리티컬 섹션들 안에서 일반적인 잠들기를 허용하는 특수한 RCU API 를
+보입니다~\cite{PaulEMcKenney2006c}.
+물론, SRCU read-side 크리티컬 섹션 안에서의 \co{synchronize_srcu()} 사용은
+스스로의 deadlock 을 유발할 수 있으므로, 반드시 피해져야 합니다.
+SRCU 의 앞의 RCU 구현들과의 차이점은 각각의 별개의 SRCU 사용처마다 호출자가
+\co{srcu_struct} 를 할당해야 한다는 겁니다.
+이 방법은 SRCU read-side 크리티컬 섹션들이 연관되지 않은
+\co{synchronize_srcu()} 실행을 블록하는 것을 방지합니다.
+또한, 이 RCU 변종에서는 \co{srcu_read_lock()} 이 연관된 \co{srcu_read_unlock()}
+에 전달되어야 하는 값을 리턴합니다.
+\iffalse
 
 The ``SRCU'' column in
 Table~\ref{tab:defer:Sleepable RCU Wait-to-Finish APIs}
@@ -442,6 +679,18 @@ unrelated \co{synchronize_srcu()} invocations.
 In addition, in this variant of RCU, \co{srcu_read_lock()}
 returns a value that must be passed into the corresponding
 \co{srcu_read_unlock()}.
+\fi
+
+``QRCU'' 행은 SRCU 와 똑같은 API 구조를 갖지만 읽기 쓰레드들이 존재하지 않을
+때에는 grace period 들의 극단적으로 낮은 대기시간을 위해 최적화된, 다른곳에서
+설명된~\cite{PaulEMcKenney2007QRCUspin} RCU 구현을 소개합니다.
+SRCU 에서와 마찬가지로, QRCU read-side 크리티컬 섹션 내에서의
+\co{synchronize_qrcu()} 사용은 스스로의 deadlock 을 유발할 수 있으므로 그런
+일은 없어야만 합니다.
+QRCU 가 아직 리눅스 커널에 들어가지는 않았지만 마이크로세컨드 내의 grace-period
+대기시간을 자랑할 수 있는 유일한 커널 수준의 RCU 구현이기 때문에 언급할 가치가
+있습니다.
+\iffalse
 
 The ``QRCU'' column presents an RCU implementation with the same
 API structure as SRCU, but optimized for extremely low-latency
@@ -454,11 +703,26 @@ Although QRCU has not yet been accepted into the Linux kernel, it
 is worth mentioning given that it is the only kernel-level
 RCU implementation
 that can boast deep sub-microsecond grace-period latencies.
+\fi
 
 \QuickQuiz{}
+	어떤 조건에서 \co{synchronize_srcu()} 가 SRCU read-side 크리티컬 섹션
+	내에서 안전하게 사용될 수 있을까요?
+	\iffalse
+
 	Under what conditions can \co{synchronize_srcu()} be safely
 	used within an SRCU read-side critical section?
+	\fi
 \QuickQuizAnswer{
+	원론적으로, 특정 \co{srcu_struct} 와 함께, \co{synchronize_srcu()} 는
+	어떤 다른 \co{srcu_struct} 를 사용하는 SRCU read-side 크리티컬 섹션
+	안에서 사용될 수 있습니다.
+	하지만, 실제에서는 이런 짓을 하는건 거의 분명하게 나쁜 생각입니다.
+	세부적으로는
+	Figure~\ref{fig:defer:Multistage SRCU Deadlocks} 에 보인 코드가 여전히
+	데드락을 일으킬 수 있을 것입니다.
+	\iffalse
+
 	In principle, you can use
 	\co{synchronize_srcu()} with a given \co{srcu_struct}
 	within an SRCU read-side critical section that uses some other
@@ -467,6 +731,7 @@ that can boast deep sub-microsecond grace-period latencies.
 	In particular, the code shown in
 	Figure~\ref{fig:defer:Multistage SRCU Deadlocks}
 	could still result in deadlock.
+	\fi
 
 \begin{figure}[htbp]
 { \centering
@@ -488,6 +753,18 @@ that can boast deep sub-microsecond grace-period latencies.
 
 } \QuickQuizEnd
 
+리눅스 커널은 분명히 놀랍도록 많은 RCU API 와 구현을 가지고 있습니다.
+이 수를 줄이려는 희망이 있는데, 리눅스 커널의 특정 빌드는 현재 세개의 API 들
+뒤에 최대 네개의 구현들을 가지고 있다는 사실 (RCU Classic 과 Realtime RCU 는
+같은 API 를 공유합니다) 이 그 증거입니다.
+하지만, 충분한 조사와 분석이 필요할텐데, 많은 락킹 API 들 가운데 하나를
+제거하려면 필요한 것처럼 말입니다.
+
+이 다양한 RCU API 들은 RCU read-side 크리티컬 섹션들이 반드시 제공해야 하는
+forward-progress 보장사항으로 차별화 되고 그 범위로도 차별화되는데, 다음과
+같습니다:
+\iffalse
+
 The Linux kernel currently has a surprising number of RCU APIs and
 implementations.
 There is some hope of reducing this number, evidenced by the fact
@@ -500,8 +777,33 @@ would be required in order to eliminate one of the many locking APIs.
 The various RCU APIs are distinguished by the forward-progress
 guarantees that their RCU read-side critical sections must provide,
 and also by their scope, as follows:
+\fi
 
 \begin{enumerate}
+\item	RCU BH: read-side 크리티컬 섹션들은 NMI 와 인터럽트 핸들러들을 제외한
+	모든 것에 대해 forward progress 를 보장해야만 합니다만
+	software-interrupt (\co{softirq}) 핸들러들은 제외입니다.
+	RCU BH 는 범위내에서 글로벌 합니다.
+\item	RCU Sched: read-side 크리티컬 섹션들은 NMI 와 \co{softirq} 핸들러들을
+	포함한 irq 핸들러들을 제외한 모든것들에 forward progress 를 보장해야
+	합니다.
+	RCU Sched 는 범위내에서 글로벌합니다.
+\item	RCU (Classic 과 Real-time 둘 다): read-side 크리티컬 섹션들은 NMI
+	핸들러, irq 핸들러, \co{softirq} 핸들러, 그리고 (real-time 의 경우) 더
+	높은 우선순위의 real-time task 를 제외한 모든 것에 forward progress 를
+	보장해야 합니다.
+	RCU 는 범위내에서 글로벌합니다.
+\item	SRCU 와 QRCU: read-side 크리티컬 섹션들은 다른 태스크가 연관된 grace
+	period 가 완료되기를 기다리고 있지 않다면 forward progress 를 보장하지
+	않아도 됩니다. 이런 상황에서 이 read-side 크리티컬 섹션들은 수초
+	이내에는 완료되어야 합니다 (그리고 더 빠르면 더 좋습니다).\footnote{
+		단순히 forward-progress guarantee 가 없다고 말하는 대신 이런
+		명확한 설명을 하도록 재촉해준 James Bottomley 에게 감사의
+		말씀을 드립니다.}
+	SRCU 그리고 QRCU 의 범위는 각각 연관된 \co{srcu_struct} 나
+	\co{qrcu_struct} 의 사용에 따라 정의됩니다.
+\iffalse
+
 \item	RCU BH: read-side critical sections
 	must guarantee forward progress against everything except for
 	NMI and interrupt handlers, but not including software-interrupt
@@ -526,11 +828,17 @@ and also by their scope, as follows:
 		there are no forward-progress guarantees.}
 	SRCU's and QRCU's scope is defined by the use of the corresponding
 	\co{srcu_struct} or \co{qrcu_struct}, respectively.
+\fi
 \end{enumerate}
+
+달리 말하자면, SRCU 와 QRCU 는 개발자가 그 범위를 제한할 수 있도록 하는 것으로
+극단적으로 약한 forward-progress 보장사항의 문제를 보완합니다.
+\iffalse
 
 In other words, SRCU and QRCU compensate for their extremely weak
 forward-progress guarantees by permitting the developer to restrict
 their scope.
+\fi
 
 \subsubsection{RCU has Publish-Subscribe and Version-Maintenance APIs}
 \label{sec:defer:RCU has Publish-Subscribe and Version-Maintenance APIs}
