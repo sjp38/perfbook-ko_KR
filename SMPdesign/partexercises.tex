@@ -456,7 +456,7 @@ which case it is necessary to:
 	\fi
 } \QuickQuizEnd
 
-그 결과로 만들어지는 코드 (\co{locktdeq.c}) 는 매우 직접적입니다.
+그 결과로 만들어지는 코드 (\path{locktdeq.c}) 는 매우 직접적입니다.
 앞서 언급한 다시 균형잡는 작업은 원소를 두 큐 사이에서 옮길 수도 있을 것이고,
 이로 인해 시간을 소모할 수 있으므로 최적의 성능을 위해선 실제 워크로드에 따른,
 휴리스틱이 필요할 것입니다.
@@ -464,7 +464,7 @@ which case it is necessary to:
 재미있을 겁니다.
 \iffalse
 
-The resulting code (\co{locktdeq.c}) is quite straightforward.
+The resulting code (\path{locktdeq.c}) is quite straightforward.
 The rebalancing operation might well shuttle a given element back
 and forth between the two queues, wasting time and possibly requiring
 workload-dependent heuristics to obtain optimal performance.
@@ -607,9 +607,8 @@ Each underlying single-lock double-ended queue holds a one-quarter
 slice of the full parallel double-ended queue.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 struct pdeq {
   2   spinlock_t llock;
   3   int lidx;
@@ -617,8 +616,11 @@ slice of the full parallel double-ended queue.
   5   int ridx;
   6   struct deq bkt[DEQ_N_BKTS];
   7 };
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Lock-Based Parallel Double-Ended Queue Data Structure}
 \label{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Data Structure}
 \end{figure}
@@ -647,9 +649,8 @@ A high-performance implementation would of course use padding or special
 alignment directives to avoid false sharing.
 \fi
 
-\begin{figure*}[bp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 struct cds_list_head *pdeq_pop_l(struct pdeq *d)
   2 {
   3   struct cds_list_head *e;
@@ -699,14 +700,17 @@ alignment directives to avoid false sharing.
  47   d->ridx = moveright(d->ridx);
  48   spin_unlock(&d->rlock);
  49 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure*}[bp]
+\centering
+\theverbbox
 \caption{Lock-Based Parallel Double-Ended Queue Implementation}
 \label{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
 \end{figure*}
 
 Figure~\ref{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
-(\co{lockhdeq.c}) 
+(\path{lockhdeq.c}) 
 는 집어넣기 (enqueue) 와 꺼내기 (dequeue) 기능 구현을 보입니다.\footnote{
 	다른 언어들로 다양한 형태의 구현을 하는 것도 쉬울 것입니다만, 그건
 	독자의 몫으로 남겨두겠습니다.}
@@ -723,7 +727,7 @@ Line~8 에서 해당 원소를 꺼내고, line~9 에서 그 결과가 \co{NULL} 
 \iffalse
 
 Figure~\ref{fig:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
-(\co{lockhdeq.c}) 
+(\path{lockhdeq.c})
 shows the implementation of the enqueue and dequeue functions.\footnote{
 	One could easily create a polymorphic implementation in any
 	number of languages, but doing so is left as an exercise for
@@ -774,14 +778,14 @@ exercise for the reader.
 	Why or why not?
 	\fi
 \QuickQuizAnswer{
-	이 질문에 답을 하는 가장 좋은 방법은 \url{lockhdeq.c} 를 여러개의
+	이 질문에 답을 하는 가장 좋은 방법은 \path{lockhdeq.c} 를 여러개의
 	멀티프로세서 시스템들 위에서 돌려보는 것이고, 가능한한 그렇게
 	해보시기를 권장합니다.
 	신경써야 하는 한가지 이유는, 이 구현에서 각 오퍼레이션은 한개가 아니라
 	두개의 락들을 획득해야 한다는 점입니다.
 	\iffalse
 
-	The best way to answer this is to run \url{lockhdeq.c} on
+	The best way to answer this is to run \path{lockhdeq.c} on
 	a number of different multiprocessor systems, and you are
 	encouraged to do so in the strongest possible terms.
 	One reason for concern is that each operation on this
@@ -863,9 +867,8 @@ a sequential implementation of a double-ended queue that uses
 neither locks nor atomic operations.
 \fi
 
-\begin{figure*}[bp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 struct cds_list_head *pdeq_pop_l(struct pdeq *d)
   2 {
   3   struct cds_list_head *e;
@@ -922,8 +925,11 @@ neither locks nor atomic operations.
  54   deq_push_r(e, &d->rdeq);
  55   spin_unlock(&d->rlock);
  56 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure*}[bp]
+\centering
+\theverbbox
 \caption{Compound Parallel Double-Ended Queue Implementation}
 \label{fig:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
 \end{figure*}
@@ -1145,12 +1151,12 @@ Michael~\cite{DBLP:conf/europar/Michael03}.\footnote{
 \QuickQuizAnswer{
 	실은 최소한 세개입니다.
 	Domink Dingel 의 세번째 것은 reader-writer 락킹을 사용하는데,
-	\co{lockrwdeq.c} 에서 보실 수 있을 겁니다.
+	\path{lockrwdeq.c} 에서 보실 수 있을 겁니다.
 	\iffalse
 
 	There are actually at least three.
 	The third, by Dominik Dingel, makes interesting use of
-	reader-writer locking, and may be found in \co{lockrwdeq.c}.
+	reader-writer locking, and may be found in \path{lockrwdeq.c}.
 	\fi
 } \QuickQuizEnd
 

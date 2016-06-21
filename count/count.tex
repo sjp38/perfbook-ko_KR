@@ -296,9 +296,8 @@ are more appropriate for advanced students.
 \section{Why Isn't Concurrent Counting Trivial?}
 \label{sec:count:Why Isn't Concurrent Counting Trivial?}
 
-\begin{figure}[bp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 long counter = 0;
   2 
   3 void inc_count(void)
@@ -310,8 +309,11 @@ are more appropriate for advanced students.
   9 {
  10   return counter;
  11 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tp]
+\centering
+\theverbbox
 \caption{Just Count!}
 \label{fig:count:Just Count!}
 \end{figure}
@@ -329,7 +331,7 @@ Figure~\ref{fig:count:Just Count!} (\url{count_nonatomic.c})
 
 Let's start with something simple, for example, the straightforward
 use of arithmetic shown in
-Figure~\ref{fig:count:Just Count!} (\url{count_nonatomic.c}).
+Figure~\ref{fig:count:Just Count!} (\path{count_nonatomic.c}).
 Here, we have a counter on line~1, we increment it on line~5, and we
 read out its value on line~10.
 What could be simpler?
@@ -422,16 +424,36 @@ accuracies far greater than 50\% are almost always necessary.
 
 	Furthermore, while proofs of correctness certainly do have their
 	place, they never will replace testing, including the
-	\url{counttorture.h} test setup used here.
+	\path{counttorture.h} test setup used here.
 	After all, proofs are only as good as the assumptions that they
 	are based on.
 	Furthermore, proofs can have bugs just as easily as programs can!
 	\fi
 } \QuickQuizEnd
 
-\begin{figure}[tbp]
+The straightforward way to count accurately is to use atomic operations,
+as shown in
+Figure~\ref{fig:count:Just Count Atomically!} (\path{count_atomic.c}).
+Line~1 defines an atomic variable, line~5 atomically increments it, and
+line~10 reads it out.
+Because this is atomic, it keeps perfect count.
+However, it is slower: on an Intel Core Duo laptop, it is about
+six times slower than non-atomic increment
+when a single thread is incrementing, and more than \emph{ten times}
+slower if two threads are incrementing.\footnote{
+	Interestingly enough, a pair of threads non-atomically incrementing
+	a counter will cause the counter to increase more quickly than
+	a pair of threads atomically incrementing the counter.
+	Of course, if your only goal is to make the counter increase
+	quickly, an easier approach is to simply assign a large value
+	to the counter.
+	Nevertheless, there is likely to be a role for algorithms that
+	use carefully relaxed notions of correctness in order to gain
+	greater performance and
+	scalability~\cite{Andrews91textbook,Arcangeli03,DavidUngar2011unsync}.}
+
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 atomic_t counter = ATOMIC_INIT(0);
   2 
   3 void inc_count(void)
@@ -443,8 +465,11 @@ accuracies far greater than 50\% are almost always necessary.
   9 {
  10   return atomic_read(&counter);
  11 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Just Count Atomically!}
 \label{fig:count:Just Count Atomically!}
 \end{figure}
@@ -458,7 +483,7 @@ accuracies far greater than 50\% are almost always necessary.
 \end{figure}
 
 정확하게 카운트를 하는 직관적 방법은
-Figure~\ref{fig:count:Just Count Atomically!} (\url{count_atomic.c})
+Figure~\ref{fig:count:Just Count Atomically!} (\path{count_atomic.c})
 에 나온 것처럼 어토믹 오퍼레이션을 사용하는 것입니다.
 라인~1 은 어토믹 변수를 정의하고, 라인~5 에서 어토믹하게 값을 증가시키고,
 라인~10 에서 읽어냅니다.
@@ -478,7 +503,7 @@ Figure~\ref{fig:count:Just Count Atomically!} (\url{count_atomic.c})
 
 The straightforward way to count accurately is to use atomic operations,
 as shown in
-Figure~\ref{fig:count:Just Count Atomically!} (\url{count_atomic.c}).
+Figure~\ref{fig:count:Just Count Atomically!} (\path{count_atomic.c}).
 Line~1 defines an atomic variable, line~5 atomically increments it, and
 line~10 reads it out.
 Because this is atomic, it keeps perfect count.
@@ -861,9 +886,8 @@ thread (presumably cache aligned and padded to avoid false sharing).
 	\fi
 } \QuickQuizEnd
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 DEFINE_PER_THREAD(long, counter);
   2 
   3 void inc_count(void)
@@ -880,8 +904,11 @@ thread (presumably cache aligned and padded to avoid false sharing).
  14     sum += per_thread(counter, t);
  15   return sum;
  16 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Array-Based Per-Thread Statistical Counters}
 \label{fig:count:Array-Based Per-Thread Statistical Counters}
 \end{figure}
@@ -907,7 +934,7 @@ Figure~\ref{fig:count:Array-Based Per-Thread Statistical Counters}
 
 Such an array can be wrapped into per-thread primitives, as shown in
 Figure~\ref{fig:count:Array-Based Per-Thread Statistical Counters}
-(\url{count_stat.c}).
+(\path{count_stat.c}).
 Line~1 defines an array containing a set of per-thread counters of
 type \co{long} named, creatively enough, \co{counter}.
 
@@ -1326,9 +1353,8 @@ converge on the true value---hence this approach qualifies as
 eventually consistent.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 DEFINE_PER_THREAD(unsigned long, counter);
   2 unsigned long global_count;
   3 int stopflag;
@@ -1379,8 +1405,11 @@ eventually consistent.
  48     poll(NULL, 0, 1);
  49   smp_mb();
  50 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Array-Based Per-Thread Eventually Consistent Counters}
 \label{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
 \end{figure}
@@ -1398,7 +1427,7 @@ Per-Thread Statistical Counters} 것과 비슷합니다.
 
 The implementation is shown in
 Figure~\ref{fig:count:Array-Based Per-Thread Eventually Consistent Counters}
-(\url{count_stat_eventual.c}).
+(\path{count_stat_eventual.c}).
 Lines~1-2 show the per-thread variable and the global variable that
 track the counter's value, and line three shows \co{stopflag}
 which is used to coordinate termination (for the case where we want
@@ -1600,9 +1629,8 @@ comes at the cost of the additional thread running \co{eventual()}.
 \subsection{Per-Thread-Variable-Based Implementation}
 \label{sec:count:Per-Thread-Variable-Based Implementation}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 long __thread counter = 0;
   2 long *counterp[NR_THREADS] = { NULL };
   3 long finalcount = 0;
@@ -1645,8 +1673,11 @@ comes at the cost of the additional thread running \co{eventual()}.
  40   counterp[idx] = NULL;
  41   spin_unlock(&final_mutex);
  42 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Per-Thread Statistical Counters}
 \label{fig:count:Per-Thread Statistical Counters}
 \end{figure}
@@ -1668,7 +1699,7 @@ Figure~\ref{fig:count:Per-Thread Statistical Counters} (\url{count_end.c})
 Fortunately, gcc provides an \co{__thread} storage class that provides
 per-thread storage.
 This can be used as shown in
-Figure~\ref{fig:count:Per-Thread Statistical Counters} (\url{count_end.c})
+Figure~\ref{fig:count:Per-Thread Statistical Counters} (\path{count_end.c})
 to implement
 a statistical counter that not only scales, but that also incurs little
 or no performance penalty to incrementers compared to simple non-atomic
@@ -1987,9 +2018,8 @@ variables vanish when that thread exits.
 	if the corresponding CPU never existed and never will exist.
 	\fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 long __thread counter = 0;
   2 long *counterp[NR_THREADS] = { NULL };
   3 int finalthreadcount = 0;
@@ -2028,8 +2058,11 @@ variables vanish when that thread exits.
  36   while (finalthreadcount < nthreadsexpected)
  37     poll(NULL, 0, 1);
  38 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Per-Thread Statistical Counters With Lockless Summation}
 \label{fig:count:Per-Thread Statistical Counters With Lockless Summation}
 \end{figure}
@@ -2049,10 +2082,10 @@ variables vanish when that thread exits.
 	One workaround is to ensure that each thread continues to exist
 	until all threads are finished, as shown in
 	Figure~\ref{fig:count:Per-Thread Statistical Counters With Lockless Summation}
-	(\co{count_tstat.c}).
+	(\path{count_tstat.c}).
 	Analysis of this code is left as an exercise to the reader,
 	however, please note that it does not fit well into the
-	\url{counttorture.h} counter-evaluation scheme.
+	\path{counttorture.h} counter-evaluation scheme.
 	(Why not?)
 	Chapter~\ref{chp:Deferred Processing} will introduce 
 	synchronization mechanisms that handle this situation in a much
@@ -2401,9 +2434,8 @@ Section~\ref{sec:SMPdesign:Parallel Fastpath}.
 \subsection{Simple Limit Counter Implementation}
 \label{sec:count:Simple Limit Counter Implementation}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 unsigned long __thread counter = 0;
   2 unsigned long __thread countermax = 0;
   3 unsigned long globalcountmax = 10000;
@@ -2411,8 +2443,11 @@ Section~\ref{sec:SMPdesign:Parallel Fastpath}.
   5 unsigned long globalreserve = 0;
   6 unsigned long *counterp[NR_THREADS] = { NULL };
   7 DEFINE_SPINLOCK(gblcnt_mutex);
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Simple Limit Counter Variables}
 \label{fig:count:Simple Limit Counter Variables}
 \end{figure}
@@ -2486,9 +2521,8 @@ is permitted to access or modify any of the global variables unless it
 has acquired \co{gblcnt_mutex}.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 int add_count(unsigned long delta)
   2 {
   3   if (countermax - counter >= delta) {
@@ -2539,20 +2573,23 @@ has acquired \co{gblcnt_mutex}.
  48   spin_unlock(&gblcnt_mutex);
  49   return sum;
  50 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Simple Limit Counter Add, Subtract, and Read}
 \label{fig:count:Simple Limit Counter Add, Subtract, and Read}
 \end{figure}
 
 Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
-(\url{count_lim.c}) 에서 \co{add_count()}, \co{sub_count()}, and
+(\path{count_lim.c}) 에서 \co{add_count()}, \co{sub_count()}, and
 \co{read_count()} 함수들을 보이고 있습니다.
 \iffalse
 
 Figure~\ref{fig:count:Simple Limit Counter Add, Subtract, and Read}
 shows the \co{add_count()}, \co{sub_count()}, and \co{read_count()}
-functions (\url{count_lim.c}).
+functions (\path{count_lim.c}).
 \fi
 
 
@@ -2911,9 +2948,8 @@ per-thread \co{counter} variables.
 Line~49 then returns the sum.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 static void globalize_count(void)
   2 {
   3   globalcount += counter;
@@ -2952,8 +2988,11 @@ Line~49 then returns the sum.
  36   counterp[idx] = NULL;
  37   spin_unlock(&gblcnt_mutex);
  38 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Simple Limit Counter Utility Functions}
 \label{fig:count:Simple Limit Counter Utility Functions}
 \end{figure}
@@ -3282,9 +3321,8 @@ This task is undertaken in the next section.
 \subsection{Approximate Limit Counter Implementation}
 \label{sec:count:Approximate Limit Counter Implementation}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 unsigned long __thread counter = 0;
   2 unsigned long __thread countermax = 0;
   3 unsigned long globalcountmax = 10000;
@@ -3293,15 +3331,17 @@ This task is undertaken in the next section.
   6 unsigned long *counterp[NR_THREADS] = { NULL };
   7 DEFINE_SPINLOCK(gblcnt_mutex);
   8 #define MAX_COUNTERMAX 100
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Approximate Limit Counter Variables}
 \label{fig:count:Approximate Limit Counter Variables}
 \end{figure}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 static void balance_count(void)
   2 {
   3   countermax = globalcountmax -
@@ -3315,13 +3355,16 @@ This task is undertaken in the next section.
  11     counter = globalcount;
  12   globalcount -= counter;
  13 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Approximate Limit Counter Balancing}
 \label{fig:count:Approximate Limit Counter Balancing}
 \end{figure}
 
-이 구현 (\url{count_lim_app.c}) 은 앞 섹션의 것 (
+이 구현 (\path{count_lim_app.c}) 은 앞 섹션의 것 (
 Figures~\ref{fig:count:Simple Limit Counter Variables},
 \ref{fig:count:Simple Limit Counter Add, Subtract, and Read},
 \ref{fig:count:Simple Limit Counter Utility Functions}) 들과 상당히 비슷하기
@@ -3339,7 +3382,7 @@ Figure~\ref{fig:count:Simple Limit Counter Utility Functions} 의
 \co{balance_count()} 함수와 동일합니다.
 \iffalse
 
-Because this implementation (\url{count_lim_app.c}) is quite similar to
+Because this implementation (\path{count_lim_app.c}) is quite similar to
 that in the previous section
 (Figures~\ref{fig:count:Simple Limit Counter Variables},
 \ref{fig:count:Simple Limit Counter Add, Subtract, and Read}, and
@@ -3498,9 +3541,8 @@ represent \co{counter} and the low-order 16 bits to represent
 	\fi
 } \QuickQuizEnd
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 atomic_t __thread ctrandmax = ATOMIC_INIT(0);
   2 unsigned long globalcountmax = 10000;
   3 unsigned long globalcount = 0;
@@ -3534,8 +3576,11 @@ represent \co{counter} and the low-order 16 bits to represent
  31   cami = (c << CM_BITS) | cm;
  32   return ((int)cami);
  33 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Atomic Limit Counter Variables and Access Functions}
 \label{fig:count:Atomic Limit Counter Variables and Access Functions}
 \end{figure}
@@ -3560,7 +3605,7 @@ Figure~\ref{fig:count:Approximate Limit Counter Variables} 에 있는 것들과
 The variables and access functions for a simple atomic limit counter
 are shown in
 Figure~\ref{fig:count:Atomic Limit Counter Variables and Access Functions}
-(\url{count_lim_atomic.c}).
+(\path{count_lim_atomic.c}).
 The \co{counter} and \co{countermax} variables in earlier algorithms
 are combined into the single variable \co{ctrandmax} shown on
 line~1, with \co{counter} in the upper half and \co{countermax} in
@@ -3690,9 +3735,8 @@ the result.
 	\fi
 } \QuickQuizEnd
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 int add_count(unsigned long delta)
   2 {
   3   int c;
@@ -3756,8 +3800,11 @@ the result.
  61   spin_unlock(&gblcnt_mutex);
  62   return 1;
  63 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Atomic Limit Counter Add and Subtract}
 \label{fig:count:Atomic Limit Counter Add and Subtract}
 \end{figure}
@@ -3922,9 +3969,8 @@ A line-by-line analysis of this function is left as an exercise to
 the reader.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 unsigned long read_count(void)
   2 {
   3   int c;
@@ -3943,8 +3989,11 @@ the reader.
  16   spin_unlock(&gblcnt_mutex);
  17   return sum;
  18 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Atomic Limit Counter Read}
 \label{fig:count:Atomic Limit Counter Read}
 \end{figure}
@@ -3967,9 +4016,8 @@ using \co{split_ctrandmax} on line~13.
 Finally, line~17 returns the sum.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 static void globalize_count(void)
   2 {
   3   int c;
@@ -4002,15 +4050,17 @@ Finally, line~17 returns the sum.
  30       globalreserve -= cm;
  31     }
  32 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Atomic Limit Counter Utility Functions 1}
 \label{fig:count:Atomic Limit Counter Utility Functions 1}
 \end{figure}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 static void balance_count(void)
   2 {
   3   int c;
@@ -4052,8 +4102,11 @@ Finally, line~17 returns the sum.
  39   counterp[idx] = NULL;
  40   spin_unlock(&gblcnt_mutex);
  41 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Atomic Limit Counter Utility Functions 2}
 \label{fig:count:Atomic Limit Counter Utility Functions 2}
 \end{figure}
@@ -4505,9 +4558,8 @@ The slowpath then sets that thread's \co{theft} state to IDLE.
 \subsection{Signal-Theft Limit Counter Implementation}
 \label{sec:count:Signal-Theft Limit Counter Implementation}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 #define THEFT_IDLE  0
   2 #define THEFT_REQ   1
   3 #define THEFT_ACK   2
@@ -4525,14 +4577,17 @@ The slowpath then sets that thread's \co{theft} state to IDLE.
  15 int *theftp[NR_THREADS] = { NULL };
  16 DEFINE_SPINLOCK(gblcnt_mutex);
  17 #define MAX_COUNTERMAX 100
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Signal-Theft Limit Counter Data}
 \label{fig:count:Signal-Theft Limit Counter Data}
 \end{figure}
 
 Figure~\ref{fig:count:Signal-Theft Limit Counter Data}
-(\url{count_lim_sig.c})
+(\path{count_lim_sig.c})
 는 signal-theft based counter 구현에 사용되는 데이터 구조를 보입니다.
 라인~1-7 에서는 앞의 섹션에서 설명한 상태들과 쓰레드별 theft 스테이트 머신을
 위한 값들을 정의합니다.
@@ -4542,7 +4597,7 @@ Figure~\ref{fig:count:Signal-Theft Limit Counter Data}
 \iffalse
 
 Figure~\ref{fig:count:Signal-Theft Limit Counter Data}
-(\url{count_lim_sig.c})
+(\path{count_lim_sig.c})
 shows the data structures used by the signal-theft based counter
 implementation.
 Lines~1-7 define the states and values for the per-thread theft state machine
@@ -4552,9 +4607,8 @@ lines~14 and 15 to allow remote access to a thread's \co{countermax}
 and \co{theft} variables, respectively.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 static void globalize_count(void)
   2 {
   3   globalcount += counter;
@@ -4618,8 +4672,11 @@ and \co{theft} variables, respectively.
  61     counter = globalcount;
  62   globalcount -= counter;
  63 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Signal-Theft Limit Counter Value-Migration Functions}
 \label{fig:count:Signal-Theft Limit Counter Value-Migration Functions}
 \end{figure}
@@ -4858,9 +4915,8 @@ Lines~51-63 show \co{balance_count()}, which is similar to that of
 earlier examples.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 int add_count(unsigned long delta)
   2 {
   3   int fastpath = 0;
@@ -4897,15 +4953,17 @@ earlier examples.
  34   spin_unlock(&gblcnt_mutex);
  35   return 1;
  36 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Signal-Theft Limit Counter Add Function}
 \label{fig:count:Signal-Theft Limit Counter Add Function}
 \end{figure}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
  38 int sub_count(unsigned long delta)
  39 {
  40   int fastpath = 0;
@@ -4940,8 +4998,11 @@ earlier examples.
  69   spin_unlock(&gblcnt_mutex);
  70   return 1;
  71 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Signal-Theft Limit Counter Subtract Function}
 \label{fig:count:Signal-Theft Limit Counter Subtract Function}
 \end{figure}
@@ -4990,9 +5051,8 @@ If the fastpath addition at line~9 was executed, then line~20 returns
 success.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 unsigned long read_count(void)
   2 {
   3   int t;
@@ -5006,8 +5066,11 @@ success.
  11   spin_unlock(&gblcnt_mutex);
  12   return sum;
  13 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Signal-Theft Limit Counter Read Function}
 \label{fig:count:Signal-Theft Limit Counter Read Function}
 \end{figure}
@@ -5033,9 +5096,8 @@ left as an exercise for the reader, as is the analysis of
 Figure~\ref{fig:count:Signal-Theft Limit Counter Read Function}.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 void count_init(void)
   2 {
   3   struct sigaction sa;
@@ -5071,8 +5133,11 @@ Figure~\ref{fig:count:Signal-Theft Limit Counter Read Function}.
  33   theftp[idx] = NULL;
  34   spin_unlock(&gblcnt_mutex);
  35 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Signal-Theft Limit Counter Initialization Functions}
 \label{fig:count:Signal-Theft Limit Counter Initialization Functions}
 \end{figure}
@@ -5484,13 +5549,13 @@ will expand on these lessons.
 	Algorithm & Section & Updates & 1 Core & 32 Cores \\
 	\hline
 	\hline
-	\url{count_stat.c} & \ref{sec:count:Array-Based Implementation} &
+	\path{count_stat.c} & \ref{sec:count:Array-Based Implementation} &
 		11.5 ns & 408 ns & 409 ns \\
-	\url{count_stat_eventual.c} & \ref{sec:count:Eventually Consistent Implementation} &
+	\path{count_stat_eventual.c} & \ref{sec:count:Eventually Consistent Implementation} &
 		11.6 ns & 1 ns & 1 ns \\
-	\url{count_end.c} & \ref{sec:count:Per-Thread-Variable-Based Implementation} &
+	\path{count_end.c} & \ref{sec:count:Per-Thread-Variable-Based Implementation} &
 		6.3 ns & 389 ns & 51,200 ns \\
-	\url{count_end_rcu.c} & \ref{sec:together:RCU and Per-Thread-Variable-Based Statistical Counters} &
+	\path{count_end_rcu.c} & \ref{sec:together:RCU and Per-Thread-Variable-Based Statistical Counters} &
 		5.7 ns & 354 ns & 501 ns \\
 \end{tabular}
 \end{center}
@@ -5517,29 +5582,29 @@ Table~\ref{tab:count:Statistical Counter Performance on Power-6}
 shows the performance of the four parallel statistical counting
 algorithms.
 All four algorithms provide near-perfect linear scalability for updates.
-The per-thread-variable implementation (\co{count_end.c})
+The per-thread-variable implementation (\path{count_end.c})
 is significantly faster on
 updates than the array-based implementation
-(\co{count_stat.c}), but is slower at reads on large numbers of core,
+(\path{count_stat.c}), but is slower at reads on large numbers of core,
 and suffers severe lock contention when there are many parallel readers.
 This contention can be addressed using the deferred-processing
 techniques introduced in
 Chapter~\ref{chp:Deferred Processing},
-as shown on the \co{count_end_rcu.c} row of
+as shown on the \path{count_end_rcu.c} row of
 Table~\ref{tab:count:Statistical Counter Performance on Power-6}.
-Deferred processing also shines on the \co{count_stat_eventual.c} row,
+Deferred processing also shines on the \path{count_stat_eventual.c} row,
 courtesy of eventual consistency.
 \fi
 
 \QuickQuiz{}
 	Table~\ref{tab:count:Statistical Counter Performance on Power-6} 의
-	\url{count_stat.c} 열에 보면 읽기 성능이 쓰레드 수에 따라
+	\path{count_stat.c} 열에 보면 읽기 성능이 쓰레드 수에 따라
 	선형적으로 확장되는데요.
 	쓰레드 수가 늘어나면 더 많은 쓰레드별 카운터의 합이 이루어져야 하는데
 	어떻게 그게 가능하죠?
 	\iffalse
 
-	On the \url{count_stat.c} row of
+	On the \path{count_stat.c} row of
 	Table~\ref{tab:count:Statistical Counter Performance on Power-6},
 	we see that the read-side scales linearly with the number of
 	threads.
@@ -5618,13 +5683,13 @@ courtesy of eventual consistency.
 	Algorithm & Section & Exact? & Updates & 1 Core & 64 Cores \\
 	\hline
 	\hline
-	\url{count_lim.c} & \ref{sec:count:Simple Limit Counter Implementation} &
+	\path{count_lim.c} & \ref{sec:count:Simple Limit Counter Implementation} &
 		N & 3.6 ns & 375 ns & 50,700 ns \\
-	\url{count_lim_app.c} & \ref{sec:count:Approximate Limit Counter Implementation} &
+	\path{count_lim_app.c} & \ref{sec:count:Approximate Limit Counter Implementation} &
 		N & 11.7 ns & 369 ns & 51,000 ns \\
-	\url{count_lim_atomic.c} & \ref{sec:count:Atomic Limit Counter Implementation} &
+	\path{count_lim_atomic.c} & \ref{sec:count:Atomic Limit Counter Implementation} &
 		Y & 51.4 ns & 427 ns & 49,400 ns \\
-	\url{count_lim_sig.c} & \ref{sec:count:Signal-Theft Limit Counter Implementation} &
+	\path{count_lim_sig.c} & \ref{sec:count:Signal-Theft Limit Counter Implementation} &
 		Y & 10.2 ns & 370 ns & 54,000 ns \\
 \end{tabular}
 \end{center}
@@ -6112,14 +6177,14 @@ Summarizing the summary:
 
 \item	Read-only code paths should remain read-only:  Spurious
 	synchronization writes to shared memory kill performance
-	and scalability, as seen in the \co{count_end.c} row of
+	and scalability, as seen in the \path{count_end.c} row of
 	Table~\ref{tab:count:Statistical Counter Performance on Power-6}.
 \item	Judicious use of delay promotes performance and scalability, as
 	seen in Section~\ref{sec:count:Eventually Consistent Implementation}.
 \item	Parallel performance and scalability is usually a balancing act:
 	Beyond a certain point, optimizing some code paths will degrade
 	others.
-	The \co{count_stat.c} and \co{count_end_rcu.c} rows of
+	The \path{count_stat.c} and \path{count_end_rcu.c} rows of
 	Table~\ref{tab:count:Statistical Counter Performance on Power-6}
 	illustrate this point.
 \item	Different levels of performance and scalability will affect
