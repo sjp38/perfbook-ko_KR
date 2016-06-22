@@ -1345,6 +1345,22 @@ scheme that provides greatly improved read-side performance and scalability.
 
 Figure~\ref{fig:defer:RCU Read-Side Using Per-Thread Reference-Count Pair}
 (\url{rcu_rcpl.h})
+는 쓰레드별 레퍼런스 카운터 한쌍을 사용하는 RCU 구현의 read-side 기능들을
+보입니다.
+이 구현은
+Figure~\ref{fig:defer:RCU Read-Side Using Global Reference-Count Pair} 에서
+보인 구현과 상당히 비슷한데, 차이점은 \co{rcu_refcnt} 가 (
+Figure~\ref{fig:defer:RCU Per-Thread Reference-Count Pair Data} 에 보인 것과
+같이) 쓰레드별 배열이라는 것 뿐입니다.
+앞 섹션에서의 알고리즘처럼, 이 두개의 배열의 원소를 사용하는 것은 읽기
+쓰레드들이 업데이트 쓰레드들을 starvation 에 빠뜨리는 것을 막습니다.
+쓰레드별 \co{rcu_refcnt[]} 배열의 한가지 장점은 \co{rcu_read_lock()} 과
+\co{rcu_read_unlock()} 기능들이 더이상 어토믹 오퍼레이션들을 사용하지 않는다는
+것입니다.
+\iffalse
+
+Figure~\ref{fig:defer:RCU Read-Side Using Per-Thread Reference-Count Pair}
+(\url{rcu_rcpl.h})
 shows the read-side primitives of an RCU implementation that uses per-thread
 pairs of reference counters.
 This implementation is quite similar to that shown in
@@ -1357,14 +1373,32 @@ array prevents readers from starving updaters.
 One benefit of per-thread \co{rcu_refcnt[]} array is that the
 \co{rcu_read_lock()} and \co{rcu_read_unlock()} primitives no longer
 perform atomic operations.
+\fi
 
 \QuickQuiz{}
+	집어쳐요!
+	\co{rcu_read_lock()} 안에 \co{atomic_read()} 가 뻔히 보인다구요!!!
+	왜 \co{rcu_read_lock()} 이 어토믹 오퍼레이션을 포함하고 있지 않은 척
+	하시는거죠???
+	\iffalse
+
 	Come off it!
 	We can see the \co{atomic_read()} primitive in
 	\co{rcu_read_lock()}!!!
 	So why are you trying to pretend that \co{rcu_read_lock()}
 	contains no atomic operations???
+	\fi
 \QuickQuizAnswer{
+	해당 \co{atomic_read()} 기능은 실제로는 어토믹한 머신 인스트럭션을
+	실행하지 않고, 그저 \co{atomic_t} 로부터의 평범한 로드를 수행합니다.
+	이 기능의 목적은 컴파일러의 타입 검사를 쉽게 해주려는 것입니다.
+	리눅스 커널이 8비트 CPU 에서 수행된다면, 16 비트 포인터를 저장하는데에
+	일부 8-bit 시스템에서의 8비트 액세스 두번이 행해지는 ``store tearing''
+	을 막을 필요도 있을 겁니다.
+	하지만 감사하게도, 누구도 리눅스를 8 비트 시스템에서 사용하고 있는 것
+	같지는 않습니다.
+	\iffalse
+
 	The \co{atomic_read()} primitives does not actually execute
 	atomic machine instructions, but rather does a normal load
 	from an \co{atomic_t}.
@@ -1374,6 +1408,7 @@ perform atomic operations.
 	to store a 16-bit pointer with two eight-bit accesses on some
 	8-bit systems.
 	But thankfully, it seems that no one runs Linux on 8-bit systems.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -1413,12 +1448,30 @@ perform atomic operations.
 
 Figure~\ref{fig:defer:RCU Update Using Per-Thread Reference-Count Pair}
 (\url{rcu_rcpl.c})
+는 \co{synchronize_rcu()} 의 구현을 \co{flip_counter_and_wait()} 라 이름지어진
+함수와 함께 보이고 있습니다.
+\co{synchronize_rcu()} 함수는
+Figure~\ref{fig:defer:RCU Update Using Global Reference-Count Pair} 에 보인
+것과 유사합니다만, 반복된 카운터 뒤집기는 line~22 와 23 에서의 새로운 함수로의
+호출 두개로 뒤바뀌었습니다.
+\iffalse
+
+Figure~\ref{fig:defer:RCU Update Using Per-Thread Reference-Count Pair}
+(\url{rcu_rcpl.c})
 shows the implementation of \co{synchronize_rcu()}, along with a helper
 function named \co{flip_counter_and_wait()}.
 The \co{synchronize_rcu()} function resembles that shown in
 Figure~\ref{fig:defer:RCU Update Using Global Reference-Count Pair},
 except that the repeated counter flip is replaced by a pair of calls
 on lines~22 and 23 to the new helper function.
+\fi
+
+이 새로운 \co{flip_counter_and_wait()} 함수는 \co{rcu_idx} 변수를 line~5 에서
+업데이트 하고 line~6 에서 메모리 배리어를 실행한 후 line~7-11 에서 각 쓰레드의
+기존 \co{rcu_refcnt} 원소가 0이 되기를 기다리며 스핀 하게 됩니다.
+일단 모든 그런 원소들이 0이 된다면, 이 함수는 line~12 에서 또다른 메모리
+배리어를 치고 리턴합니다.
+\iffalse
 
 The new \co{flip_counter_and_wait()} function updates the
 \co{rcu_idx} variable on line~5, executes a memory barrier on line~6,
@@ -1426,6 +1479,19 @@ then lines~7-11 spin on each thread's prior \co{rcu_refcnt} element,
 waiting for it to go to zero.
 Once all such elements have gone to zero,
 it executes another memory barrier on line~12 and returns.
+\fi
+
+이 RCU 구현은 그 소프트웨어 환경에 중요한 새로운 요구사항을 내포하고 있는데,
+이는 (1) 쓰레드별 변수를 선언할 수 있어야 하고, (2) 이 쓰레드별 변수들은 다른
+쓰레드들에서도 접근할 수 있어야 하며, (3) 모든 쓰레드의 것들을 하나하나
+열거하기가 가능해야 한다는 것입니다.
+이런 요구사항들은 거의 모든 소프트웨어 환경에서 충족됩니다만 종종 전체 쓰레드의
+갯수의 상한선이 고정되는 결과가 나오곤 합니다.
+더 복잡한 구현은 그런 상한선을 제거할 수 있는데, 예를 들면 확장 가능한 해시
+테이블을 사용하거나 하는 형태입니다.
+그런 구현은 동적으로 쓰레드들의 정보를 추적할 수 있을텐데, 예를 들면 각
+쓰레드들의 정보를 \co{rcu_read_lock()} 호출 시에 추가하는 형태일 겁니다.
+\iffalse
 
 This RCU implementation imposes important new requirements on its
 software environment, namely, (1) that it be possible to declare
@@ -1437,13 +1503,33 @@ More-complex implementations might avoid such bounds, for example, by using
 expandable hash tables.
 Such implementations might dynamically track threads, for example, by
 adding them on their first call to \co{rcu_read_lock()}.
+\fi
 
 \QuickQuiz{}
+	좋아요, 우리가 $N$ 쓰레드들을 가지고 있다면 우리는 $2N$ 10 밀리세컨드의
+	기다리는 호출 (\co{flip_counter_and_wait()} 당 한 세트) 을 할 수
+	있을텐데, 우리가 각 쓰레드를 위해 오직 한번 기다린다고 가정해도
+	그렇습니다.
+	\iffalse
+
+	grace period 는 \emph{훨씬} 더 빨리 완료되어야 하지 않을까요?
 	Great, if we have $N$ threads, we can have $2N$ ten-millisecond
 	waits (one set per \co{flip_counter_and_wait()} invocation,
 	and even that assumes that we wait only once for each thread.
 	Don't we need the grace period to complete \emph{much} more quickly?
+	\fi
 \QuickQuizAnswer{
+	기다리는 것은 오로지 해당 쓰레드가 여전히 앞에서 시작된 RCU read-side
+	크리티컬 섹션 안에 있을 때 뿐이라는 점을, 그리고 하나의 쓰레드를
+	기다리는 것은 모든 다른 쓰레드들에게 여전히 수행중일 수도 있는 모든
+	앞서 시작한 RCU read-side 크리티컬 섹션들을 완료할 기회를 준다는 점을
+	기억하세요.
+	따라서 우리가 $2N$ 간격을 기다리게 되는 경우는 모든 앞의 쓰레드들에의
+	모든 기다림에도 불구하고 직전의 쓰레드가 여전히 앞서 시작된 RCU
+	read-side 크리티컬 섹션 안에 있을 때 뿐입니다.
+	짧게 말해서, 이 구현은 불필요하게 기다리지는 않을 겁니다.
+	\iffalse
+
 	Keep in mind that we only wait for a given thread if that thread
 	is still in a pre-existing RCU read-side critical section,
 	and that waiting for one hold-out thread gives all the other
@@ -1454,13 +1540,37 @@ adding them on their first call to \co{rcu_read_lock()}.
 	RCU read-side critical section despite all the waiting for
 	all the prior threads.
 	In short, this implementation will not wait unnecessarily.
+	\fi
+
+	하지만, RCU 를 사용하는 코드를 스트레스 테스트 하고 있다면, 부정확하게
+	RCU 로 보호되고 있는 데이터 원소로의 레퍼런스를 RCU read-side 크리티컬
+	섹션 밖에서도 쥐고 있게 되는 버그를 더 잘 잡기 위해서는 \co{poll()}
+	구문을 없애고 싶을 수도 있을 겁니다.
+	\iffalse
 
 	However, if you are stress-testing code that uses RCU, you
 	might want to comment out the \co{poll()} statement in
 	order to better catch bugs that incorrectly retain a reference
 	to an RCU-protected data element outside of an RCU
 	read-side critical section.
+	\fi
 } \QuickQuizEnd
+
+이 구현은 여전히 일부 한계점들을 가지고 있습니다.
+먼저, \co{rcu_idx} 를 두번 뒤집어야 하는 필요성은 업데이트 쪽에 상당한
+오버헤드를 내포하고 있는데, 특히 많은 수의 쓰레드가 있을때 그렇습니다.
+
+두번째로 \co{synchronize_rcu()} 는 이제 쓰레드들의 수가 늘어남에 따라
+선형적으로 늘어나는 여러 변수들을 조사해야 하는데, 이는 쓰레드의 수가 많은
+어플리케이션에 상당한 오버헤드가 있을 것을 암시합니다.
+
+세번째로, 앞에서와 마찬가지로 동시의 RCU 업데이트들은 원론적으로는 공통의 grace
+period 를 사용할 수 있음에도 이 구현은 grace period 들을 직렬화 시켜서 grace
+period 공유를 막고 있습니다.
+
+마지막으로, 글에서 이야기했듯, 쓰레드별 변수의 필요성과 쓰레드들을 모두 봐야
+한다는 필요성은 일부 소프트웨어 환경에서는 문제가 될 수 있습니다.
+\iffalse
 
 This implementation still has several shortcomings.
 First, the need to flip \co{rcu_idx} twice imposes substantial overhead
@@ -1477,6 +1587,19 @@ grace periods, preventing grace-period sharing.
 Finally, as noted in the text, the need for per-thread variables
 and for enumerating threads may be problematic in some software
 environments.
+\fi
+
+그렇다고는 하나, read-side 기능들은 매우 잘 확장되는데, 단일 CPU 에서 돌아가든
+64-CPU Power5 시스템에서 돌아가든 상관없이 약 115~나노세컨드를 필요로 합니다.
+앞에서 이야기한 바와 같이, \co{synchronize_rcu()} 기능은 확장되지 못하는데, 그
+오버헤드는 단일 Power5 CPU 에서의 약 1 마이크로세컨드를, 그리고 64-CPU
+시스템에서는 200~마이크로세컨드를 보입니다.
+이 구현은 생각건대 제품 품질의 사용자 수준 RCU 구현에 대한 토대가 될 수도 있을
+것입니다.
+
+다음 섹션에서는 더 효과적인 동시의 RCU 업데이트들을 가능하게 하는 알고리즘
+하나를 설명합니다.
+\iffalse
 
 That said, the read-side primitives scale very nicely, requiring about
 115~nanoseconds regardless of whether running on a single-CPU or a 64-CPU
@@ -1489,6 +1612,7 @@ production-quality user-level RCU implementation.
 
 The next section describes an algorithm permitting more efficient
 concurrent RCU updates.
+\fi
 
 \subsubsection{Scalable Counter-Based RCU With Shared Grace Periods}
 \label{defer:Scalable Counter-Based RCU With Shared Grace Periods}
