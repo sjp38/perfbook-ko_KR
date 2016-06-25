@@ -2017,6 +2017,18 @@ thread-local accesses to one, as is done in the next section.
 
 Figure~\ref{fig:defer:Free-Running Counter Using RCU}
 (\url{rcu.h} and \url{rcu.c})
+는 Figure~\ref{fig:defer:Data for Free-Running Counter Using RCU} 에 보여진
+데이터와 함께 짝수 값만을 갖는 글로벌한 자유롭게 동작하는 카운터에 기반한 RCU
+구현을 보입니다.
+이렇게 만들어진 \co{rcu_read_lock()} 구현은 상당히 단순합니다.
+Line~3 과 4 에서는 단순히 글로벌한 자유롭게 동작하는 \co{rcu_gp_ctr} 변수에 1을
+더한 값으로 만들어진 홀수를 쓰레드별 변수인 \co{rcu_reader_gp} 에 저장합니다.
+Line~5 는 뒤따르는 RCU read-side 크리티컬 섹션의 내용이 ``삐져나오는 것''을
+방지하기 위해 메모리 배리어를 실행합니다.
+\iffalse
+
+Figure~\ref{fig:defer:Free-Running Counter Using RCU}
+(\url{rcu.h} and \url{rcu.c})
 show an RCU implementation based on a single global free-running counter
 that takes on only even-numbered values, with data shown in
 Figure~\ref{fig:defer:Data for Free-Running Counter Using RCU}.
@@ -2027,6 +2039,15 @@ variable and stores the resulting odd-numbered value into the
 \co{rcu_reader_gp} per-thread variable.
 Line~5 executes a memory barrier to prevent the content of the
 subsequent RCU read-side critical section from ``leaking out''.
+\fi
+
+\co{rcu_read_unlock()} 구현 역시 비슷합니다.
+Line~10 에서는 이번에도 앞의 RCU read-side 크리티컬 섹션이 ``삐져나오는 것'' 을
+방지하기 위해 메모리 배리어를 실행합니다.
+Line~11 과 12 는 \co{rcu_gp_ctr} 글로벌 변수의 값을 쓰레드별 변수인
+\co{rcu_reader_gp} 에 복사해서 이 쓰레드별 변수의 값을 짝수로 만듦으로 인해
+동시의 \co{synchronize_rcu()} 인스턴스가 이를 무시해도 좋을 것임을 알립니다.
+\iffalse
 
 The \co{rcu_read_unlock()} implementation is similar.
 Line~10 executes a memory barrier, again to prevent the prior RCU
@@ -2035,19 +2056,58 @@ Lines~11 and~12 then copy the \co{rcu_gp_ctr} global variable to the
 \co{rcu_reader_gp} per-thread variable, leaving this per-thread
 variable with an even-numbered value so that a concurrent instance
 of \co{synchronize_rcu()} will know to ignore it.
+\fi
 
 \QuickQuiz{}
+	짝수만으로도 해당 태스크를 무시해도 좋다고 \co{synchronize_rcu()} 에
+	말하기에 충분하다면
+	Figure~\ref{fig:defer:Free-Running Counter Using RCU} 의 line~10 과 11
+	은 왜 단순히 \co{rcu_reader_gp} 에 0을 할당하지 않나요?
+	\iffalse
+
 	If any even value is sufficient to tell \co{synchronize_rcu()}
 	to ignore a given task, why don't lines~10 and~11 of
 	Figure~\ref{fig:defer:Free-Running Counter Using RCU}
 	simply assign zero to \co{rcu_reader_gp}?
+	\fi
 \QuickQuizAnswer{
+	0을 (또는 어떤 다른 짝수의 상수를) 할당하는 것은 실제로 동작할
+	것입니다만 \co{rcu_gp_ctr} 의 값을 할당하는 것은 개발자에게 언제 연관된
+	쓰레드가 마지막으로 RCU read-side 크리티컬 섹션을 끝냈는지와 같은,
+	디버깅을 위한 가치 있는 도움을 제공할 수 있습니다.
+	\iffalse
+
 	Assigning zero (or any other even-numbered constant)
 	would in fact work, but assigning the value of
 	\co{rcu_gp_ctr} can provide a valuable debugging aid,
 	as it gives the developer an idea of when the corresponding
 	thread last exited an RCU read-side critical section.
+	\fi
 } \QuickQuizEnd
+
+따라서, \co{synchronize_rcu()} 는 이 모든 쓰레드별 \co{rcu_reader_gp} 변수들이
+짝수를 가지게 될때까지 기다릴 수도 있습니다.
+하지만, 그보다 훨씬 나은 방법이 있는데 \co{synchronize_rcu()} 는 \emph{전부터
+존재한} RCU read-side 크리티컬 섹션들만 기다리면 그만이기 때문입니다.
+Line~19 에서는 앞의 RCU 로 보호되는 데이터 구조체의 조정이 line~21 의 값 증가
+뒤로 (CPU 에 의해서든 컴파일러에 의해서든) 재배치 되는 것을 막기 위해 메모리
+배리어를 실행합니다.
+Line~20 에서는 여러개의 \co{synchronize_rcu()} 인스턴스들이 동시에 수행되는
+것을 막기 위해 \co{rcu_gp_lock} 을 획득합니다 (그리고 line~30 에서 이를
+해제합니다).
+Line~21 은 글로벌 변수인 \co{rcu_gp_ctr} 의 값을 2 만큼 증가시켜서 모든 전부터
+존재해온 RCU read-side 크리티컬 섹션들이 갖는 그들과 연관된 쓰레드별 변수
+\co{rcu_reader_gp} 는 \co{rcu_gp_ctr} 보다 작은 값을 가지게 될 것입니다.
+짝수 값의 \co{rcu_reader_gp} 를 갖는 쓰레드들은 RCU read-side 크리티컬 섹션에
+들어가 있지않다는 점을 다시 상기해서, line~23-29 는 \co{rcu_reader_gp} 값들을
+그 모든 것들이 짝수이거나 (line~24) 글로벌한 \co{rcu_gp_ctr} 보다 큰 동안
+(line~25-26) 스캔합니다.
+Line~27 에서는 앞서 존재해온 RCU read-side 크리티컬 섹션을 기다리기 위해 짧은
+시간동안 블록하지만 만약 grace-period 대기시간이 중요하다면 스핀 루프로 교체될
+수 있습니다.
+마지막으로, line~31 에서의 메모리 배리어는 뒤따르는 모든 오브젝트 해체가 루프의
+앞으로 재배치 되지 않도록 보장합니다.
+\iffalse
 
 Thus, \co{synchronize_rcu()} could wait for all of the per-thread
 \co{rcu_reader_gp} variables to take on even-numbered values.
@@ -2075,14 +2135,30 @@ pre-existing RCU read-side critical section, but this can be replaced with
 a spin-loop if grace-period latency is of the essence.
 Finally, the memory barrier at line~31 ensures that any subsequent
 destruction will not be reordered into the preceding loop.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Free-Running Counter Using RCU}
+	의 line~19 와 31 에서의 메모리 배리어들은 왜 필요한 건가요?
+	line~20 과 30 에서의 락킹이 충분한데 메모리 배리어는 피할 수 있지
+	않나요?
+	\iffalse
+
 	Why are the memory barriers on lines~19 and~31 of
 	Figure~\ref{fig:defer:Free-Running Counter Using RCU}
 	needed?
 	Aren't the memory barriers inherent in the locking
 	primitives on lines~20 and~30 sufficient?
+	\fi
 \QuickQuizAnswer{
+	락킹 기능들은 단지 크리티컬 섹션을 가두는 것만을 보장하기 때문에 이
+	메모리 배리어들이  필요합니다.
+	락킹 도구들은 다른 코드가 크리티컬 섹션 안으로 흘러들어오는 것을 막기
+	위한 어떤 의무도 가지고 있지 않습니다.
+	따라서 이런 종류의, 컴파일러에 의해서든 CPU 에 의해서든 행해질 수 있는
+	코드의 움직임을 방지하기 위해 이 두개의 메모리 배리어들이 필요합니다.
+	\iffalse
+
 	These memory barriers are required because the locking
 	primitives are only guaranteed to confine the critical
 	section.
@@ -2091,7 +2167,14 @@ destruction will not be reordered into the preceding loop.
 	The pair of memory barriers are therefore requires to prevent
 	this sort of code motion, whether performed by the compiler
 	or by the CPU.
+	\fi
 } \QuickQuizEnd
+
+이 전략은 훨씬 나은 read-side 성능을 달성할 수 있게 하는데, Power5 CPU 들의
+숫자에 관계 없이 대략 63~나노세컨드의 오버헤드를 갖습니다.
+업데이트는 더 많은 오버헤드를 갖는데, 하나의 Power5 CPU 에서
+500~나노세컨드로부터 64 개의 CPU 에서 100~\emph{마이크로세컨드} 까지 갖습니다.
+\iffalse
 
 This approach achieves much better read-side performance, incurring
 roughly 63~nanoseconds of overhead regardless of the number of
@@ -2099,16 +2182,42 @@ Power5 CPUs.
 Updates incur more overhead, ranging from about 500~nanoseconds on
 a single Power5 CPU to more than 100~\emph{microseconds} on 64
 such CPUs.
+\fi
 
 \QuickQuiz{}
+	Section~\ref{defer:Scalable Counter-Based RCU With Shared Grace Periods}
+	에서 설명한 update-side batching 이
+	Figure~\ref{fig:defer:Free-Running Counter Using RCU} 에 보인 구현에
+	적용될 수도 있지 않을까요?
+	\iffalse
+
 	Couldn't the update-side batching optimization described in
 	Section~\ref{defer:Scalable Counter-Based RCU With Shared Grace Periods}
 	be applied to the implementation shown in
 	Figure~\ref{fig:defer:Free-Running Counter Using RCU}?
+	\fi
 \QuickQuizAnswer{
+	실제로, 약간의 수정과 함께라면 그럴 수 있습니다.
+	이 작업은 독자의 연습문제로 남겨두겠습니다.
+	\iffalse
+
 	Indeed it could, with a few modifications.
 	This work is left as an exercise for the reader.
+	\fi
 } \QuickQuizEnd
+
+이 구현은 앞서 언급한 많은 update-side 오버헤드 외에도 몇가지 심각한 한계점들로
+인해 문제가 될 수 있습니다.
+먼저, 더이상 중첩된 RCU read-side 크리티컬 섹션들이 불가능한데, 이에 대해선
+다음 섹션에서 다루도록 합니다.
+둘째로, 읽기 쓰레드가 \co{rcu_gp_ctr} 에서 값을 읽어왔지만 \co{rcu_reader_gp}
+에 값을 저장하기 전에 Figure~\ref{fig:defer:Free-Running Counter Using RCU} 의
+line~3 에서 preemption 당하고 \co{rcu_gp_ctr} 카운터가 가질 수 있는 값들보다는
+적게, 하지만 그 절반보다는 많게 값 증가를 반복한다면, \co{synchronize_rcu()} 는
+이 뒤의 RCU read-side 크리티컬 섹션을 무시하게 될겁니다.
+마지막으로, 이 구현은 쓰레드별 변수들을 유지할 수 있고 모든 쓰레드들을 검사할
+수 있는 소프트웨어 환경에 들어가 있을 것을 필요로 합니다.
+\iffalse
 
 This implementation suffers from some serious shortcomings in
 addition to the high update-side overhead noted earlier.
@@ -2123,8 +2232,17 @@ will ignore the subsequent RCU read-side critical section.
 Third and finally, this implementation requires that the enclosing software
 environment be able to enumerate threads and maintain per-thread
 variables.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Free-Running Counter Using RCU} 의 line~3-4 에서
+	읽기 쓰레드들이 preemption 당할 수 있다는 사실은 진짜 문제일까요? 달리
+	말하자면, 정말 실패를 만들 수 있는 실제의 이벤트들이 존재하나요?
+	그렇지 않다면, 왜죠?
+	그렇다면, 그 이벤트들은 어떤 것이고, 그 실패는 어떻게 해결될 수
+	있을까요?
+	\iffalse
+
 	Is the possibility of readers being preempted in
 	lines~3-4 of Figure~\ref{fig:defer:Free-Running Counter Using RCU}
 	a real problem, in other words, is there a real sequence
@@ -2132,7 +2250,18 @@ variables.
 	If not, why not?
 	If so, what is the sequence of events, and how can the
 	failure be addressed?
+	\fi
 \QuickQuizAnswer{
+	진짜 문제입니다, 그리고 실패를 이끌어내는 일련의 이벤트들이 존재하며,
+	이를 해결하기 위한 방법들이 여럿 있습니다.
+	더 자세한 내용을 위해서는
+	Section~\ref{defer:Nestable RCU Based on Free-Running Counter} 의
+	끝부분의 Quick Quizz 들을 참고하세요.
+	이에 대한 토론을 거기에 두는 이유는 (1) 당신에게 생각할 시간을 더 주고,
+	(2) 그 섹션에서 추가되는 중첩 지원은 카운터를 오버플로우 시키는데
+	걸리는 시간을 훨씬 줄여주기 때문입니다.
+	\iffalse
+
 	It is a real problem, there is a sequence of events leading to
 	failure, and there are a number of possible ways of
 	addressing it.
@@ -2142,6 +2271,7 @@ variables.
 	more time to think about it, and (2) because the nesting support
 	added in that section greatly reduces the time required to
 	overflow the counter.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Nestable RCU Based on Free-Running Counter}
