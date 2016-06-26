@@ -2344,6 +2344,33 @@ variables.
 
 Figure~\ref{fig:defer:Nestable RCU Using a Free-Running Counter}
 (\url{rcu_nest.h} and \url{rcu_nest.c})
+는 하나의 글로벌한 자유롭게 동작하는 카운터에 기반하지만 RCU read-side 크리티컬
+섹션들의 중첩을 허용하는 RCU 구현을 보입니다.
+이 중첩 가능성은
+Figure~\ref{fig:defer:Data for Nestable RCU Using a Free-Running Counter} 에
+보인 정의들을 사용해서 글로벌한 \co{rcu_gp_ctr} 의 아래쪽 비트들을 중첩을
+세는데 사용하도록 전용화 함으로써 이루어집니다.
+이는
+Section~\ref{defer:RCU Based on Free-Running Counter} 에서 보인, 아래쪽의
+하나의 비트를 중첩 단계를 세는데에 사용한 것으로 생각될 수 있는 방법의 일반화된
+방법입니다.
+이를 위해 두개의 C 프리프로세서 매크로인 \co{RCU_GP_CTR_NEST_MASK} 와
+\co{RCU_GP_CTR_BOTTOM_BIT} 이 사용됩니다.
+이 매크로들은 연관되어 있습니다:
+\co{RCU_GP_CTR_NEST_MASK=RCU_GP_CTR_BOTTOM_BIT-1}.
+\co{RCU_GP_CTR_BOTTOM_BIT} 매크로는 중첩 단계를 세기 위해 전용화된 비트들의
+바로 앞에 자리잡은 하나의 비트를 가지고 있으며, \co{RCU_GP_CTR_NEST_MASK} 는
+\co{rcu_gp_ctr} 에서 중첩 단계를 세기 위해 사용되는 지역에 모두 1 비트를 채워
+가지고 있습니다.
+분명하게, 두개의 C 프리프로세서 매크로들은 요구되는 최대의 RCU read-side
+크리티컬 섹션들의 중첩을 허용하기 충분한 만큼의 카운터의 아래쪽 비트들을 가지고
+있어야 하고, 이 구현은 대부분의 어플리케이션들에서는 충분할 만한 크기인 최대
+127 단계의 RCU read-side 크리티컬 섹션 중첩을 위해 일곱개의 비트를 준비해 두고
+있습니다.
+\iffalse
+
+Figure~\ref{fig:defer:Nestable RCU Using a Free-Running Counter}
+(\url{rcu_nest.h} and \url{rcu_nest.c})
 show an RCU implementation based on a single global free-running counter,
 but that permits nesting of RCU read-side critical sections.
 This nestability is accomplished by reserving the low-order bits of the
@@ -2367,6 +2394,25 @@ nesting of RCU read-side critical sections, and this implementation
 reserves seven bits, for a maximum RCU read-side critical-section
 nesting depth of 127, which should be well in excess of that needed
 by most applications.
+\fi
+
+그렇게 해서 만들어진 \co{rcu_read_lock()} 구현은 여전히 합리적인 수준으로
+간단합니다.
+Line~6 에서는 이 쓰레드의 \co{rcu_reader_gp} 인스턴스로의 포인터를 지역 변수인
+\co{rrgp} 로 가져와서 비싼 pthreads thread-local-state API 의 호출 횟수를
+최소화 합니다.
+Line~7 에서는 \co{rcu_reader_gp} 의 현재 값을 또다른 지역 변수인 \co{tmp} 에
+기록하고, line~8 에서 그 아래쪽 비트들이 0인지 확인하는데, 이는 이 쓰레드가
+가장 바깥의 \co{rcu_read_lock()} 을 수행중인지 확인하게 됩니다.
+만약 그렇다면, line~9 에서는 line~7 에서 앞서 가져왔던 현재의 값은 더이상
+유효하지 않을 수 있으므로 글로벌 변수인 \co{rcu_gp_ctr} 를 \co{tmp} 에
+넣습니다.
+어떤 경우든, line~10 에서는 중첩 단계를 증가시키는데, 이는 카운터의 아래쪽
+7개의 비트들에 저장됩니다.
+Line~11 에서는 업데이트된 카운터를 이 쓰레드의 \co{rcu_reader_gp} 인스턴스에
+업데이트하고, 마지막으로 line~12 에서는 RCU read-side 크리티컬 섹션이 앞의
+\co{rcu_read_lock()} 안으로 삐져나오지 않도록 메모리 배리어를 실행합니다.
+\iffalse
 
 The resulting \co{rcu_read_lock()} implementation is still reasonably
 straightforward.
@@ -2385,6 +2431,15 @@ Line~11 stores the updated counter back into this thread's instance
 of \co{rcu_reader_gp}, and, finally, line~12 executes a memory
 barrier to prevent the RCU read-side critical section from bleeding out
 into the code preceding the call to \co{rcu_read_lock()}.
+\fi
+
+달리 말하면, 이 \co{rcu_read_lock()} 구현은 현재의 \co{rcu_read_lock()} 의
+실행이 RCU read-side 크리티컬 섹션 안에서 중첩되어 있지 않다면 글로벌 변수
+\co{rcu_gp_ctr} 의 복사본을 가져오고, 그렇지 않다면 현재 쓰레드의
+\co{rcu_reader_gp} 의 값을 가져옵니다.
+어떤 경우든, 추가적인 중첩 단계를 기록하기 위해 뭐가 가져와졌든 가져온 값을
+증가시키고 그 결과를 현재 쓰레드의 \co{rcu_reader_gp} 인스턴스에 저장합니다.
+\iffalse
 
 In other words, this implementation of \co{rcu_read_lock()} picks up a copy
 of the global \co{rcu_gp_ctr} unless the current invocation of
@@ -2394,6 +2449,19 @@ instance of \co{rcu_reader_gp}.
 Either way, it increments whatever value it fetched in order to record
 an additional nesting level, and stores the result in the current
 thread's instance of \co{rcu_reader_gp}.
+\fi
+
+흥미롭게도, 이 \co{rcu_read_lock()} 의 차이점에도 불구하고,
+\co{rcu_read_unlock()} 의 구현은
+Section~\ref{defer:RCU Based on Free-Running Counter} 에 보인 것과 상당히
+유사합니다.
+Line~19 에서는 RCU read-side 크리티컬 섹션이 뒤따르는 \co{rcu_read_unlock()}
+으로 삐져나오는 걸 막기 위해 메모리 배리어를 실행하고, line~20 에서 이 쓰레드의
+\co{rcu_reader_gp} 의 인스턴스를 값 감소시키는데, 이는 \co{rcu_reader_gp} 의
+아래쪽 비트들에 저장되어 있는 중첩 단계 카운트를 감소시키는 효과를 갖습니다.
+이 기능의 디버깅 버전은 (값을 감소시키기 전에!) 이 아래쪽 비트들이 0이 아닌지
+검사할 수도 있을 겁니다.
+\iffalse
 
 Interestingly enough, despite their \co{rcu_read_lock()} differences,
 the implementation of \co{rcu_read_unlock()}
@@ -2407,6 +2475,17 @@ which has the effect of decrementing the nesting count contained in
 \co{rcu_reader_gp}'s low-order bits.
 Debugging versions of this primitive would check (before decrementing!)
 that these low-order bits were non-zero.
+\fi
+
+\co{synchronize_rcu()} 의 구현은
+Section~\ref{defer:RCU Based on Free-Running Counter} 에 보인 것과 상당히
+유사합니다.
+그 사이엔 두가지 차이가 있습니다.
+첫번째는 line~29 와 30 에서 상수 ``2'' 가 아니라 \co{RCU_GP_CTR_BOTTOM_BIT} 을
+\co{rcu_gp_ctr} 에 더한다는 것이고, 두번째는 line~33 에서의 비교가 조건에
+관계없이 아래쪽 비트를 검사하는게 아니라 \co{RCU_GP_CTR_BOTTOM_BIT} 을 검사하는
+별도의 함수로 추상화 되었다는 점입니다.
+\iffalse
 
 The implementation of \co{synchronize_rcu()} is quite similar to
 that shown in
@@ -2418,6 +2497,15 @@ and the second is that the comparison on line~33 has been abstracted
 out to a separate function, where it checks the bit indicated
 by \co{RCU_GP_CTR_BOTTOM_BIT} instead of unconditionally checking
 the low-order bit.
+\fi
+
+이 방법은
+Section~\ref{defer:RCU Based on Free-Running Counter} 에 보인 것과 거의 유사한
+read-side 성능을 달성하는데, Power5 CPU 의 수와 관계 없이 대략 65~나노세컨드의
+오버헤드를 보입니다.
+업데이트는 이번에도 더 많은 오버헤드를 갖는데, 하나의 Power5 CPU 에서 약
+600~나노세컨드부터 64 CPU 에서 약 100~\emph{마이크로세컨드} 를 갖습니다.
+\iffalse
 
 This approach achieves read-side performance almost equal to that
 shown in
@@ -2427,12 +2515,26 @@ Power5 CPUs.
 Updates again incur more overhead, ranging from about 600~nanoseconds on
 a single Power5 CPU to more than 100~\emph{microseconds} on 64
 such CPUs.
+\fi
 
 \QuickQuiz{}
+	이 복잡한 비트 조정을 하는 대신에 앞의 섹션에서 그랬듯이 별도의
+	쓰레드별 중첩 수준 변수를 갖지 않는 건가요?
+	\iffalse
+
 	Why not simply maintain a separate per-thread nesting-level
 	variable, as was done in previous section, rather than having
 	all this complicated bit manipulation?
+	\fi
 \QuickQuizAnswer{
+	별도의 쓰레드별 변수의 분명한 단순성은 주의를 돌리는 것일 뿐입니다.
+	이 방법은 조심스럽게 오퍼레이션들을 순서맞추는 데에서 훨씬 큰 복잡도를
+	만들어내는데, 특히 시그널 핸들러들이 RCU read-side 크리티컬 섹션들을
+	가질 수 있게 허용되는 경우에서 특히 그렇습니다.
+	하지만 그냥 제 말에서 멈추지 말고, 코딩을 직접 해보시고 그렇게 해서
+	뭐가 나오는지 한번 보시기 바랍니다!
+	\iffalse
+
 	The apparent simplicity of the separate per-thread variable
 	is a red herring.
 	This approach incurs much greater complexity in the guise
@@ -2441,7 +2543,18 @@ such CPUs.
 	critical sections.
 	But don't take my word for it, code it up and see what you
 	end up with!
+	\fi
 } \QuickQuizEnd
+
+이 구현은 RCU read-side 크리티컬 섹션들의 중첩이 이제는 가능하다는 점을
+제외하고는
+Section~\ref{defer:RCU Based on Free-Running Counter} 에서의 것과 동일한
+한계점들로 문제가 될 수 있습니다.
+또한, 32 비트 시스템에서라면, 이 전략은 global \co{rcu_gp_ctr} 변수를
+오버플로우 시키는데 필요한 시간을 더 줄여버릴 수 있습니다.
+다음 섹션은 오버플로우가 일어나는데 필요한 시간을 훨씬 증가시키면서도 read-side
+오버헤드는 훨씬 줄이는 한가지 방법을 보입니다.
+\iffalse
 
 This implementation suffers from the same shortcomings as does that of
 Section~\ref{defer:RCU Based on Free-Running Counter}, except that
@@ -2451,29 +2564,68 @@ required to overflow the global \co{rcu_gp_ctr} variable.
 The following section shows one way to greatly increase the time
 required for overflow to occur, while greatly reducing read-side
 overhead.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Nestable RCU Using a Free-Running Counter} 에
+	보여진 알고리즘에서, 어떻게 하면 전역 변수인 \co{rcu_gp_ctr} 가
+	오버플로우 되는데 걸리는 시간을 두배로 늘릴 수 있을까요?
+	\iffalse
+
 	Given the algorithm shown in
 	Figure~\ref{fig:defer:Nestable RCU Using a Free-Running Counter},
 	how could you double the time required to overflow the global
 	\co{rcu_gp_ctr}?
+	\fi
 \QuickQuizAnswer{
+	한가지 방법은 line~33 과 34 에서의 비교의 규모를 쓰레드별
+	\co{rcu_reader_gp} 변수와 \co{rcu_gp_ctr+RCU_GP_CTR_BOTTOM_BIT} 사이의
+	동일 여부 검사로 바꾸는 게 될겁니다.
+	\iffalse
+
 	One way would be to replace the magnitude comparison on
 	lines~33 and 34 with an inequality check of the per-thread
 	\co{rcu_reader_gp} variable against
 	\co{rcu_gp_ctr+RCU_GP_CTR_BOTTOM_BIT}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	다시, Figure~\ref{fig:defer:Nestable RCU Using a Free-Running Counter}
+	에 보여진 알고리즘에서, 카운터 오버플로우는 치명적인가요?
+	그 이유는 무엇이죠?
+	만약 치명적이라면, 그걸 고치기 위해 뭘 할 수 있을까요?
+	\iffalse
+
 	Again, given the algorithm shown in
 	Figure~\ref{fig:defer:Nestable RCU Using a Free-Running Counter},
 	is counter overflow fatal?
 	Why or why not?
 	If it is fatal, what can be done to fix it?
+	\fi
 \QuickQuizAnswer{
+	실제로 치명적일 수 있습니다.
+	이를 보기 위해, 다음의 일련의 이벤트들을 생각해 봅시다:
+	\iffalse
+
 	It can indeed be fatal.
 	To see this, consider the following sequence of events:
+	\fi
 	\begin{enumerate}
+	\item	Thread~0 가 \co{rcu_read_lock()} 에 들어와 아직 중첩되지 않은
+		상태임을 확인하고 글로벌 변수 \co{rcu_gp_ctr} 의 값을
+		가져옵니다.
+		Thread~0 는 그러고나서 (자신의 쓰레드별 변수 \co{rcu_reader_gp}
+		에 값을 저장하기 전에) 상당히 긴 시간동안 preemption 당합니다.
+	\item	다른 쓰레드들이 반복적으로 \co{synchronize_rcu()} 를 호출해서
+		\co{rcu_gp_ctr} 의 새로운 값이 Thread~0 가 가져왔을 때의 값보다
+		\co{RCU_GP_CTR_BOTTOM_BIT} 적은 값이 됩니다.
+	\item	Thread~0 는 이제 다시 수행을 시작하고, 자신의 쓰레드별 변수인
+		\co{rcu_reader_gp} 에 값을 저장합니다.
+		이 값은 전역변수인 \co{rcu_gp_ctr} 의 현재 값보다
+		\co{RCU_GP_CTR_BOTTOM_BIT + 1} 만큼 큽니다.
+	\iffalse
+
 	\item	Thread~0 enters \co{rcu_read_lock()}, determines
 		that it is not nested, and therefore fetches the
 		value of the global \co{rcu_gp_ctr}.
@@ -2489,6 +2641,23 @@ overhead.
 		The value it stores is
 		\co{RCU_GP_CTR_BOTTOM_BIT+1}
 		greater than that of the global \co{rcu_gp_ctr}.
+	\fi
+	\item	Thread~0 가 RCU 로 보호되는 데이터 원소~A 로의 레퍼런스를
+		얻습니다.
+	\item	Thread~1 이 이제 thread~0 가 방금 레퍼런스를 얻어간 원소~A 를
+		제거합니다.
+	\item	Thread~1 이 \co{synchronize_rcu()} 를 호출해서 글로벌 변수
+		\co{rcu_gp_ctr} 의 값을 \co{RCU_GP_CTR_BOTTOM_BIT} 만큼
+		증가시킵니다.
+		그리고는 모든 쓰레드별 \co{rcu_reader_gp} 변수의 값을
+		검사하지만, thread~0 의 값은 (부정확하게도) 자신이 thread~1 의
+		\co{synchronize_rcu()} 호출 뒤에 시작되었다고 알려서 thread~1
+		은 thread~0 가 RCU read-side 크리티컬 섹션을 완료하기를
+		기다리지 않게 됩니다.
+	\item	Thread~1 은 thread~0 가 여전히 레퍼런스를 가지고 있는 데이터
+		원소~A 를 메모리 해제시켜버리게 됩니다.
+	\iffalse
+
 	\item	Thread~0 acquires a reference to RCU-protected data
 		element~A.
 	\item	Thread~1 now removes the data element~A that thread~0
@@ -2504,7 +2673,19 @@ overhead.
 		section.
 	\item	Thread~1 then frees up data element~A, which thread~0
 		is still referencing.
+	\fi
 	\end{enumerate}
+
+	이 시나리오는
+	Section~\ref{defer:RCU Based on Free-Running Counter} 에서 보인
+	구현에서도 역시 일어날 수 있음에 주의하세요.
+
+	이 문제를 고치는 한가지 방법은 64-bit 카운터를 사용해서 오버플로우에
+	필요한 시간이 컴퓨터 시스템의 일반적인 수행시간을 넘어서도록 하는
+	것입니다.
+	x86 CPU 계열의 최신 CPU 들은 64-bit 카운터들을 \co{cmpxchg64b}
+	인스트럭션을 통해 어토믹하게 조정할 수 있게 함을 알아두세요.
+	\iffalse
 
 	Note that scenario can also occur in the implementation presented in
 	Section~\ref{defer:RCU Based on Free-Running Counter}.
@@ -2515,6 +2696,21 @@ overhead.
 	Note that non-antique members of the 32-bit x86 CPU family
 	allow atomic manipulation of 64-bit counters via the
 	\co{cmpxchg64b} instruction.
+	\fi
+
+	또다른 방법은 비슷한 효과를 얻기 위해 grace period 가 일어나도록
+	허용되는 비율에 제한을 두는 것입니다.
+	예를 들어, \co{synchronize_rcu()} 는 자신이 호출된 마지막 시간을 기록해
+	두고, 그 뒤의 모든 수행은 이 시간을 체크하고 원하는 간격을 유지하는데
+	필요한 만큼 블록될 수 있을 겁니다.
+	예를 들어, 카운터의 아랫쪽 네개의 비트들이 중첩을 위해 전용화 되어
+	있다면, 그리고 grace period 는 초당 열번까지 일어나는 것이 허용되어
+	있다면, 이 카운터가 오버플로우 되는데에는 300일 이상이 걸릴 겁니다.
+	하지만, 이 방법은 이 시스템이 CPU 에 성능이 제한되는 높은 우선순위의
+	리얼타임 쓰레드를 300일 이상 돌리게 될 가능성이 있는 경우에는 도움이
+	되지 않습니다.
+	(아마도 희박한 가능성이지만 먼저 고려해 보는게 최선입니다.)
+	\iffalse
 
 	Another strategy is to limit the rate at which grace periods are
 	permitted to occur in order to achieve a similar effect.
@@ -2531,6 +2727,24 @@ overhead.
 	real-time threads for the full 300 days.
 	(A remote possibility, perhaps, but best to consider it ahead
 	of time.)
+	\fi
+
+	세번째 방법은 이 경우에는 시스템에서 리얼타임 쓰레드를 사용할 수 없도록
+	관리하는 것입니다.
+	이 경우, preemption 당한 프로세스는 우선순위를 높여갈 것이고, 따라서
+	카운터가 오버플로우 날 기회를 얻기 전까지의 수행을 길게 할 것입니다.
+	물론, 이 전략은 리얼 타임 어플리케이션들에는 별로 도움이 되지 않습니다.
+
+	마지막 방법은 \co{rcu_read_lock()} 이 전역 변수 \co{rcu_gp_ctr} 의 값을
+	자신의 쓰레드별 변수 \co{rcu_reader_gp} 마운터에 저장한 후에 다시
+	검사해서 전역 변수 \co{rcu_gp_ctr} 의 새로운 값이 적절하지 않다면 다시
+	일을 시도하는 것입니다.
+	이 방법은 동작하지만, \co{rcu_read_lock()} 에 예측 불가한 실행 시간을
+	가져오게 됩니다.
+	달리 말하며, 당신의 어플리케이션이 카운터가 오버플로우 나기에 충분한
+	시간만큼 preemption 당하면, 당신은 예측 가능한 실행 시간을 기대할 수
+	없을 겁니다!
+	\iffalse
 
 	A third approach is to administratively abolish real-time threads
 	from the system in question.
@@ -2549,6 +2763,7 @@ overhead.
 	On the other hand, if your application is being preempted long
 	enough for the counter to overflow, you have no hope of
 	deterministic execution time in any case!
+	\fi
 
 	% @@@ A fourth approach is rcu_nest32.[hc].
 } \QuickQuizEnd
