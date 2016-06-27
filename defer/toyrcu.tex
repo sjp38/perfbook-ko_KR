@@ -2822,6 +2822,34 @@ overhead.
 
 Figure~\ref{fig:defer:Quiescent-State-Based RCU Read Side}
 (\url{rcu_qs.h})
+는 조용한 상태에 기반한 사용자 레벨 RCU 구현을 만드는데에
+Figure~\ref{fig:defer:Data for Quiescent-State-Based RCU} 에 보인 데이터와 함께
+사용되는 read-side 기능들을 보입니다.
+그림의 line~1-7 에서 볼 수 있듯이, \co{rcu_read_lock()} 과
+\co{rcu_read_unlock()} 기능들은 아무일도 하지 않고, 따라서 인라인 함수로 바뀌고
+최적화 단계에서 아예 사라져서 버릴 거라 예상할 수 있고, 리눅스 커널의 서버
+빌드에서는 그렇습니다.
+이는 조용한-상태-기반의 RCU 구현들은 RCU read-side 크리티컬 섹션들의 양을 앞서
+언급한 조용한 상태들을 사용해서 \emph{어림잡는다는} 사실 때문입니다.
+이러한 각각의 조용한 상태들은 \co{rcu_quiescent_state()} 호출을 포함하는데, 이
+함수는 이 그림의 line~9-15 에 보여져 있습니다.
+확장된 조용한 상태에 들어가는 쓰레드는 (예를 들어, 블록되었을 때) 대신
+\co{rcu_thread_offline()} (line~17-23) 을 호출하고 그로부터 빠져나올 때에는
+\co{rcu_thread_online()} (line~25-28) 을 호출할 수 있습니다.
+그런 식으로, \co{rcu_quiescent_state()} 는 \co{rcu_read_lock()} 과 유사하고
+\co{rcu_thread_offline()} 은 \co{rcu_read_unlock()} 과 유사합니다.
+또한, \co{rcu_quiscent_state()} 는 \co{rcu_thread_online()} 뒤에 곧바로
+\co{rcu_thread_offline()} 이 이어지는 것으로 생각될 수 있습니다.\footnote{
+	비록 이 그림의 코드가 \co{rcu_quiescent_state()} 가
+	\co{rcu_thread_online()} 뒤에 곧바로 \co{rcu_thread_offline()} 이
+	따라오는 것과 같지만, 이 관계는 성능 최적화로 인해 불투명해집니다.}
+RCU read-side 크리티컬 섹션 내에서 \co{rcu_quiescent_state()},
+\co{rcu_thread_offline()}, 또는 \co{rcu_thrad_online()} 을 호출하는 건 금지된
+행위입니다.
+\iffalse
+
+Figure~\ref{fig:defer:Quiescent-State-Based RCU Read Side}
+(\url{rcu_qs.h})
 shows the read-side primitives used to construct a user-level
 implementation of RCU based on quiescent states, with the data shown in
 Figure~\ref{fig:defer:Data for Quiescent-State-Based RCU}.
@@ -2850,6 +2878,22 @@ In addition, \co{rcu_quiescent_state()} can be thought of as a
 	performance optimizations.}
 It is illegal to invoke \co{rcu_quiescent_state()}, \co{rcu_thread_offline()},
 or \co{rcu_thread_online()} from an RCU read-side critical section.
+\fi
+
+\co{rcu_quiescent_state()} 에서, line~11 에서는 이 quiescent state (조용한
+상태) 앞의 (RCU read-side 크리티컬 섹션들을 포함해서) 어떤 코드가 quiescent
+state 앞으로 재배치 되는 것을 막기 위해 메모리 배리어를 칩니다.
+Line~12-13 에서는 글로벌 변수 \co{rcu_gp_ctr} 의 복사본을 가져오는데,
+\co{rcu_gp_ctr} 가 두번 이상 가져와지는 최적화가 만들어지거나 하지 않게
+\co{ACCESS_ONCE()} 를 사용합니다. 그리고 나서 가져온 값에 1을 더하고 쓰레드별
+변수인 \co{rcu_reader_qs_gp} 에 저장해서 모든 동시에 수행되는
+\co{sychronize_rcu()} 인스턴스들은 홀수를 볼 수 있게 해서, 새로운 RCU read-side
+크리티컬 섹션이 시작되었음을 알 수 있게 합니다.
+예전의 RCU read-side 크리티컬 섹션들을 기다리는 \co{synchronize_rcu()} 의
+인스턴스들은 따라서 이것을 무시해도 좋을 것임을 알 수 있게 됩니다.
+마지막으로, line~14 에서는 메모리 배리어를 실행해서 (RCU read-side 크리티컬
+섹션을 포함해서) 뒤따르는 코드가 line~12-13 과 재배치 되는 일을 방지합니다.
+\iffalse
 
 In \co{rcu_quiescent_state()}, line~11 executes a memory barrier
 to prevent any code prior to the quiescent state (including possible
@@ -2868,12 +2912,29 @@ RCU read-side critical sections will thus know to ignore this new one.
 Finally, line~14 executes a memory barrier, which prevents subsequent
 code (including a possible RCU read-side critical section) from being
 re-ordered with the lines~12-13.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Quiescent-State-Based RCU Read Side}
+	의 line~14 에 보인 추가적인 메모리 배리어는 \co{rcu_quiescent_state} 의
+	오버헤드를 많이 늘리지 않을까요?
+	\iffalse
+
 	Doesn't the additional memory barrier shown on line~14 of
 	Figure~\ref{fig:defer:Quiescent-State-Based RCU Read Side},
 	greatly increase the overhead of \co{rcu_quiescent_state}?
+	\fi
 \QuickQuizAnswer{
+	실제로 그렇습니다!
+	따라서 이 RCU 구현을 사용하는 어플리케이션은 \co{rcu_quiescent_state}
+	를 아껴서 사용하고, 대부분의 경우에는 그대신 \co{rcu_read_lock()} 과
+	\co{rcu_read_unlock()} 을 사용해야 합니다.
+
+	하지만, 이 메모리 배리어는 호출자에 의해 실행될 뒤따르는 RCU read-side
+	크리티컬 섹션 전에 다른 쓰레드들이 line~12-13 의 저장 결과들을 볼 수
+	있도록 하기 위해 반드시 필요합니다.
+	\iffalse
+
 	Indeed it does!
 	An application using this implementation of RCU should therefore
 	invoke \co{rcu_quiescent_state} sparingly, instead using
@@ -2884,7 +2945,18 @@ re-ordered with the lines~12-13.
 	other threads will see the store on lines~12-13 before any
 	subsequent RCU read-side critical sections executed by the
 	caller.
+	\fi
 } \QuickQuizEnd
+
+어떤 어플리케이션들은 RCU 를 가끔씩만 쓰지만, 사용할 때에는 매우 자주 사용할
+수도 있습니다.
+그런 어플리케이션들은 RCU 를 사용하기 시작할 때 \co{rcu_thread_online()} 을
+사용하고 더이상 RCU 를 사용하지 않을 때에 \co{rcu_thread_offline()} 을 사용할
+수 있을 겁니다.
+\co{rcu_thread_offline()} 호출과 뒤따르는 \co{rcu_thread_online()} 사이의
+시간은 하나의 확장된 quiescent state 여서, RCU 는 이 시간동안 명시적으로
+quiescent state 가 등록되지는 않을 것이라고 예상할 수 있습니다.
+\iffalse
 
 Some applications might use RCU only occasionally, but use it very heavily
 when they do use it.
@@ -2895,18 +2967,39 @@ The time between a call to \co{rcu_thread_offline()} and a subsequent
 call to \co{rcu_thread_online()} is an extended quiescent state,
 so that RCU will not expect explicit quiescent states to be registered
 during this time.
+\fi
+
+\co{rcu_thrad_offline()} 함수는 쓰레드별 변수 \co{rcu_reader_qs_gp} 변수를
+\co{rcu_gp_ctr} 의 현재 값으로 설정하는데, 이 값은 짝수 값을 가질 겁니다.
+따라서 동시에 수행되는 \co{synchronize_rcu()}  인스턴스들은 이 쓰레드를
+무시해도 됨을 알 것입니다.
+\iffalse
 
 The \co{rcu_thread_offline()} function simply sets the
 per-thread \co{rcu_reader_qs_gp} variable to the current value of
 \co{rcu_gp_ctr}, which has an even-numbered value.
 Any concurrent instances of \co{synchronize_rcu()} will thus know to
 ignore this thread.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Quiescent-State-Based RCU Read Side}
+	의 line~19 와 22 의 메모리 배리어들은 왜 필요한 건가요?
+	\iffalse
+
 	Why are the two memory barriers on lines~19 and 22 of
 	Figure~\ref{fig:defer:Quiescent-State-Based RCU Read Side}
 	needed?
+	\fi
 \QuickQuizAnswer{
+	Line~19 의 메모리 배리어는 \co{rcu_thread_offline()} 에 앞서는 어떤 RCU
+	read-side 크리티컬 섹션들도 컴파일러나 CPU 에 의해 line~20-21 의 값
+	할당 뒤로 재배치 되지 않게 합니다.
+	Line~22 에서의 메모리 배리어는 엄밀하게 말하면 불필요한데,
+	\co{rcu_thrad_offline()} 뒤에 RCU read-side 크리티컬 섹션들을 두는 것은
+	금지된 행위이기 때문입니다.
+	\iffalse
+
 	The memory barrier on line~19 prevents any RCU read-side
 	critical sections that might precede the
 	call to \co{rcu_thread_offline()} won't be reordered by either
@@ -2914,11 +3007,17 @@ ignore this thread.
 	The memory barrier on line~22 is, strictly speaking, unnecessary,
 	as it is illegal to have any RCU read-side critical sections
 	following the call to \co{rcu_thread_offline()}.
+	\fi
 } \QuickQuizEnd
+
+\co{rcu_thread_online()} 은 단순히 \co{rcu_quiescent_state()} 를 호출해서
+연장된 quiescent state 의 종료를 표시합니다.
+\iffalse
 
 The \co{rcu_thread_online()} function simply invokes
 \co{rcu_quiescent_state()}, thus marking the end of the extended
 quiescent state.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -2949,6 +3048,18 @@ quiescent state.
 
 Figure~\ref{fig:defer:RCU Update Side Using Quiescent States}
 (\url{rcu_qs.c})
+는 \co{synchronize_rcu()} 의 구현을 보이는데, 이는 앞 섹션들에서의 것과 상당히
+유사합니다.
+
+이 구현은 \co{rcu_read_lock()}-\co{rcu_read_unlock()} 왕복에 대략
+50~\emph{피코세컨드} 라는 엄청나게 빠른 read-side 기능들을 갖습니다.
+\co{synchronize_rcu()} 의 오버헤드는 단일 CPU 의 Power5 시스템에서
+600~나노세컨드부터 64-CPU 시스템에서 100~마이크로세컨드 까지의 오버헤드를
+갖습니다.
+\iffalse
+
+Figure~\ref{fig:defer:RCU Update Side Using Quiescent States}
+(\url{rcu_qs.c})
 shows the implementation of \co{synchronize_rcu()}, which is
 quite similar to that of the preceding sections.
 
@@ -2958,21 +3069,44 @@ an overhead of roughly 50~\emph{picoseconds}.
 The \co{synchronize_rcu()} overhead ranges from about 600~nanoseconds
 on a single-CPU Power5 system up to more than 100~microseconds on
 a 64-CPU system.
+\fi
 
 \QuickQuiz{}
+	분명히 해두겠는데, 2008 년의 Power 시스템들의 클락 주파수는 상당히
+	높았지만, 5GHz 클락 주파수도 루프가 50~피코세컨드만에 실행되게
+	하는데에는 부족해요!
+	무슨 일이 벌어진 거죠?
+	\iffalse
+
 	To be sure, the clock frequencies of Power
 	systems in 2008 were quite high, but even a 5GHz clock
 	frequency is insufficient to allow
 	loops to be executed in 50~picoseconds!
 	What is going on here?
+	\fi
 \QuickQuizAnswer{
+	측정을 하는 루프는 한쌍의 텅빈 함수들만을 가지고 있으므로, 컴파일러는
+	이것을 최적화해서 없애버립니다.
+	이 측정 루프는 매번의 \co{rcu_quiescent_state()} 호출마다 1,000 번
+	넘어가므로, 이 측정은 한번의 \co{rcu_quiescent_state()} 호출마다 대략
+	천번의 오버헤드를 가진 걸로 치는 셈입니다.
+	\iffalse
+
 	Since the measurement loop contains a pair of empty functions,
 	the compiler optimizes it away.
 	The measurement loop takes 1,000 passes between each call to
 	\co{rcu_quiescent_state()}, so this measurement is roughly
 	one thousandth of the overhead of a single call to
 	\co{rcu_quiescent_state()}.
+	\fi
 } \QuickQuizEnd
+
+하지만, 이 구현은 각 쓰레드가 주기적으로 \co{rcu_quiescent_state()} 를
+호출하거나 연장된 quiescent state 를 위해 \co{rcu_thread_offline()} 을 호출해
+줄것을 필요로 합니다.
+이 함수들을 주기적으로 실행해야 하는 필요성은 이 구현을 특정 타입의 라이브러리
+함수들과 같은 일부 환경에서는 사용하기 어렵게 할 수 있습니다.
+\iffalse
 
 However, this implementation requires that each thread either
 invoke \co{rcu_quiescent_state()} periodically or to invoke
@@ -2980,14 +3114,30 @@ invoke \co{rcu_quiescent_state()} periodically or to invoke
 The need to invoke these functions periodically can make this
 implementation difficult to use in some situations, such as for
 certain types of library functions.
+\fi
 
 \QuickQuiz{}
+	코드가 라이브러리에 있다는 사실이 왜
+	Figure~\ref{fig:defer:Quiescent-State-Based RCU Read Side} 와
+	\ref{fig:defer:RCU Update Side Using Quiescent States} 에 보여진 RCU
+	구현의 사용에 어려움을 가져올 수 있는 건가요?
+	\iffalse
+
 	Why would the fact that the code is in a library make
 	any difference for how easy it is to use the RCU
 	implementation shown in
 	Figures~\ref{fig:defer:Quiescent-State-Based RCU Read Side} and
 	\ref{fig:defer:RCU Update Side Using Quiescent States}?
+	\fi
 \QuickQuizAnswer{
+	라이브러리 함수는 호출자에 대한 제어가 전혀 존재치 않고 따라서 호출자가
+	\co{rcu_quiescent_state()} 를 주기적으로 실행할 것을 강제하지 못합니다.
+	다른 편으로는, 주어진 RCU 로 보호되는 데이터 구조체에 많은 레퍼런스를
+	가지고 있을 수도 있는 라이브러리 함수는 \co{rcu_thrad_online()} 을 매
+	원소마다, \co{rcu_quiescent_state()} 를 주기적으로, 그리고
+	\co{rcu_thread_offline()} 을 종료될 때에 호출할 수도 있을 겁니다.
+	\iffalse
+
 	A library function has absolutely no control over the caller,
 	and thus cannot force the caller to invoke \co{rcu_quiescent_state()}
 	periodically.
@@ -2996,16 +3146,35 @@ certain types of library functions.
 	\co{rcu_thread_online()} upon entry,
 	\co{rcu_quiescent_state()} periodically, and
 	\co{rcu_thread_offline()} upon exit.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 락을 \co{synchronize_rcu()} 전후에 걸쳐 잡고, 같은 락을 RCU
+	read-side 크리티컬 섹션에서 잡으면 어떻게 되나요?
+	이건 데드락이 되어야 할텐데, 하지만 어떻게 어떤 코드도 만들지 않는
+	기능이 데드락 사이클에 참여될 수가 있죠?
+	\iffalse
+
 	But what if you hold a lock across a call to
 	\co{synchronize_rcu()}, and then acquire that same lock within
 	an RCU read-side critical section?
 	This should be a deadlock, but how can a primitive that
 	generates absolutely no code possibly participate in a
 	deadlock cycle?
+	\fi
 \QuickQuizAnswer{
+	RCU read-side 크리티컬 섹션은 둘러싸는 \co{rcu_read_lock()} 과
+	\co{rcu_read_unlock()} 너머로 확장되어서 앞과 뒤의
+	\co{rcu_quiescent_state()} 에 닿음을 알아두시기 바랍니다.
+	이 \co{rcu_quiescent_State} 는 \co{rcu_read_lock()} 을 곧바로 뒤따르는
+	\co{rcu_read_unlock()} 으로 생각될 수 있습니다.
+
+	비록 그렇다 해도, 실제 데드락 자신은 RCU read-side 크리티컬 섹션
+	내에서와 \co{synchronize_rcu()} 에서의 락 획득에 연구되지,
+	\co{rcu_quiescent_state()} 와 연루되지는 않을 겁니다.
+	\iffalse
+
 	Please note that the RCU read-side critical section is in
 	effect extended beyond the enclosing
 	\co{rcu_read_lock()} and \co{rcu_read_unlock()}, out to
@@ -3017,12 +3186,20 @@ certain types of library functions.
 	Even so, the actual deadlock itself will involve the lock
 	acquisition in the RCU read-side critical section and
 	the \co{synchronize_rcu()}, never the \co{rcu_quiescent_state()}.
+	\fi
 } \QuickQuizEnd
+
+또한, 이 구현은 동시의 \co{synchronize_rcu()} 호출이 grace period 를 공유할 수
+있도록 허용하지 않습니다.
+그렇다곤 하나, 이 버전의 RCU 에 기초해서 제품 품질의 RCU 구현을 쉽게 생각해 볼
+수 있을 겁니다.
+\iffalse
 
 In addition, this implementation does not permit concurrent calls
 to \co{synchronize_rcu()} to share grace periods.
 That said, one could easily imagine a production-quality RCU
 implementation based on this version of RCU.
+\fi
 
 \subsubsection{Summary of Toy RCU Implementations}
 \label{defer:Summary of Toy RCU Implementations}
