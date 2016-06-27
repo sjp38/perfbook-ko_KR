@@ -3204,6 +3204,19 @@ implementation based on this version of RCU.
 \subsubsection{Summary of Toy RCU Implementations}
 \label{defer:Summary of Toy RCU Implementations}
 
+여기까지 잘 도착했다면, 축하합니다!
+이제 독자 여러분은 RCU 자체에 대해서만이 아니라 그걸 둘러싸고 있는 소프트웨어
+환경들과 어플리케이션들의 요구사항들에 대해서도 분명한 이해를 가지게 되었을
+겁니다.
+이보다도 더 깊은 이해를 원하는 분들은 제품 품질의 RCU 구현에 대한 설명을
+읽어보시기
+바랍니다~\cite{MathieuDesnoyers2012URCU,PaulEMcKenney2007PreemptibleRCU,PaulEMcKenney2008HierarchicalRCU,PaulEMcKenney2009BloatwatchRCU}.
+
+앞의 섹션들에서는 다양한 RCU 기능들의 바랄법한 속성들을 열거해 보았습니다.
+새로운 RCU 구현을 만들고자 하는 분들이 쉽게 참조해 볼 수 있도록 다음의 리스트를
+제공합니다.
+\iffalse
+
 If you made it this far, congratulations!
 You should now have a much clearer understanding
 not only of RCU itself, but also of the requirements of enclosing
@@ -3216,8 +3229,22 @@ The preceding sections listed some desirable properties of the
 various RCU primitives.
 The following list is provided for easy reference for those wishing to
 create a new RCU implementation.
+\fi
 
 \begin{enumerate}
+\item	Read-side 기능들 (\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 과
+	같은 것들) 과 grace-period 기능들 (\co{synchronize_rcu()} 와
+	\co{call_rcu()} 와 같은 것들) 이 반드시 있어야만 하는데, 그것들은 grace
+	period 의 시작 시점에 존재한 read-side 크리티컬 섹션은 모두 그 grace
+	period 의 종료 전까지는 완료되어야 합니다.
+\item	RCU read-side 기능들은 최소한의 오버헤드만을 가져야 합니다.
+	구체적으로는, 캐시 미스, 어토믹 인스트럭션, 메모리 배리어, 그리고
+	브랜칭과 같은 비싼 오퍼레이션들은 방지되어야 합니다.
+\item	리얼타임 쪽에서의 사용을 위해선 RCU read-side 기능들은
+	$O\left(1\right)$ 의 계산 복잡도를 가져야 합니다.
+	(이는 읽기 쓰레드들은 업데이트 쓰레드들과 동사에 수행됨을 암시합니다.)
+\iffalse
+
 \item	There must be read-side primitives (such as \co{rcu_read_lock()}
 	and \co{rcu_read_unlock()}) and grace-period primitives
 	(such as \co{synchronize_rcu()} and \co{call_rcu()}), such
@@ -3231,6 +3258,22 @@ create a new RCU implementation.
 \item	RCU read-side primitives should have $O\left(1\right)$ computational
 	complexity to enable real-time use.
 	(This implies that readers run concurrently with updaters.)
+\fi
+\item	RCU read-side 기능들은 모든 컨텍스트에서 사용이 가능해야 합니다
+	(리눅스 커널에서는, idle 루프를 제외한 모든 곳에서 사용이 가능합니다).
+	중요한 특수 케이스는 RCU read-side 기능들이 RCU read-side 크리티컬 섹션
+	내부에서 사용되는 것으로, 달리 말하면, RCU read-side 크리티컬 섹션들은
+	중첩될 수 있어야 합니다.
+\item	RCU read-side 기능들은 무조건적으로 수행되어서 실패를 리턴하거나 하지
+	않아야 합니다.
+	이 속성은 굉장히 중요한데, 실패여부 검사는 복잡성을 증가시키고 테스트와
+	검증을 번거롭게 만들기 때문입니다.
+\item	Quiescent state (그리고 grace period) 를 제외한 모든 오퍼레이션은 RCU
+	read-side 크리티컬 섹션 내에서 사용 가능해야 합니다.
+	구체적으로는, I/O 와 같이 취소 불가능한 오퍼레이션들이 사용 가능해야
+	합니다.
+\iffalse
+
 \item	RCU read-side primitives should be usable in all contexts
 	(in the Linux kernel, they are permitted everywhere except in
 	the idle loop).
@@ -3245,6 +3288,18 @@ create a new RCU implementation.
 	period) should be permitted in an RCU read-side critical section.
 	In particular, irrevocable operations such as I/O should be
 	permitted.
+\fi
+\item	RCU 로 보호되는 데이터 구조체는 RCU read-side 크리티컬 섹션에서 실행
+	중일 때에도 업데이트 할 수 있어야 합니다.
+\item	RCU read-side 기능들도 update-side 기능들도 메모리 할당자 설계와
+	구현과는 독립적이어야 하는데, 달리 말해서, 같은 RCU 구현은 특정 데이터
+	구조에 대해 그 데이터 원소들이 어떻게 할당되고 해제되는가에 관계없이 그
+	데이터 구조를 보호할 수 있어야 합니다.
+\item	RCU grace period 는 RCU read-side 크리티컬 섹션들 바깥에서 종료되는
+	쓰레드들에 의해 블록되지 않아야 합니다.
+	(하지만 대부분의 quiescent-state 기반의 구현은 이 필요성을 위반합니다.)
+\iffalse
+
 \item	It should be possible to update an RCU-protected data structure
 	while executing within an RCU read-side critical section.
 \item	Both RCU read-side and update-side primitives should be independent
@@ -3256,13 +3311,30 @@ create a new RCU implementation.
 	halt outside of RCU read-side critical sections.
 	(But note that most quiescent-state-based implementations
 	violate this desideratum.)
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	Grace period 가 RCU read-side 크리티컬 섹션들로 통제된다면, RCU로
+	보호되는 데이터 구조체는 어떻게 RCU read-side 크리티컬 섹션 내에서
+	업데이트 될 수 있을까요?
+	\iffalse
+
 	Given that grace periods are prohibited within RCU read-side
 	critical sections, how can an RCU data structure possibly be
 	updated while in an RCU read-side critical section?
+	\fi
 \QuickQuizAnswer{
+	이 상황이 \co{call_rcu()} 와 같은 비동기적 grace-period 기능들의 존재
+	이유 중 하나입니다.
+	이 기능은 RCU read-side 크리티컬 섹션 내에서 실행될 수도 있고, 이 특정
+	RCU 콜백은 하나의 grace period 가 종료된 이후에 뒤늦게 실행될 것입니다.
+
+	RCU read-side 크리티컬 섹션 내에서 RCU 업데이트를 할 수 있는 능력은
+	상당히 편리할 수 있고, (허구의) reader-writer 락킹에서의 무조건적인
+	read-to-write 업그레이드로 비유될 수 있습니다.
+	\iffalse
+
 	This situation is one reason for the existence of asynchronous
 	grace-period primitives such as \co{call_rcu()}.
 	This primitive may be invoked within an RCU read-side critical
@@ -3273,4 +3345,5 @@ create a new RCU implementation.
 	critical section can be extremely convenient, and is analogous
 	to a (mythical) unconditional read-to-write upgrade for
 	reader-writer locking.
+	\fi
 } \QuickQuizEnd
