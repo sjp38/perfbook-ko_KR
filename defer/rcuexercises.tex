@@ -3,6 +3,15 @@
 \subsection{RCU Exercises}
 \label{sec:defer:RCU Exercises}
 
+이 섹션은 RCU 를 이 책에서 앞서 보인 여러 예제들에 적용하는 내용에 대한
+여러개의 Quick Quizz 들로 구성되어 있습니다.
+각 Quick Quiz 에의 답은 힌트를 일부 제공하고, 또한 그 해법이 자세히 설명되어
+있는 뒤의 섹션으로의 포인터를 담고 있습니다.
+\co{rcu_read_lock()}, \co{rcu_read_unlock()}, \co{rcu_dereference()},
+\co{rcu_assign_pointer()}, 그리고 \co{synchronize_rcu()} 기능들만으로도 이
+문제들에 충분해야 할 겁니다.
+\iffalse
+
 This section is organized as a series of Quick Quizzes that invite you
 to apply RCU to a number of examples earlier in this book.
 The answer to each Quick Quiz gives some hints, and also contains a
@@ -10,8 +19,20 @@ pointer to a later section where the solution is explained at length.
 The \co{rcu_read_lock()}, \co{rcu_read_unlock()}, \co{rcu_dereference()},
 \co{rcu_assign_pointer()}, and \co{synchronize_rcu()} primitives should
 suffice for most of these exercises.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:count:Per-Thread Statistical Counters}
+	(\url{count_end.c})
+	에 보인 통계적 카운터의 구현은 \co{read_count()} 안에서 합계를 구하는
+	것을 보호하기 위해 글로벌 락을 사용했는데 이는 부족한 성능과 음의
+	확장성을 일으켰습니다.
+	\co{read_count()} 가 훌륭한 성능과 좋은 확장성을 제공할 수 있게 하기
+	위해 RCU 를 어떻게 적용해 볼 수 있을까요.
+	(\co{read_count()} 의 확장성은 모든 쓰레드의 카운터들을 스캔해야 한다는
+	필요성으로 인해 제한되어진다는 점을 명심하세요.)
+	\iffalse
+
 	The statistical-counter implementation shown in
 	Figure~\ref{fig:count:Per-Thread Statistical Counters}
 	(\url{count_end.c})
@@ -22,7 +43,19 @@ suffice for most of these exercises.
 	(Keep in mind that \co{read_count()}'s scalability will
 	necessarily be limited by its need to scan all threads'
 	counters.)
+	\fi
 \QuickQuizAnswer{
+	힌트: 글로벌 변수 \co{finalcount} 와 배열 \co{counterp[]} 를 하나의 RCU
+	로 보호되는 구조체 안에 넣으세요.
+	초기화 때, 이 구조체는 할당되고 모두 0과 \co{NULL} 로 설정될 겁니다.
+
+	\co{inc_count()} 함수는 바뀔 필요가 없을 겁니다.
+
+	\co{read_count()} 함수는 \co{final_mutex} 를 잡는 대신에
+	\co{rcu_read_lock()} 를 사용할 것이고, 현재 구조체로의 레퍼런스를
+	얻어오는데에 \co{rcu_dereference()} 를 사용해야 할겁니다.
+	\iffalse
+
 	Hint: place the global variable \co{finalcount} and the
 	array \co{counterp[]} into a single RCU-protected struct.
 	At initialization time, this structure would be allocated
@@ -34,6 +67,20 @@ suffice for most of these exercises.
 	instead of acquiring \co{final_mutex}, and would need to
 	use \co{rcu_dereference()} to acquire a reference to the
 	current structure.
+	\fi
+
+	\co{count_register_thread()} 함수는 이 새로 생성된 쓰레드와 연관된 배열
+	원소를 그 쓰레드의 쓰레드별 \co{counter} 변수로의 레퍼런스로 설정할
+	겁니다.
+
+	\co{count_unregister_thread()} 함수는 새로운 구조체를 할당받고,
+	\co{final_mutex} 를 잡은 후, 기존의 구조체를 새로운 것으로 복사하고,
+	나가는 쓰레드의 \co{counter} 변수를 전체 값에 더하고, 이 \co{counter}
+	변수로의 포인터를 \co{NULL} 로 만든 후, 이 새로운 구조체를 과거의 것의
+	자리에 설치하기 위해 \co{rcu_assign_pointer()} 를 사용한 후,
+	\co{final_mutex} 를 풀고, grace period 를 기다린 후, 마지막으로 기존의
+	구조체를 메모리 해제시켜야 할 것입니다.
+	\iffalse
 
 	The \co{count_register_thread()} function would set the
 	array element corresponding to the newly created thread
@@ -47,6 +94,17 @@ suffice for most of these exercises.
 	use \co{rcu_assign_pointer()} to install the new structure
 	in place of the old one, release \co{final_mutex},
 	wait for a grace period, and finally free the old structure.
+	\fi
+
+	이게 정말 동작할까요?
+	그 이유는 무엇이죠?
+
+	더 자세한 내용을 위해서는
+	page~\pageref{sec:together:RCU and Per-Thread-Variable-Based Statistical Counters}
+	의
+	Section~\ref{sec:together:RCU and Per-Thread-Variable-Based Statistical Counters}
+	를 참고하세요.
+	\iffalse
 
 	Does this really work?
 	Why or why not?
@@ -56,10 +114,22 @@ suffice for most of these exercises.
 	on
 	page~\pageref{sec:together:RCU and Per-Thread-Variable-Based Statistical Counters}
 	for more details.
+	\fi
 } \QuickQuizEnd
 
 
 \QuickQuiz{}
+	Section~\ref{sec:count:Applying Specialized Parallel Counters}
+	는 디바이스들을 제거하기 위해 I/O 액세스들을 카운트하는 일을 처리하는
+	한쌍의 코드 조각들을 보였습니다.
+	이 코드 조각들은 reader-writer 락을 잡아야 하는 이유로 (I/O 를
+	시작하는) 빠른 수행 경로의 높은 오버헤드 문제를 겪었습니다.
+	여기에 훌륭한 성능과 확장성을 가져오기 위해 RCU 를 어떻게 사용할 수
+	있을까요?
+	(I/O 액세스를 하는 일반적인 경우의 첫번째 코드 조각의 성능이 디바이스
+	제거 코드 조각의 것보다 훨씬 더 중요함을 명심하세요.)
+	\iffalse
+
 	Section~\ref{sec:count:Applying Specialized Parallel Counters}
 	showed a fanciful pair of code fragments that dealt with counting
 	I/O accesses to removable devices.
@@ -71,7 +141,17 @@ suffice for most of these exercises.
 	(Keep in mind that the performance of the common-case first
 	code fragment that does I/O accesses is much more important
 	than that of the device-removal code fragment.)
+	\fi
 \QuickQuizAnswer{
+	힌트: 이 reader-writer 락의 read 권한 획득을 RCU read-side 크리티컬
+	섹션들로 바꾸고, device 제거 코드를 이에 맞게 조정하세요.
+	이 문제에 대한 하나의 해결책을 위해선
+	Page~\pageref{sec:together:RCU and Counters for Removable I/O Devices}
+	의
+	Section~\ref{sec:together:RCU and Counters for Removable I/O Devices}
+	를 참고하세요.
+	\iffalse
+
 	Hint: replace the read-acquisitions of the reader-writer lock
 	with RCU read-side critical sections, then adjust the
 	device-removal code fragment to suit.
@@ -81,4 +161,5 @@ suffice for most of these exercises.
 	on
 	Page~\pageref{sec:together:RCU and Counters for Removable I/O Devices}
 	for one solution to this problem.
+	\fi
 } \QuickQuizEnd
