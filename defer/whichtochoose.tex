@@ -59,6 +59,16 @@
 \end{table*}
 
 Table~\ref{tab:defer:Which Deferred Technique to Choose?}
+는 이 챕터에서 소개한 네개의 미뤄두고 처리하기 테크닉들 중 무엇을
+선택해야할지를 돕는 대략적 경험적 법칙을 제공합니다.
+
+``Existence Guarantee'' 행에서 보인 것처럼, 링크된 데이터 원소들에 대한 존재
+보장이 필요하다면 레퍼런스 카운팅, 해저드 포인터, 또는 RCU 를 사용해야 합니다.
+시퀀스 락은 존재 보장을 제공하지 않고, 업데이트의 발견과 업데이트를 마주한
+read-side 크리티컬 섹션의 재시도 기능을 제공합니다.
+\iffalse
+
+Table~\ref{tab:defer:Which Deferred Technique to Choose?}
 provides some rough rules of thumb that can help you choose among the
 four deferred-processing techniques presented in this chapter.
 
@@ -68,6 +78,16 @@ data elements, you must use reference counting, hazard pointers, or RCU.
 Sequence locks do not provide existence guarantees, instead providing
 detection of updates, retrying any read-side critical sections
 that do encounter an update.
+\fi
+
+물론, ``Updates and Readers Progress Concurrently'' 행에서 보인 것처럼, 이런
+업데이트의 발견은 시퀀스 락킹이 업데이트 쓰레드와 읽기 쓰레드가 동시에 진행할
+수는 없게 만듭니다.
+무엇보다, 그런 진행을 방지하는 것은 시퀀스 락킹을 사용하는 첫번째 이유입니다!
+이런 상황은 존재 보장과 업데이트 발견을 제공하기 위해서는 시퀀스 락킹을
+레퍼런스 카운팅, 해저드 포인터, 또는 RCU 와 함께 사용해야 함을 가리킵니다.
+실제로, 리눅스 커널은 경로 탐색을 할 때에 RCU 와 시퀀스 락킹을 함께 사용합니다.
+\iffalse
 
 Of course, as shown in the ``Updates and Readers Progress Concurrently''
 column, this detection of updates implies
@@ -80,6 +100,24 @@ with reference counting, hazard pointers, or RCU in order to provide
 both existence guarantees and update detection.
 In fact, the Linux kernel combines RCU and sequence locking in
 this manner during pathname lookup.
+\fi
+
+``Read-side Overhead'' 행은 이 테크닉들의 대략적인 read-side 오버헤드를
+보입니다.
+레퍼런스 카운팅의 오버헤드는 다양하게 변합니다.
+오버헤드가 적은 경우는, 간단한 어토믹하지 않은 값 증가연산만으로도 충분할 수
+있는데, 적어도 다른 이유로 잡아야만 하는 락의 보호 아래에서 레퍼런스를 잡는
+경우라면 그렇습니다.
+오버헤드가 큰 경우에는 완전히 순서잡힌 어토믹 오퍼레이션이 필요합니다.
+레퍼런스 카운팅은 마주치는 각각의 모든 데이터 원소들에 이 오버헤드를 끼칩니다.
+해저드 포인터는 마주치는 각각의 데이터 원소에 메모리 배리어 오버헤드를 끼치고
+시퀀스 락은 크리티컬 섹션을 실행하고자 하는 각 시도마다 두개의 메모리 배리어
+오버헤드를 만듭니다.
+RCU 구현의 오버헤드는 아예 없는 경우부터 각각의 read-side 크리티컬 섹션에서의
+한쌍의 메모리 배리어까지 다양하고, 따라서 RCU 는 최고의 성능을 제공하는데, 많은
+데이터 원소들을 마주치게 되는 read-side 크리티컬 섹션들에 대해서는 특히
+그렇습니다.
+\iffalse
 
 The ``Read-Side Overhead'' column gives a rough sense of the read-side
 overhead of these techniques.
@@ -97,23 +135,55 @@ The overhead of RCU implementations vary from nothing to that of a pair of
 memory barriers for each read-side critical section, thus providing RCU
 with the best performance, particularly for read-side critical sections
 that traverse many data elements.
+\fi
+
+``Bulk Reference'' 행은 RCU 만이 오버헤드를 일정하게 유지한채 여러 레퍼런스들을
+잡을 수 있음을 이야기합니다.
+시퀀스 락의 항목은 ``N/A'' 라 표기되어 있는데, 다시 말하지만 시퀀스 락은
+레퍼런스를 얻는게 아니라 업데이트를 발견하기 때문입니다.
+\iffalse
 
 The ``Bulk Reference'' column indicates that only RCU is capable of acquiring
 multiple references with constant overhead.
 The entry for sequence locks is ``N/A'' because, again, sequence locks
 detect updates rather than acquiring references.
+\fi
 
 \QuickQuiz{}
+	하지만 레퍼런스 카운팅과 해저드 포인터도 오버헤드를 일정하게 유지한 채
+	여러 데이터 원소들로의 레퍼런스를 얻어올 수 있지 않나요?
+	하나의 레퍼런스 카운트로 여러 데이터 원소들을 취급할 수 있잖아요,
+	그렇죠?
+	\iffalse
+
 	But can't both reference counting and hazard pointers can also acquire
 	a reference to multiple data elements with constant overhead?
 	A single reference count can cover multiple data elements, right?
+	\fi
 \QuickQuizAnswer{
+	거의 그렇죠.
+	``Unconditional Acquisition'' 행에서 보게 되겠지만, 레퍼런스 카운팅도
+	해저드 포인터도 무조건적인 레퍼런스 획득을 제공하지 않고, 따라서 겹치는
+	업데이트들이 있는 상태에서 레퍼런스를 획득하는 것은 일정하지 않은
+	오버헤드를 가질 수 있습니다.
+	\iffalse
+
 	Almost.
 	As we will see in the ``Unconditional Acquisition'' column,
 	neither reference counting
 	nor hazard pointers provide unconditional acquisition of references,
 	so acquiring a reference can have non-constant overhead in the face
 	of conflicting updates.
+	\fi
+
+	또한, 하나의 레퍼런스 카운트를 여러 데이터 항목들을 취급하는데 사용하는
+	것은 상당한 중요성을 가질 수 있는데, 예를 들어, 모두에 대한 레퍼런스가
+	풀려지기 전까지는 어떤 데이터도 삭제할 수가 없습니다.
+	이는 더 복잡한 데이터 항목 정리 코드로 귀결될 것이고, RCU 와 같은
+	경쟁상대에 비해 메모리 사용량을 더 늘릴 수도 있을 겁니다.
+	달리 말하자면, 증가된 메모리 사용량은 특히나 RCU 의 결과가 아니고
+	일반적으로 대량의 레퍼런스 카운트 획득으로 인한 결과입니다.
+	\iffalse
 
 	In addition, using a single reference count to cover multiple
 	data items can have severe consequences, for example, you cannot
@@ -124,7 +194,22 @@ detect updates rather than acquiring references.
 	In other words, the increased memory footprint is a consequence
 	not of RCU in particular, but of bulk reference-count acquisition
 	in general.
+	\fi
 } \QuickQuizEnd
+
+``Low Memory Footprint'' 행은 어떤 테크닉들이 적은 메모리 사용량을 보이는지
+이야기 합니다.
+이 행은 결국 ``Bulk Reference'' 행을 비추고 있게 되어버렸습니다: 많은 수의
+데이터 원소들에의 레퍼런스를 획득하는 능력은 이 모든 데이터 원소들이 반드시
+존재해야 함을 암시하는데, 이는 일부 경우에서는 많은 메모리 사용량을 암시합니다.
+예를 들어, 한 쓰레드가 동시에 긴 RCU read-side 크리티컬 섹션을 수행하고 있는
+동안 다른 쓰레드는 많은 수의 데이터 원소들을 삭제할 수 있습니다.
+Read-side 크리티컬 섹션은 잠재적으로 새로 삭제된 데이터 원소들로의 레퍼런스를
+얻을 수 있기 때문에, 이런 모든 데이터 원소들은 그 크리티컬 섹션의 전체 기간동안
+유지되어야만 합니다.
+반면, 레퍼런스 카운팅과 해저드 포인터는 동시의 읽기 쓰레드들에 의해 실제로
+레퍼런스되어 있는 데이터 원소들만을 유지할 것입니다.
+\iffalse
 
 The ``Low Memory Footprint'' column indicates which techniques enjoy low
 memory footprint.
@@ -140,6 +225,15 @@ to any of the newly deleted data elements, all those data elements must
 be retained for the full duration of that critical section.
 In contrast, reference counting and hazard pointers would retain only
 those specific data elements actually referenced by concurrent readers.
+\fi
+
+하지만, 이 적은 메모리 사용량 이점은 ``Unconditional Acquisition'' 행에 보여진
+비용을 요구하게 됩니다.
+이를 살펴보기 위해, 커다란 링크된 데이터 구조체가 존재하고 레퍼런스 카운팅이나
+해저드 포인터를 사용하는 읽기 쓰레드 (Thread~A 라 해보죠) 가 구조체의 중간에
+위치한 격리된 데이터 원소로의 레퍼런스를 쥐는고 있다고 해봅시다.
+다음과 같은 일련의 이벤트들을 생각해 봅시다:
+\iffalse
 
 However, this low-memory-footprint advantage comes at a price, as shown
 in the ``Unconditional Acquisition'' column.
@@ -148,8 +242,25 @@ reference-counting or hazard-pointer reader (call it Thread~A)
 holds a reference to
 an isolated data element in the middle of that structure.
 Consider the following sequence of events:
+\fi
 
 \begin{enumerate}
+\item	Thread~B 는 Thread~A 에 의해 레퍼런스 되고 있는 데이터 원소를
+	삭제합니다.
+	이 레퍼런스로 인해, 이 데이터 원소는 메모리에서 해제될 수 없습니다.
+\item	Thread~B 가 Thread~A 에 인접한 모든 데이터 원소들을 삭제합니다.
+	이 데이터 원소들로의 레퍼런스는 존재하지 않으므로 이것들은 모두 곧바로
+	메모리에서 해제됩니다.
+	Thread~A 의 데이터 원소는 이미 제거되었으므로, 그것의 다른 원소로의
+	포인터들은 업데이트 되지 않습니다.
+\item	Thread~A 의 데이터 원소의 다른 부분으로의 모든 포인터들은 이제
+	메모리에서 해제된 것들로의 레퍼런스이므로 안전하게 따라가볼 수
+	없습니다.
+\item	따라서 레퍼런스 카운팅이나 해저드 포인터 구현은 Thread~A 가 자신의
+	데이터 원소로부터 발산된 포인터로의 어떤 레퍼런스를 획득하려 하는
+	시도는 실패하게 될 수밖에 없을 겁니다.
+\iffalse
+
 \item	Thread~B removes the data element referenced by Thread~A.
 	Because of this reference, the data element cannot yet be freed.
 \item	Thread~B removes all the data elements adjacent to the one
@@ -164,12 +275,34 @@ Consider the following sequence of events:
 	has no choice but to fail any attempt by Thread~A to acquire
 	a reference via any of the pointers emanating from its data
 	element.
+\fi
 \end{enumerate}
+
+요약해서, 정확한 레퍼런스 추적을 제공하는 모든 미뤄두고 처리하기 테크닉들은
+레퍼런스를 획득하려는 시도가 실패할 수 있음에 준비되어 있어야만 합니다.
+따라서, RCU 의 메모리 사용량 단점은 사용하기 쉽다는 장점을 의미하는데, 즉, RCU
+읽기 쓰레드들은 획득 실패를 처리할 필요가 없습니다.
+\iffalse
 
 In short, any defered-processing technique that offers precise tracking
 of references must also be prepared to fail attempts to acquire references.
 Therefore, RCU's memory-footprint disadvantage implies an ease-of-use
 advantage, namely that RCU readers need not deal with acquisition failure.
+\fi
+
+이런 메모리 사용량, 정확히는 추적, 과 획득 실패 사이의 미묘한 긴장감은 리눅스
+커널 안에서는 일부 경우 RCU 와 레퍼런스 카운터를 함께 사용하는 것으로
+해결되기도 합니다.
+RCU 는 잠깐 사용되는 레퍼런스들에 사용되는데, 이는 RCU read-side 크리티컬
+섹션들이 짧을 수 있음을 의미합니다.
+이런 짧은 RCU read-side 크리티컬 섹션들은 곧 연관된 RCU grace period 들 역시
+짧을 수 있어서, 메모리 사용량을 제한할 수 있음을 의미합니다.
+긴 시간 사용될 수 있는 레퍼런스를 필요로 하는 일부 데이터 원소들을 위해서는
+레퍼런스 카운팅이 사용됩니다.
+이 말이 의미하는 바는 레퍼런스 획득 실패의 복잡도를 처리하는건 그런 일부 데이터
+원소들에서만 필요시 된다는 뜻입니다:  대량의 레퍼런스 획득은 RCU 덕분에
+고려되지 않습니다.
+\iffalse
 
 This tension between memory footprint, precise tracking, and acquisition
 failures is sometimes resolved within the Linux kernel by combining use
@@ -183,6 +316,23 @@ counting is used.
 This means that the complexity of reference-acquisition failure only
 needs to be dealt with for those few data elements:  The bulk of
 the reference acquisitions are unconditional, courtesy of RCU.
+\fi
+
+마지막으로, ``Non-Blocking Updates'' 행은 해저드 포인터는 non-blocking
+업데이트를 제공할 수 있음을 이야기합니다~\cite{MagedMichael04a,HerlihyLM02}.
+레퍼런스 카운팅은 구현에 따라서 그럴수도 그러지 않을수도 있습니다.
+하지만, 시퀀스 락킹은 update-side 락 때문에 non-blocking 업데이트를 제공할 수
+없습니다.
+RCU 업데이트 쓰레드들은 읽기 쓰레드를 기다려야만 하는데, 이 역시 non-blocking
+업데이트의 규칙을 완전히 벗어납니다.
+하지만, 블록킹 오퍼레이션은 메모리를 해제하기 위한 기다림 뿐인 상황이
+존재하는데, 많은 경우에 이런 상황은 non-blocking 만큼이나 좋은
+상황입니다~\cite{MathieuDesnoyers2012URCU}.
+
+이런 테크닉들을 조합해서 또는 각각 사용하는 경험이 더 쌓여감에 따라서 이 섹션에
+놓인 경험적 법칙은 수정될 수 있을 겁니다.
+하지만, 이 섹션은 현재로써는 최선의 결과를 반영하고 있습니다.
+\iffalse
 
 Finally, the ``Non-Blocking Updates'' column shows that hazard pointers
 can provide non-blocking updates~\cite{MagedMichael04a,HerlihyLM02}.
@@ -199,3 +349,4 @@ As more experience is gained using these techniques, both separately
 and in combination, the rules of thumb laid out in this section will
 need to be refined.
 However, this section does reflect the current state of the art.
+\fi
