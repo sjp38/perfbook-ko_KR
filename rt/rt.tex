@@ -85,7 +85,7 @@ In contrast, the definition of hard real time is quite definite.
 After all, a given system either always meets its deadlines or it
 doesn't.
 Unfortunately, a strict application of this definition would mean that
-there can never be any hard real time systems.
+there can never be any hard real-time systems.
 The reason for this is fancifully depicted in
 Figure~\ref{fig:rt:Hard Real-Time Response Guarantee, Meet Hammer}.
 It is true that you could construct a more robust system, perhaps even
@@ -104,7 +104,7 @@ Then again, perhaps it is unfair to blame the software for what is clearly
 not just a hardware problem, but a bona fide big-iron hardware problem
 at that.\footnote{
 	Or, given modern hammers, a big-steel problem.}
-This suggests that we define hard-real-time software as software that
+This suggests that we define hard real-time software as software that
 will always meet its deadlines, but only in the absence of a hardware
 failure.
 Unfortunately, failure is not always an option, as fancifully depicted in
@@ -147,7 +147,7 @@ The next section therefore takes a more real-world approach.
 \subsection{Real-World Real Time}
 \label{sec:rt:Real-World Real Time}
 
-Although sentences like ``Hard real time systems \emph{always} meet
+Although sentences like ``Hard real-time systems \emph{always} meet
 their deadlines!'' can be catchy and are no doubt easy to memorize,
 something else is needed for real-world real-time systems.
 Although the resulting specifications are
@@ -181,7 +181,7 @@ that the hardware designers met through use of physical seals.
 Another old college friend worked on a computer-controlled system
 that sputtered ingots of titanium using an industrial-strength arc
 in a vacuum.
-From time to time, the arc would decide that is was bored with its path
+From time to time, the arc would decide that it was bored with its path
 through the ingot of titanium and choose a far shorter and more
 entertaining path to ground.
 As we all learned in our physics classes, a sudden shift in the flow of
@@ -281,17 +281,32 @@ real-time systems.
 \QuickQuiz{}
 	But given the results from queueing theory, won't low utilization
 	merely improve the average response time rather than improving
-	the worst-case response time, which is the only response time
-	that many real-time systems care about?
+	the worst-case response time?
+	And isn't worst-case response time all that most
+	real-time systems really care about?
 \QuickQuizAnswer{
-	It depends.
-	One situation where the worst-case response time is improved by
-	lowering utilization is where there is only one real-time thread
-	using the device in question, but where all the threads use
-	the device in question.
-	Restricting use of that device to the single real-time thread
-	eliminates queueing delays, at least assuming that the
-	real-time thread refrains from overdriving that device.
+	Yes, but...
+
+	Those queueing-theory results assume infinite ``calling populations'',
+	which in the Linux kernel might correspond to an infinite number
+	of tasks.
+	As of mid-2016, no real system supports an infinite of tasks,
+	so results assuming infinite calling populations should be
+	expected to have less-than-infinite applicability.
+
+	Other queueing-theory results have \emph{finite}
+	calling populations, which feature sharply bounded response
+	times~\cite{Hillier86}.
+	These results better model real systems, and these models do
+	predict reductions in both average and worst-case response
+	times as utilizations decrease.
+	These results can be extended to model concurrent systems that use
+	synchronization mechanisms such as
+	locking~\cite{BjoernBrandenburgPhD}.
+
+	In short, queueing-theory results that accurately describe
+	real-world real-time systems show that worst-case response
+	time decreases with decreasing utilization.
 } \QuickQuizEnd
 
 Of course, maintaining sufficiently low utilization requires great
@@ -354,7 +369,7 @@ high probability of completing without time-consuming retransmissions,
 while that same networking operation over a lossy WiFi network might
 have a much higher probability of missing tight deadlines.
 Similarly, a read from a tightly coupled solid-state disk (SSD) could be
-expected to complete much more quickly that that same read to an old-style
+expected to complete much more quickly than that same read to an old-style
 USB-connected rotating-rust disk drive.\footnote{
 	Important safety tip:  Worst-case response times from USB devices
 	can be extremely long.
@@ -555,7 +570,7 @@ strategy and planning portion of the application runs on the multiple
 remaining CPUs.
 Strategy and planning activities might include statistical analysis,
 periodic calibration, user interface, supply-chain activities, and
-perparation.
+preparation.
 For an example of high-compute-load preparation activities, think back
 to the veneer-peeling application discussed in
 Section~\ref{sec:rt:Real-World Real-Time Specifications}.
@@ -678,10 +693,10 @@ the next section.
 
 There are a number of strategies that may be used to implement a
 real-time system.
-One approach is to port a general-purpose non-realtime OS on top
+One approach is to port a general-purpose non-real-time OS on top
 of a special purpose real-time operating system (RTOS), as shown in
 Figure~\ref{fig:rt:Linux Ported to RTOS}.
-The green ``Linux Process'' boxes represent non-realtime processes
+The green ``Linux Process'' boxes represent non-real-time processes
 running on the Linux kernel, while the yellow ``RTOS Process''
 boxes represent real-time processes running on the RTOS.
 
@@ -880,7 +895,7 @@ Figure~\ref{fig:rt:Timer Wheel}
 for an unrealistically small eight-bit clock.
 Here, each array has 16 elements, so the low-order four bits of the time
 (currently \co{0xf}) index the low-order (rightmost) array, and the
-next four bits (currently (0x1) index the next level up.
+next four bits (currently \co{0x1}) index the next level up.
 Thus, we have two arrays each with 16 elements, for a total of 32 elements,
 which, taken together, is much smaller than the 256-element array that
 would be required for a single array.
@@ -1149,9 +1164,8 @@ sections~\cite{DinakarGuniguntala2008IBMSysJ}.
 Otherwise, long RCU read-side critical sections would result in
 excessive real-time latencies.
 
-\begin{figure}[tb]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
  1 void __rcu_read_lock(void)
  2 {
  3   current->rcu_read_lock_nesting++;
@@ -1174,8 +1188,11 @@ excessive real-time latencies.
 20     t->rcu_read_lock_nesting = 0;
 21   }
 22 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tb]
+\centering
+\theverbbox
 \caption{Preemptible Linux-Kernel RCU}
 \label{fig:rt:Preemptible Linux-Kernel RCU}
 \end{figure}
@@ -1183,7 +1200,7 @@ excessive real-time latencies.
 A preemptible RCU implementation was therefore added to the Linux kernel.
 This implementation avoids the need to individually track the state of
 each and every task in the kernel by keeping lists of tasks that have
-been preempted within their current RCU read-side critical section.
+been preempted within their current RCU read-side critical sections.
 A grace period is permitted to end: (1)~Once all CPUs have completed any
 RCU read-side critical sections that were in effect before the start
 of the current grace period and
@@ -1293,7 +1310,7 @@ kernel simply by running a single CPU-bound user-mode thread on a
 given CPU, avoiding all causes of interference.
 Although the reality is of course more complex, it is becoming
 possible to do just that,
-courtesy of the \co{NO_HZ_FULL} implementaion led by
+courtesy of the \co{NO_HZ_FULL} implementation led by
 Frederic Weisbecker~\cite{JonCorbet2013NO-HZ-FULL} that has been
 accepted into version 3.10 of the Linux kernel.
 Nevertheless, considerable care is required to properly set up such
@@ -1312,7 +1329,7 @@ for the system to communicate with the outside world.
 One way of resolving this conflict between OS jitter and maintaining
 contact with the outside world is to reserve a small number of
 housekeeping CPUs, and to force all interrupts to these CPUs.
-The \co{Documentation/IRQ-affinity.txt} file in the Linux source tree
+The \path{Documentation/IRQ-affinity.txt} file in the Linux source tree
 describes how to direct device interrupts to specified CPU,
 which as of early 2015 involves something like the following:
 
@@ -1340,7 +1357,7 @@ initiation take place on housekeeping CPUs, that special kernel
 Kconfig or boot parameters be selected in order to direct work away from
 the worker CPUs, or that worker CPUs never enter the kernel.
 Specific per-kthread advice may be found in the Linux kernel source
-\co{Documentation} directory at \co{kernel-per-CPU-kthreads.txt}.
+\path{Documentation} directory at \path{kernel-per-CPU-kthreads.txt}.
 
 A third source of OS jitter in the Linux kernel for CPU-bound threads
 running at real-time priority is the scheduler itself.
@@ -1360,15 +1377,15 @@ This can be done as follows:
 You will of course need to be running as root to execute this command,
 and you will also need to carefully consider the Spiderman principle.
 One way to minimize the risks is to offload interrupts and
-kernel threads/daemons from all CPUs running CPU-bound realtime
+kernel threads/daemons from all CPUs running CPU-bound real-time
 threads, as described in the paragraphs above.
 In addition, you should carefully read the material in the
-\co{Documentation/scheduler} directory.
-The material in the \co{sched-rt-group.txt} file is particularly
-important, especially if you using are the \co{cgroups} real-time features
+\path{Documentation/scheduler} directory.
+The material in the \path{sched-rt-group.txt} file is particularly
+important, especially if you are using the \co{cgroups} real-time features
 enabled by the \co{CONFIG_RT_GROUP_SCHED} Kconfig parameter, in which
 case you should also read the material in the
-\co{Documentation/cgroups} directory.
+\path{Documentation/cgroups} directory.
 
 A fourth source of OS jitter comes from timers.
 In most cases, keeping a given CPU out of the kernel will prevent
@@ -1440,7 +1457,7 @@ need for delta process accounting and the need to inform kernel subsystems
 It also prevents CPUs running processes with POSIX CPU timers enabled
 from entering adaptive-ticks mode.
 Additional limitations, tradeoffs, and configuration advice may be
-found in \co{Documentation/timers/NO_HZ.txt}.
+found in \path{Documentation/timers/NO_HZ.txt}.
 
 An eighth source of OS jitter is page faults.
 Because most Linux implementations use an MMU for memory protection,
@@ -1455,18 +1472,20 @@ A ninth source of OS jitter is unfortunately the hardware and firmware.
 It is therefore important to use systems that have been designed for
 real-time use.
 OSADL runs long-term tests of systems, so referring to their
-website ((\url{http://osadl.org/}) can be helpful.
+website (\url{http://osadl.org/}) can be helpful.
 
-\begin{figure}[tb]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
  1 cd /sys/kernel/debug/tracing
  2 echo 1 > max_graph_depth
  3 echo function_graph > current_tracer
  4 # run workload
  5 cat per_cpu/cpuN/trace
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tb]
+\centering
+\theverbbox
 \caption{Locating Sources of OS Jitter}
 \label{fig:rt:Locating Sources of OS Jitter}
 \end{figure}
@@ -1699,9 +1718,8 @@ or about 9,000 degrees of rotation per second, which translates to
 We therefore need to schedule the fuel injection to within a time
 interval of about 100 microseconds.
 
-\begin{figure}[tb]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
  1 if (clock_gettime(CLOCK_REALTIME, &timestart) != 0) {
  2   perror("clock_gettime 1");
  3   exit(-1);
@@ -1714,8 +1732,11 @@ interval of about 100 microseconds.
 10   perror("clock_gettime 2");
 11   exit(-1);
 12 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tb]
+\centering
+\theverbbox
 \caption{Timed-Wait Test Program}
 \label{fig:rt:Timed-Wait Test Program}
 \end{figure}
@@ -1782,9 +1803,8 @@ in fields imaginatively named \co{a}, \co{b}, and \co{c}.
 Otherwise, \co{cur_cal} points to a dynamically allocated
 structure providing the current calibration values.
 
-\begin{figure}[tb]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
  1 struct calibration {
  2   short a;
  3   short b;
@@ -1820,15 +1840,18 @@ structure providing the current calibration values.
 33   free(p);
 34   return true;
 35 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tb]
+\centering
+\theverbbox
 \caption{Real-Time Calibration Using RCU}
 \label{fig:rt:Real-Time Calibration Using RCU}
 \end{figure}
 
 Figure~\ref{fig:rt:Real-Time Calibration Using RCU}
 shows how RCU can be used to solve this problem.
-Lookups are deterministic, as shown in \co{alc_control()}
+Lookups are deterministic, as shown in \co{calc_control()}
 on lines~9-15, consistent with real-time requirements.
 Updates are more complex, as shown by \co{update_cal()}
 on lines~17-35.

@@ -76,7 +76,7 @@ zero overhead.
 
 	Yes and no.
 	Although seqlock readers can run concurrently with
-	seqlock writers, whenever this happens, the {\tt read\_seqretry()}
+	seqlock writers, whenever this happens, the \co{read_seqretry()}
 	primitive will force the reader to retry.
 	This means that any work done by a seqlock reader running concurrently
 	with a seqlock updater will be discarded and redone.
@@ -137,9 +137,8 @@ summarizes RCU fundamentals.
 \subsubsection{Publish-Subscribe Mechanism}
 \label{sec:defer:Publish-Subscribe Mechanism}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 struct foo {
   2   int a;
   3   int b;
@@ -154,8 +153,11 @@ summarizes RCU fundamentals.
  12 p->b = 2;
  13 p->c = 3;
  14 gp = p;
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Data Structure Publication (Unsafe)}
 \label{fig:defer:Data Structure Publication (Unsafe)}
 \end{figure}
@@ -388,8 +390,8 @@ Therefore, the \co{rcu_assign_pointer()} and
 primitives have been embedded in special RCU variants of Linux's
 list-manipulation API.
 Linux has two variants of doubly linked list, the circular
-{\tt struct list\_head} and the linear
-{\tt struct hlist\_head}/{\tt struct hlist\_node} pair.
+\co{struct list_head} and the linear
+\co{struct hlist_head}/\co{struct hlist_node} pair.
 The former is laid out as shown in
 Figure~\ref{fig:defer:Linux Circular Linked List},
 where the green (leftmost) boxes represent the list header and the blue
@@ -399,9 +401,8 @@ Figure~\ref{fig:defer:Linux Linked List Abbreviated},
 which shows only the non-header (blue) elements.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 struct foo {
   2   struct list_head *list;
   3   int a;
@@ -417,8 +418,11 @@ which shows only the non-header (blue) elements.
  13 p->b = 2;
  14 p->c = 3;
  15 list_add_rcu(&p->list, &head);
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{RCU Data Structure Publication}
 \label{fig:defer:RCU Data Structure Publication}
 \end{figure}
@@ -478,9 +482,9 @@ this same entry.
 	것 같은데, 이걸 무엇이 방지해 주나요?
 	\iffalse
 
-	What prevents the {\tt list\_for\_each\_entry\_rcu()} from
+	What prevents the \co{list_for_each_entry_rcu()} from
 	getting a segfault if it happens to execute at exactly the same
-	time as the {\tt list\_add\_rcu()}?
+	time as the \co{list_add_rcu()}?
 	\fi
 \QuickQuizAnswer{
 	리눅스가 돌아가는 모든 시스템에서 포인터로의 로드와 스토어는 모두
@@ -499,10 +503,10 @@ this same entry.
 	the same time as a load from that same pointer, the load will return
 	either the initial value or the value stored, never some bitwise
 	mashup of the two.
-	In addition, the {\tt list\_for\_each\_entry\_rcu()} always proceeds
+	In addition, the \co{list_for_each_entry_rcu()} always proceeds
 	forward through the list, never looking back.
-	Therefore, the {\tt list\_for\_each\_entry\_rcu()} will either see
-	the element being added by {\tt list\_add\_rcu()} or it will not,
+	Therefore, the \co{list_for_each_entry_rcu()} will either see
+	the element being added by \co{list_add_rcu()} or it will not,
 	but either way, it will see a valid well-formed list.
 	\fi
 } \QuickQuizEnd
@@ -538,9 +542,8 @@ in the same way lists are, as shown in
 Figure~\ref{fig:defer:Linux Linked List Abbreviated}.
 \fi
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 struct foo {
   2   struct hlist_node *list;
   3   int a;
@@ -556,8 +559,11 @@ Figure~\ref{fig:defer:Linux Linked List Abbreviated}.
  13 p->b = 2;
  14 p->c = 3;
  15 hlist_add_head_rcu(&p->list, &head);
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{RCU {\tt hlist} Publication}
 \label{fig:defer:RCU hlist Publication}
 \end{figure}
@@ -588,37 +594,13 @@ circular list:
 \scriptsize
 \begin{verbatim}
   1 rcu_read_lock();
-  2 hlist_for_each_entry_rcu(p, q, head, list) {
+  2 hlist_for_each_entry_rcu(p, head, list) {
   3   do_something_with(p->a, p->b, p->c);
   4 }
   5 rcu_read_unlock();
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
-
-\QuickQuiz{}
-	{\tt list\_for\_each\_entry\_rcu()} 에서는 한개면 되었던 포인터가 왜
-	{\tt hlist\_for\_each\_entry\_rcu()} 에서는 두개나 넘겨줘야 하는거죠?
-	\iffalse
-
-	Why do we need to pass two pointers into
-	{\tt hlist\_for\_each\_entry\_rcu()}
-	when only one is needed for {\tt list\_for\_each\_entry\_rcu()}?
-	\fi
-\QuickQuizAnswer{
-	hlist 에서는 헤드를 만나는 대신에 NULL 체크를 할 필요가 있기
-	때문입니다.
-	(하나의 포인터만 사용하는 {\tt hlist\_for\_each\_entry\_rcu()} 를
-	한번 구현해 보세요.
-	만약 좋은 해결책을 찾는다면, 정말 좋은 일일 겁니다!)
-	\iffalse
-
-	Because in an hlist it is necessary to check for
-	NULL rather than for encountering the head.
-	(Try coding up a single-pointer {\tt hlist\_for\_each\_entry\_rcu()}.
-	If you come up with a nice solution, it would be a very good thing!)
-	\fi
-} \QuickQuizEnd
 
 \begin{table*}[tb]
 \begin{center}
@@ -792,9 +774,8 @@ RCU to wait for readers:
 \fi
 \end{enumerate}
 
-\begin{figure}[tbp]
 { \scriptsize
-\begin{verbatim}
+\begin{verbbox}
   1 struct foo {
   2   struct list_head *list;
   3   int a;
@@ -816,8 +797,11 @@ RCU to wait for readers:
  19 list_replace_rcu(&p->list, &q->list);
  20 synchronize_rcu();
  21 kfree(p);
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[tbp]
+\centering
+\theverbbox
 \caption{Canonical RCU Replacement Example}
 \label{fig:defer:Canonical RCU Replacement Example}
 \end{figure}
@@ -1244,9 +1228,8 @@ versions of the list active at a given time.
 	Figure~\ref{fig:defer:Concurrent RCU Deletion}.
 	\fi
 
-\begin{figure}[htbp]
-{ \centering
-\begin{verbatim}
+{
+\begin{verbbox}
   1 spin_lock(&mylock);
   2 p = search(head, key);
   3 if (p == NULL)
@@ -1257,8 +1240,11 @@ versions of the list active at a given time.
   8   synchronize_rcu();
   9   kfree(p);
  10 }
-\end{verbatim}
+\end{verbbox}
 }
+\begin{figure}[htbp]
+\centering
+\theverbbox
 \caption{Concurrent RCU Deletion}
 \label{fig:defer:Concurrent RCU Deletion}
 \end{figure}
@@ -1428,7 +1414,7 @@ algorithms:
 	\iffalse
 
 	How can RCU updaters possibly delay RCU readers, given that the
-	{\tt rcu\_read\_lock()} and {\tt rcu\_read\_unlock()}
+	\co{rcu_read_lock()} and \co{rcu_read_unlock()}
 	primitives neither spin nor block?
 	\fi
 \QuickQuizAnswer{
