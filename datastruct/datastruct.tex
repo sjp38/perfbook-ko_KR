@@ -305,6 +305,28 @@ offers excellent scalability.
 
 Figure~\ref{fig:datastruct:Hash-Table Data Structures}
 (\path{hash_bkt.c})
+는 chaing 과 bucket 별 락킹을 사용하는 간단한 고정 크기 해시 테이블에 사용되는
+데이터 구조들을 보이고 있고,
+Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram} 는 그것들이
+어떻게 함께 동작하는지 보이고 있습니다.
+(Figure~\ref{fig:datastruct:Hash-Table Data Structures} 의 line~11-14 의)
+\co{hashtab} 구조체는
+(Figure~\ref{fig:datastruct:Hash-Table Data Structures} 의 line~6-9 의)
+\co{ht_bucket} 구조체들을 네개 가지고 있으며, \co{->ht_nbuckets} 필드로 이
+bucket 들의 갯수를 조절합니다.
+그런 각각의 bucket 은 리스트 헤더 \co{->htb_head} 와 락 \co{->htb_lock} 을
+갖습니다.
+이 리스트 헤더들은
+(Figure~\ref{fig:datastruct:Hash-Table Data Structures} 의 line~1-4 의)
+\co{->ht_elem} 구조체들을 \co{->hte_next} 필드를 이용해 연결하고, 각각의
+\co{ht_elem} 구조체는 또한 연관된 원소의 해시 값을 \co{->hte_hash} 필드에
+저장해 둡니다.
+\co{ht_elem} 구조체는 이 해시 테이블에 위치한 더 큰 구조체의 안에 포함될 수도
+있는데, 이런 경우의 이 큰 구조체는 복잡한 키를 가질 겁니다.
+\iffalse
+
+Figure~\ref{fig:datastruct:Hash-Table Data Structures}
+(\path{hash_bkt.c})
 shows a set of data structures used in a simple fixed-sized hash
 table using chaining and per-hash-bucket locking, and
 Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram}
@@ -325,10 +347,17 @@ the corresponding element's hash value in the \co{->hte_hash} field.
 The \co{ht_elem} structure would be included in the larger structure
 being placed in the hash table, and this larger structure might contain
 a complex key.
+\fi
+
+Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram}
+에 보인 다이어그램에서 bucket~0 는 두개의 원소를 가지고 있고 bucket~2 는 하나의
+원소를 가지고 있습니다.
+\iffalse
 
 The diagram shown in
 Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram}
 has bucket~0 with two elements and bucket~2 with one.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -356,6 +385,16 @@ has bucket~0 with two elements and bucket~2 with one.
 \end{figure}
 
 Figure~\ref{fig:datastruct:Hash-Table Mapping and Locking}
+는 매핑과 락킹 함수들을 보입니다.
+Line~1 과 2 는 \co{HASH2BKT()} 매크로를 보이는데, 이 매크로는 해시 값으로부터
+연관된 \co{ht_bucket} 구조체로의 매핑을 합니다.
+이 매크로는 간단한 모듈로 연산을 사용합니다: 더 적극적인 해싱이 필요하다면, 이
+함수의 호출자는 키로부터 해시 값을 매핑할 때 이를 구현해야 합니다.
+남아있는 두 함수들은 특정 해시 값에 연관된 \co{->htb_lock} 을 각각 획득하고
+해제합니다.
+\iffalse
+
+Figure~\ref{fig:datastruct:Hash-Table Mapping and Locking}
 shows mapping and locking functions.
 Lines~1 and~2 show the macro \co{HASH2BKT()}, which maps from a hash value
 to the corresponding \co{ht_bucket} structure.
@@ -363,6 +402,7 @@ This macro uses a simple modulus: if more aggressive hashing is required,
 the caller needs to implement it when mapping from key to hash value.
 The remaining two functions acquire and release the \co{->htb_lock}
 corresponding to the specified hash value.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -397,6 +437,22 @@ corresponding to the specified hash value.
 \end{figure}
 
 Figure~\ref{fig:datastruct:Hash-Table Lookup}
+는 \co{hashtab_lookup()} 을 보이는데, 이 함수는 특정 해시 값과 키를 가지고 있는
+원소가 존재한다면 그 원소로의 포인터를, 그렇지 않다면 \co{NULL} 을 리턴합니다.
+이 함수는 해시 값과 그 키로의 포인터를 받는데 이는 이 함수의 사용자들이 임의의
+키와 임의의 해시 함수를 사용할 수 있게 하며, \co{qsort()} 에서와 비슷하게
+\co{cmp()} 를 통해 넘겨지는 키 비교 함수를 사용할 수 있게 하기 때문입니다.
+Line~11 은 해시 값으로부터 그에 연관된 bucket 으로의 포인터를 매핑해 줍니다.
+Line~12-19 의 루프를 통한 각각의 수행은 bucket 의 해시 체인의 원소 하나를
+조사합니다.
+Line~15 에서는 해시 값이 들어맞는지 보고, 그렇지 않다면 line~16 에서 다음
+원소로 넘어갑니다.
+Line~17 에서는 실제 키가 맞는지 확인해보고, 그렇다면 line~18 에서 그 원소로의
+포인터를 리턴합니다.
+어떤 원소도 들어맞지 않는다면, line~20 에서 \co{NULL} 을 리턴합니다.
+\iffalse
+
+Figure~\ref{fig:datastruct:Hash-Table Lookup}
 shows \co{hashtab_lookup()},
 which returns a pointer to the element with the specified hash and key if it
 exists, or \co{NULL} otherwise.
@@ -413,12 +469,26 @@ proceeds to the next element.
 Line~17 checks to see if the actual key matches, and if so,
 line~18 returns a pointer to the matching element.
 If no element matches, line~20 returns \co{NULL}.
+\fi
 
 \QuickQuiz{}
+	하지만 Figure~\ref{fig:datastruct:Hash-Table Lookup} 의 line~15-18
+	에서의 두번의 비교는 키가 unsigned long 에 들어맞는 경우라면
+	비효율적이지 않나요?
+	\iffalse
+
 	But isn't the double comparison on lines~15-18 in
 	Figure~\ref{fig:datastruct:Hash-Table Lookup} inefficient
 	in the case where the key fits into an unsigned long?
+	\fi
 \QuickQuizAnswer{
+	실제로 그렇습니다!
+	하지만, 해시 테이블들은 상당히 자주 키에 unsigned long 에 들어맞아야 할
+	이유가 없는 문자열과 같은 정보를 저장하기도 합니다.
+	해시 테이블 구현을 키가 항상 unsigned long 에 들어맞는 경우에 맞춰
+	간소화 시키는 것은 독자 여러분의 연습으로 두겠습니다.
+	\iffalse
+
 	Indeed it is!
 	However, hash tables quite frequently store information with
 	keys such as character strings that do not necessarily fit
@@ -426,6 +496,7 @@ If no element matches, line~20 returns \co{NULL}.
 	Simplifying the hash-table implementation for the case where
 	keys always fit into unsigned longs is left as an exercise
 	for the reader.
+	\fi
 } \QuickQuizEnd
 
 { \scriptsize
@@ -454,6 +525,19 @@ If no element matches, line~20 returns \co{NULL}.
 \end{figure}
 
 Figure~\ref{fig:datastruct:Hash-Table Modification}
+는 \co{hashtab_add()} 와 \co{hashtab_del()} 함수들을 보이는데, 이 함수들은 각각
+해시 테이블로부터 원소를 더하고 삭제합니다.
+
+\co{hashtab_add()} 함수는 단순히 원소의 해시 값을 line~6 에서 설정하고 line~7
+과 8 에서 연관된 bucket 에 이 원소를 집어넣습니다.
+\co{hashtab_del()} 함수는 hash chain 리스트의 이중 연결의 원리 덕에 단순히
+무엇이든 원소가 속해 있는 hash chain 으로부터 자신을 제거합니다.
+이 두 함수들을 수행하기 전에, 호출자는 다른 어떤 쓰레드도 같은 bucket 을
+접근하거나 수정하고 있지 않음을 분명히 해야 하는데, 예를 들어
+\co{hashtab_lock()} 을 미리 호출할 수 있을 겁니다.
+\iffalse
+
+Figure~\ref{fig:datastruct:Hash-Table Modification}
 shows the \co{hashtab_add()} and \co{hashtab_del()} functions
 that add and delete elements from the hash table, respectively.
 
@@ -467,6 +551,7 @@ Before calling either of these two functions, the caller is required to
 ensure that no other thread is accessing
 or modifying this same bucket, for example, by invoking
 \co{hashtab_lock()} beforehand.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -503,6 +588,19 @@ or modifying this same bucket, for example, by invoking
 \end{figure}
 
 Figure~\ref{fig:datastruct:Hash-Table Allocation and Free}
+는 \co{hashtab_alloc()} 과 \co{hashtab_free()} 를 보이는데, 이 함수들은 각각
+해시 테이블 할당과 해제를 합니다.
+할당은 line~7-9 에서의 필요한 메모리 할당으로 시작합니다.
+Line~10 에서 메모리가 무족하다는 걸 알게 된다면 line~11 에서 호출자에게
+\co{NULL} 을 리턴합니다.
+그렇지 않다면, line~12 에서는 bucket 들의 갯수를 초기화하고, line~13-16 의
+루프는 bucket 각각을 초기화 하는데, line~14 에서의 chain 리스트 헤더와 line~15
+에서의 락 초기화를 포함합니다.
+마지막으로, line~17 에서는 이 새로 할당된 해시 테이블로의 포인터를 리턴합니다.
+Line~20-23 에서의 \co{hashtab_free()} 함수는 단순합니다.
+\iffalse
+
+Figure~\ref{fig:datastruct:Hash-Table Allocation and Free}
 shows \co{hashtab_alloc()} and \co{hashtab_free()},
 which do hash-table allocation and freeing, respectively.
 Allocation begins on lines~7-9 with allocation of the underlying memory.
@@ -513,6 +611,7 @@ spanning lines~13-16 initializes the buckets themselves,
 including the chain list header on line~14 and the lock on line~15.
 Finally, line~17 returns a pointer to the newly allocated hash table.
 The \co{hashtab_free()} function on lines~20-23 is straightforward.
+\fi
 
 \subsection{Hash-Table Performance}
 \label{sec:datastruct:Hash-Table Performance}
