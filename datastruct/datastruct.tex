@@ -624,6 +624,19 @@ The \co{hashtab_free()} function on lines~20-23 is straightforward.
 \label{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo}
 \end{figure}
 
+여덟개의 2GHz
+Intel\textsuperscript\textregistered
+Xeon\textsuperscript\textregistered
+CPU 를 사용한 시스템에서 bucket 별 락을 사용하는 해시 테이블을 1024개의 bucket
+을 사용한 성능 결과가
+Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's
+Zoo} 에 있습니다.
+이 성능은 거의 선형적으로 증가합니다만, 8개의 CPU 만 사용함에도 이상적인 성능
+기준의 절반을 넘지 못합니다.
+이것은 락 획득과 해제가 하나의 CPU 에서는 캐시 미스를 내지 않지만, 두개 이상의
+CPU 에서는 캐시 미스를 내기 때문입니다.
+\iffalse
+
 The performance results for an eight-CPU 2GHz
 Intel\textsuperscript\textregistered
 Xeon\textsuperscript\textregistered
@@ -634,6 +647,7 @@ of the ideal performance level, even at only eight CPUs.
 Part of this shortfall is due to the fact that the lock acquisitions and
 releases incur no cache misses on a single CPU, but do incur misses
 on two or more CPUs.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -643,12 +657,28 @@ on two or more CPUs.
 \label{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, 60 CPUs}
 \end{figure}
 
+그리고 CPU 의 수가 커져갈수록 상황은 더 나빠져가는데, 이를
+Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, 60 CPUs}
+가 보이고 있습니다.
+여기선 이상적 성능을 위한 선을 추가적으로 봉리 필요도 없습니다: 9개 이상의 CPU
+에서의 성능은 끔찍합니다.
+이는 적당한 수의 CPU 이상으로 CPU 를 늘리는 것의 위험성을 분명하게 강조합니다.
+\iffalse
+
 And things only get worse with larger number of CPUs, as can be seen in
 Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, 60 CPUs}.
 We do not need an additional line to show ideal performance: The performance
 for nine CPUs and beyond is worse than abysmal.
 This clearly underscores the dangers of extrapolating performance from a
 modest number of CPUs.
+\fi
+
+물론, 이렇게 성능이 떨어지는 것은 bucket 의 수가 부족해서일 수도 있습니다.
+일단, 우리는 각 bucket 을 전체 cache line 에 맞아 떨어지도록 패딩을 넣지
+않았고, 따라서 하나의 캐시 라인에 여러 bucket 들이 존재할 겁니다.
+이로 인해 9개 CPU 에서부터 캐시 쓰래싱이 시작되었을 수 있습니다.
+당연하게도 이는 bucket 의 수를 늘리는 것으로 테스트 해볼 수 있을 겁니다.
+\iffalse
 
 Of course, one possible reason for the collapse in performance might be
 that more hash buckets are needed.
@@ -657,11 +687,25 @@ there are a number of hash buckets per cache line.
 It is possible that the resulting cache-thrashing comes into play at
 nine CPUs.
 This is of course easy to test by increasing the number of hash buckets.
+\fi
 
 \QuickQuiz{}
+	단순히 bucket 들의 수를 늘리는 대신에 이미 있는 bucket 들을 캐시에 정렬
+	시키는게 더 낫지 않을까요?
+	\iffalse
+
 	Instead of simply increasing the number of hash buckets,
 	wouldn't it be better to cache-align the existing hash buckets?
+	\fi
 \QuickQuizAnswer{
+	이에 대한 답은 상당히 많은 것들에 의존적입니다.
+	만약 해시 테이블이 bucket 마다 많은 수의 원소를 가지고 있었다면, bucket
+	들의 수를 늘리는게 분명 나을 겁니다.
+	한편으로는, 만약 해시 테이블에 가해지는 로드가 적었다면, 이에 대한 답은
+	하드웨어, 해시 함수의 효율성, 그리고 워크로드에 의존적일 겁니다.
+	관심있는 독자들은 실험을 해보시기 바랍니다.
+	\iffalse
+
 	The answer depends on a great many things.
 	If the hash table has a large number of elements per bucket, it
 	would clearly be better to increase the number of hash buckets.
@@ -669,6 +713,7 @@ This is of course easy to test by increasing the number of hash buckets.
 	the answer depends on the hardware, the effectiveness of the
 	hash function, and the workload.
 	Interested readers are encouraged to experiment.
+	\fi
 } \QuickQuizEnd
 
 
@@ -680,6 +725,16 @@ This is of course easy to test by increasing the number of hash buckets.
 \label{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets}
 \end{figure}
 
+하지만,
+Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets},
+에서 볼 수 있듯이, bucket 들의 수를 늘리는 것이 실제로 성능을 어느정도
+증가시키기는 하지만, 확장성은 여전히 끔찍합니다.
+특히, 아홉개 이상의 CPU 들에서는 여전히 현격한 성능 저하를 볼 수 있습니다.
+더 나아가서, 8,192 개 bucket 에서 16,384 개의 bucket 으로 넘어가는것부터는
+더이상 성능이 늘어나지도 않습니다.
+분명 뭔가가 잘못되어 있습니다.
+\iffalse
+
 However, as can be seen in
 Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets},
 although increasing the number of buckets does increase performance somewhat,
@@ -688,6 +743,20 @@ In particular, we still see a sharp dropoff at nine CPUs and beyond.
 Furthermore, going from 8,192 buckets to 16,384 buckets produced almost
 no increase in performance.
 Clearly something else is going on.
+\fi
+
+문제는 이 시스템이
+Table~\ref{tab:datastruct:NUMA Topology of System Under Test} 에 보인 것처럼
+CPU~0-7 과 32-39 는 첫번째 소켓에 위치하는 멀티 소켓 시스템이라는 점입니다.
+따라서, 처음 여덟개 CPU 에 국한되어 돌아가는 테스트는 상당히 잘 동작하지만,
+소켓~0 의 CPU~0-7 과 소켓~1 의 CPU~8 이 관여되는 테스트에서는 데이터를 소켓
+너머로 주고받는 오버헤드가 생겨납니다.
+이는
+Section~\ref{sec:cpu:Hardware System Architecture} 에서 보인 것처럼,
+성능을 상당히 저하시킬 수 있습니다.
+짧게 말해서, 커다란 멀티 소켓 시스템에서는 완전한 파티셔닝에 더해서 메모리
+참조의 높은 로컬리티를 필요로 합니다.
+\iffalse
 
 The problem is that this is a multi-socket system, with CPUs~0-7
 and~32-39 mapped to the first socket as shown in
@@ -700,13 +769,34 @@ This can severely degrade performance, as was discussed in
 Section~\ref{sec:cpu:Hardware System Architecture}.
 In short, large multi-socket systems require good locality of reference
 in addition to full partitioning.
+\fi
 
 \QuickQuiz{}
+	Schr\"odinger 의 동물원 어플리케이션의 소켓을 넘어가면서 보이는 음의
+	확장성을 가지고 생각해보면, 어플리케이션의 복사본을 여럿 만들어서
+	각각의 복사본이 전체 동물의 부분집합만을 가지고 하나의 소켓 위에서만
+	각자 돌도록 하는 건 어떨까요?
+	\iffalse
+
 	Given the negative scalability of the Schr\"odinger's
 	Zoo application across sockets, why not just run multiple
 	copies of the application, with each copy having a subset
 	of the animals and confined to run on a single socket?
+	\fi
 \QuickQuizAnswer{
+	그렇게 해볼 수 있습니다!
+	사실, 이 아이디어를 커다란 클러스터 시스템으로 확장할 수도 있는데, 각
+	어플리케이션 복사본을 클러스터의 각 노드에 수행시키는 형식으로
+	말입니다.
+	이 방법은 ``sharding'' 이라 불리며, 실제로 커다란 웹 기반의 상점들에서
+	상당히 많이 사용되는
+	방법입니다~\cite{DeCandia:2007:DAH:1323293.1294281}.
+
+	하지만, 멀티소켓 시스템에서 소켓별로 분할을 하려 한다면, 별개의 더 작고
+	싼 단일 소켓 시스템들을 사서 각각의 데이터베이스 족각을 그 시스템들
+	각각에서 수행시키는게 어떻겠어요?
+	\iffalse
+
 	You can do just that!
 	In fact, you can extend this idea to large clustered systems,
 	running one copy of the application on each node of the cluster.
@@ -718,7 +808,25 @@ in addition to full partitioning.
 	a multisocket system, why not buy separate smaller and cheaper
 	single-socket systems, and then run one shard of the database
 	on each of those systems?
+	\fi
 } \QuickQuizEnd
+
+지금까지 논의된 Schr\"odinger's-zoo 수행의 한가지 핵심적 특성은 이것들이 모두
+읽기만 했다는 것입니다.
+이는 락 획득이 초래한 캐시 미스들로 인해 발생한 성능 하락을 더욱 심하게
+만듭니다.
+이 아래에 깔려 있는 해시 테이블 자체에 대해 업데이트를 하지 않더라도, 메모리에
+쓰기를 하기 위한 비용은 여전히 지불하고 있는 것입니다.
+물론, 이 해시 테이블이 절대 업데이트 되지 않는다면, 상호 배타성을 완전히 제거할
+수 있을 겁니다.
+이 방법은 상당히 단순하고, 따라서 독자들의 연습으로 남겨두겠습니다.
+하지만 결국은 일어나는 업데이트가 있다 하더라도, 쓰기를 막는 것은 캐시 미스를
+막을 것이고, 이는 읽기가 대부분인 데이터의 복사본을 모든 캐시에 만들어두는
+것으로 메모리 참조의 로컬리티를 높여줄 수 있을 것입니다.
+
+따라서 다음 섹션에서는 읽기가 대부분이지만 업데이트가 가끔씩이지만 언제든
+일어날 수 있는 경우를 위한 최적화들을 알아보겠습니다.
+\iffalse
 
 One key property of the Schr\"odinger's-zoo runs discussed thus far is that
 they are all read-only.
@@ -736,6 +844,7 @@ the caches, which in turn promotes locality of reference.
 
 The next section therefore examines optimizations that can be carried out in
 read-mostly cases where updates are rare, but could happen at any time.
+\fi
 
 \begin{table}
 \begin{center}
