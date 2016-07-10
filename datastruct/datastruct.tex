@@ -1412,6 +1412,16 @@ not recommended for production use.
 \subsection{RCU-Protected Hash Table Discussion}
 \label{sec:datastruct:RCU-Protected Hash Table Discussion}
 
+RCU 와 해저드 포인터를 사용한 구현들로부터 얻어지는 한가지 결론은 두개의 동시에
+수행되는 읽기 쓰레듣들은 한 고양이의 상태에 서로 다른 의견을 가질 수 있다는
+겁니다.
+예를 들어, 한 읽기 쓰레드는 고양이가 삭제되기 직전에 그 고양이의 데이터로의
+포인터를 얻어오지만, 또다른 읽기 쓰레드는 똑같은 포인터를 삭제 직후에 얻어올
+수도 있습니다.
+첫번째 읽기 쓰레드는 고양이가 살아있다고 믿겠지만, 두번째 읽기 쓰레드는
+고양이가 죽었다고 생각할 겁니다.
+\iffalse
+
 One consequence of the RCU and hazard-pointer implementations is
 that a pair of concurrent readers might disagree on the state of
 the cat.
@@ -1420,6 +1430,13 @@ the cat's data structure just before it was removed, while another
 reader might have fetched this same pointer just afterwards.
 The first reader would then believe that the cat was alive, while
 the second reader would believe that the cat was dead.
+\fi
+
+물론, 이 상황은 Schr\"odinger 의 고양이에 적합합니다만, 이는 평범한 양자가 아닌
+고양이에도 상당히 합리적인 일임이 드러납니다.
+
+동물이 정확히 언제 태어나고 죽었는지 판단하는건 불가능하기 때문입니다.
+\iffalse
 
 Of course, this situation is completely fitting for Schr\"odinger's
 cat, but it turns out that it is quite reasonable for normal
@@ -1427,6 +1444,17 @@ non-quantum cats as well.
 
 The reason for this is that it is impossible to determine exactly
 when an animal is born or dies.
+\fi
+
+이를 분명히 하기 위해, 고양이의 죽음을 맥박으로 판단한다고 생각해 봅시다.
+이는 죽음을 판단하기 위해선 마지막 맥박으로부터 얼마나 오래 기다려야 하는지에
+대한 질문을 만듭니다.
+딱 1 밀리세컨드만 기다리는건 분명 웃기는 짓인데, 그렇게 되면 건강하게 살아있는
+고양이도 1초 동안에도 여러번 죽은 것으로 판단될 것이기 때문입니다---그리고선
+부활하겠죠---.
+한달을 기다리는 것도 똑같이 웃긴 짓일텐데, 그렇게 되면 가여운 고양이의 죽음이
+냄새로도 분명히 알 수 있게 될테니까요.
+\iffalse
 
 To see this, let's suppose that we detect a cat's death by heartbeat.
 This raise the question of exactly how long we should wait after the
@@ -1437,6 +1465,7 @@ resurrected---more than once every second.
 It is equally ridiculous to wait a full month, because by that time
 the poor cat's death would have made itself very clearly known
 via olfactory means.
+\fi
 
 \begin{figure}[htb]
 \begin{center}
@@ -1445,6 +1474,18 @@ via olfactory means.
 \caption{Even Veterinarians Disagree!}
 \ContributedBy{Figure}{fig:datastruct:Even Veterinarians Disagree}{Melissa Broussard}
 \end{figure}
+
+동물의 심장은 수초동안 멈췄다가 다시 도작할 수 있으므로, 죽음의 인식과 잘못된
+알람의 가능성 사이의 트레이드오프가 있습니다.
+두명의 전문가도 마지막 맥박으로부터 얼마나 기다려야 죽음을 판단할 수 있는지에
+대해선 의견이 갈릴 수 있습니다.
+예를 들어, 한 전문가는 마지막 맥박으로부터 30초 후에 죽음을 판단할 수 있는
+반면, 다른 전문가는 1분을 기다려서야 인식할 수 있습니다.
+이런 경우, 두명의 전문가는
+Figure~\ref{fig:datastruct:Even Veterinarians Disagree} 에 그린 것처럼 마지막
+맥박으로부터 30초가 지난 후 30초 동안은 그 고양이의 상태에 대해 이견을 가질
+것입니다.
+\iffalse
 
 Because an animal's heart can stop for some seconds and then start up
 again, there is a tradeoff between timely recognition of death and
@@ -1459,6 +1500,16 @@ In this case, the two veterinarians would disagree on the state of the
 cat for the second period of thirty seconds following the last heartbeat,
 as fancifully depicted in
 Figure~\ref{fig:datastruct:Even Veterinarians Disagree}.
+\fi
+
+물론, Heisenberg 는 이런 종류의 불확실성과 함께 살아가야 한다고
+가르쳤고~\cite{WeinerHeisenberg1927Uncertain}, 이는 컴퓨팅 하드웨어와
+소프트웨어 역시 비슷하게 동작하기 때문에 좋은 일입니다.
+예를 들어, 컴퓨팅 하드웨어의 일부 부분이 고장났는지 어떻게 아시나요?
+종종 시간적으로 응답을 하지 않을때가 있죠.
+고양이의 맥박처럼, 이는 하드웨어가 고장난건지 아닌지에 대한 불확실성의 기간을
+만들어냅니다.
+\iffalse
 
 Of course, Heisenberg taught us to live with this sort of
 uncertainty~\cite{WeinerHeisenberg1927Uncertain}, which is a good
@@ -1468,6 +1519,22 @@ has failed?
 Often because it does not respond in a timely fashion.
 Just like the cat's heartbeat, this results in a window of
 uncertainty as to whether or not the hardware has failed.
+\fi
+
+더 나아가서, 대부분의 컴퓨팅 시스템은 바깥 세상의 것들과 상호 동작하도록
+만들어졌습니다.
+따라서 이 바깥 세상의 것들과의 일관성은 무엇보다 중요합니다.
+하지만,
+page~\pageref{fig:defer:Response Time of RCU vs. Reader-Writer Locking} 의
+Figure~\ref{fig:defer:Response Time of RCU vs. Reader-Writer Locking}
+에서 봤듯이 증가되는 내부의 일관성은 외부의 일관성의 비용을 비싸게 만들 수
+있습니다.
+RCU 와 해저드 포인터와 같은 테크닉들은 향상된 외부 일관성을 얻기 위해 내부
+일관성을 약간 포기합니다.
+
+요약해서, 내부의 일관성은 모든 문제 상황에서 자연적인 부분은 아니고, 종종 성능,
+확장성, 외부 일관성, 그리고 그런 것들 모두의 측면에서 커다란 비용을 만듭니다.
+\iffalse
 
 Furthermore, most computing systems are intended to interact with
 the outside world.
@@ -1484,6 +1551,7 @@ internal consistency to attain improved external consistency.
 In short, internal consistency is not a natural part of all problem domains,
 and often incurs great expense in terms of performance,
 scalability, external consistency, or all of the above.
+\fi
 
 \section{Non-Partitionable Data Structures}
 \label{sec:datastruct:Non-Partitionable Data Structures}
