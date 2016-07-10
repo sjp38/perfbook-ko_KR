@@ -34,12 +34,19 @@
 struct route_entry {
 	struct rcu_head rh;
 	struct cds_list_head re_next;
-	unsigned long re_addr;
-	unsigned long re_interface;
+	unsigned long addr;
+	unsigned long iface;
+	int re_freed;
 };
 
 CDS_LIST_HEAD(route_list);
 DEFINE_SPINLOCK(routelock);
+
+static void re_free(struct route_entry *rep)
+{
+	ACCESS_ONCE(rep->re_freed) = 1;
+	free(rep);
+}
 
 /*
  * Look up a route entry, return the corresponding interface. 
@@ -51,8 +58,10 @@ unsigned long route_lookup(unsigned long addr)
 
 	rcu_read_lock();
 	cds_list_for_each_entry_rcu(rep, &route_list, re_next) {
-		if (rep->re_addr == addr) {
-			ret = rep->re_interface;
+		if (rep->addr == addr) {
+			ret = rep->iface;
+			if (ACCESS_ONCE(rep->re_freed))
+				abort();
 			rcu_read_unlock();
 			return ret;
 		}
@@ -71,8 +80,9 @@ int route_add(unsigned long addr, unsigned long interface)
 	rep = malloc(sizeof(*rep));
 	if (!rep)
 		return -ENOMEM;
-	rep->re_addr = addr;
-	rep->re_interface = interface;
+	rep->addr = addr;
+	rep->iface = interface;
+	rep->re_freed = 0;
 	spin_lock(&routelock);
 	cds_list_add_rcu(&rep->re_next, &route_list);
 	spin_unlock(&routelock);
@@ -83,7 +93,8 @@ static void route_cb(struct rcu_head *rhp)
 {
 	struct route_entry *rep = container_of(rhp, struct route_entry, rh);
 
-	free(rep);
+	ACCESS_ONCE(rep->re_freed) = 1;
+	re_free(rep);
 }
 
 /*
@@ -95,7 +106,7 @@ int route_del(unsigned long addr)
 
 	spin_lock(&routelock);
 	cds_list_for_each_entry(rep, &route_list, re_next) {
-		if (rep->re_addr == addr) {
+		if (rep->addr == addr) {
 			cds_list_del_rcu(&rep->re_next);
 			spin_unlock(&routelock);
 			call_rcu(&rep->rh, route_cb);
@@ -124,7 +135,7 @@ void route_clear(void)
 	spin_unlock(&routelock);
 	synchronize_rcu();
 	cds_list_for_each_entry_safe(rep, rep1, &junk, re_next)
-		free(rep);
+		re_free(rep);
 }
 
 

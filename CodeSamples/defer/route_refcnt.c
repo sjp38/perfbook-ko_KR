@@ -25,12 +25,19 @@
 struct route_entry {
 	atomic_t re_refcnt;
 	struct route_entry *re_next;
-	unsigned long re_addr;
-	unsigned long re_interface;
+	unsigned long addr;
+	unsigned long iface;
+	int re_freed;
 };
 
 struct route_entry route_list;
 DEFINE_SPINLOCK(routelock);
+
+static void re_free(struct route_entry *rep)
+{
+	ACCESS_ONCE(rep->re_freed) = 1;
+	free(rep);
+}
 
 /*
  * Look up a route entry, return the corresponding interface. 
@@ -48,13 +55,15 @@ retry:
 	rep = NULL;
 	do {
 		if (rep && atomic_dec_and_test(&rep->re_refcnt))
-			free(rep);
+			re_free(rep);
 		rep = ACCESS_ONCE(*repp);
 		if (rep == NULL)
 			return ULONG_MAX;
 
 		/* Acquire a reference if the count is non-zero. */
 		do {
+			if (ACCESS_ONCE(rep->re_freed))
+				abort();
 			old = atomic_read(&rep->re_refcnt);
 			if (old <= 0)
 				goto retry;
@@ -63,10 +72,10 @@ retry:
 
 		/* Advance to next. */
 		repp = &rep->re_next;
-	} while (rep->re_addr != addr);
-	ret = rep->re_interface;
+	} while (rep->addr != addr);
+	ret = rep->iface;
 	if (atomic_dec_and_test(&rep->re_refcnt))
-		free(rep);
+		re_free(rep);
 	return ret;
 }
 
@@ -81,10 +90,11 @@ int route_add(unsigned long addr, unsigned long interface)
 	if (!rep)
 		return -ENOMEM;
 	atomic_set(&rep->re_refcnt, 1);
-	rep->re_addr = addr;
-	rep->re_interface = interface;
+	rep->addr = addr;
+	rep->iface = interface;
 	spin_lock(&routelock);
 	rep->re_next = route_list.re_next;
+	rep->re_freed = 0;
 	route_list.re_next = rep;
 	spin_unlock(&routelock);
 	return 0;
@@ -104,11 +114,11 @@ int route_del(unsigned long addr)
 		rep = *repp;
 		if (rep == NULL)
 			break;
-		if (rep->re_addr == addr) {
+		if (rep->addr == addr) {
 			*repp = rep->re_next;
 			spin_unlock(&routelock);
 			if (atomic_dec_and_test(&rep->re_refcnt))
-				free(rep);
+				re_free(rep);
 			return 0;
 		}
 		repp = &rep->re_next;
@@ -131,7 +141,7 @@ void route_clear(void)
 	while (rep != NULL) {
 		rep1 = rep->re_next;
 		if (atomic_dec_and_test(&rep->re_refcnt))
-			free(rep);
+			re_free(rep);
 		rep = rep1;
 	}
 	spin_unlock(&routelock);

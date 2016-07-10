@@ -47,6 +47,8 @@ this chapter and Section~\ref{sec:defer:What About Updates?}
 discusses the role of updates.
 \fi
 
+% TODO: apply commit 7b8df24023d7 ("Create running example section, rename
+% figure") in translation
 이 챕터는 이런 접근법들의 가치를 보이고 또 그것들을 서로 비교할 수 있도록 하기
 위해 단순화된 디멀티플렉싱 알고리즘을 사용할 겁니다.
 디멀티플렉싱 알고리즘들은 운영체제 커널에서 각각의 들어오는 TCP/IP 패킷들을
@@ -61,20 +63,24 @@ BSD UNIX~\cite{VanJacobson88} 에서 사용되었으며, 단순한 링크드 리
 극단적으로 간단한 알고리즘이 극단적으로 이해하기 쉬운 구성에서의 병렬성에
 특정된 문제들을 밝히는데 도움을 줄 것입니다.
 \iffalse
+But first we will introduce an example algorithm that will be used
+to compare and contrast these approaches.
 
-This chapter will use a simplified demultiplexing algorithm to demonstrate
+\section{Running Example}
+\label{sec:defer:Running Example}
+
+This chapter will use a simplified packet-routing algorithm to demonstrate
 the value of these approaches and to allow them to be compared.
-Demultiplexing algorithms are used in operating-system kernels to
-deliver each incomoing TCP/IP packets to its receiving process.
+Routing algorithms are used in operating-system kernels to
+deliver each outgoing TCP/IP packets to the appropriate network interface.
 This particular algorithm is a simplified version of the classic 1980s
 packet-train-optimized algorithm used in BSD UNIX~\cite{VanJacobson88},
 consisting of a simple linked list.\footnote{
 	In other words, this is not OpenBSD, NetBSD, or even
 	FreeBSD, but none other than Pre-BSD.}
-Modern demultiplexing algorithms use more complex data structures,
-for example, hash tables~\cite{McKenney92b}, however, as in
-Chapter~\ref{chp:Counting}, an extremely simple algorithm will
-help highlight issues specific to parallelism in an extremely
+Modern routing algorithms use more complex data structures, however, as in
+Chapter~\ref{chp:Counting}, a simple algorithm will
+help highlight issues specific to parallelism in an
 easy-to-understand setting.
 \fi
 
@@ -95,31 +101,111 @@ Chapter~\ref{chp:Hardware and its Habits} 에서 우리는, 빛의 제한된 속
 
 We further simplify the algorithm by reducing the search key from
 a quadruple consisting of source and destination IP addresses and
-ports all the down to a simple integer.
+ports all the way down to a simple integer.
 The value looked up and returned will also be a simple integer,
 so that the data structure is as shown in
-Figure~\ref{fig:defer:Pre-BSD Packet Demultiplexing List}, which
-directs packets of address~42 to process~1, address~56 to
-process~2, and address~17 to process~10.
-Assuming that processes are long-lived and receive a large number
-of packets, this list will be searched frequently and updated
-rarely.
+Figure~\ref{fig:defer:Pre-BSD Packet Routing List}, which
+directs packets with address~42 to interface~1, address~56 to
+interface~2, and address~17 to interface~7.
+Assuming that external packet network is stable,
+this list will be searched frequently and updated rarely.
 In Chapter~\ref{chp:Hardware and its Habits}
-we learned that the best ways to evade laws of physics, such as
+we learned that the best ways to evade inconvenient laws of physics, such as
 the finite speed of light and the atomic nature of matter, is to
 either partition the data or to rely on read-mostly sharing.
-In this chapter, we will use the Pre-BSD packet demultiplexing
-list to evaluate a number of techniques involving read-mostly
-sharing.
+% TODO: apply commit 9c3146f3fd7d ("Add single-threaded routing algorithm and
+% brief description") to translation
+In this chapter, we will use this Pre-BSD packet routing
+list to evaluate a number of read-mostly synchronization techniques.
 \fi
 
 \begin{figure}[tb]
 \begin{center}
-\resizebox{3in}{!}{\includegraphics{defer/DemuxList}}
+\resizebox{3in}{!}{\includegraphics{defer/RouteList}}
 \end{center}
-\caption{Pre-BSD Packet Demultiplexing List}
-\label{fig:defer:Pre-BSD Packet Demultiplexing List}
+\caption{Pre-BSD Packet Routing List}
+\label{fig:defer:Pre-BSD Packet Routing List}
 \end{figure}
+
+{ \scriptsize
+\begin{verbbox}
+ 1 struct route_entry {
+ 2   struct cds_list_head re_next;
+ 3   unsigned long addr;
+ 4   unsigned long iface;
+ 5 };
+ 6 CDS_LIST_HEAD(route_list);
+ 7
+ 8 unsigned long route_lookup(unsigned long addr)
+ 9 {
+10   struct route_entry *rep;
+11   unsigned long ret;
+12
+13   cds_list_for_each_entry(rep,
+14                           &route_list, re_next) {
+15     if (rep->addr == addr) {
+16       ret = rep->iface;
+17       return ret;
+18     }
+19   }
+20   return ULONG_MAX;
+21 }
+22
+23 int route_add(unsigned long addr,
+24               unsigned long interface)
+25 {
+26   struct route_entry *rep;
+27
+28   rep = malloc(sizeof(*rep));
+29   if (!rep)
+30     return -ENOMEM;
+31   rep->addr = addr;
+32   rep->iface = interface;
+33   cds_list_add(&rep->re_next, &route_list);
+34   return 0;
+35 }
+36
+37 int route_del(unsigned long addr)
+38 {
+39   struct route_entry *rep;
+40
+41   cds_list_for_each_entry(rep,
+42                           &route_list, re_next) {
+43     if (rep->addr == addr) {
+44       cds_list_del(&rep->re_next);
+45       free(rep);
+46       return 0;
+47     }
+48   }
+49   return -ENOENT;
+50 }
+\end{verbbox}
+}
+\begin{figure}[bp]
+\centering
+\theverbbox
+\caption{Sequential Pre-BSD Routing Table}
+\label{fig:defer:Sequential Pre-BSD Routing Table}
+\end{figure}
+
+Figure~\ref{fig:defer:Sequential Pre-BSD Routing Table}
+shows a simple single-threaded implementation corresponding to
+Figure~\ref{fig:defer:Pre-BSD Packet Routing List}.
+Lines~1-5 define a \co{route_entry} structure and line~6 defines
+the \co{route_list} header.
+Lines~8-21 define \co{route_lookup()}, which sequentially searches
+\co{route_list}, returning the corresponding \co{->iface}, or
+\co{ULONG_MAX} if there is no such route entry.
+Lines~23-35 define \co{route_add()}, which allocates a
+\co{route_entry} structure, initializes it, and adds it to the
+list, returning \co{-ENOMEM} in case of memory-allocation failure.
+Finally, lines~37-50 define \co{route_del()}, which removes and
+frees the specified \co{route_entry} structure if it exists,
+or returns \co{-ENOENT} otherwise.
+
+This single-threaded implementation serves as a prototype for the various
+concurrent implementations in this chapter, and also as an estimate of
+ideal scalability and performance.
 
 \input{defer/refcnt}
 \input{defer/hazptr}

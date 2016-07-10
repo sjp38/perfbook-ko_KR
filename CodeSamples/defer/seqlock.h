@@ -23,25 +23,27 @@ typedef struct {
 	spinlock_t lock;
 } seqlock_t;
 
-static void seqlock_init(seqlock_t *slp)
+#define DEFINE_SEQ_LOCK(name) seqlock_t name = { \
+	.seq = 0, \
+	.lock = __SPIN_LOCK_UNLOCKED(name.lock), \
+};
+
+static inline void seqlock_init(seqlock_t *slp)
 {
 	slp->seq = 0;
 	spin_lock_init(&slp->lock);
 }
 
-static unsigned long read_seqbegin(seqlock_t *slp)
+static inline unsigned long read_seqbegin(seqlock_t *slp)
 {
 	unsigned long s;
 
-repeat:
 	s = ACCESS_ONCE(slp->seq);
 	smp_mb();
-	if (unlikely(s & 1))
-		goto repeat;
-	return s;
+	return s & ~0x1UL;
 }
 
-static int read_seqretry(seqlock_t *slp, unsigned long oldseq)
+static inline int read_seqretry(seqlock_t *slp, unsigned long oldseq)
 {
 	unsigned long s;
 
@@ -50,14 +52,14 @@ static int read_seqretry(seqlock_t *slp, unsigned long oldseq)
 	return s != oldseq;
 }
 
-static void write_seqlock(seqlock_t *slp)
+static inline void write_seqlock(seqlock_t *slp)
 {
 	spin_lock(&slp->lock);
 	++slp->seq;
 	smp_mb();
 }
 
-static void write_sequnlock(seqlock_t *slp)
+static inline void write_sequnlock(seqlock_t *slp)
 {
 	smp_mb();
 	++slp->seq;

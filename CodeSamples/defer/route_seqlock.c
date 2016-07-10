@@ -1,7 +1,6 @@
 /*
- * route_seq.c: Trivial linked-list routing table protected by nothing,
- *	thus allowing multiple readers with no updater or single updater.
- *	Running --stresstest with this version will result in failures.
+ * route_seqlock.c: Trivial linked-list routing table "protected" by
+ *	sequence locking.  To reiterate: BUGGY!!!
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,15 +20,18 @@
  */
 
 #include "../api.h"
+#include "seqlock.h"
 
 /* Route-table entry to be included in the routing list. */
 struct route_entry {
-	struct cds_list_head re_next;
+	struct route_entry *re_next;
 	unsigned long addr;
 	unsigned long iface;
 };
 
-CDS_LIST_HEAD(route_list);
+struct route_entry route_list;
+DEFINE_SPINLOCK(routelock);
+DEFINE_SEQ_LOCK(sl);
 
 /*
  * Look up a route entry, return the corresponding interface. 
@@ -37,15 +39,28 @@ CDS_LIST_HEAD(route_list);
 unsigned long route_lookup(unsigned long addr)
 {
 	struct route_entry *rep;
+	struct route_entry **repp;
 	unsigned long ret;
+	unsigned long s;
 
-	cds_list_for_each_entry(rep, &route_list, re_next) {
-		if (rep->addr == addr) {
-			ret = rep->iface;
-			return ret;
+retry:
+	s = read_seqbegin(&sl);
+	repp = &route_list.re_next;
+	do {
+		rep = ACCESS_ONCE(*repp);
+		if (rep == NULL) {
+			if (read_seqretry(&sl, s))
+				goto retry;
+			return ULONG_MAX;
 		}
-	}
-	return ULONG_MAX;
+
+		/* Advance to next. */
+		repp = &rep->re_next;
+	} while (rep->addr != addr);
+	ret = rep->iface;
+	if (read_seqretry(&sl, s))
+		goto retry;
+	return ret;
 }
 
 /*
@@ -60,7 +75,10 @@ int route_add(unsigned long addr, unsigned long interface)
 		return -ENOMEM;
 	rep->addr = addr;
 	rep->iface = interface;
-	cds_list_add(&rep->re_next, &route_list);
+	write_seqlock(&sl);
+	rep->re_next = route_list.re_next;
+	route_list.re_next = rep;
+	write_sequnlock(&sl);
 	return 0;
 }
 
@@ -70,14 +88,25 @@ int route_add(unsigned long addr, unsigned long interface)
 int route_del(unsigned long addr)
 {
 	struct route_entry *rep;
+	struct route_entry **repp;
 
-	cds_list_for_each_entry(rep, &route_list, re_next) {
+	write_seqlock(&sl);
+	repp = &route_list.re_next;
+	for (;;) {
+		rep = *repp;
+		if (rep == NULL)
+			break;
 		if (rep->addr == addr) {
-			cds_list_del(&rep->re_next);
+			*repp = rep->re_next;
+			write_sequnlock(&sl);
+			/* Poison pointer for debugging purposes. */
+			rep->re_next = (struct route_entry *)1UL;
 			free(rep);
 			return 0;
 		}
+		repp = &rep->re_next;
 	}
+	write_sequnlock(&sl);
 	return -ENOENT;
 }
 
@@ -89,17 +118,21 @@ void route_clear(void)
 	struct route_entry *rep;
 	struct route_entry *rep1;
 
-	cds_list_for_each_entry_safe(rep, rep1, &route_list, re_next) {
-		cds_list_del(&rep->re_next);
+	write_seqlock(&sl);
+	rep = route_list.re_next;
+	ACCESS_ONCE(route_list.re_next) = NULL;
+	while (rep != NULL) {
+		rep1 = rep->re_next;
 		free(rep);
+		rep = rep1;
 	}
+	write_sequnlock(&sl);
 }
 
+#define quiescent_state() rcu_quiescent_state()
 
 #define route_register_thread() do { } while (0)
 #define route_unregister_thread() do { } while (0)
-
-#define quiescent_state() do { } while (0)
 
 #define synchronize_rcu() do { } while (0)
 

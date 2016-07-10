@@ -26,8 +26,9 @@
 struct route_entry {
 	struct hazptr_head hh;
 	struct route_entry *re_next;
-	unsigned long re_addr;
-	unsigned long re_interface;
+	unsigned long addr;
+	unsigned long iface;
+	int re_freed;
 };
 
 struct route_entry route_list;
@@ -65,8 +66,10 @@ retry:
 
 		/* Advance to next. */
 		repp = &rep->re_next;
-	} while (rep->re_addr != addr);
-	return rep->re_interface;
+	} while (rep->addr != addr);
+	if (ACCESS_ONCE(rep->re_freed))
+		abort();
+	return rep->iface;
 }
 
 /*
@@ -79,8 +82,9 @@ int route_add(unsigned long addr, unsigned long interface)
 	rep = malloc(sizeof(*rep));
 	if (!rep)
 		return -ENOMEM;
-	rep->re_addr = addr;
-	rep->re_interface = interface;
+	rep->addr = addr;
+	rep->iface = interface;
+	rep->re_freed = 0;
 	spin_lock(&routelock);
 	rep->re_next = route_list.re_next;
 	route_list.re_next = rep;
@@ -102,7 +106,7 @@ int route_del(unsigned long addr)
 		rep = *repp;
 		if (rep == NULL)
 			break;
-		if (rep->re_addr == addr) {
+		if (rep->addr == addr) {
 			*repp = rep->re_next;
 			rep->re_next = (struct route_entry *)HAZPTR_POISON;
 			spin_unlock(&routelock);
@@ -151,6 +155,9 @@ void route_register_thread(void)
 
 void hazptr_free(void *p)
 {
+	struct route_entry *rep = p;
+
+	ACCESS_ONCE(rep->re_freed) = 1;
 	free(p);
 }
 
