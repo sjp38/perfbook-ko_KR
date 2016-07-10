@@ -47,27 +47,30 @@ this chapter and Section~\ref{sec:defer:What About Updates?}
 discusses the role of updates.
 \fi
 
-% TODO: apply commit 7b8df24023d7 ("Create running example section, rename
-% figure") in translation
+하지만 먼저 이런 방법들을 비교하고 대비하는데에 사용될 예제 알고리즘을
+소개하겠습니다.
+\iffalse
+
+But first we will introduce an example algorithm that will be used
+to compare and contrast these approaches.
+\fi
+
+\section{Running Example}
+\label{sec:defer:Running Example}
+
 이 챕터는 이런 접근법들의 가치를 보이고 또 그것들을 서로 비교할 수 있도록 하기
-위해 단순화된 디멀티플렉싱 알고리즘을 사용할 겁니다.
-디멀티플렉싱 알고리즘들은 운영체제 커널에서 각각의 들어오는 TCP/IP 패킷들을
-전달받아야 할 프로세스에게 전달하는데에 사용됩니다.
+위해 단순화된 패킷 라우팅 알고리즘을 사용할 겁니다.
+라우팅 알고리즘은 운영체제 커널에서 각각의 바깥으로 나가는 TCP/IP 패킷들을
+알맞는 네트워크 인터페이스로 전달하는데에 사용됩니다.
 이 특정한 알고리즘은 고전적인 1980년대의 packet-train-optimized 알고리즘으로
 BSD UNIX~\cite{VanJacobson88} 에서 사용되었으며, 단순한 링크드 리스트로
 구성되었습니다.\footnote{
 	달리 말하자면, 이건 OpenBSD, NetBSD 도 아니고 심지어 FreeBSD 도
-아니었고 Pre-BSD 였습니다.}
-최신 디멀티플렉싱 알고리즘들은, 예를 들어 해시 테이블~\cite{McKenney92b} 같은
-더 복잡한 데이터 구조를 사용합니다만, Chapter~\ref{chp:Counting} 에서와 같이,
-극단적으로 간단한 알고리즘이 극단적으로 이해하기 쉬운 구성에서의 병렬성에
-특정된 문제들을 밝히는데 도움을 줄 것입니다.
+	아니었고 Pre-BSD 였습니다.}
+최신 라우팅 알고리즘들은 더 복잡한 데이터 구조를 사용합니다만,
+Chapter~\ref{chp:Counting} 에서와 같이, 극단적으로 간단한 알고리즘이 극단적으로
+이해하기 쉬운 구성에서의 병렬성에 특정된 문제들을 밝히는데 도움을 줄 것입니다.
 \iffalse
-But first we will introduce an example algorithm that will be used
-to compare and contrast these approaches.
-
-\section{Running Example}
-\label{sec:defer:Running Example}
 
 This chapter will use a simplified packet-routing algorithm to demonstrate
 the value of these approaches and to allow them to be compared.
@@ -87,16 +90,16 @@ easy-to-understand setting.
 우리는 더 나아가서 출발지와 목적지 IP 주소와 포트들 네가지 정보로 구성되는 검색
 키를 간단한 정수로 교체함으로써 알고리즘을 더욱 단순화할 겁니다.
 검색되고 리턴되는 값 또한 간단한 정수로 바꿔질 것이어서, 데이터 구조는
-Figure~\ref{fig:defer:Pre-BSD Packet Demultiplexing List} 에서와 같이 될건데,
-이 그림대로라면 address~42 의 패킷을 process~1 로, address~56 의 패킷을
-process~2 로, 그리고 address~17 의 패킷을 process~10 으로 전달할 겁니다.
-프로세스들은 오랫동안 살아있을 것이고 수많은 패킷을 받을 것임을 가정하면, 이
-리스트는 매우 자주 검색되고 아주 가끔씩만 업데이트 될 것입니다.
+Figure~\ref{fig:defer:Pre-BSD Packet Routing List} 에서와 같이 될건데,
+이 그림대로라면 address~42 의 패킷을 interface~1 로, address~56 의 패킷을
+interface~2 로, 그리고 address~17 의 패킷을 interface~7 로 전달할 겁니다.
+외부의 패킷 네트워크는 안정적일 것을 가정하면, 이 리스트는 매우 자주 검색되고
+아주 가끔씩만 업데이트 될 것입니다.
 Chapter~\ref{chp:Hardware and its Habits} 에서 우리는, 빛의 제한된 속도와
-물질의 원자성의 자연적 법칙과 같은 물리 법칙을 회피하는 가장 좋은 방법은
+물질의 원자성의 자연적 법칙과 같은 불편한 물리 법칙을 회피하는 가장 좋은 방법은
 데이터를 쪼개거나 읽기가 대부분인 공유에 기대는 것임을 배웠습니다.
-이 챕터에서, 우리는 Pre-BSD 패킷 디멀티플렉싱 리스트를 사용해 읽기가 대부분인
-공유에 관련된 기법들을 평가해 보도록 하겠습니다.
+이 챕터에서, 우리는 이 Pre-BSD 패킷 라우팅 리스트를 사용해 읽기가 대부분인
+상황을 위한 동기화 기법을 평가해 보도록 하겠습니다.
 \iffalse
 
 We further simplify the algorithm by reducing the search key from
@@ -113,8 +116,6 @@ In Chapter~\ref{chp:Hardware and its Habits}
 we learned that the best ways to evade inconvenient laws of physics, such as
 the finite speed of light and the atomic nature of matter, is to
 either partition the data or to rely on read-mostly sharing.
-% TODO: apply commit 9c3146f3fd7d ("Add single-threaded routing algorithm and
-% brief description") to translation
 In this chapter, we will use this Pre-BSD packet routing
 list to evaluate a number of read-mostly synchronization techniques.
 \fi
