@@ -133,19 +133,19 @@ Figure~\ref{fig:defer:Sequence-Locking Writer} 에 보여진 것처럼 사용합
 \iffalse
 
 The key component of sequence locking is the sequence number, which has
-an even value in the absence of writers and an odd value if there
+an even value in the absence of updaters and an odd value if there
 is an update in progress.
 Readers can then snapshot the value before and after each access.
 If either snapshot has an odd value, or if the two snapshots differ,
 there has been a concurrent update, and the reader must discard
 the results of the access and then retry it.
-Readers use the \co{read_seqbegin()} and \co{read_seqretry()}
-functions, as shown in Figure~\ref{fig:defer:Sequence-Locking Reader},
+Readers therefore use the \co{read_seqbegin()} and \co{read_seqretry()}
+functions shown in Figure~\ref{fig:defer:Sequence-Locking Reader}
 when accessing data protected by a sequence lock.
 Writers must increment the value before and after each update,
 and only one writer is permitted at a given time.
-Writers use the \co{write_seqlock()} and \co{write_sequnlock()}
-functions, as shown in Figure~\ref{fig:defer:Sequence-Locking Writer},
+Writers therefore use the \co{write_seqlock()} and \co{write_sequnlock()}
+functions shown in Figure~\ref{fig:defer:Sequence-Locking Writer}
 when updating data protected by a sequence lock.
 \fi
 
@@ -156,139 +156,58 @@ when updating data protected by a sequence lock.
 탐색에도 사용됩니다.
 \iffalse
 
-Sequence-lock-protected data can have an arbitrarily large number of
-concurrent readers, but only one writer at a time.
+As a result, sequence-lock-protected data can have an arbitrarily
+large number of concurrent readers, but only one writer at a time.
 Sequence locking is used in the Linux kernel to protect calibration
 quantities used for timekeeping.
 It is also used in pathname traversal to detect concurrent rename operations.
 \fi
 
-\QuickQuiz{}
-	시퀀스 락을 동시적인 추가, 삭제, 그리고 검색을 지원하는 링크드 리스트를
-	보호하는 유일한 동기화 메커니즘으로 사용할 수 있을까요?
-	\iffalse
-
-	Can you use sequence locks as the only synchronization
-	mechanism protecting a linked list supporting concurrent
-	addition, deletion, and search?
-	\fi
-\QuickQuizAnswer{
-	이를 가능하게 하는 한가지 간단한 방법은 읽기만 하는 액세스들을 포함해서
-	모든 액세스들을 \co{write_seqlock()} 과 \co{write_sequnlock()} 으로
-	감싸는 것입니다.
-	물론, 이 방법은 모든 읽기 쓰레드들 간의 병렬성을 방해할 것이고, 더
-	나아가서 간단한 락킹을 사용하는 것만큼이나 쉽게 구현될 수 있을
-	것입니다.
-
-	읽기 쪽 액세스를 보호하는데 \co{read_seqbegin()} 과
-	\co{read_Seqretry()} 함수를 사용하는 해결책을 찾아낸다면, 다음과 같은
-	일련의 이벤트들에 대해서도 정확히 처리를 해주고 있음을 분명히 해야
-	합니다:
-	\iffalse
-
-	One trivial way of accomplishing this is to surround all
-	accesses, including the read-only accesses, with
-	\co{write_seqlock()} and \co{write_sequnlock()}.
-	Of course, this solution also prohibits all read-side
-	parallelism, and furthermore could just as easily be implemented
-	using simple locking.
-
-	If you do come up with a solution that uses \co{read_seqbegin()}
-	and \co{read_seqretry()} to protect read-side accesses, make
-	sure that you correctly handle the following sequence of events:
-	\fi
-
-	\begin{enumerate}
-	\item	CPU~0 가 링크드 리스트를 탐색하다가 리스트의 원소~A 로의
-		포인터를 집어냄.
-	\item	CPU~1 이 리스트에서 원소~A 를 삭제하고 메모리에서 해제시킴.
-	\item	CPU~2 가 관계없는 데이터 구조체를 위해 메모리를 할당받는데, 이
-		때 원소~A 에서 사용되던 메모리를 얻어오게 됨.
-		이 관계없는 데이터 구조체에서, 원소~A 의 \co{->next} 포인터로
-		사용되던 메모리 영역은 이제 하나의 소수 (floating-point number)
-		를 저장하게 됨.
-	\item	CPU~0 원소~A 의 \co{->next} 포인터로 사용되던 메모리를 집어오고
-		알 수 없는 무작위의 비트들을 갖게 되고, 따라서 세그먼테이션
-		폴트가 발생함.
-	\iffalse
-
-	\item	CPU~0 is traversing the linked list, and picks up a pointer
-		to list element~A.
-	\item	CPU~1 removes element~A from the list and frees it.
-	\item	CPU~2 allocates an unrelated data structure, and gets
-		the memory formerly occupied by element~A.
-		In this unrelated data structure, the memory previously
-		used for element~A's \co{->next} pointer is now occupied
-		by a floating-point number.
-	\item	CPU~0 picks up what used to be element~A's \co{->next}
-		pointer, gets random bits, and therefore gets a
-		segmentation fault.
-	\fi
-	\end{enumerate}
-
-	이런 종류의 문제들로부터 보호를 하는 한가지 방법은 ``타입 안정성 제공
-	메모리'' 를 필요로 하는데, Section~\ref{sec:defer:RCU is a Way of
-	Providing Type-Safe Memory} 에서 알아보겠습니다.
-	하지만 이 경우에는, 시퀀스 락에 추가적으로 뭔가 다른 동기화 메커니즘을
-	사용해야 할겁니다!
-	\iffalse
-
-	One way to protect against this sort of problem requires use
-	of ``type-safe memory'', which will be discussed in
-	Section~\ref{sec:defer:RCU is a Way of Providing Type-Safe Memory}.
-	But in that case, you would be using some other synchronization
-	mechanism in addition to sequence locks!
-	\fi
-} \QuickQuizEnd
-
 { \scriptsize
 \begin{verbbox}
-  1 typedef struct {
-  2   unsigned long seq;
-  3   spinlock_t lock;
-  4 } seqlock_t;
-  5 
-  6 static void seqlock_init(seqlock_t *slp)
-  7 {
-  8   slp->seq = 0;
-  9   spin_lock_init(&slp->lock);
- 10 }
- 11 
- 12 static unsigned long read_seqbegin(seqlock_t *slp)
- 13 {
- 14   unsigned long s;
- 15 
- 16 repeat:
- 17   s = ACCESS_ONCE(slp->seq);
- 18   smp_mb();
- 19   if (unlikely(s & 1))
- 20     goto repeat;
- 21   return s;
- 22 }
- 23 
- 24 static int read_seqretry(seqlock_t *slp,
- 25                          unsigned long oldseq)
- 26 {
- 27   unsigned long s;
- 28 
- 29   smp_mb();
- 30   s = ACCESS_ONCE(slp->seq);
- 31   return s != oldseq;
- 32 }
- 33 
- 34 static void write_seqlock(seqlock_t *slp)
- 35 {
- 36   spin_lock(&slp->lock);
- 37   ++slp->seq;
- 38   smp_mb();
- 39 }
- 40 
- 41 static void write_sequnlock(seqlock_t *slp)
- 42 {
- 43   smp_mb();
- 44   ++slp->seq;
- 45   spin_unlock(&slp->lock);
- 46 }
+ 1  typedef struct {
+ 2    unsigned long seq;
+ 3    spinlock_t lock;
+ 4  } seqlock_t;
+ 5
+ 6  static void seqlock_init(seqlock_t *slp)
+ 7  {
+ 8    slp->seq = 0;
+ 9    spin_lock_init(&slp->lock);
+10  }
+11
+12  static unsigned long read_seqbegin(seqlock_t *slp)
+13  {
+14    unsigned long s;
+15
+16    s = ACCESS_ONCE(slp->seq);
+17    smp_mb();
+18    return s & ~0x1UL;
+19  }
+20
+21  static int read_seqretry(seqlock_t *slp,
+22                           unsigned long oldseq)
+23  {
+24    unsigned long s;
+25
+26    smp_mb();
+27    s = ACCESS_ONCE(slp->seq);
+28    return s != oldseq;
+29  }
+30
+31  static void write_seqlock(seqlock_t *slp)
+32  {
+33    spin_lock(&slp->lock);
+34    ++slp->seq;
+35    smp_mb();
+36  }
+37
+38  static void write_sequnlock(seqlock_t *slp)
+39  {
+40    smp_mb();
+41    ++slp->seq;
+42    spin_unlock(&slp->lock);
+43  }
 \end{verbbox}
 }
 \begin{figure}[bp]
@@ -326,84 +245,42 @@ Line~19 에서는 이 스냅샷이 홀수인지 확인해서 동시에 다른 �
 \co{read_seqretry()} 호출에 넘겨줄 값입니다.
 \iffalse
 
-Lines~12-22 show \co{read_seqbegin()}, which begins a sequence-lock
+Lines~12-19 show \co{read_seqbegin()}, which begins a sequence-lock
 read-side critical section.
-Line~17 takes a snapshot of the sequence counter, and line~18 orders
+Line~16 takes a snapshot of the sequence counter, and line~17 orders
 this snapshot operation before the caller's critical section.
-Line~19 checks to see if the snapshot is odd, indicating that there
-is a concurrent writer, and, if so, line~20 jumps back to the beginning.
-Otherwise, line~21 returns the value of the snapshot, which the caller
+Finally, line~18 returns the value of the snapshot (with the least-significant
+bit cleared), which the caller
 will pass to a later call to \co{read_seqretry()}.
 \fi
 
 \QuickQuiz{}
-	Figure~\ref{fig:defer:Sequence-Locking Implementation} 의
-	\co{read_seqbegin()} 의 line~19 에서의 체크를 왜 하는거죠?
-	새로운 쓰기를 하는 쓰레드는 언제든 시작될 수 있다는 점을 생각해서, 왜
-	간단하게 \co{read_seqretry()} 함수의 line~31 과 결합시키지 않는건가요?
-	\iffalse
-
-	Why bother with the check on line~19 of
-	\co{read_seqbegin()} in
-	Figure~\ref{fig:defer:Sequence-Locking Implementation}?
-	Given that a new writer could begin at any time, why not
-	simply incorporate the check into line~31 of
-	\co{read_seqretry()}?
-	\fi
+	Why not have \co{read_seqbegin()} in
+	Figure~\ref{fig:defer:Sequence-Locking Implementation}
+	check for the low-order bit being set, and retry
+	internally, rather than allowing a doomed read to start?
 \QuickQuizAnswer{
-	그것도 일리 있는 구현이 될겁니다.
-	하지만, 그 어떤 것도 그 검사를 \co{read_seqretry()} 로 내려가게 하는
-	것을 막지 못할 것입니다: 결국은 대략 같은 수의 인스트럭션들이 존재하게
-	될겁니다.
-	더욱이, 읽기를 하는 쓰레드의, 벌써 망한 read-side 크리티컬 섹션에서의
-	액세스는 캐시 미스의 형태로 쓰기를 하는 쪽에 오버헤드를 가져다 줄수도
-	있습니다.
-	이 검사를
-	Figure~\ref{fig:defer:Sequence-Locking Implementation} 의 line~19 에
-	보여진 것처럼 \co{read_seqbegin()} 안에 위치시킴으로써 이런 캐시 미스를
-	막을 수 있을 겁니다.
-	\iffalse
-
 	That would be a legitimate implementation.
-	However, it would not save anything to move the check down
-	to \co{read_seqretry()}: There would be roughly the same number
-	of instructions.
-	Furthermore, the reader's accesses from its doomed read-side
-	critical section could inflict overhead on the writer in
-	the form of cache misses.
-	We can avoid these cache misses by placing the check in
-	\co{read_seqbegin()} as shown on line~19 of
-	Figure~\ref{fig:defer:Sequence-Locking Implementation}.
-	\fi
+	However, if the workload is read-mostly, it would likely
+	increase the overhead of the common-case successful read,
+	which could be counter-productive.
+	However, given a sufficiently large fraction of updates
+	and sufficiently high-overhead readers, having the
+	check internal to \co{read_seqbegin()} might be preferable.
 } \QuickQuizEnd
 
-Line~24-32 는 \co{read_seqretry()} 함수인데, 이 함수는 연관된
-\co{read_seqbegin()} 의 실행 이래로부터 쓰기를 하는 쓰레드가 존재하지 않았다면
-true 를 리턴합니다.
-Line~29 에서는 호출자의 앞의 크리티컬 섹션을 line~30 에서의 시퀀스 카운터의
-새로운 스냅샷을 얻어오는 작업 이전에 완료되도록 순서를 맞춥니다.
-마지막으로, line~31 에서는 시퀀스 카운터가 변하지 않았음을 검사하는데, 달리
-말하자면 그동안 쓰기가 행해지지 않았음을 확인하고, 그렇다면 true 를 리턴합니다.
-\iffalse
-
-Lines~24-32 show \co{read_seqretry()}, which returns true if there
+Lines~21-29 show \co{read_seqretry()}, which returns true if there
 were no writers present since the time of the corresponding
 call to \co{read_seqbegin()}.
-Line~29 orders the caller's prior critical section before line~30's
+Line~26 orders the caller's prior critical section before line~27's
 fetch of the new snapshot of the sequence counter.
-Finally, line~31 checks that the sequence counter has not changed,
+Finally, line~28 checks that the sequence counter has not changed,
 in other words, that there has been no writer, and returns true if so.
-\fi
 
 \QuickQuiz{}
-	Figure~\ref{fig:defer:Sequence-Locking Implementation} 의 line~29
-	에서의 \co{smp_mb()} 는 왜 필요한 건가요?
-	\iffalse
-
-	Why is the \co{smp_mb()} on line~29 of
+	Why is the \co{smp_mb()} on line~26 of
 	Figure~\ref{fig:defer:Sequence-Locking Implementation}
 	needed?
-	\fi
 \QuickQuizAnswer{
 	만약 그게 없다면, 컴파일러 또는 CPU 가 이 \co{read_seqretry()} 함수
 	호출 전의 크리티컬 섹션을 이 함수 뒤로 옮겨버릴 수도 있기 때문입니다.
@@ -443,13 +320,13 @@ in other words, that there has been no writer, and returns true if so.
 
 	In older versions of the Linux kernel, no.
 
-	In very new versions of the Linux kernel, line~17 could use
+	In very new versions of the Linux kernel, line~16 could use
 	\co{smp_load_acquire()} instead of \co{ACCESS_ONCE()}, which
-	in turn would allow the \co{smp_mb()} on line~18 to be dropped.
-	Similarly, line~44 could use an \co{smp_store_release()}, for
+	in turn would allow the \co{smp_mb()} on line~17 to be dropped.
+	Similarly, line~41 could use an \co{smp_store_release()}, for
 	example, as follows: \\
 	\co{smp_store_release(&slp->seq, ACCESS_ONCE(slp->seq) + 1);} \\
-	This would allow the \co{smp_mb()} on line~43 to be dropped.
+	This would allow the \co{smp_mb()} on line~40 to be dropped.
 	\fi
 } \QuickQuizEnd
 
@@ -477,21 +354,12 @@ in other words, that there has been no writer, and returns true if so.
 	\fi
 } \QuickQuizEnd
 
-Line~34-39 는 \co{write_seqlock()} 함수로, 단순히 락을 획득하고, 시퀀스 넘버를
-증가시키고, 이 값 증가 연산이 호출자의 크리티컬 섹션 전으로 순서맞춰짐을 분명히
-하도록 메모리 배리어를 실행합니다.
-Line~41-46 은 \co{write_sequnlock()} 함수를 보여주는데, 이 함수는 호출자의
-크리티컬 섹션이 line~44 에서의 시퀀스 넘버 값 증가 전으로 순서맞춰지는 것을
-분명히 하도록 메모리 배리어를 실행하고 락을 해제합니다.
-\iffalse
-
-Lines~34-39 show \co{write_seqlock()}, which simply acquires the lock,
+Lines~31-36 show \co{write_seqlock()}, which simply acquires the lock,
 increments the sequence number, and executes a memory barrier to ensure
 that this increment is ordered before the caller's critical section.
-Lines~41-46 show \co{write_sequnlock()}, which executes a memory barrier
+Lines~38-43 show \co{write_sequnlock()}, which executes a memory barrier
 to ensure that the caller's critical section is ordered before the
 increment of the sequence number on line~44, then releases the lock.
-\fi
 
 \QuickQuiz{}
 	다른 뭔가가 쓰기 쓰레드들을 직렬화 시켜서 락이 필요치
@@ -551,7 +419,7 @@ increment of the sequence number on line~44, then releases the lock.
 	it to ignore the following sequence of events:
 	\begin{enumerate}
 	\item	Thread~0 executes \co{read_seqbegin()}, picking up
-		\co{->seq} in line~17, noting that the value is even,
+		\co{->seq} in line~16, noting that the value is even,
 		and thus returning to the caller.
 	\item	Thread~0 starts executing its read-side critical section,
 		but is then preempted for a long time.
@@ -597,15 +465,44 @@ increment of the sequence number on line~44, then releases the lock.
 	\fi
 } \QuickQuizEnd
 
-시퀀스 락의 읽기 쪽 크리티컬 섹션도 쓰기 쪽 크리티컬 섹션도 트랜잭션으로 생각될
-수 있고, 따라서 시퀀스 락킹은 Section~\ref{sec:future:Transactional Memory}
-에서 이야기될 트랜잭셔널 메모리의 제한된 형태라고 생각될 수 있습니다.
-시퀀스 락킹의 제한점은: (1)~시퀀스 락킹은 업데이트를 제약시키고 (2)~시퀀스
-락킹은 업데이터들에 의해 메모리 해제될 수도 있는 오브젝트들로의 포인터들의
-탐색을 허락하지 않습니다.
-이런 제약점들은 물론 트랜잭셔널 메모리로 극복될 수 있습니다만, 시퀀스 락킹과
-다른 동기화 기능들을 조합하는 것으로도 극복될 수 있습니다.
-\iffalse
+@@@
+
+\QuickQuiz{}
+	Can you use sequence locks as the only synchronization
+	mechanism protecting a linked list supporting concurrent
+	addition, deletion, and search?
+\QuickQuizAnswer{
+	One trivial way of accomplishing this is to surround all
+	accesses, including the read-only accesses, with
+	\co{write_seqlock()} and \co{write_sequnlock()}.
+	Of course, this solution also prohibits all read-side
+	parallelism, and furthermore could just as easily be implemented
+	using simple locking.
+
+	If you do come up with a solution that uses \co{read_seqbegin()}
+	and \co{read_seqretry()} to protect read-side accesses, make
+	sure that you correctly handle the following sequence of events:
+
+	\begin{enumerate}
+	\item	CPU~0 is traversing the linked list, and picks up a pointer
+		to list element~A.
+	\item	CPU~1 removes element~A from the list and frees it.
+	\item	CPU~2 allocates an unrelated data structure, and gets
+		the memory formerly occupied by element~A.
+		In this unrelated data structure, the memory previously
+		used for element~A's \co{->next} pointer is now occupied
+		by a floating-point number.
+	\item	CPU~0 picks up what used to be element~A's \co{->next}
+		pointer, gets random bits, and therefore gets a
+		segmentation fault.
+	\end{enumerate}
+
+	One way to protect against this sort of problem requires use
+	of ``type-safe memory'', which will be discussed in
+	Section~\ref{sec:defer:RCU is a Way of Providing Type-Safe Memory}.
+	But in that case, you would be using some other synchronization
+	mechanism in addition to sequence locks!
+} \QuickQuizEnd
 
 Both the read-side and write-side critical sections of a sequence lock
 can be thought of as transactions, and sequence locking therefore
@@ -617,7 +514,6 @@ to objects that might be freed by updaters.
 These limitations are of course overcome by transactional memory, but
 can also be overcome by combining other synchronization primitives
 with sequence locking.
-\fi
 
 시퀀스 락들은 쓰기를 하는 쓰레드들이 읽기를 하는 쓰레드들을 뒤로 미뤄지도록 할
 수 있지만, 그 반대는 불가능합니다.
