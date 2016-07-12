@@ -1583,6 +1583,15 @@ scalable RCU-protected hash tables, as described in the following sections.
 \subsection{Resizable Hash Table Design}
 \label{sec:datastruct:Resizable Hash Table Design}
 
+행복하게도 2000년 초의 상황과 대조적으로, 이제는 확장성 있고 RCU 로 보호되는
+해시 테이블은 세개 이상의 종류가 있습니다.
+첫번째의 (그리고 가장 간단한) 것은 Herbert Xu~\cite{HerbertXu2010RCUResizeHash}
+에 의해 리눅스 커널을 위해 개발된 것이고, 다음 섹션에서 설명됩니다.
+다른 두가지는
+Section~\ref{sec:datastruct:Other Resizable Hash Tables} 에서
+간단히 다루겠습니다.
+\iffalse
+
 In happy contrast to the situation in the early 2000s, there are now
 no fewer than three different types of scalable RCU-protected hash
 tables.
@@ -1591,6 +1600,15 @@ Herbert Xu~\cite{HerbertXu2010RCUResizeHash}, and is described in the
 following sections.
 The other two are covered briefly in
 Section~\ref{sec:datastruct:Other Resizable Hash Tables}.
+\fi
+
+첫번째 해시테이블의 구현의 기저에 깔린 핵심은 각 데이터 원소가 두개의 리스트
+포인터들을 가질 수 있는데, 하나는 현재 RCU 읽기 쓰레드들 (과 non-RCU 업데이트
+쓰레드드들) 에 의해 사용되는 것이고 다른 하나는 새로운, 크기가 재조정된 해시
+테이블을 구성하는데 사용된다는 것입니다.
+이 방뻐은 검색, 삽입, 그리고 삭제 작업이 크기 재조정 작업과 동시에 수행될 수
+있게 합니다.
+\iffalse
 
 The key insight behind the first hash-table implementation is that
 each data element can have two sets of list pointers, with one set
@@ -1598,6 +1616,7 @@ currently being used by RCU readers (as well as by non-RCU updaters)
 and the other being used to construct a new resized hash table.
 This approach allows lookups, insertions, and deletions to all run
 concurrently with a resize operation (as well as with each other).
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -1615,6 +1634,20 @@ concurrently with a resize operation (as well as with each other).
 \label{fig:datastruct:Growing a Double-List Hash Table, State (b)}
 \end{figure}
 
+크기 조정 오퍼레이션은
+Figure~\ref{fig:datastruct:Growing a Double-List Hash Table, State (a)} 에 보인
+최초의 두개 bucket 상태로부터 시작해서
+Figures~\ref{fig:datastruct:Growing a Double-List Hash Table, State (a)}-\ref{fig:datastruct:Growing a Double-List Hash Table, State (d)}
+에 보인 것처럼 진행되는데, 시간의 흐름에 따라 그림에서 그림으로 이동합니다.
+최초의 상태는 원소들을 bucket 안에 연결하기 위해 zero-index 링크를 사용합니다.
+네개의 새로운 bucket 배열이 할당되고, one-index 링크들이 원소들을 이 네개의
+새로운 bucket 안으로 연결되는데 사용됩니다.
+이는
+Figure~\ref{fig:datastruct:Growing a Double-List Hash Table, State (b)} 에 보인
+state~(b) 상황을 만드는데, 읽기 쓰레드들은 여전히 원래의 두개 bucket 배열을
+사용하고 있습니다.
+\iffalse
+
 The resize operation proceeds as shown in
 Figures~\ref{fig:datastruct:Growing a Double-List Hash Table, State (a)}-\ref{fig:datastruct:Growing a Double-List Hash Table, State (d)},
 with the initial two-bucket state shown in
@@ -1627,6 +1660,7 @@ chain the elements into these four new hash buckets.
 This results in state~(b) shown in
 Figure~\ref{fig:datastruct:Growing a Double-List Hash Table, State (b)},
 with readers still using the original two-bucket array.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -1644,6 +1678,19 @@ with readers still using the original two-bucket array.
 \label{fig:datastruct:Growing a Double-List Hash Table, State (d)}
 \end{figure}
 
+새로운 네개의 bucket 배열은 읽기 쓰레드들에게 노출되고, 모든 읽기 쓰레드들을
+기다리기 위해 grace-period 를 기다리게 되어서 state~(c) 에 도달하게 되는데,
+Figure~\ref{fig:datastruct:Growing a Double-List Hash Table, State (c)} 에 그
+상태가 그려져 있습니다.
+이 상태에서, 모든 읽기 쓰레드들은 새로운 네개 bucket 배열을 사용하게 되는데, 이
+말은 기존의 두개 bucket 배열은 해제되어도 좋다는 뜻이므로
+Figure~\ref{fig:datastruct:Growing a Double-List Hash Table, State (d)} 에
+보여진 state~(d) 로의 이전을 하게 됩니다.
+
+이 디자인은 상대적으로 간단한 구현을 이끄는데, 이 구현에 대해서는 다음 섹션에서
+다룹니다.
+\iffalse
+
 The new four-bucket array is exposed to readers and then a grace-period
 operation waits for all readers, resulting in state~(c), shown in
 Figure~\ref{fig:datastruct:Growing a Double-List Hash Table, State (c)}.
@@ -1654,6 +1701,7 @@ Figure~\ref{fig:datastruct:Growing a Double-List Hash Table, State (d)}.
 
 This design leads to a relatively straightforward implementation,
 which is the subject of the next section.
+\fi
 
 \subsection{Resizable Hash Table Implementation}
 \label{sec:datastruct:Resizable Hash Table Implementation}
