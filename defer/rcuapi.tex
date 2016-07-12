@@ -28,9 +28,9 @@ presents concluding remarks.
 \label{sec:defer:RCU has a Family of Wait-to-Finish APIs}
 
 \begin{table*}[p]
-\begin{center}
-\scriptsize
-\begin{tabular}{p{1.1in}|p{1.0in}|p{1.1in}|p{1.0in}|p{1.0in}}
+\centering
+\scriptsize\tymin=1.1in
+\begin{tabulary}{5.9in}{L|L|L|L|L}
 Attribute &
     RCU Classic &
 	RCU BH &
@@ -41,8 +41,7 @@ Attribute &
 Purpose &
     Original &
 	Prevent DDoS attacks &
-	    { \raggedright Wait for preempt-disable regions,
-	      hardirqs, \& NMIs } &
+	    Wait for preempt-disable regions, hardirqs, \& NMIs &
 	        Realtime response \\
 \hline
 Availability &
@@ -52,23 +51,23 @@ Availability &
 	        2.6.26 \\
 \hline
 Read-side primitives &
-    { \raggedright
+    \begin{minipage}[t]{1.0in}{ \raggedright
       \co{rcu_read_lock()}~! \\
-      \co{rcu_read_unlock()}~! } &
-	{ \raggedright
+      \co{rcu_read_unlock()}~! }\end{minipage} &
+	\begin{minipage}[t]{1.0in}{ \raggedright
 	  \co{rcu_read_lock_bh()} \\
-	  \co{rcu_read_unlock_bh()} } &
-	    { \raggedright
+	  \co{rcu_read_unlock_bh()} }\end{minipage} &
+	    \begin{minipage}[t]{1.0in}{ \raggedright
 	      \co{preempt_disable()} \\
 	      \co{preempt_enable()} \\
-	      (and friends) } &
-	        { \raggedright
+	      (and friends) }\end{minipage} &
+	        \begin{minipage}[t]{1.0in}{ \raggedright
 		  \co{rcu_read_lock()} \\
-		  \co{rcu_read_unlock()} } \\
+		  \co{rcu_read_unlock()} }\end{minipage} \\
 \hline
 { Update-side primitives (synchronous) } &
     { \co{synchronize_rcu()} \co{synchronize_net()} } &
-	&
+	\co{synchronize_rcu_bh()} &
 	    \co{synchronize_sched()} &
 	        { \co{synchronize_rcu()} \co{synchronize_net()} } \\
 \hline
@@ -92,7 +91,7 @@ Type-safe memory &
 \hline
 Read side constraints &
     No blocking &
-	No irq enabling &
+	No bottom-half (BH) enabling &
 	    No blocking &
 	        Only preemption and lock acquisition \\
 \hline
@@ -105,7 +104,7 @@ Read side overhead &
 Asynchronous update-side overhead &
     sub-microsecond &
 	sub-microsecond &
-	    &
+	    sub-microsecond &
 	        sub-microsecond \\
 \hline
 Grace-period latency &
@@ -125,78 +124,54 @@ Non-\co{PREEMPT_RT} implementation &
 	Realtime RCU &
 	    Forced Schedule on all CPUs &
 	        Realtime RCU \\
-\end{tabular}
-\end{center}
+\end{tabulary}
 \caption{RCU Wait-to-Finish APIs}
 \label{tab:defer:RCU Wait-to-Finish APIs}
 \end{table*}
 
 \begin{table*}[p]
-\begin{center}
-\scriptsize
-\begin{tabular}{p{1.1in}|p{1.5in}|p{1.5in}}
+\centering
+\scriptsize\tymin=1.1in\tymax=1.5in
+\begin{tabulary}{4.5in}{L|L}
 Attribute &
-    SRCU &
-	QRCU \\
+    SRCU \\
 \hline
 \hline
 Purpose &
-    Sleeping readers &
-	Sleeping readers and fast grace periods \\
+    Sleeping readers \\
 \hline
 Availability &
-    2.6.19 &
-	\\
+    2.6.19 \\
 \hline
 Read-side primitives &
-    { \raggedright
+    \begin{minipage}[t]{1.5in}{ \raggedright
       \co{srcu_read_lock()} \\
-      \co{srcu_read_unlock()} } &
-	{ \raggedright
-	  \co{qrcu_read_lock()} \\
-	  \co{qrcu_read_unlock()} } \\
+      \co{srcu_read_unlock()} }\end{minipage} \\
 \hline
-{ Update-side primitives (synchronous) } &
-    \co{synchronize_srcu()} &
-	\co{synchronize_qrcu()} \\
+Update-side primitives (synchronous) &
+    \co{synchronize_srcu()} \\
 \hline
-{ Update-side primitives (asynchronous/callback) } &
-    N/A &
-	N/A \\
+Update-side primitives (asynchronous/callback) &
+    \co{call_srcu()} \\
 \hline
-{ Update-side primitives (wait for callbacks) } &
-    N/A &
-	N/A \\
+Update-side primitives (wait for callbacks) &
+    N/A \\
 \hline
 Type-safe memory &
-    &
-	\\
+    \\
 \hline
 Read side constraints &
-    No \co{synchronize_srcu()} &
-	No \co{synchronize_qrcu()} \\
+    No \co{synchronize_srcu()} wtih same \co{srcu_struct} \\
 \hline
 Read side overhead &
-    Simple instructions, preempt disable/enable &
-	Atomic increment and decrement of shared variable \\
+    Simple instructions, preempt disable/enable, memory barriers \\
 \hline
 Asynchronous update-side overhead &
-    N/A &
-	N/A \\
+    N/A \\
 \hline
 Grace-period latency &
-    10s of milliseconds &
-	10s of \emph{nanoseconds} in absence of readers \\
-\hline
-Non-\co{PREEMPT_RT} implementation &
-    SRCU &
-	N/A \\
-\hline
-\co{PREEMPT_RT} implementation &
-    SRCU &
-	N/A \\
-\end{tabular}
-\end{center}
+    10s of milliseconds \\
+\end{tabulary}
 \caption{Sleepable RCU Wait-to-Finish APIs}
 \label{tab:defer:Sleepable RCU Wait-to-Finish APIs}
 \end{table*}
@@ -428,11 +403,9 @@ RCU BH 는 필요한 사람은 쉽게 구현할 수 있겠지만, 동기적인
 
 In the ``RCU BH'' column, \co{rcu_read_lock_bh()} and
 \co{rcu_read_unlock_bh()} delimit RCU read-side critical
-sections, and \co{call_rcu_bh()} invokes the specified
-function and argument after a subsequent grace period.
-Note that RCU BH does not have a synchronous \co{synchronize_rcu_bh()}
-interface,
-though one could easily be added if required.
+sections, \co{synchronize_rcu_bh()} waits for a grace period,
+and \co{call_rcu_bh()} invokes the specified
+function and argument after a later grace period.
 \fi
 
 \QuickQuiz{}
@@ -627,8 +600,7 @@ elsewhere~\cite{PaulEMcKenney2007PreemptibleRCU}.
 	인터페이스가 없나요?
 	\iffalse
 
-	Why do both SRCU and QRCU lack asynchronous \co{call_srcu()}
-	or \co{call_qrcu()} interfaces?
+	Why should you be careful with \co{call_srcu()}?
 	\fi
 \QuickQuizAnswer{
 	비동기 인터페이스가 있다면, 하나의 태스크는 무수히 많은 SRCU 나 QRCU
@@ -639,12 +611,11 @@ elsewhere~\cite{PaulEMcKenney2007PreemptibleRCU}.
 	끝내야만 합니다.
 	\iffalse
 
-	Given an asynchronous interface, a single task
-	could register an arbitrarily large number of SRCU or QRCU callbacks,
-	thereby consuming an arbitrarily large quantity of memory.
-	In contrast, given the current synchronous
-	\co{synchronize_srcu()} and \co{synchronize_qrcu()}
-	interfaces, a given task must finish waiting for a given grace period
+	A single task could register SRCU callbacks very quickly.
+	Given that SRCU allows readers to block for arbitrary periods of
+	time, this could consume an arbitrarily large quantity of memory.
+	In contrast, given the synchronous \co{synchronize_srcu()}
+	interface, a given task must finish waiting for a given grace period
 	before it can start waiting for the next one.
 	\fi
 } \QuickQuizEnd
@@ -679,30 +650,6 @@ unrelated \co{synchronize_srcu()} invocations.
 In addition, in this variant of RCU, \co{srcu_read_lock()}
 returns a value that must be passed into the corresponding
 \co{srcu_read_unlock()}.
-\fi
-
-``QRCU'' 행은 SRCU 와 똑같은 API 구조를 갖지만 읽기 쓰레드들이 존재하지 않을
-때에는 grace period 들의 극단적으로 낮은 대기시간을 위해 최적화된, 다른곳에서
-설명된~\cite{PaulEMcKenney2007QRCUspin} RCU 구현을 소개합니다.
-SRCU 에서와 마찬가지로, QRCU read-side 크리티컬 섹션 내에서의
-\co{synchronize_qrcu()} 사용은 스스로의 deadlock 을 유발할 수 있으므로 그런
-일은 없어야만 합니다.
-QRCU 가 아직 리눅스 커널에 들어가지는 않았지만 마이크로세컨드 내의 grace-period
-대기시간을 자랑할 수 있는 유일한 커널 수준의 RCU 구현이기 때문에 언급할 가치가
-있습니다.
-\iffalse
-
-The ``QRCU'' column presents an RCU implementation with the same
-API structure as SRCU, but optimized for extremely low-latency
-grace periods in absence of readers, as described
-elsewhere~\cite{PaulEMcKenney2007QRCUspin}.
-As with SRCU, use of \co{synchronize_qrcu()} in a QRCU read-side
-critical section can result in
-self-deadlock, so should be avoided.
-Although QRCU has not yet been accepted into the Linux kernel, it
-is worth mentioning given that it is the only kernel-level
-RCU implementation
-that can boast deep sub-microsecond grace-period latencies.
 \fi
 
 \QuickQuiz{}
@@ -820,7 +767,7 @@ and also by their scope, as follows:
 	NMI handlers, irq handlers, \co{softirq} handlers, and (in the
 	real-time case) higher-priority real-time tasks.
 	RCU is global in scope.
-\item	SRCU and QRCU: read-side critical sections need not guarantee
+\item	SRCU: read-side critical sections need not guarantee
 	forward progress unless some other task is waiting for the
 	corresponding grace period to complete, in which case these
 	read-side critical sections should complete in no more than
@@ -828,8 +775,8 @@ and also by their scope, as follows:
 		Thanks to James Bottomley for urging me to this
 		formulation, as opposed to simply saying that
 		there are no forward-progress guarantees.}
-	SRCU's and QRCU's scope is defined by the use of the corresponding
-	\co{srcu_struct} or \co{qrcu_struct}, respectively.
+	SRCU's scope is defined by the use of the corresponding
+	\co{srcu_struct}.
 \fi
 \end{enumerate}
 
@@ -837,7 +784,7 @@ and also by their scope, as follows:
 극단적으로 약한 forward-progress 보장사항의 문제를 보완합니다.
 \iffalse
 
-In other words, SRCU and QRCU compensate for their extremely weak
+In other words, SRCU compensate for their extremely weak
 forward-progress guarantees by permitting the developer to restrict
 their scope.
 \fi
@@ -869,9 +816,9 @@ that Linux supports~\cite{Spraul01}.
 \fi
 
 \begin{table*}[tb]
-\begin{center}
-% \scriptsize
-\begin{tabular}{p{1.1in}|p{1.9in}|p{0.7in}|p{1.3in}}
+\footnotesize
+\centering\tymin=1.0in\tymax=1.6in
+\begin{tabulary}{5in}{l|L|l|L}
 Category &
 	Primitives &
 		Availability &
@@ -941,8 +888,7 @@ Pointer update &
 	\co{rcu_assign_pointer()} &
 		2.6.10 &
 			Memory barrier \\
-\end{tabular}
-\end{center}
+\end{tabulary}
 \caption{RCU Publish-Subscribe and Version Maintenance APIs}
 \label{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
 \end{table*}
