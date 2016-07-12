@@ -3,41 +3,17 @@
 \subsection{Introduction to RCU}
 \label{sec:defer:Introduction to RCU}
 
-RCU 로 보호되는 자료구조의 모범적인 예는 네트워킹 라우팅 테이블로, 이
-자료구조는 목적지 주소를 연관된 목적지 포트로 매핑해 줍니다.
-일반적으로, 이 매핑은 바뀌지 않습니다만, 하드웨어 재구성이나 실패로 인해 언제든
-바뀔 수 있습니다.
-네트워크 패킷 전송은 하드웨어 재구성이나 실패에 비해 훨씬 더 빈번하므로, 룩업
-(lookup) 의 오버헤드는 업데이트에 드는 비용이 상당히 비싸진다 하더라도 최소화
-되어야 합니다.
-사실, 가능하기만 하다면, 룩업의 오버헤드는 싱글 쓰레드에서의 룩업과 같아야
-합니다.
-이 제한된 사례에서, 병렬적인 룩업들은 싱글 쓰레드에서의 룩업과 동일한 일련의
-어셈블리어 인스트럭션들을 수행하게 될겁니다.
-
-비로 이게 좋은 목표이긴 하지만, 이는 몇가지 심각한 구현 가능성에 대한 질문을
-떠올리게 합니다.
-인입과 삭제는 별개로 구분될 겁니다.
-\iffalse
-
-The prototypical example of an RCU-protected data structure is a
-networking routing table that maps from destination address to
-the corresponding destination port.
-Normally, this mapping will not change, but it could change at any
-time due to hardware reconfigurations or failures.
-Because network packet transmissions are much more frequent than hardware
-reconfigurations or failures, the overhead of lookups should be minimized
-even if doing so causes updates to become quite expensive.
-In fact, if possible, the overhead of lookups should be the same as
-that of a single-threaded lookup.
-In this limiting case, the parallel lookups would execute the same
-sequence of assembly language instructions as would a single-threaded
-lookup.
-
+The approaches discussed in the preceding sections have provided
+some scalability but decidedly non-ideal performance for the
+Pre-BSD routing table.
+It would be nice if the overhead of Pre-BSD lookups was the same as
+that of a single-threaded lookup, so that the parallel lookups would
+execute the same sequence of assembly language instructions as would a
+single-threaded lookup.
 Although this is a nice goal, it does raise some serious implementability
 questions.
-Insertion and deletion will be treated separately.
-\fi
+But let's see what happens if we try, treating insertion and deletion
+separately.
 
 \begin{figure}[tb]
 \begin{center}
