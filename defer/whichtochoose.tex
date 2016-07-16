@@ -92,7 +92,7 @@ Table~\ref{tab:defer:Which Deferred Technique to Choose?}
 는 이 챕터에서 소개한 네개의 미뤄두고 처리하기 테크닉들 중 무엇을
 선택해야할지를 돕는 대략적 경험적 법칙을 제공합니다.
 
-``Existence Guarantee'' 행에서 보인 것처럼, 링크된 데이터 원소들에 대한 존재
+``Existence Guarantee'' 열에서 보인 것처럼, 링크된 데이터 원소들에 대한 존재
 보장이 필요하다면 레퍼런스 카운팅, 해저드 포인터, 또는 RCU 를 사용해야 합니다.
 시퀀스 락은 존재 보장을 제공하지 않고, 업데이트의 발견과 업데이트를 마주한
 read-side 크리티컬 섹션의 재시도 기능을 제공합니다.
@@ -110,7 +110,7 @@ detection of updates, retrying any read-side critical sections
 that do encounter an update.
 \fi
 
-물론, ``Updates and Readers Progress Concurrently'' 행에서 보인 것처럼, 이런
+물론, ``Updates and Readers Progress Concurrently'' 열에서 보인 것처럼, 이런
 업데이트의 발견은 시퀀스 락킹이 업데이트 쓰레드와 읽기 쓰레드가 동시에 진행할
 수는 없게 만듭니다.
 무엇보다, 그런 진행을 방지하는 것은 시퀀스 락킹을 사용하는 첫번째 이유입니다!
@@ -132,14 +132,12 @@ In fact, the Linux kernel combines RCU and sequence locking in
 this manner during pathname lookup.
 \fi
 
-``Read-side Overhead'' 행은 이 테크닉들의 대략적인 read-side 오버헤드를
-보입니다.
-레퍼런스 카운팅의 오버헤드는 다양하게 변합니다.
-오버헤드가 적은 경우는, 간단한 어토믹하지 않은 값 증가연산만으로도 충분할 수
-있는데, 적어도 다른 이유로 잡아야만 하는 락의 보호 아래에서 레퍼런스를 잡는
-경우라면 그렇습니다.
-오버헤드가 큰 경우에는 완전히 순서잡힌 어토믹 오퍼레이션이 필요합니다.
-레퍼런스 카운팅은 마주치는 각각의 모든 데이터 원소들에 이 오버헤드를 끼칩니다.
+``Contention Among Readers'', ``Reader Per-Critical-Section Overhead'',
+그리고 ``Reader Per-Object Traversal Overhead'' 열은 이 테크닉들의 대략적인
+read-side 오버헤드를 보입니다.
+레퍼런스 카운팅의 오버헤드는 읽기 쓰레드간의 완전히 순서 맞춰진
+read-modify-write 어토믹 오퍼레이션이 각각의 모든 오브젝트 방문에 필요하기
+때문에 상당히 클 수 있습니다.
 해저드 포인터는 마주치는 각각의 데이터 원소에 메모리 배리어 오버헤드를 끼치고
 시퀀스 락은 크리티컬 섹션을 실행하고자 하는 각 시도마다 두개의 메모리 배리어
 오버헤드를 만듭니다.
@@ -164,8 +162,12 @@ with the best performance, particularly for read-side critical sections
 that traverse many data elements.
 \fi
 
-``Bulk Reference'' 행은 RCU 만이 오버헤드를 일정하게 유지한채 여러 레퍼런스들을
-잡을 수 있음을 이야기합니다.
+``Reader Forward Progress Guarantee'' 열은 RCU 만이 bounded wait-free
+forward-progress 보장을 가짐을 보이는데, 이는 유한한 갯수의 인스트럭션들을
+수행하는 것으로 유한한 방문을 할 수 있음을 의미합니다.
+
+``Reader REference Acquisition'' 열은 RCU 만이 무조건적으로 레퍼런스를 얻어오는
+것이 가능함을 알립니다.
 시퀀스 락의 항목은 ``N/A'' 라 표기되어 있는데, 다시 말하지만 시퀀스 락은
 레퍼런스를 얻는게 아니라 업데이트를 발견하기 때문입니다.
 \iffalse
@@ -181,6 +183,15 @@ The entry for sequence locks is ``N/A'' because, again, sequence locks
 detect updates rather than acquiring references.
 \fi
 
+레퍼런스 카운팅과 해저드 포인터는 레퍼런스 획득에 실패하면 횡단을 처음부터 다시
+시작할 것이 요구되는데, 현재의 오브젝트는 그사이 삭제되었을 수 있고 뒤따르는
+쓰레드에 의해 삭제만 된게 아니라 해제되었을 수도 있기 때문입니다.
+예를 들어, 트리(tree) 횡단을 보호하기 위해 레퍼런스 카운팅이나 해저드 포인터를
+사용할 때에는 모든 레퍼런스 획득 실패는 그 횡단을 그 트리의 루트부터 다시
+시작해야 함을 의미합니다.
+이 상황은 RCU 에게 상당한 사용의 편이성 이득을 줍니다.
+\iffalse
+
 Reference counting and hazard pointers require that traversals be
 restarted from the beginning should a given acquisition fail because
 the currrent object might be removed and all of its
@@ -189,6 +200,17 @@ For example, when using reference counting or hazard pointers to
 protect a tree traversal, any reference-acquisition failure requires
 that the traversal be restarted from the root of the tree.
 This situation gives RCU a significant ease-of-use advantage.
+\fi
+
+하지만, RCU 의 사용성 이득은 공짜로 오는 것은 아닌데, ``Memory Footprint''
+열에서 이를 볼 수 있습니다.
+RCU 의 무조건적 레퍼런스 획득 지원은 곧 어떤 RCU 읽기 쓰레드에게 보이는
+오브젝트는 그 읽기 쓰레드가 완료되기 전까지는 해제시킬 수가 없음을 의미합니다.
+따라서 RCU 는 무한한 메모리 사용량 가능성을 갖는데, 업데이트가 인공적으로
+조절되지 않는한은 그렇습니다.
+반면에, 레퍼런스 카운팅과 해저드 포인터는 정말로 동시의 읽기 쓰레드들이
+레퍼런스 하고 있는 데이터 원소들만을 유지할 겁니다.
+\iffalse
 
 However, RCU's ease-of-use advantage does not come
 for free, as can be seen in the ``Memory Footprint'' row.
@@ -199,8 +221,9 @@ RCU therefore has an unbounded footprint, at least unless updates
 are artificially throttled.
 In contrast, reference counting and hazard pointers would retain only
 those specific data elements actually referenced by concurrent readers.
+\fi
 
-이런 메모리 사용량, 정확히는 추적, 과 획득 실패 사이의 미묘한 긴장감은 리눅스
+이런 메모리 사용량과 획득 실패 사이의 미묘한 긴장감은 리눅스
 커널 안에서는 일부 경우 RCU 와 레퍼런스 카운터를 함께 사용하는 것으로
 해결되기도 합니다.
 RCU 는 잠깐 사용되는 레퍼런스들에 사용되는데, 이는 RCU read-side 크리티컬
@@ -212,6 +235,9 @@ RCU 는 잠깐 사용되는 레퍼런스들에 사용되는데, 이는 RCU read-
 이 말이 의미하는 바는 레퍼런스 획득 실패의 복잡도를 처리하는건 그런 일부 데이터
 원소들에서만 필요시 된다는 뜻입니다:  대량의 레퍼런스 획득은 RCU 덕분에
 고려되지 않습니다.
+레퍼런스 카운팅을 다른 동기화 메커니즘과 결합하는 방법에 대한 더 많은 정보를
+위해선
+Section~\ref{sec:together:Refurbish Reference Counting} 을 보시기 바랍니다.
 \iffalse
 
 This tension between memory footprint and acquisition
@@ -231,7 +257,7 @@ for more information on combining reference counting with other
 synchronization mechanisms.
 \fi
 
-마지막으로, ``Non-Blocking Updates'' 행은 해저드 포인터는 non-blocking
+``Reclamation Forward Progress'' 열은 해저드 포인터가 non-blocking
 업데이트를 제공할 수 있음을 이야기합니다~\cite{MagedMichael04a,HerlihyLM02}.
 레퍼런스 카운팅은 구현에 따라서 그럴수도 그러지 않을수도 있습니다.
 하지만, 시퀀스 락킹은 update-side 락 때문에 non-blocking 업데이트를 제공할 수
@@ -241,10 +267,6 @@ RCU 업데이트 쓰레드들은 읽기 쓰레드를 기다려야만 하는데, 
 하지만, 블록킹 오퍼레이션은 메모리를 해제하기 위한 기다림 뿐인 상황이
 존재하는데, 많은 경우에 이런 상황은 non-blocking 만큼이나 좋은
 상황입니다~\cite{MathieuDesnoyers2012URCU}.
-
-이런 테크닉들을 조합해서 또는 각각 사용하는 경험이 더 쌓여감에 따라서 이 섹션에
-놓인 경험적 법칙은 수정될 수 있을 겁니다.
-하지만, 이 섹션은 현재로써는 최선의 결과를 반영하고 있습니다.
 \iffalse
 
 The ``Reclamation Forward Progress'' row shows that hazard pointers
@@ -257,6 +279,17 @@ updates.
 However, there are situations in which the only blocking operation is
 a wait to free memory, which results in an situation that, for many
 purposes, is as good as non-blocking~\cite{MathieuDesnoyers2012URCU}.
+\fi
+
+``Automatic Reclamation'' 열에 보여진 것처럼, 레퍼런스 카운팅만이 메모리 해제를
+자동화 할 수 있는데, 적어도 non-cyclic 데이터 구조들을 가정하면 그렇습니다.
+
+마지막으로, ``Lines of Code'' 열은 Pre-BSD 라우팅 테이블 구현의 크기를
+보이는데, 상대적인 사용의 편리성에 대한 대략적 정보를 제공합니다.
+그렇다곤 하나, 레퍼런스 카운팅과 시퀀스 락킹 구현은 버그가 존재하며, 정확히
+동작하는 레퍼런스 카운팅 구현은 더 복잡할 것으로 여겨짐을 알아둘 필요가
+있습니다.
+\iffalse
 
 As shown in the ``Automatic Reclamation'' row, only reference
 counting can automate freeing of memory, at least assuming non-cyclic
@@ -267,6 +300,12 @@ Routing Table implementations, giving a rough idea of relative ease of use.
 That said, it is important to note that the reference-counting and
 sequence-locking implementations are buggy, and that a correct
 reference-counting implementation is considerably more complex.
+\fi
+
+이런 테크닉들을 조합해서 또는 각각 사용하는 경험이 더 쌓여감에 따라서 이 섹션에
+놓인 경험적 법칙은 수정될 수 있을 겁니다.
+하지만, 이 섹션은 현재로써는 최선의 결과를 반영하고 있습니다.
+\iffalse
 
 As more experience is gained using these techniques, both separately
 and in combination, the rules of thumb laid out in this section will
