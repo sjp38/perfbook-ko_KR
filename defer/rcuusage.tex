@@ -146,12 +146,33 @@ Section~\ref{sec:defer:RCU Usage Summary} provides a summary.
 \label{fig:defer:RCU Pre-BSD Routing Table Add/Delete}
 \end{figure}
 
+Figure~\ref{fig:defer:RCU Pre-BSD Routing Table Lookup}
+와~\ref{fig:defer:RCU Pre-BSD Routing Table Add/Delete}
+는 RCU 로 보호되는 Pre-BSD 라우팅 테이블을 위한 코드를 보이고 있습니다
+(\path{route_rcu.c}).
+앞의 것은 데이터 구조들과 \co{route_lookup()} 을, 뒤의 것은 \co{route_add()} 와
+\co{route_del()} 을 위한 코드입니다.
+\iffalse
+
 Figures~\ref{fig:defer:RCU Pre-BSD Routing Table Lookup}
 and~\ref{fig:defer:RCU Pre-BSD Routing Table Add/Delete}
 show code for an RCU-protected Pre-BSD routing table
 (\path{route_rcu.c}).
 The former shows data structures and \co{route_lookup()},
 and the latter shows \co{route_add()} and \co{route_del()}.
+\fi
+
+Figure~\ref{fig:defer:RCU Pre-BSD Routing Table Lookup} 에서, ine~2 는 RCU
+reclamation 에 사용되는 \co{->rh} 필드를 보이고, line~6 는 해제 후 사용 검사를
+위한 \co{->re_freed} 필드를 보이며, line~16, 17, 23, 그리고 27 은 RCU read-side
+보호 코드를 보이고, line~21 과 22 에서 해제 후 사용 여부 검사를 합니다.
+Figure~\ref{fig:defer:RCU Pre-BSD Routing Table Add/Delete} 에서, line~12, 14,
+31, 36, 그리고 41 에서 update-side 락킹을 하며, line~13 과 35 에서 RCU
+update-side 보호를 하고, line~37 에서 grace period 가 하나 지나간 후에
+\co{route_cb()} 를 호출되게 하고, line~18-25 에서 \co{route_cb()} 를
+정의합니다.
+이는 똑바로 동작하는 구현을 위해 추가되는 최소한의 코드입니다.
+\iffalse
 
 In Figure~\ref{fig:defer:RCU Pre-BSD Routing Table Lookup},
 line~2 adds the \co{->rh} field used by RCU reclamation,
@@ -164,6 +185,7 @@ lines~13 and~35 add RCU update-side protection,
 line~37 causes \co{route_cb()} to be invoked after a grace period elapses,
 and lines~18-25 define \co{route_cb()}.
 This is minimal added code for a working concurrent implementation.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -171,6 +193,18 @@ This is minimal added code for a working concurrent implementation.
 \caption{Pre-BSD Routing Table Protected by RCU}
 \label{fig:defer:Pre-BSD Routing Table Protected by RCU}
 \end{figure}
+
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU}
+는 read-only 워크로드에서의 성능을 보입니다.
+RCU 는 상당히 잘 확장되어서, 이상적 성능에 가까운 성능을 보입니다.
+하지만, 이 데이터는 userspace RCU 의 \co{RCU_SIGNAL} 사용
+버전~\cite{MathieuDesnoyers2009URCU,PaulMcKenney2013LWNURCU} 을 사용해서 생성된
+것으로, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 이 약간의 코드를
+생성합니다.
+\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 에 아무 코드도 생성하지 않는
+Quiescent-state-based-reclamation (QSBR) 버전의 RCU 를 사용한다면 어떻게
+될까요?
+\iffalse
 
 Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU}
 shows the performance on the read-only workload.
@@ -183,6 +217,14 @@ generate a small amount of code.
 What happens for the quiescent-state-based-reclamation (QSBR)
 flavor of RCU, which generates no code for
 \co{rcu_read_lock()} and \co{rcu_read_unlock()}?
+\fi
+
+그에 대한 답이 RCU QSBR 결과를 RCU 와 ideal 사이에 보여주는
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR}
+에 있습니다.
+RCU QSBR 은 바랬던 대로 이상적인 동기화를 아예 하지 않는 워크로드와 거의 동일한
+성능과 확장성을 갖습니다.
+\iffalse
 
 The answer to this shown in
 Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR},
@@ -190,10 +232,25 @@ which shows the RCU QSBR results as the trace between the RCU and
 the ideal traces.
 RCU QSBR's performance and scalability is very nearly that of an
 ideal synchronization-free workload, as desired.
+\fi
 
 \QuickQuiz{}
+	RCU QSBR 은 왜 이상적 결과와 \emph{동일한} 결과를 보이지 않는 거죠?
+	\iffalse
+
 	Why doesn't RCU QSBR give \emph{exactly} ideal results?
+	\fi
 \QuickQuizAnswer{
+	\co{rcu_dereference()} 도구는 컴파일러의 최적화를 조금 제약할 수
+	있어서, 아주 약간 느린 코드를 만들어낼 수 있습니다.
+	이 영향은 일반적으로는 별로 심각하지 않을 것입니다만, 각각의 탐색이 약
+	13~나노세컨드를 더 필요로 하게 되는데, 이는 코드 생성의 작은 차이가
+	느껴지지도 못할만큼 충분히 짧은 시간입니다.
+	이 차이는 약 1.5\% 부터 약 11.1\% 까지 나오는데, RCU QSBR 코드가
+	``이상적인'' 코드는 할 수 없는 동시의 업데이트도 처리할 수 있다는 점을
+	생각하면 상당히 작은 차이입니다.
+	\iffalse
+
 	The \co{rcu_dereference()} primitive does constrain the
 	compiler's optimizations somewhat, which can result in
 	slightly slower code.
@@ -204,11 +261,18 @@ ideal synchronization-free workload, as desired.
 	The difference ranges from about 1.5\% to about 11.1\%, which is
 	quite small when you consider that the RCU QSBR code can handle
 	concurrent updates and the ``ideal'' code cannot.
+	\fi
+
+	C11 \co{memory_order_consume} 로드~\cite{RichardSmith2015N4527} 가
+	언젠가는 \co{rcu_dereference()} 에게 더 낮은 비용에 필요한 보호를
+	해주는 날이 오기를 기대해 볼만 합니다.
+	\iffalse
 
 	It is hoped that C11 \co{memory_order_consume}
 	loads~\cite{RichardSmith2015N4527}
 	might someday allow \co{rcu_dereference()} provide the
 	needed protection at lower cost.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tb]
