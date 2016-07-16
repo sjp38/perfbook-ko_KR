@@ -395,10 +395,9 @@ often, at least its type will remain the same.
 } \QuickQuizEnd
 
 ``RCU BH'' 행에서, \co{rcu_read_lock_bh()} 와 \co{rcu_read_unlock_bh()} 는
-크리티컬 섹션을 구분짓고, \co{call_rcu_bh()} 는 다음의 grace period 후에 특정
-함수를 특정 인자와 함께 호출해 줍니다.
-RCU BH 는 필요한 사람은 쉽게 구현할 수 있겠지만, 동기적인
-\co{synchronize_rcu_bh()} 인터페이스를 갖지 않는다는데 주의하세요.
+크리티컬 섹션을 구분짓고, \co{synchronize_rcu_bh()} 는 하나의 grace period 를
+기다리며, \co{call_rcu_bh()} 는 다음 grace period 후에 특정 함수를 특정 인자와
+함께 호출해 줍니다.
 \iffalse
 
 In the ``RCU BH'' column, \co{rcu_read_lock_bh()} and
@@ -596,19 +595,18 @@ elsewhere~\cite{PaulEMcKenney2007PreemptibleRCU}.
 \fi
 
 \QuickQuiz{}
-	왜 SRCU 와 QRCU 둘 다 비동기적인 \co{call_srcu()} 나 \co{call_qrcu()}
-	인터페이스가 없나요?
+	\co{call_srcu()} 사용에 있어 조심해야 하는 이유는 무엇일까요?
 	\iffalse
 
 	Why should you be careful with \co{call_srcu()}?
 	\fi
 \QuickQuizAnswer{
-	비동기 인터페이스가 있다면, 하나의 태스크는 무수히 많은 SRCU 나 QRCU
-	콜백들을 가질 수 있고, 따라서 무한히 큰 메모리를 소모할 수 있습니다.
-	반면에, 현재의 동기적인 \co{synchronize_srcu()} 와
-	\co{synchronize_qrcu()} 인터페이스들을 가지고는 특정 태스크는 다음
-	grace period 를 기다리기 시작하기 전에 현재 grace period 를 기다리기를
-	끝내야만 합니다.
+	하나의 테스크는 SRC 콜백들을 매우 빠르게 등록할 수 있습니다.
+	SRCU 가 읽기 쓰레드들이 임의의 기간동안 블록될 수 있도록 허용함을
+	생각하면, 이는 임의의 커다란 양의 메모리를 소모할 것을 알 수 있습니다.
+	반대로, 동기적인 \co{synchronize_srcu()} 인터페이스에서는 주어진
+	태스크는 다음 grace period 를 기다리는 걸 시작하기 전에 주어진 grace
+	period 를 기다리는 것을 마무리 해야만 합니다.
 	\iffalse
 
 	A single task could register SRCU callbacks very quickly.
@@ -742,15 +740,14 @@ and also by their scope, as follows:
 	높은 우선순위의 real-time task 를 제외한 모든 것에 forward progress 를
 	보장해야 합니다.
 	RCU 는 범위내에서 글로벌합니다.
-\item	SRCU 와 QRCU: read-side 크리티컬 섹션들은 다른 태스크가 연관된 grace
+\item	SRCU: read-side 크리티컬 섹션들은 다른 태스크가 연관된 grace
 	period 가 완료되기를 기다리고 있지 않다면 forward progress 를 보장하지
 	않아도 됩니다. 이런 상황에서 이 read-side 크리티컬 섹션들은 수초
 	이내에는 완료되어야 합니다 (그리고 더 빠르면 더 좋습니다).\footnote{
 		단순히 forward-progress guarantee 가 없다고 말하는 대신 이런
 		명확한 설명을 하도록 재촉해준 James Bottomley 에게 감사의
 		말씀을 드립니다.}
-	SRCU 그리고 QRCU 의 범위는 각각 연관된 \co{srcu_struct} 나
-	\co{qrcu_struct} 의 사용에 따라 정의됩니다.
+	SRCU 의 범위는 각각 연관된 \co{srcu_struct} 의 사용에 따라 정의됩니다.
 \iffalse
 
 \item	RCU BH: read-side critical sections
@@ -780,7 +777,7 @@ and also by their scope, as follows:
 \fi
 \end{enumerate}
 
-달리 말하자면, SRCU 와 QRCU 는 개발자가 그 범위를 제한할 수 있도록 하는 것으로
+달리 말하자면, SRCU 는 개발자가 그 범위를 제한할 수 있도록 하는 것으로
 극단적으로 약한 forward-progress 보장사항의 문제를 보완합니다.
 \iffalse
 
