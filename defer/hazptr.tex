@@ -431,6 +431,18 @@ and in other publications~\cite{ThomasEHart2007a,McKenney:2013:SDS:2483852.24838
 \label{fig:defer:Hazard-Pointer Pre-BSD Routing Table Add/Delete}
 \end{figure}
 
+Pre-BSD 라우팅 예제는 해저드 포인터를 사용할 수 있는데,
+Figure~\ref{fig:defer:Hazard-Pointer Pre-BSD Routing Table Lookup}
+에서 그런 데이터 구조들과 \co{route_lookup()} 를 보이고 있고,
+Figure~\ref{fig:defer:Hazard-Pointer Pre-BSD Routing Table Add/Delete}
+에서 \co{route_add()} 와 \co{route_del()} 을 보이고 있습니다
+(\path{route_hazptr.c}).
+레퍼런스 카운팅에서와 마찬가지로, 해저드 퐁니터 구현은
+page~\pageref{fig:defer:Sequential Pre-BSD Routing Table} 의
+Figure~\ref{fig:defer:Sequential Pre-BSD Routing Table} 에서 보인 순차적
+알고리즘과 상당히 유사하므로 차이점만 이야기하겠습니다.
+\iffalse
+
 The Pre-BSD routing example can use hazard pointers as shown in
 Figure~\ref{fig:defer:Hazard-Pointer Pre-BSD Routing Table Lookup}
 for data structures and \co{route_lookup()}, and in
@@ -443,6 +455,14 @@ Figure~\ref{fig:defer:Sequential Pre-BSD Routing Table}
 on
 page~\pageref{fig:defer:Sequential Pre-BSD Routing Table},
 so only differences will be discussed.
+\fi
+
+Figure~\ref{fig:defer:Hazard-Pointer Pre-BSD Routing Table Lookup} 에서 시작해,
+line~2 에서는 해저드 포인터가 해제되길 지연시키는 오브젝트들을 넣어두기 위한
+\co{->hh} 필드를 보이며, line~6 는 해제 후 사용 버그를 발견하기 위한
+\co{->re_freed} 필드를 보이며 line~24-30 에서는 해저드 포인터를 획득하려
+시도하고, 실패하면 line~18 의 \co{retry} 라벨로 브랜치 하게 됩니다.
+\iffalse
 
 Starting with
 Figure~\ref{fig:defer:Hazard-Pointer Pre-BSD Routing Table Lookup},
@@ -451,6 +471,17 @@ hazard-pointer free,
 line~6 shows the \co{->re_freed} field used to detect use-after-free bugs,
 and lines~24-30 attempt to acquire a hazard pointer, branching
 to line~18's \co{retry} label on failure.
+\fi
+
+Figure~\ref{fig:defer:Hazard-Pointer Pre-BSD Routing Table Add/Delete}
+에서, line~11 에서는 \co{->re_freed} 를 초기화 시키고, line~32 와 33 에서는
+새로 제거된 오브젝트의 \co{->re_next} 를 파괴하고, line~35 는 그 오브젝트를
+해당 해저드 포인터들의 \co{hazptr_free_later()} 함수에 넘기는데, 이 함수는 해당
+오브젝트가 해제되기 안전해질 때 해제시킬 겁니다.
+스핀락들은
+Figure~\ref{fig:defer:Reference-Counted Pre-BSD Routing Table Add/Delete}
+에서와 동일하게 동작합니다.
+\iffalse
 
 In
 Figure~\ref{fig:defer:Hazard-Pointer Pre-BSD Routing Table Add/Delete},
@@ -462,6 +493,7 @@ line~35 passes that object to the hazard pointers's
 is safe to do so.
 The spinlocks work the same as in
 Figure~\ref{fig:defer:Reference-Counted Pre-BSD Routing Table Add/Delete}.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -469,6 +501,18 @@ Figure~\ref{fig:defer:Reference-Counted Pre-BSD Routing Table Add/Delete}.
 \caption{Pre-BSD Routing Table Protected by Hazard Pointers}
 \label{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
 \end{figure}
+
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers} 는
+해저드 포인터로 보호되는 Pre-BSD 라우팅 알고리즘의
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Reference Counting}
+에서와 동일한 read-only 워크로드에서의 성능을 보입니다.
+해저드 포인터가 레퍼런스 카운팅에 비해 훨씬 잘 확장되긴 하지만, 해저드 포인터는
+여전히 읽기 쓰레드가 공유 메모리에 쓰기를 할 것을 필요로 하며 (대신 훨씬 개선된
+레퍼런스의 로컬리티를 제공합니다), 각 오브젝트 방문마다 메모리 배리어와 재시도
+여부 검사를 필요로 합니다.
+그로 인해 해저드 포인터의 성능은 이상적인 것에 비하면 훨씬 떨어집니다.
+반면에, 해저드 포인터는 동시의 업데이트가 존재할 때에도 올바르게 동작합니다.
+\iffalse
 
 Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
 shows the hazard-pointers-protected Pre-BSD routing algorithm's
@@ -482,14 +526,35 @@ object traversed.
 Therefore, hazard pointers's performance is far short of ideal.
 On the other hand, hazard pointers do operate correctly for workloads
 involving concurrent updates.
+\fi
 
 \QuickQuiz{}
+	논문 ``Structured Deferral: Synchronization via
+	Procrastination''~\cite{McKenney:2013:SDS:2483852.2483867} 는 해저드
+	포인터가 이상적인 경우에 가까운 성능을 보인다는 걸 보였습니다.
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard
+	Pointers} 에선 무슨 일이 일어난거죠???
+	\iffalse
+
 	The paper ``Structured Deferral: Synchronization via
 	Procrastination''~\cite{McKenney:2013:SDS:2483852.2483867}
 	shows that hazard pointers have near-ideal performance.
 	Whatever happened in
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}???
+	\fi
 \QuickQuizAnswer{
+	첫째로,
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	는 1차원적 y-축을 갖는데 반해 ``Structured Deferral'' 논문에서의
+	그래프는 로그스케일 y-축을 갖습니다.
+	다음으로, 그 논문은 해시 테이블을 사용했고,
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	의 수행은 간단한 링크드 리스트를 사용했습니다.
+	마지막으로, 그 논문은 더 커다랗고 오래된 x86 시스템을 쓴 반면,
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	의 결과를 생성하는데 사용된 시스템은 더 신형이고 더 작은 시스템이었습니다.
+	\iffalse
+
 	First,
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
 	has a linear y-axis, while most of the graphs in the
@@ -501,8 +566,14 @@ involving concurrent updates.
 	a newer but smaller system that was used to generate the data
 	shown in
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}.
+	\fi
 } \QuickQuizEnd
+
+다음 섹션은 해저드 포인터에서 더 개선을 하기 위해서 read-side 에서의 쓰기도
+오브젝트별 메모리 배리어도 없애주는 시퀀스 락을 사용해 보겠습니다.
+\iffalse
 
 The next section attempts to improve on hazard pointers by using
 sequence locks, which avoid both read-side writes and per-object memory
 barriers.
+\fi
