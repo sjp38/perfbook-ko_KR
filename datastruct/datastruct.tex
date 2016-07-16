@@ -1747,6 +1747,19 @@ which is the subject of the next section.
 \label{fig:datastruct:Resizable Hash-Table Data Structures}
 \end{figure}
 
+크기 재조절은 전통적인 우회로 추가 방법으로 이루어지는데, 여기서 이 우회로는
+Figure~\ref{fig:datastruct:Resizable Hash-Table Data Structures} 의 line~12-25
+에 보이는 \co{ht} 구조체입니다.
+Line~27-30 에 보인 \co{hashtab} 구조체는 현재의 \co{ht} 구조체로의 포인터와
+해시 테이블 크기 재조정을 하려는 동시적 시도를 직렬화 하는데 사용되는
+스핀락만을 담고 있습니다.
+전통적인 lock 또는 어토믹 오퍼레이션 기반의 구현을 사용하려 했다면, 이
+\co{hashtab} 구조체는 성능 측면에서도 확장성 측면에서도 심각한 병목지점이 될 수
+있었을 겁니다.
+하지만, 크기 재조정 작업은 상대적으로 가끔씩만 이뤄지므로 RCU 를 잘 사용해 볼
+수 있습니다.
+\iffalse
+
 Resizing is accomplished by the classic approach of inserting a level
 of indirection, in this case, the \co{ht} structure shown on
 lines~12-25 of
@@ -1759,6 +1772,25 @@ implementation, this \co{hashtab} structure could become a severe bottleneck
 from both performance and scalability viewpoints.
 However, because resize operations should be relatively infrequent,
 we should be able to make good use of RCU.
+\fi
+
+\co{ht} 구조체는 line~13 의 \co{->ht_nbuckets} 필드를 통해 해시 테이블의 크기를
+나타냅니다.
+이 크기는 bucket 배열을 담고 있는 똑같은 구조체 (line~24 의 \co{->ht_bkt[]})
+에도 저장되는데 이 크기와 배열 사이의 미스매치를 피하기 위해서입니다.
+Line~14 에서의 \co{->ht_resize_cur} 필드는 현재 크기 재조정 작업이 진행중이지
+않다면 -1 이 되는데, 크기 조정 작업이 진행 중이라면 line~15 의 \co{->ht_new}
+필드로 레퍼런스 될, 새로운 해시 테이블에 추가될 원소의 bucket 의 인덱스를
+가리키게 됩니다.
+진행 중인 크기 조정 작업이 없다면, \co{->ht_new} 는 \co{NULL} 입니다.
+따라서, 크기 조정 작업은 새로운 \co{ht} 구조체를 메모리 할당하고 \co{->ht_new}
+포인터로 그것을 레퍼런스 한 후, \co{->ht_resize_cur} 를 기존 테이블의 bucket
+들을 거쳐 증가시켜갑니다.
+새로운 테이블에 모든 원소가 추가되었다면, 새로운 데이블은 \co{hashtab} 구조체의
+\co{->ht_cur} 필드로 연결됩니다.
+기존의 읽기 쓰레드들이 모두 완료되면, 기존의 해시 테이블의 \co{ht} 구조체는
+메모리에서 해제될 수 있을 겁니다.
+\iffalse
 
 The \co{ht} structure represents a specific size of the hash table,
 as specified by the \co{->ht_nbuckets} field on line~13.
@@ -1778,6 +1810,26 @@ When all the elements have been added to the new table, the new
 table is linked into the \co{hashtab} structure's \co{->ht_cur} field.
 Once all old readers have completed, the old hash table's \co{ht} structure
 may be freed.
+\fi
+
+Line~16 에 있는 \co{->ht_idx} 필드는 이 두개의 리스트 포인터들 중 이 해시
+테이블을 통해 무엇이 사용되고 있는가를 알리고, line~3 의 \co{ht_elem}
+구조체의 \co{->hte_next[]} 배열의 인덱스로 사용됩니다.
+
+Line~17-23 의 \co{->ht_hash_private}, \co{->ht_cmp()}, \co{->ht_gethash()},
+그리고 \co{->ht_getkey()} 필드는 원소별 키와 해시 함수를 정의합니다.
+\co{->ht_hash_private} 은 해시 함수가 혼란스러울 수 있게
+해서~\cite{McKenney89c,McKenney90,McKenney91} 해시 함수에 사용되는 패러미터들에
+대한 통계적 추측을 기반으로 하는 denial-of-service 공격을 막는데 사용될 수 있게
+합니다.
+\co{->ht_cmp()} 함수는 특정 키를 특정 원소와 비교하고, \co{ht_gethash()} 는
+특정 키의 해시를 계산하며, \co{->ht_getkey()} 는 키를 감싸고 있는 데이터
+원소로부터 키를 꺼낼 수 있게 합니다.
+
+\co{ht_bucket} 구조체는 앞에서와 동일하고, \co{ht_elem} 구조체는 앞에서의
+하나의 리스트 포인터와 달리 두개의 리스트 포인터의 원소 배열을 제공한다는 점만
+다릅니다.
+\iffalse
 
 The \co{->ht_idx} field on line~16 indicates which of the two sets of
 list pointers are being used by this instantiation of the hash table,
@@ -1801,6 +1853,17 @@ The \co{ht_bucket} structure is the same as before, and the
 \co{ht_elem} structure differs from that of previous implementations
 only in providing a two-element array of list pointer sets in place of
 the prior single set of list pointers.
+\fi
+
+고정크기 해시 테이블에서의 bucket 선택은 상당히 간단합니다:
+단순히 해시 값을 연관된 bucket 인덱스로 변환하면 됩니다.
+반면에, 크기 조정이 가능하다면, 과거의 bucket 과 새로운 bucket 중 무엇을 선택할
+지 결정해야 합니다.
+만약 과거 테이블에서 선택될 bucket 이 이미 새로운 테이블에 분산되었다면, 새로운
+테이블에서의 bucket 이 선택되어야 합니다.
+거꾸로, 과거 테이블에서 선택될 bucket 이 아직 분산되지 않았다면, 그 bucket 은
+과거 테이블에서 선택되어야 합니다.
+\iffalse
 
 In a fixed-sized hash table, bucket selection is quite straightforward:
 Simply transform the hash value to the corresponding bucket index.
@@ -1812,6 +1875,7 @@ from the new table.
 Conversely, if the bucket that would be selected from the old table
 has not yet been distributed, then the bucket should be selected from
 the old table.
+\fi
 
 { \scriptsize
 \begin{verbbox}
