@@ -168,7 +168,7 @@ forward-progress 보장을 가짐을 보이는데, 이는 유한한 갯수의 �
 
 ``Reader REference Acquisition'' 열은 RCU 만이 무조건적으로 레퍼런스를 얻어오는
 것이 가능함을 알립니다.
-시퀀스 락의 항목은 ``N/A'' 라 표기되어 있는데, 다시 말하지만 시퀀스 락은
+시퀀스 락의 항목은 ``Unsafe'' 라 표기되어 있는데, 다시 말하지만 시퀀스 락은
 레퍼런스를 얻는게 아니라 업데이트를 발견하기 때문입니다.
 \iffalse
 
@@ -183,22 +183,35 @@ The entry for sequence locks is ``Unsafe'' because, again, sequence locks
 detect updates rather than acquiring references.
 \fi
 
-레퍼런스 카운팅과 해저드 포인터는 레퍼런스 획득에 실패하면 횡단을 처음부터 다시
-시작할 것이 요구되는데, 현재의 오브젝트는 그사이 삭제되었을 수 있고 뒤따르는
-쓰레드에 의해 삭제만 된게 아니라 해제되었을 수도 있기 때문입니다.
-예를 들어, 트리(tree) 횡단을 보호하기 위해 레퍼런스 카운팅이나 해저드 포인터를
-사용할 때에는 모든 레퍼런스 획득 실패는 그 횡단을 그 트리의 루트부터 다시
-시작해야 함을 의미합니다.
-이 상황은 RCU 에게 상당한 사용의 편이성 이득을 줍니다.
+레퍼런스 카운팅과 해저드 포인터 둘 다 특정 레퍼런스 획득에 실패했을 때에는
+횡단을 처음부터 다시 시작할 것이 요구됩니다.
+이를 자세히 보기 위해, 오브젝트~A, B, C, 그리고~D 가 순서대로 담겨 있는 링크드
+리스트에 다음과 같은 이벤트들이 발생한다고 생각해 봅시다:
 \iffalse
 
-% TODO: apply 22455cae203
 Reference counting and hazard pointers both require that traversals be
 restarted from the beginning if a given acquisition fails.
 To see this, consider a linked list containing objects~A, B, C, and~D,
 in that order, and the following series of events:
+\fi
 
 \begin{enumerate}
+\item	한 읽기 쓰레드가 오브젝트~B 로의 레퍼런스를 얻습니다.
+\item	업데이트 쓰레드가 오브젝트~B 를 제거하지만, 읽기 쓰레드가 레퍼런스를
+	잡고 있으므로 해제하지는 않습니다.
+	이 리스트는 이제 오브젝트~A, C, 그리고~D 를 가지고 있고, 오브젝트~B 의
+	\co{->next} 포인터는 \co{HAZPTR_POISON} 으로 설정되어 있습니다.
+\item	앞의 업데이트 쓰레드는 오브젝트~C 를 제거하고, 이에 의해 리스트는
+	오브젝트~A 와~D 만 가지고 있게 됩니다.
+	오브젝트~C 에는 레퍼런스가 잡혀 있지 않으므로, 곧바로 해제됩니다.
+\item	앞의 읽기 쓰레드는 이제는 삭제된 오브젝트~B 의 다음 오브젝트로 넘어가려
+	하지만, poison 값을 가지고 있는 \co{->next} 포인터는 이를 못하게
+	합니다.
+	이는 좋은 일인데, 이렇게 되지 않으면 오브젝트~B 의 \co{->next} 포인터는
+	이미 해제된 메모리 영역을 가리킬 수도 있기 때문입니다.
+\item	이 읽기 쓰레드는 따라서 리스트의 헤드부터 횡단을 다시 시작해야 합니다.
+\iffalse
+
 \item	A reader acquires a reference to object~B.
 \item	An updater removes~object B, but refrains from freeing it because
 	the reader holds a reference.
@@ -214,7 +227,15 @@ in that order, and the following series of events:
 	would otherwise point to the freelist.
 \item	The reader must therefore restart its traversal from the head
 	of the list.
+\fi
 \end{enumerate}
+
+따라서, 레퍼런스를 획득하는데 실패했다면, 해저드 포인터나 레퍼런스 카운터를
+사용하는 횡단은 처음부터 그 횡단을 재시작해야 합니다.
+예를 들어 링크드 리스트를 담고 있는 트리와 같이 중첩된 링크드 데이터 구조의
+경우 이 횡단은 가장 바깥의 데이터 구조로부터 재시작되어야 합니다.
+이런 상황은 RCU 에 훨씬 사용하기 쉬운 이점을 가져다 줍니다.
+\iffalse
 
 Thus, when failing to acquire a reference, a hazard-pointer or
 reference-counter traversal must restart that traversal from the
@@ -238,7 +259,6 @@ RCU 의 무조건적 레퍼런스 획득 지원은 곧 어떤 RCU 읽기 쓰레�
 However, RCU's ease-of-use advantage does not come
 for free, as can be seen in the ``Memory Footprint'' row.
 RCU's support of unconditional reference acquisition means that
-% TODO: apply 22455cae
 it must avoid freeing any object reachable by a given
 RCU reader until that reader completes.
 RCU therefore has an unbounded memory footprint, at least unless updates
@@ -306,13 +326,17 @@ purposes, is as good as non-blocking~\cite{MathieuDesnoyers2012URCU}.
 \fi
 
 ``Automatic Reclamation'' 열에 보여진 것처럼, 레퍼런스 카운팅만이 메모리 해제를
-자동화 할 수 있는데, 적어도 non-cyclic 데이터 구조들을 가정하면 그렇습니다.
+자동화 할 수 있는데, non-cyclic 데이터 구조들에서만 그렇습니다.
 
 마지막으로, ``Lines of Code'' 열은 Pre-BSD 라우팅 테이블 구현의 크기를
 보이는데, 상대적인 사용의 편리성에 대한 대략적 정보를 제공합니다.
 그렇다곤 하나, 레퍼런스 카운팅과 시퀀스 락킹 구현은 버그가 존재하며, 정확히
-동작하는 레퍼런스 카운팅 구현은 더 복잡할 것으로 여겨짐을 알아둘 필요가
-있습니다.
+동작하는 레퍼런스 카운팅 구현은 더 복잡할 것으로
+여겨짐~\cite{Valois95a,MagedMichael95a}을 알아둘 필요가 있습니다.
+그런 부분을 위해, 올바른 시퀀스 락킹 구현은 추가적인 또다른 동기화 메커니즘을
+필요로 하는데, 예를 들어 해저드 포인터나 RCU 를 사용할 수 있는데, 시퀀스 락킹은
+동시의 업데이트를 발견하고 다른 메커니즘은 안전한 레퍼런스 획득을 제공할 수
+있을 겁니다.
 \iffalse
 
 As shown in the ``Automatic Reclamation'' row, only reference
@@ -323,7 +347,6 @@ Finally, the ``Lines of Code'' row shows the size of the Pre-BSD
 Routing Table implementations, giving a rough idea of relative ease of use.
 That said, it is important to note that the reference-counting and
 sequence-locking implementations are buggy, and that a correct
-% TODO: apply 22455cae
 reference-counting implementation is considerably
 more complex~\cite{Valois95a,MagedMichael95a}.
 For its part, a correct sequence-locking implementation requires
