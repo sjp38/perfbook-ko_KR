@@ -2049,6 +2049,14 @@ with a resize operation.
 \label{fig:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
 \end{figure}
 
+Read-side 동시성 제어는
+Figure~\ref{fig:datastruct:RCU-Protected Hash-Table Read-Side Concurrency Control}
+에서 보인 것처럼 RCU 로 제공됩니다만, update-side 동시성 제어 함수인
+\co{hashtab_lock_mode()} 와 \co{hashtab_unlock_mod()} 는
+Figure~\ref{fig:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
+에 보인 것처럼 동시의 크기 재조정 오퍼레이션 존재 가능성을 처리해야 합니다.
+\iffalse
+
 Read-side concurrency control is provided by RCU as was shown in
 Figure~\ref{fig:datastruct:RCU-Protected Hash-Table Read-Side Concurrency Control},
 but the update-side concurrency-control functions
@@ -2056,6 +2064,21 @@ but the update-side concurrency-control functions
 must now deal with the possibility of a
 concurrent resize operation as shown in
 Figure~\ref{fig:datastruct:Resizable Hash-Table Update-Side Concurrency Control}.
+\fi
+
+이 그림의 line~1-19 에 \co{hashtab_lock_mod()} 가 있습니다.
+Line~9 는 데이터 구조가 횡단을 하는 도중에 해제되는 일을 막기 위해 RCU
+read-side 크리티컬 섹션에 들어가고, line~10 에서 현재 해시 테이블로의
+레퍼런스를 얻어온 후, line~11 에서 이 해시 테이블에서 현재 키에 연관되는 bucket
+으로의 레퍼런스를 얻어옵니다.
+Line~12 는 이 bucket 의 락을 획득하는데, 이 락은 동시의 크기 재조정
+오퍼레이션이 그 bucket 을 분산시키는 것을 막는데, 물론 크기 재조정 오퍼레이션이
+이미 이 bucket 을 분산시켰다면 아무 영향이 없을 것임에도 불구하고 그렇습니다.
+Line~13 에서는 동시의 크기 재조정 오퍼레이션이 이미 이 bucket 을 새 해시
+테이블에 분산시켰는지 확인해보고, 그렇지 않다면 line~14 에서 선택된 bucket 의
+락을 잡은채로 (그리고 RCU read-side 크리티컬 섹션 안에 들어와 있는 채로)
+리턴합니다.
+\iffalse
 
 The \co{hashtab_lock_mod()} spans lines~1-19 in the figure.
 Line~9 enters an RCU read-side critical section to prevent
@@ -2071,6 +2094,16 @@ Line~13 then checks to see if a concurrent resize operation has
 already distributed this bucket across the new hash table, and if not,
 line~14 returns with the selected hash bucket's lock held (and also
 within an RCU read-side critical section).
+\fi
+
+그렇지 않고, 동시의 크기 재조정 오퍼레이션이 이미 이 bucket 을 분산시킨 것으로,
+line~15 에서 새로운 해시 테이블로 넘어가고 line~16 에서 키에 연관되는 bucket 을
+선택합니다.
+마지막으로, line~17 에서 해당 bucket 의 락을 잡고 line~18 에서 기존 해시
+테이블의 bucket 을 위한 락을 놓아줍니다.
+다시 한번, \co{hashtab_lock_mod()} 는 RCU read-side 크리티컬 섹션 안에 들어와
+있는 채로 빠져나가집니다.
+\iffalse
 
 Otherwise, a concurrent resize operation has already distributed this
 bucket, so line~15 proceeds to the new hash table and line~16
@@ -2079,21 +2112,46 @@ Finally, line~17 acquires the bucket's lock and line~18 releases the
 lock for the old hash table's bucket.
 Once again, \co{hashtab_lock_mod()} exits within an RCU read-side critical
 section.
+\fi
 
 \QuickQuiz{}
+	Figures~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection}
+	와~\ref{fig:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
+	의 코드는 업데이트를 위해 해시 값을 계산하고 bucket 선택 로직을 두번
+	수행하네요!
+	왜 이렇게 비효율적인거죠?
+	\iffalse
+
 	The code in
 	Figures~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection}
 	and~\ref{fig:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
 	computes the hash and executes the bucket-selection logic twice for
 	updates!
 	Why this blatant inefficiency?
+	\fi
 \QuickQuizAnswer{
+	이 방법은 \path{hashtorture.h} 테스트 도구가 재사용될 수 있게 합니다.
+	그렇다고는 하지만, 제품 품질의 크기 재조정 가능한 해시 테이블은 이런
+	두번의 계산이 없도록 최적화 되어야 할겁니다.
+	그런 최적화를 하는건 독자 여러분의 몫으로 남겨둡니다.
+	\iffalse
+
 	This approach allows the \path{hashtorture.h} testing infrastructure
 	to be reused.
 	That said, a production-quality resizable hash table would likely
 	be optimized to avoid this double computation.
 	Carrying out this optimization is left as an exercise for the reader.
+	\fi
 } \QuickQuizEnd
+
+\co{hashtab_unlock_mod()} 함수는 \co{hashtab_lock_mod()} 로 잡아 두었던 락을
+놓아줍니다.
+Line~28 에서 현재 해시 테이블을 고르고, line~29 에서 키에 연관된
+bucket---당연히 이 bucket 은 새로운 해시 테이블에 속해 있을 수도 있습니다--- 의
+레퍼런스를 증가시키기 위해 \co{ht_get_bucket()} 을 수행합니다.
+Line~30 은 이 bucket 의 락을 놓고 마지막으로 line~31 에서 RCU read-side
+크리티컬 섹션을 빠져나갑니다.
+\iffalse
 
 The \co{hashtab_unlock_mod()} function releases the lock acquired by
 \co{hashtab_lock_mod()}.
@@ -2103,13 +2161,32 @@ corresponds to the key---and of course this bucket might well be in a
 new hash table.
 Line~30 releases the bucket's lock and finally line~31 exits the
 RCU read-side critical section.
+\fi
 
 \QuickQuiz{}
+	크기 재조정 작업이 이루어지는 사이에 한 쓰레드가 새로운 해시 테이블에
+	원소를 넣는다고 생각해 봅시다.
+	뒤따르는 크기 재조정 작업이 이 삽입 작업 전에 완료됨으로 인해 이 삽입
+	작업이 없던 것처럼 되어버리는 문제는 어떻게 방지되고 있나요?
+	\iffalse
+
 	Suppose that one thread is inserting an element into the
 	new hash table during a resize operation.
 	What prevents this insertion from being lost due to a subsequent
 	resize operation completing before the insertion does?
+	\fi
 \QuickQuizAnswer{
+	두번째 크기 재조정 작업은 해당 bucket 에서 삽입 작업이 이루어지고 있는
+	장소로 움직일 수 없을텐데, 삽입 작업이 새로운 해시 테이블 (이 예에서의
+	세개의 해시 테이블 중 두번째)의 bucket 중 하나의 락을 잡고 있기
+	때문입니다.
+	더 나아가서, 이 삽입 작업은 RCU read-side 크리티컬 섹션 안에 위치하고
+	있습니다.
+	\co{hashtab_resize()} 함수에서 봤듯이, 이 말은 첫번째 크기 재조정
+	작업이 삽입의 read-side 크리티컬 섹션이 완료되기를
+	\co{synchronize_rcu()} 를 이용해 기다리고 있을 것을 의미합니다.
+	\iffalse
+
 	The second resize operation will not be able to move beyond
 	the bucket into which the insertion is taking place due to
 	the insertion holding the lock on one of the hash buckets in
@@ -2122,6 +2199,7 @@ RCU read-side critical section.
 	use
 	\co{synchronize_rcu()} to wait for the insertion's read-side
 	critical section to complete.
+	\fi
 } \QuickQuizEnd
 
 { \scriptsize
