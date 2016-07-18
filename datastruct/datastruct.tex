@@ -1897,6 +1897,17 @@ the old table.
 \label{fig:datastruct:Resizable Hash-Table Bucket Selection}
 \end{figure}
 
+Bucket 선택은
+Figure~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection} 에
+\co{ht_get_bucket_single()} 를 line~1-8 에, 그리고
+\co{ht_get_bucket()} 를 line~10-24 에 보이고 있습니다.
+\co{ht_get_bucket_single()} 함수는 특정 해시 테이블의 특정 키에 연관된 bucket
+으로의 레퍼런스를 리턴하는데, 이때에는 크기 재조정을 고려하지 않습니다.
+또한 해당 키에 연관된 해시 값을 line~5 와~6 에서 패러미터 \co{b} 로
+레퍼런스되는 영역에 저장합니다.
+그러고 나서 line~7 은 연관된 bucket 으로의 레퍼런스를 리턴합니다.
+\iffalse
+
 Bucket selection is shown in
 Figure~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection},
 which shows \co{ht_get_bucket_single()} on lines~1-8 and
@@ -1907,6 +1918,16 @@ making any allowances for resizing.
 It also stores the hash value corresponding to the key into the location
 referenced by parameter \co{b} on lines~5 and ~6.
 Line~7 then returns a reference to the corresponding bucket.
+\fi
+
+\co{ht_get_bucket()} 함수는 해시 테이블 선택을 처리하는데, line~16 에서
+\co{ht_get_bucket_single()} 을 호출해서 현재 해시 테이블에서 해시 값에 연관된
+bucket 을 선택하는데, 이 해시 값은 패러미터 \co{b} 에 저장합니다.
+Line~17 에서 이 테이블이 크기 재조정 중이고 line~16 의 bucket 이 이미 새로운
+해시 테이블로 분산되었다는 점을 알게 되면, line~18 에서 새 해시 테이블을
+선택하고 line~19 에서 이 새로운 해시 테이블에서의 해시 값에 연관된 bucket 을
+선택하고, 이때에도 해시 값은 패러미터 \co{b} 에 저장합니다.
+\iffalse
 
 The \co{ht_get_bucket()} function handles hash-table selection, invoking
 \co{ht_get_bucket_single()} on line~16 to select the bucket
@@ -1917,38 +1938,73 @@ line~16's bucket has already been distributed across the new hash
 table, then line~18 selects the new hash table and line~19
 selects the bucket corresponding to the hash in the new hash table,
 again storing the hash value through parameter \co{b}.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection}
+	의 코드는 해시 값을 두번 계산하네요!
+	왜 이렇게 비효율적이죠?
+	\iffalse
+
 	The code in
 	Figure~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection}
 	computes the hash twice!
 	Why this blatant inefficiency?
+	\fi
 \QuickQuizAnswer{
+	기존의 해시 테이블과 새로운 해시 테이블은 전혀 다른 해시 함수를 사용할
+	수도 있고, 따라서 기존의 테이블을 위해 계산된 해시 값은 새로운
+	테이블에서는 적절치 않을 수 있기 때문입니다.
+	\iffalse
+
 	The reason is that the old and new hash tables might have
 	completely different hash functions, so that a hash computed
 	for the old table might be completely irrelevant to the
 	new table.
+	\fi
 } \QuickQuizEnd
+
+Line~21 에서 패러미터 \co{i} 가 \co{NULL} 이 아니란 걸 알게 되면, line~22 에서
+선택된 해시 테이블로의 인덱스를 저장합니다.
+마지막으로, line~23 에서는 선택된 해시 bucket 으로의 레퍼런스를 리턴합니다.
+\iffalse
 
 If line~21 finds that parameter \co{i} is non-\co{NULL}, then
 line~22 stores the pointer-set index for the selected hash table.
 Finally, line~23 returns a reference to the selected hash bucket.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection}
+	의 코드는 선택된 bucket 에서 진행중일 수도 있는 크기 재조정
+	프로세스로부터의 보호는 어떻게 하나요?
+	\iffalse
+
 	How does the code in
 	Figure~\ref{fig:datastruct:Resizable Hash-Table Bucket Selection}
 	protect against the resizing process progressing past the
 	selected bucket?
+	\fi
 \QuickQuizAnswer{
+	그런 보호는 전혀 이루어지지 않고 있습니다.
+	그건 뒤에서 설명될 업데이트 쪽 동시성 제어 함수에서 할 일입니다.
+	\iffalse
+
 	It does not provide any such protection.
 	That is instead the job of the update-side concurrency-control
 	functions described next.
+	\fi
 } \QuickQuizEnd
+
+이와 같은 \co{ht_get_bucket_single()} 와 \co{ht_get_bucket()} 의 구현은 크기
+재조정 작업과 동시에 탐색과 수정이 가능하게 할 겁니다.
+\iffalse
 
 This implementation of
 \co{ht_get_bucket_single()} and \co{ht_get_bucket()}
 will permit lookups and modifications to run concurrently
 with a resize operation.
+\fi
 
 { \scriptsize
 \begin{verbbox}
