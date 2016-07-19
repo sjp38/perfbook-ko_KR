@@ -2265,11 +2265,32 @@ RCU read-side critical section.
 \label{fig:datastruct:Resizable Hash-Table Access Functions}
 \end{figure}
 
+이제 bucket 선택과 동시성 제어를 다뤘으니, 이 크기 재조정 가능한 해시 테이블의
+탐색과 업데이트를 할 준비가 되었습니다.
+\co{hashtab_lookup()}, \co{hashtab_add()}, 그리고 \co{hashtab_del()} 함수들이
+Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions} 에 보여져
+있습니다.
+\iffalse
+
 Now that we have bucket selection and concurrency control in place,
 we are ready to search and update our resizable hash table.
 The \co{hashtab_lookup()}, \co{hashtab_add()}, and \co{hashtab_del()}
 functions shown in
 Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions}.
+\fi
+
+이 그림의 line~1-21 의 \co{hashtab_lookup()} 함수는 탐색을 합니다.
+Line~11 에서는 현재 해시 테이블을 가져오고 line~12 에서 특정 키에 연관된 bucket
+으로의 레퍼런스를 얻어옵니다.
+이 bucket 은 크기 재조정 오퍼레이션이 원하는 데이터 원소를 담고 있는 예전 해시
+테이블의 bucket 에서 진행되었을 때에는 새로운 크기 재조정된 해시 테이블에
+위치해 있을 겁니다.
+Line~12 는 또한 각 원소의 포인터 쌍들 중 올바른 것을 고르기 위한 인덱스 역시
+리턴한다는 점을 알아 두세요.
+Line~13-19 의 루프는 bucket 을 찾는데, line~16 에서는 매치되는지를 판단하고,
+line~18 에서 데이터 원소로의 포인터를 리턴하는데, 매치되지 않는다면 line~20
+에서 실패를 알리는 \co{NULL} 을 리턴합니다.
+\iffalse
 
 The \co{hashtab_lookup()} function on lines~1-21 of the figure does
 hash lookups.
@@ -2284,8 +2305,17 @@ The loop spanning lines~13-19 searches the bucket, so that if line~16
 detects a match, line~18 returns a pointer to the enclosing data element.
 Otherwise, if there is no match, line~20 returns \co{NULL} to indicate
 failure.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions} 의
+	\co{hashtab_lookup()} 함수에서, 코드는 탐색될 원소가 이미 동시의 크기
+	재조정 작업에 의해 분산되었다면 새로운 해시 테이블에 있는 올바른 bucket
+	을 찾아옵니다.
+	이건 RCU 로 보호되는 탐색에서는 좀 낭비가 있는 것 같은데요.
+	이 경우에는 왜 그냥 기존 해시 테이블에서 작업을 끝내지 않는 거죠?
+	\iffalse
+
 	In the \co{hashtab_lookup()} function in
 	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions},
 	the code carefully finds the right bucket in the new hash table
@@ -2293,7 +2323,17 @@ failure.
 	by a concurrent resize operation.
 	This seems wasteful for RCU-protected lookups.
 	Why not just stick with the old hash table in this case?
+	\fi
 \QuickQuizAnswer{
+	크기 재조정 작업이 시작되었고 기존 테이블의 bucket 들 중 절반만 새로운
+	테이블로 분산했다고 생각해 보세요.
+	더 나아가서 한 쓰레드가 이미 분산된 bucket 안에 원소를 하나 넣었고, 이
+	쓰레드가 이제 방금 새로 추가한 원소를 탐색한다고 생각해 봅시다.
+	탐색이 무조건적으로 기존 해시 테이블을 탐색한다고 하면, 이 쓰레드는
+	자신이 집어넣은 원소를 찾는데 실패할텐데, 이는 저한테는 분명한 버그처럼
+	들리는군요!
+	\iffalse
+
 	Suppose that a resize operation begins and distributes half of
 	the old table's buckets to the new table.
 	Suppose further that a thread adds a new element that goes into
@@ -2302,7 +2342,20 @@ failure.
 	If lookups unconditionally traversed only the old hash table,
 	this thread would get a lookup failure for the element that it
 	just added, which certainly sounds like a bug to me!
+	\fi
 } \QuickQuizEnd
+
+그림의 line~23-37 의 \co{hashtab_add()} 함수는 해시 테이블에 새로운 데이터
+원소를 넣습니다.
+Line~32-34 는 앞에서와 같이 키에 연관되는 bucket 으로의 포인터 (그리고 인덱스)
+를 얻어오고, line~35 는 새로운 원소를 테이블에 집어넣습니다.
+호출자는 동시성을 잘 제어할 것이 요구되는데, 예를 들어 \co{hashtab_add()} 호출
+전에 \co{hashtab_lock_mod()} 를 호출하고, 후에 \co{hashtab_unlock_mod()} 를
+호출해야 하는 것 등입니다.
+이런 두개의 동시성 제어 함수들은 동시의 크기 재조정 작업들과 올바르게 순서를
+맞출 겁니다: 만약 이 크기 재조정 작업이 이 데이터 원소가 넣어질 bucket 에
+대해서 이미 진행되었다면, 이 원소는 새로운 테이블에 추가될 겁니다.
+\iffalse
 
 The \co{hashtab_add()} function on lines~23-37 of the figure adds
 new data elements to the hash table.
@@ -2316,6 +2369,15 @@ These two concurrency-control functions will correctly synchronize with
 a concurrent resize operation:  If the resize operation has already
 progressed beyond the bucket that this data element would have been added to,
 then the element is added to the new table.
+\fi
+
+그림의 line~39-52 의 \co{hashtab_del()} 함수는 해시 테이블에서 존재하는 원소를
+하나 제거합니다.
+Line~48-50 에서는 앞에서와 같이 bucket 과 인덱스를 제공하고, line~51 에서 특정
+원소를 제거합니다.
+\co{hashtab_add()} 에서와 같이, 호출자는 동시성 제어를 할 책임을 갖게 되고 이
+동시성 제어는 동시의 크기 재조정 작업과의 동기화를 처리합니다.
+\iffalse
 
 The \co{hashtab_del()} function on lines~39-52 of the figure removes
 an existing element from the hash table.
@@ -2324,14 +2386,35 @@ the specified element.
 As with \co{hashtab_add()}, the caller is responsible for concurrency
 control and this concurrency control suffices for synchronizing with
 a concurrent resize operation.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions}
+	의 \co{hashtab_del()} 함수는 원소를 항상 기존 해시 테이블에서
+	제거하지는 않는데요.
+	이 말은 읽기 쓰레드들이 이 새로 제거된 원소를 해제된 후에도 볼 수
+	있다는 의미 아닌가요?
+	\iffalse
+
 	The \co{hashtab_del()} function in
 	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions}
 	does not always remove the element from the old hash table.
 	Doesn't this mean that readers might access this newly removed
 	element after it has been freed?
+	\fi
 \QuickQuizAnswer{
+	아닙니다.
+	\co{hashtab_del()} 함수는 이제 제거된 원소를 담고 있는 bucket 에 대해
+	크기 재조정 작업이 이미 완료되었을 때에만 기존 해시 테이블에서
+	제거합니다.
+	하지만 이는 새로운 \co{hashtab_lookup()} 오퍼레이션은 해당 원소를
+	탐색할 때 새로운 해시 테이블을 사용할 것을 의미합니다.
+	따라서, \co{hashtab_del()} 보다 먼저 시작된 \co{hashtab_lookup()}
+	오퍼레이션들만이 이번에 제거된 원소를 만날 수 있을 겁니다.
+	이는 \co{hashtab_del()} 는 이 불편한 \co{hashtab_lookup()} 을 막기 위해
+	하나의 RCU grace period 만을 기다리면 된다는 것을 의미합니다.
+	\iffalse
+
 	No.
 	The \co{hashtab_del()} function omits removing the element
 	from the old hash table only if the resize operation has
@@ -2345,6 +2428,7 @@ a concurrent resize operation.
 	This means that \co{hashtab_del()} need only wait for an
 	RCU grace period to avoid inconveniencing
 	\co{hashtab_lookup()} operations.
+	\fi
 } \QuickQuizEnd
 
 { \scriptsize
