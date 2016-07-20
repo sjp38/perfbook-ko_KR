@@ -2492,6 +2492,20 @@ a concurrent resize operation.
 \label{fig:datastruct:Resizable Hash-Table Resizing}
 \end{figure*}
 
+실제로 자신의 크기를 재조정 하는 일은 \co{hashtab_resize} 로 수행되는데,
+page~\pageref{fig:datastruct:Resizable Hash-Table Resizing} 의
+Figure~\ref{fig:datastruct:Resizable Hash-Table Resizing} 에 보여져 있습니다.
+Line~17 은 가장 높은 레벨의 \co{->ht_lock} 을 조건적으로 얻어오는데, 만약 락을
+잡는데 실패했다면 line~18 에서 크기 재조정이 이미 진행중임을 알리기 위해
+\co{-EBUSY} 를 리턴합니다.
+그렇지 않다면, line~19 에서 현재 해시 테이블로의 레퍼런스를 가져오고,
+line~21-24 에서 원하는 크기의 새로운 해시 테이블을 할당받습니다.
+새로운 hash/key 함수들이 명시된다면, 이것들이 새로운 테이블을 위해 사용되고,
+그렇지 않다면 기존 테이블의 것들을 사용합니다.
+Line~25 에서 메모리 할당 실패를 확인하게 된다면 line~26 에서 \co{->ht_lock} 을
+놓고 line~27 에서 실패했음을 알리도록 리턴합니다.
+\iffalse
+
 The actual resizing itself is carried out by \co{hashtab_resize}, shown in
 Figure~\ref{fig:datastruct:Resizable Hash-Table Resizing} on
 page~\pageref{fig:datastruct:Resizable Hash-Table Resizing}.
@@ -2504,6 +2518,16 @@ If a new set of hash/key functions have been specified, these are
 used for the new table, otherwise those of the old table are preserved.
 If line~25 detects memory-allocation failure, line~26 releases \co{->ht_lock}
 and line~27 returns a failure indication.
+\fi
+
+Line~29 는 bucket 분산 프로세스를 새로운 해시테이블로의 레퍼런스를 기존
+테이블의 \co{->ht_new} 에 넣음으로써 시작합니다.
+Line~30 에서는 새로운 테이블의 존재를 알지 못하는 모든 읽기 쓰레드들이 크기
+재조정 작업이 진행되기 전에 완료될 것을 보장합니다.
+Line~31 에서는 현재 테이블의 인덱스를 얻어오고 그 역을 새로운 해시 테이블에
+저장함으로써 두개의 해시 테이블이 서로의 링크드 리스트를 덮어쓰는 것을 막는
+것을 보장합니다.
+\iffalse
 
 Line~29 starts the bucket-distribution process by installing a reference
 to the new table into the \co{->ht_new} field of the old table.
@@ -2512,21 +2536,48 @@ complete before the resize operation continues.
 Line~31 picks up the current table's index and stores its inverse to
 the new hash table, thus ensuring that the two hash tables avoid overwriting
 each other's linked lists.
+\fi
+
+Line~33-44 의 루프의 각 패스에서는 기존 해시 테이블의 bucket 의 내용물 중
+하나를 새로운 해시 테이블로 옮깁니다.
+Line~34 에서는 기존 테이블의 현재 bucket 으로의 레퍼런스를 가져오고, line~35
+에서 해당 bucket 의 스핀락을 잡은 후 line~36 에서 이 bucket 이 분산되었음을
+알리기 위해 \co{->ht_resize_cur} 를 업데이트 합니다.
+\iffalse
 
 Each pass through the loop spanning lines~33-44 distributes the contents
 of one of the old hash table's buckets into the new hash table.
 Line~34 picks up a reference to the old table's current bucket,
 line~35 acquires that bucket's spinlock, and line~36 updates
 \co{->ht_resize_cur} to indicate that this bucket is being distributed.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions} 의
+	\co{hashtab_resize()} 함수에서, line~29 에서의 \co{->ht_new} 로의
+	업데이트가 line~36 에서의 \co{->ht_resize_cur} 로의 업데이트 전에
+	일어난 것으로 \co{hashtab_lookup()}, \co{hashtab_add()}, 그리고
+	\co{hashtab_del()} 의 관점에 보일 것을 무엇이 보장하죠?
+	\iffalse
+
 	In the \co{hashtab_resize()} function in
 	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions},
 	what guarantees that the update to \co{->ht_new} on line~29
 	will be seen as happening before the update to \co{->ht_resize_cur}
 	on line~36 from the perspective of \co{hashtab_lookup()},
 	\co{hashtab_add()}, and \co{hashtab_del()}?
+	\fi
 \QuickQuizAnswer{
+	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions}
+	의 line~30 에서의 \co{synchronize_rcu()} 는 전부터 존재한 RCU 읽기
+	쓰레드들이 line~29 에서 새로운 해시 테이블로의 레퍼런스를 설치한 시점과
+	line~36 에서 \co{->ht_resize_cur} 를 업데이트한 시점 사이에서
+	완료되었을 것을 보장합니다.
+	이 말은 \co{->ht_resize_cur} 의 음이 아닌 값을 본 모든 읽기 쓰레드들은
+	\co{->ht_new} 할당 전에 시작되었을 수 없고, 따라서 새로운 해시
+	테이블로의 레퍼런스를 볼 수 있어야 합니다.
+	\iffalse
+
 	The \co{synchronize_rcu()} on line~30 of
 	Figure~\ref{fig:datastruct:Resizable Hash-Table Access Functions}
 	ensures that all pre-existing RCU readers have completed between
@@ -2537,12 +2588,29 @@ line~35 acquires that bucket's spinlock, and line~36 updates
 	of \co{->ht_resize_cur} cannot have started before the
 	assignment to \co{->ht_new}, and thus must be able to see
 	the reference to the new hash table.
+	\fi
 } \QuickQuizEnd
+
+Line~37-42 의 루프의 각 패스에서는 데이터 원소 하나를 현재의 기존 테이블의
+bucket 에서 연관된 새로운 테이블의 bucket 으로 옮기는데, 이 때 새로운 테이블의
+bucket 의 락을 잡고 있습니다.
+마지막으로, line~43 에서는 기존 테이블 bucket 의 락을 놓게 됩니다.
+\iffalse
 
 Each pass through the loop spanning lines~37-42 adds one data element
 from the current old-table bucket to the corresponding new-table bucket,
 holding the new-table bucket's lock during the add operation.
 Finally, line~43 releases the old-table bucket lock.
+\fi
+
+일단 모든 기존 테이블의 bucket 들이 새로운 테이블로 분산되면 line~45 가
+수행됩니다.
+Line~45 는 새로 생성된 테이블을 현재의 것으로 보이게 만들고, line~46 에서는
+(여전히 기존 테이블을 레퍼런스 하고 있을) 기존 읽기 쓰레드들이 완료되기를
+기다립니다.
+그리고 나서 line~47 에서는 크기 재조정 직렬화 락을 놓고, line~48 에서 기존 hash
+table 을 해제하고, line~48 에서 마침내 성공했음을 리턴합니다.
+\iffalse
 
 Execution reaches line~45 once all old-table buckets have been distributed
 across the new table.
@@ -2551,6 +2619,7 @@ line~46 waits for all old readers (who might still be referencing
 the old table) to complete.
 Then line~47 releases the resize-serialization lock, line~48 frees
 the old hash table, and finally line~48 returns success.
+\fi
 
 \subsection{Resizable Hash Table Discussion}
 \label{sec:datastruct:Resizable Hash Table Discussion}
