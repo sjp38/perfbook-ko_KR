@@ -2632,6 +2632,15 @@ the old hash table, and finally line~48 returns success.
 \end{figure}
 
 Figure~\ref{fig:datastruct:Overhead of Resizing Hash Tables}
+는 크기 재조정 해시 테이블을 고정 크기 버전과 2048, 16,384, 그리고 131,702 개
+원소에 대해 비교해 본 결과입니다.
+이 그림은 각 원소 수마다 세개씩의 선을 보여주는데, 하나는 고정크기 1024-bucket
+해시 테이블의 것이고, 하나는 고정크기 2048-bucket 해시 테이블, 나머지 하나는
+1024 개와 2048 개 bucket 사이를 오갈 수 있는 크기 재조정 가능한 해시테이블
+버전으로, 각각의 크기 재조정 작업 사이에는 1 밀리세컨드 멈춥니다.
+\iffalse
+
+Figure~\ref{fig:datastruct:Overhead of Resizing Hash Tables}
 compares resizing hash tables to their fixed-sized counterparts
 for 2048, 16,384, and 131,072 elements in the hash table.
 The figure shows three traces for each element count, one
@@ -2639,6 +2648,18 @@ for a fixed-size 1024-bucket hash table, another for a
 fixed-size 2048-bucket hash table, and a third for a resizable
 hash table that shifts back and forth between 1024 and 2048
 buckets, with a one-millisecond pause between each resize operation.
+\fi
+
+가장 위의 세개의 선들은 2048 개 원소의 해시테이블의 것입니다.
+위쪽 선은 2048개 bucket 을 사용하는 고정 크기 해시테이블의 것이고, 중간의 것은
+1024개 bucket 을 사용하는 고정크기 해시 테이블, 그리고 아래의 것은 크기 재조정
+가능한 해시 테이블입니다.
+이 경우, 짧은 해시 체인들이 평범한 탐색 오버헤드를 매우 낮게 만들어서 크기
+재조정 오버헤드가 지배적이게 만들었습니다.
+더도아니고 덜도 아니고, 더 큰 고정 크기 해시 테이블을 상당한 성능 이득을
+가졌고, 따라서 크기 재조정은 크기 재조정 작업 사이에 충분한 시간이 주어진다면
+상당한 이득을 보일 겁니다: 1 밀리세컨드는 분명 너무 짧은 시간입니다.
+\iffalse
 
 The uppermost three traces are for the 2048-element hash table.
 The upper trace corresponds to the 2048-bucket fixed-size hash
@@ -2650,6 +2671,18 @@ Nevertheless, the larger fixed-size hash table has a significant
 performance advantage, so that resizing can be quite beneficial,
 at least given sufficient time between resizing operations: One
 millisecond is clearly too short a time.
+\fi
+
+중간의 세개 선들은 16,384 개 원소를 가진 해시 테이블의 결과입니다.
+이번에도 위쪽의 선은 2048개 bucket 을 가진 고정 크기 해시 테이블을 위한
+것입니다만, 중간의 선은 크기 재조정 해시 테이블의 것이고 아래의 것은 1024개
+bucket 의 고정크기 해시 테이블입니다.
+하지만, 크기 재조정 버전과 1024개 bucket 버전 해시 테이블 사이의 성능 차이는
+상당히 적은 것을 볼 수 있습니다.
+원소의 수를 (따라서 해시 체인의 길이도) 8배로 증가시킨 것의 한가지 결과는,
+끊임없는 크기 재조정은 이제 너무 작은 해시 테이블을 유지하는 것보다 더 나쁘지는
+않다는 것입니다.
+\iffalse
 
 The middle three traces are for the 16,384-element hash table.
 Again, the upper trace corresponds to the 2048-bucket fixed-size hash
@@ -2660,6 +2693,18 @@ However, the performance difference between the resizable and the
 One consequence of the eight-fold increase in number of elements
 (and thus also in hash-chain length) is that incessant resizing
 is now no worse than maintaining a too-small hash table.
+\fi
+
+아래쪽의 세개 선은 131,072 원소를 갖는 해시 테이블입니다.
+위쪽 선은 2048 개 bucket 의 고정크기 해시 테이블이고,
+중간의 것은 크기 재조정 가능 해시 테이블, 그리고 아래의 것은 1024개 bucket 사용
+해시 테이블입니다.
+이 경우, 더 길어진 해시체인은 높은 탐색 오버헤드를 가져왔고, 따라서 이 탐색
+오버헤드가 해시 테이블의 크기 재조정을 넘어섰습니다.
+하지만, 세개 해시 테이블 모두 131,072 원소 성능 수준은 2048개 원소에서의
+수준보다 10배 이상 나빠졌는데, 이는 해시 테이블 크기를 64배 늘리는 것이 최고의
+방법일 것임을 의미합니다.
+\iffalse
 
 The lower three traces are for the 131,072-element hash table.
 The upper trace corresponds to the 2048-bucket fixed-size hash table,
@@ -2672,6 +2717,19 @@ However, the performance of all three approaches at the 131,072-element
 level is more than an order of magnitude worse than that at the
 2048-element level, suggesting that the best strategy would be
 a single 64-fold increase in hash-table size.
+\fi
+
+이 데이터의 핵심은 RCU 로 보호되는 크기 재조정 가능한 해시 테이블은 고정 크기
+버전 만큼이나 성능을 보이고 확장될 수 있다는 겁니다.
+실제 크기 재조정 작업동안의 성능은 물론 안좋은데, 각 원소의 포인터들에의
+업데이트가 일으키는 캐시 미스 때문일 것이고 이 영향은 해시 테이블 bucket
+리스트가 짧을 때 두드러질 것입니다.
+이는 해시 테이블은 상당한 크기에서 크기 재조정 되어야 하고 너무 빈번한 크기
+재조정 작업으로 인한 성능 저하를 막기 위해 기록에 따른 조정(hysteresis) 을
+가져야 할겁니다.
+메모리가 충분히 큰 환경이라면, 해시 테이블 크기는 줄어들기보다는 더 공격적으로
+증가될 수 있을 겁니다.
+\iffalse
 
 The key point from this data is that the RCU-protected resizable hash
 table performs and scales almost as well as does its fixed-size counterpart.
@@ -2684,6 +2742,22 @@ and that hysteresis should be be applied to prevent performance degradation
 due to too-frequent resize operations.
 In memory-rich environments, hash-table sizes should furthermore
 be increased much more aggressively than they are decreased.
+\fi
+
+또다른 중요한 점은 \co{hashtab} 구조체가 분할될 수는 없지만 이것도 읽기가
+대부분이므로 RCU 를 사용해 볼만 합니다.
+이 크기 재조정 가능한 해시 테이블의 성능과 확장성이 RCU 로 보호되는 고정크기
+해시 테이블에 근접한다는 점을 놓고 보면, 이 방법이 상당히 성공적이라고 결론내릴
+수 있을 겁니다.
+
+마지막으로, 삽입, 삭제, 그리고 탐색은 크기 재조정 작업과 동시에 이뤄질 수
+있다는 점이 중요합니다.
+이 동시성은 커다란 해시 테이블을 크기 재조정할 때 매우 중요한데, 특히 상당한
+응답시간 제약을 가진 어플리케이션에서 그러합니다.
+
+물론, \co{ht_elem} 구조체의 포인터 집합 쌍은 약간의 메모리 오버헤드를
+내포하는데, 이에 대해서는 다음 섹션에서 이야기 합니다.
+\iffalse
 
 Another key point is that although the \co{hashtab} structure is
 non-partitionable, it is also read-mostly, which suggests the use
@@ -2701,6 +2775,7 @@ for applications that must meet severe response-time constraints.
 Of course, the \co{ht_elem} structure's
 pair of pointer sets does impose some memory overhead,
 which is taken up in the next section.
+\fi
 
 \subsection{Other Resizable Hash Tables}
 \label{sec:datastruct:Other Resizable Hash Tables}
