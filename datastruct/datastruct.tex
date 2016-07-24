@@ -2780,6 +2780,23 @@ which is taken up in the next section.
 \subsection{Other Resizable Hash Tables}
 \label{sec:datastruct:Other Resizable Hash Tables}
 
+이 섹션의 앞에서 이야기한 크기 재조정 가능한 해시 테이블의 한가지 한계는 메모리
+사용량입니다.
+각각의 데이터 원소는 한개가 아니라 두개의 링크드 리스트 포인터 쌍을 가지고
+있습니다.
+하나의 쌍만 가지고 일을 해낼 수 있는 RCU 로 보호되는 크기 재조정 가능한 해시
+테이블을 만들 수는 없는 걸까요?
+
+그에 대한 답은 ``가능하다'' 로 드러났습니다.
+Josh Triplett 등은 연관된 해시 체인을 점진적으로 쪼개고 조합해서 읽기
+쓰레드들은 크기 재조정 작업 중간의 모든 순간에 올바른 해시 체인을 바라보게 되는
+\emph{상재론적 해시 테이블}~\cite{Triplett:2011:RPHash} 을 만들었습니다.
+이 점진적인 쪼개기와 조합하기는 읽기 쓰레드들이 다른 해시 체인에 있어야 하는
+데이터 원소를 보게 되는 것은 문제가 되지 않는다는 사실에 기인합니다: 이런 일이
+일어난다면, 읽기 쓰레드는 키가 맞지 않으므로 해당 데이터 원소를 무시해 버리게
+됩니다.
+\iffalse
+
 One shortcoming of the resizable hash table described earlier in this
 section is memory consumption.
 Each data element has two pairs of linked-list pointers rather than just
@@ -2796,6 +2813,7 @@ This incremental splitting and combining relies on the fact that it
 is harmless for a reader to see a data element that should be in some
 other hash chain: When this happens, the reader will simply ignore the
 extraneous data element due to key mismatches.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -2803,6 +2821,25 @@ extraneous data element due to key mismatches.
 \caption{Shrinking a Relativistic Hash Table}
 \label{fig:datastruct:Shrinking a Relativistic Hash Table}
 \end{figure}
+
+상대론적 해시 테이블을 절반으로 축소시키는 과정은
+Figure~\ref{fig:datastruct:Shrinking a Relativistic Hash Table} 에 그려져
+있는데, 이 경우에는 두개의 bucket 을 가지고 있는 해시 테이블을 한개 bucket 의
+해시 테이블, 달리 말해 하나의 선형 리스트로 축소시키고 있습니다.
+이 과정은 기존의 커다란 해시 테이블의 한쌍의 bucket 들을 새로운 작은 해시
+테이블의 하나의 bucket 으로 함치는 것으로 동작합니다.
+이 프로세스가 잘 동작하려면, 두 테이블의 해시 함수에 대해 제약을 걸어야 하는
+것이 분명합니다.
+그런 제약 가운데 하나는 두 테이블 모두 같은 해시 함수를 사용해야 하지만, 큰
+테이블에서 작은 테이블로 축소시킬 때에는 뒤쪽의 비트 하나는 버려야 한다는
+것입니다.
+예를 들어, 기존의 두개 bucket 을 사용하는 해시 테이블은 값의 두개의 꼭대기
+비트를 사용하는 반면, 새로운 한개 bucket 의 해시 테이블은 그 값의 꼭대기 비트
+하나를 사용할 겁니다.
+이런 방식으로, 기존의 커다란 테이블의 인접한 짝수와 홀수 bucket 들은 새로운
+작은 해시 테이블의 하나의 bucket 으로 합쳐질 수 있고, 그동안 하나의 해시 값이
+이 하나의 bucket 의 원소들을 다룰 수 있습니다.
+\iffalse
 
 The process of shrinking a relativistic hash table by a factor of two
 is shown in
@@ -2823,6 +2860,14 @@ In this way, a given pair of adjacent even and odd buckets in the old
 large hash table can be coalesced into a single bucket in the new small
 hash table, while still having a single hash value cover all of the
 elements in that single bucket.
+\fi
+
+최초의 상태가 그림의 꼭대기에 보여져 있는데, 아래쪽으로 갈수록 시간이 흐르게
+되고, 최초의 상황~(a) 에서 시작합니다.
+축소 과정은 새로운, bucket 들의 더 작은 배열을 할당하는 것으로 시작하고, 이
+새로운 작은 배열의 각각의 bucket 이 기존의 커다란 해시 테이블의 연관된 bucket
+들 중 하나의 첫번째 원소를 레퍼런스 하도록 해서 상황~(b)가 되게 합니다.
+\iffalse
 
 The initial state is shown at the top of the figure, with time advancing
 from top to bottom, starting with initial state~(a).
@@ -2830,6 +2875,18 @@ The shrinking process begins by allocating the new smaller array of
 buckets, and having each bucket of this new smaller array reference
 the first element of one of the buckets of the corresponding pair in
 the old large hash table, resulting in state~(b).
+\fi
+
+이제 두개의 해시 체인들은 함께 연결되어서 상태~(c) 가 됩니다.
+이 상태에서, 짝수로 해시값의 원소를 보는 읽기 쓰레드들은 아무 변화도 보지
+못하게 되고, 원소~1 과~3 을 보는 읽기 쓰레드들은 역시 변화를 보지 못합니다.
+하지만, 그와 다른 홀수 해시값의 원소를 찾는 읽기 쓰레드들은 원소~0 과~2 도
+지나가게 될겁니다.
+어떤 홀수 해시값도 이 두개의 원소들과 같지 않을 것이므로 이는 문제가 되지
+않습니다.
+이로 인한 약간의 성능 저하가 있지만, 반면에, 이는 새로운 작은 해시 테이블이
+자리를 잡게 되면 겪게 될 성능 저하와 완전히 똑같은 정도입니다.
+\iffalse
 
 Then the two hash chains are linked together, resulting in state~(c).
 In this state, readers looking up an even-numbered element see no change,
@@ -2841,17 +2898,33 @@ two elements.
 There is some performance loss, but on the other hand, this is exactly
 the same performance loss that will be experienced once the new small
 hash table is fully in place.
+\fi
+
+다음으로, 새로운 작은 해시 테이블은 읽기 쓰레드들에게 접근 가능하게 되어서
+state~(d) 가 됩니다.
+오래된 읽기 쓰레드들은 여전히 기존의 커다란 해시 테이블을 횡단하고 있을 수
+있으므로, 이 상태는 두개의 해시 테이블을 모두 사용중인 것으로 합니다.
+\iffalse
 
 Next, the new small hash table is made accessible to readers, resulting
 in state~(d).
 Note that older readers might still be traversing the old large hash
 table, so in this state both hash tables are in use.
+\fi
+
+다음 할 일은 모든 기존부터 존재한 읽기 쓰레드들이 완료되길 기다리는 것으로,
+state~(e) 에 도달하게 됩니다.
+이 상태에서, 모든 읽기 쓰레드들은 새로운 작은 해시 테이블을 사용하고 있으므로,
+기존의 커다란 해시 테이블의 bucket 들은 해제될 수 있어서, 마지막 상태~(f)로
+이르게 됩니다.
+\iffalse
 
 The next step is to wait for all pre-existing readers to complete,
 resulting in state~(e).
 In this state, all readers are using the new small hash table, so that
 the old large hash table's buckets may be freed, resulting in the final
 state~(f).
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -2860,11 +2933,31 @@ state~(f).
 \label{fig:datastruct:Growing a Relativistic Hash Table}
 \end{figure}
 
+상대론적 해시 테이블의 크기를 키우는 건 축소 프로세스의 거꾸로입니다만, 더 많은
+grace-period 단계를 필요로 하게 되는데,
+Figure~\ref{fig:datastruct:Growing a Relativistic Hash Table} 에 그려져
+있습니다.
+최소 상태~(a) 는 그림의 맨 꼭대기에 있고, 아래로 시간에 따라 진행됩니다.
+\iffalse
+
 Growing a relativistic hash table reverses the shrinking process,
 but requires more grace-period steps, as shown in
 Figure~\ref{fig:datastruct:Growing a Relativistic Hash Table}.
 The initial state~(a) is at the top of this figure, with time advancing
 from top to bottom.
+\fi
+
+새로운 커다란 두개의 bucket 을 사용하는 해시 테이블을 할당하는 것으로 시작해서,
+state~(b)로 이르게 됩니다.
+이 새로운 bucket들 각각은 그 bucket 을 향하게 될 첫번째 원소를 레퍼런스함을
+알아두세요.
+이 새로운 bucket 들은 읽기 쓰레드들에게 공개되고, 이로 인해 state~(c)로
+이릅니다.
+하나의 grace-period 가 지나고, 모든 읽기 쓰레드들은 새로운 커다란 해시 테이블을
+사용하게 되어서 state~(d) 에 이릅니다.
+이 상태에서, 짝수 해시값의 원소를 찾는 읽기 쓰레드들만이 하얀 색으로 칠해진
+원소~0 을 경유하게 됩니다.
+\iffalse
 
 We start by allocating the new large two-bucket hash table, resulting
 in state~(b).
@@ -2875,6 +2968,18 @@ After a grace-period operation, all readers are using the new large
 hash table, resulting in state~(d).
 In this state, only those readers traversing the even-values hash bucket
 traverse element~0, which is therefore now colored white.
+\fi
+
+이 시점에서, 기존의 작은 해시 bucket 들은 해제될 수 있지만, 많은 구현들은
+아이템들의 리스트를 새로운 bucket 으로 ``풀어 놓는'' 작업의 진도 상황을 보기
+위해 이 기존 bucket 들을 사용하고는 합니다.
+그런 원소들의 첫번째 연속적 수행에서의 마지막 짝수 해시값 원소는 다음으로의
+포인터가 다음의 짝수 해시값 원소를 가리키도록 업데이트 됩니다.
+다음 grace priod 후에는, 상태~(e) 가 됩니다.
+수직의 화살표는 다음으로 풀리게 될 원소를 가리키고, 원소~1 은 이제 홀수
+해시값의 원소를 찾는 읽기 쓰레드들만이 다다르게 될 것을 가리키기 위해
+검정색으로 칠해져 있습니다.
+\iffalse
 
 At this point, the old small hash buckets may be freed, although many
 implementations use these old buckets to track progress ``unzipping''
@@ -2886,6 +2991,14 @@ After a subsequent grace-period operation, the result is state~(e).
 The vertical arrow indicates the next element to be unzipped, and
 element~1 is now colored black to indicate that only those readers traversing
 the odd-values hash bucket may reach it.
+\fi
+
+다음으로, 그런 원소들의 첫번째 연속적 수행에서의 마지막 홀수 해시값 원소가 다음
+원소로의 포인터를 다음의 홀수 해시값 원소를 가리키도록 업데이트 합니다.
+다음의 grace period 가 지난후, 상태~(f) 로 다다릅니다.
+마지막 풀어놓기 오퍼레이션 (하나의 grace priod 를 포함해서) 은 마지막 상태~(g)
+로 이르게 합니다.
+\iffalse
 
 Next, the last odd-numbered element in the first consecutive run of such
 elements now has its pointer-to-next updated to reference the following
@@ -2893,6 +3006,13 @@ odd-numbered element.
 After a subsequent grace-period operation, the result is state~(f).
 A final unzipping operation (including a grace-period operation)
 results in the final state~(g).
+\fi
+
+짧게 말해서, 상대론적 해시 테이블은 원소별 리스트 포인터의 수를 크기 재조정
+동안 일어나는 추가적인 grace period 의 비용으로 대신합니다.
+삽입, 삭제, 그리고 탐색은 크기 재조정 작업과 동시에 이루어질 수 있으므로, 이런
+추가적인 grace period 들은 일반적으로 문제가 되지 않습니다.
+\iffalse
 
 In short, the relativistic hash table reduces the number of per-element
 list pointers at the expense of additional grace periods incurred during
@@ -2900,6 +3020,18 @@ resizing.
 These additional grace periods are usually not a problem because
 insertions, deletions, and lookups may proceed concurrently with
 a resize operation.
+\fi
+
+원소별 메모리 오버헤드가 한쌍의 포인터에서 하나의 포인터로 줄어들 수 있으면서도
+여전히 $O(1)$ 삭제를 유지할 수 있음이 드러났습니다.
+이는 split-order 리스트~\cite{OriShalev2006SplitOrderListHash} 를 RCU 보호로
+증강시킴으로써
+가능합니다~\cite{MathieuDesnoyers2009URCU,PaulMcKenney2013LWNURCUhash}.
+이런 해시 테이블 안의 데이터 원소는 하나의 정렬된 링크드 리스트로 정렬되고,
+각각의 해시 bucket 은 그 bucket 내의 첫번째 원소를 레퍼런스 하게 됩니다.
+원소들은 다음 원소로의 포인터 필드의 아래쪽 비트를 설정하는 것으로 지워지고, 이
+원소들은 그것들을 마주하게 되는 나중의 횟단에 의해 리스트에서 제거됩니다.
+\iffalse
 
 It turns out that it is possible to reduce the per-element memory overhead
 from a pair of pointers to a single pointer, while still retaining
@@ -2914,12 +3046,21 @@ in that bucket.
 Elements are deleted by setting low-order bits in their pointer-to-next
 fields, and these elements are removed from the list by later traversals
 that encounter them.
+\fi
+
+이 RCU 로 보호되는 split-order 리스트는 복잡하지만, lock-free 진행 보장을 모든
+삽입, 삭제, 그리고 탐색 작업에 제공합니다.
+그런 보장사항은 리얼타임 어플리케이션들에서는 중요할 수 있습니다.
+최신 버전의 userspace RCU 라이브러리~\cite{MathieuDesnoyers2009URCU} 에서 이
+구현을 사용할 수 있습니다.
+\iffalse
 
 This RCU-protected split-order list is complex, but offers lock-free
 progress guarantees for all insertion, deletion, and lookup operations.
 Such guarantees can be important in real-time applications.
 An implementation is available from recent versions of the userspace RCU
 library~\cite{MathieuDesnoyers2009URCU}.
+\fi
 
 \section{Other Data Structures}
 \label{sec:datastruct:Other Data Structures}
