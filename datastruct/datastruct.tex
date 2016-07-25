@@ -3065,6 +3065,16 @@ library~\cite{MathieuDesnoyers2009URCU}.
 \section{Other Data Structures}
 \label{sec:datastruct:Other Data Structures}
 
+앞의 섹션들은 파티셔닝 가능성
+(Section~\ref{sec:datastruct:Partitionable Data Structures}),
+읽기가 대부분인 액세스 패턴의 효과적인 처리
+(Section~\ref{sec:datastruct:Read-Mostly Data Structures}),
+또는 읽기가 대부분인 상황에서의 테크닉을 파티셔닝이 불가능함을 해결하기 위해 적용하기
+(Section~\ref{sec:datastruct:Non-Partitionable Data Structures})
+로 동시성을 향상시킨 데이터 구조들에 대해 주목해 보았습니다.
+이 섹션은 다른 데이터 구조들에 대한 간략한 리뷰를 합니다.
+\iffalse
+
 The preceding sections have focused on data structures that enhance
 concurrency due to partitionability
 (Section~\ref{sec:datastruct:Partitionable Data Structures}),
@@ -3074,6 +3084,23 @@ or application of read-mostly techniques to avoid
 non-partitionability
 (Section~\ref{sec:datastruct:Non-Partitionable Data Structures}).
 This section gives a brief review of other data structures.
+\fi
+
+해시 테이블의 병렬 사용에서의 가장 훌륭한 이점은 완전히 파티셔닝 가능하다는
+점인데, 적어도 크기 재조정이 되지 않는 동안은 그렇습니다.
+파티셔닝 가능성과 크기 독립성을 둘 다 보호하기 위한 한가지 방법은 trie 라고도
+불리는 래딕스 트리(radix tree) 의 사용입니다.
+Trie 들은 탐색 키를 분할하는데, 각각의 다음 키 부분을 다음 레벨의 trie 를
+탐색하도록 사용하는 식입니다.
+그렇게 되면, 하나의 trie 는 중첩된 해시 테이블들의 한 집합으로 생각될 수
+있으므로, 필요한 파티셔닝 가능성을 제공합니다.
+Trie 들의 한가지 단점은 드문드문한 키 스페이스는 메모리의 비효율적인 사용을
+초래할 수 있다는 점입니다.
+이런 단점을 보완할 수 있는 몇가지 압축 기법들이 존재하는데, 탐색 전에 키 값을
+더 작은 키 스페이스로 해싱을 하는 방법~\cite{RobertOlsson2006a} 등이 있습니다.
+래딕스 트리는 실제로 많이 사용되는데, 리눅스 커널도
+포함됩니다~\cite{NickPiggin2006radixtree}.
+\iffalse
 
 One of the hash table's greatest advantages for parallel use is that it
 is fully partitionable, at least while not being resized.
@@ -3091,12 +3118,40 @@ a smaller keyspace before the
 traversal~\cite{RobertOlsson2006a}.
 Radix trees are heavily used in practice, including in the Linux
 kernel~\cite{NickPiggin2006radixtree}.
+\fi
+
+해시 테이블과 trie 모두에서의 한가지 중요한 특수 케이스는 아마도 가장 오래된
+데이터 구조체이고 배열과 여러 차원의 대응되는 개념인, 행렬입니다.
+행렬의 완전히 파티셔닝 가능하다는 본질은 동시적 수학 알고리즘에서 상당히 많이
+활용되었습니다.
+\iffalse
 
 One important special case of both a hash table and a trie is what is
 perhaps the oldest of data structures, the array and its multi-dimensional
 counterpart, the matrix.
 The fully partitionable nature of matrices is exploited heavily in
 concurrent numerical algorithms.
+\fi
+
+스스로 밸러스를 잡는 트리들은 순차적 코드에서 상당히 많이 사용되었는데, AVL
+트리와 red-black 트리는 아마도 가장 널리 알려진 예일
+겁니다~\cite{ThomasHCorman2001Algorithms}.
+AVL 트리들을 병렬화 하려 한 기존의 시도들은 복잡하고 그다지 효율적이지
+못했습니다만~\cite{Ellis80}, 최근의 red-black 트리에서의 작업은 읽기 쓰레드에게
+RCU 를 사용하고 읽기와 업데이트를 각각 보호하는데에 해시를 사용한 락들의
+배열\footnote{
+	개발자가 공유되지 않는 액세스를 직접 표시하는 소프트웨어 트랜잭셔널
+	메모리의 하나의 변종인 swissTM~\cite{AleksandarDragovejic2011STMnotToy}
+	으로 가장해서}
+을 사용해서 더 나은 성능과 확장성을
+제공합니다~\cite{PhilHoward2011RCUTMRBTree,PhilipWHoward2013RCUrbtree}.
+Red-black 트리는 적극적으로 밸런스를 재조정함으로 드러났는데, 이는 순차적
+프로그램에서는 잘 동작하지만 병렬적 사용에서는 꼭 그렇지만은 않습니다.
+따라서 최근의 작업은 RCU 로 보호되는 ``bonsai tree'' 를 만들어냈는데, 이 데이터
+구조는 덜 적극적으로 밸러스 재조정을
+해서~\cite{AustinClements2012RCULinux:mmapsem} 최적의 트리 깊이와 더 효과적인
+동시의 업데이트 사이의 트레이드 오프를 합니다.
+\iffalse
 
 Self-balancing trees are heavily used in sequential code, with
 AVL trees and red-black trees being perhaps the most well-known
@@ -3117,6 +3172,23 @@ use.
 Recent work has therefore made use of RCU-protected ``bonsai trees''
 that rebalance less aggressively~\cite{AustinClements2012RCULinux:mmapsem},
 trading off optimal tree depth to gain more efficient concurrent updates.
+\fi
+
+동시의 스킵 리스트들 역시 RCU 읽기 쓰레드들에게 좋은데, 실제로 RCU 를 사용하는
+테크닉의 사용을 초기의 학계에서 선보였습니다~\cite{Pugh90}.
+
+동시적 double-ended 큐들은
+Section~\ref{sec:SMPdesign:Double-Ended Queue} 에서 다루었고,
+동시적 스택과 큐들은 긴 역사를 가지고 있습니다만~\cite{Treiber86},
+일반적으로 인상적인 성능과 확장성을 보이진 못함에도 불구하고 그렇습니다.
+이것들은 동시성 라이브러리들의 흔한 기능 이상도 이하도
+아닙니다~\cite{PaulMcKenney2013LWNURCUqueuestack}.
+연구자들은 최근에 스택과 큐의 순서 규칙을 완화시키는 것을
+제안했는데~\cite{Shavit:2011:DSM:1897852.1897873}, 일부 작업은 완화된 순서
+규칙의 큐가 실제로는 엄격한 FIFO 큐보다 더 나은 순서 특성을 실제로 가짐을
+보이기도
+했습니다~\cite{AndreasHaas2012FIFOisnt,ChristophMKirsch2012FIFOisntTR,AndreasHaas2013CFRelaxedQueues}.
+\iffalse
 
 Concurrent skip lists lend themselves well to RCU readers, and in fact
 represents an early academic use of a technique resembling
@@ -3133,9 +3205,15 @@ of stacks and queues~\cite{Shavit:2011:DSM:1897852.1897873},
 with some work indicating that relaxed-ordered queues actually have
 better ordering properties than do strict FIFO
 queues~\cite{AndreasHaas2012FIFOisnt,ChristophMKirsch2012FIFOisntTR,AndreasHaas2013CFRelaxedQueues}.
+\fi
+
+동시적 데이터 구조에 대한 지속적 작업은 놀라운 특성을 가진 기발한 알고리즘들을
+만들어낼 것으로 보입니다.
+\iffalse
 
 It seems likely that continued work with concurrent data structures will
 produce novel algorithms with surprising properties.
+\fi
 
 \section{Micro-Optimization}
 \label{sec:datastruct:Micro-Optimization}
