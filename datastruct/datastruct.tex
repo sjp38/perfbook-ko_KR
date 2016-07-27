@@ -3250,6 +3250,18 @@ alone to the set of CPU families in common use today.
 \subsection{Specialization}
 \label{sec:datastruct:Specialization}
 
+Section~\ref{sec:datastruct:Non-Partitionable Data Structures}
+에 선보여진 크기 재조정 가능한 해시 테이블은 카에 불투명한 타입을 사용했습니다.
+이는 커다란 유연성을 가능하게 해서, 어떤 종류의 키도 사용될 수 있게 했습니다만,
+또한 함수로의 포인터를 사용한 함수 호출로 인해 상당한 오버헤드를 만들었습니다.
+최신의 하드웨어는 이런 오버헤드를 최소화하기 위해 세련된 브랜치 예측 테크닉들을
+사용합니다만, 다른 한편으로 실제 세상의 소프트웨어는 오늘날의 커다란 하드웨어
+브랜치 예측 테이블로도 수용할 수 없을만큼 큰 경우가 많습니다.
+이는 특히 함수 포인터를 통한 호출의 경우에 그러한데, 브랜치 예측 하드웨어는
+브랜치가 취해졌는지 안취해졌는지에 대한 정보에 더해서 포인터를 기록해야 하는
+경우이기 때문입니다.
+\iffalse
+
 The resizable hash table presented in
 Section~\ref{sec:datastruct:Non-Partitionable Data Structures}
 used an opaque type for the key.
@@ -3263,6 +3275,19 @@ hardware branch-prediction tables.
 This is especially the case for calls via pointers, in which case
 the branch prediction hardware must record a pointer in addition
 to branch-taken/branch-not-taken information.
+\fi
+
+이 오버헤드는 해시 테이블 구현을 특정 키 타입과 해시 함수로 특수화 시킴으로써
+제거될 수 있습니다.
+그렇게 하는 것은
+page~\pageref{fig:datastruct:Resizable Hash-Table Data Structures} 의
+Figure~\ref{fig:datastruct:Resizable Hash-Table Data Structures} 에서 보인
+\co{ht} 구조체에서 \co{->ht_cmp()}, \co{->ht_gethash()}, 그리고
+\co{->ht_getkey()} 함수 포인터들을 제거합니다.
+이는 또한 연관된 포인터들을 통한 함수 호출도 제거하는데, 이는 컴파일러가 이
+고정된 함수들을 인라인 시킬 수 있게 해서 호출 명령의 오버헤드만이 아니라 인자
+정리 오버헤드 역시 제거할 것입니다.
+\iffalse
 
 This overhead can be eliminated by specializing a hash-table implementation
 to a given key type and hash function.
@@ -3274,6 +3299,17 @@ It also eliminates the corresponding calls through these pointers,
 which could allow the compiler to inline the resulting fixed functions,
 eliminating not only the overhead of the call instruction, but the
 argument marshalling as well.
+\fi
+
+또한, 이 크기 재조정 가능한 해시 테이블은 동시성 제어로부터 bucket 선택을
+분리하는 API 에 걸맞도록 설계되었습니다.
+이는 하나의 테스트가 이 챕터의 모든 해시 테이블의 구현을 테스트할 수 있도록
+해주지만, 이는 또한 많은 연산작업들이 해시 값을 계산하고 만들어질 수 있는 크기
+재조정 작업과 한번이 아니라 두번 상호작용해야 함을 의미합니다.
+성능이 중요한 환경에서라면 \co{hashtab_lock_mod()} 함수 또한 선택된 bucket
+으로의 레퍼런스를 리턴해서 이어지는 \co{ht_get_bucket()} 호출을 제거할
+것입니다.
+\iffalse
 
 In addition, the resizable hash table is designed to fit an API
 that segregates bucket selection from concurrency control.
@@ -3284,22 +3320,48 @@ rather than just once.
 In a performance-conscious environment, the \co{hashtab_lock_mod()}
 function would also return a reference to the bucket selected, eliminating
 the subsequent call to \co{ht_get_bucket()}.
+\fi
 
 \QuickQuiz{}
+	\path{hashtorture.h} 의 코드는 \co{hashtab_lock_mode()} 가
+	\co{ht_get_bucket()} 의 기능을 포섭하도록 수정될 수 없나요?
+	\iffalse
+
 	Couldn't the \path{hashtorture.h} code be modified to accommodate
 	a version of \co{hashtab_lock_mod()} that subsumes the
 	\co{ht_get_bucket()} functionality?
+	\fi
 \QuickQuizAnswer{
+	그럴 수도 있을테고, 그렇게 하는게 이 챕터에 선보여진 bucket 별 락킹을
+	사용하는 해시 테이블에 이득을 가져다 줄 수 있을 겁니다.
+	이런 변경을 만드는 건 독자 여러분의 몫으로 두겠습니다.
+	\iffalse
+
 	It probably could, and doing so would benefit all of the
 	per-bucket-locked hash tables presented in this chapter.
 	Making this modification is left as an exercise for the
 	reader.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	이런 특수화는 정말로 얼마나 성능을 구하나요?
+	이게 정말 가치가 있나요?
+	\iffalse
+
 	How much do these specializations really save?
 	Are they really worth it?
+	\fi
 \QuickQuizAnswer{
+	첫번째 질문에 대한 답은 독자의 몫으로 남겨져 있습니다.
+	크기 재조정 가능한 해시 테이블을 특수화 시켜보고 그 결과로 성능이
+	얼마나 개선되는지 살펴보세요.
+	두번째 질문은 일반적으로는 답변될 수가 없습니다만, 대신 특수한 사용
+	예에 맞춰서 답변될 수 있을 겁니다.
+	일부 사용 케이스는 성능과 확장성에 극단적으로 민감하고 다른 것들은
+	그보다 덜할 수 있습니다.
+	\iffalse
+
 	The answer to the first question is left as an exercise to
 	the reader.
 	Try specializing the resizable hash table and see how much
@@ -3308,13 +3370,22 @@ the subsequent call to \co{ht_get_bucket()}.
 	instead be answered with respect to a specific use case.
 	Some use cases are extremely sensitive to performance and
 	scalability, while others are less so.
+	\fi
 } \QuickQuizEnd
+
+그렇다고는 해도, 제가 처음 프로그램을 배우기 시작한 1970년대 초반에 사용할 수
+있던 것들에 비해 최신 하드웨어의 커다란 장점중 하나는 그렇게까지나 특수화가
+필요하지는 않다는 것입니다.
+이는 4 킬로바이트 주소공간을 사용하던 시절에 그랬던 것에 비해 훨씬 많은
+생산성을 가능하게 합니다.
+\iffalse
 
 All that aside, one of the great benefits of modern hardware compared
 to that available when I first started learning to program back in
 the early 1970s is that much less specialization is required.
 This allows much greater productivity than was possible back in the
 days of four-kilobyte address spaces.
+\fi
 
 \subsection{Bits and Bytes}
 \label{sec:datastruct:Bits and Bytes}
