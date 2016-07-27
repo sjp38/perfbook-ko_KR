@@ -40,7 +40,7 @@ Table~\ref{tab:defer:RCU Usage} 에 보여진 것처럼 그런 메커니즘들�
 에서는 요약을 제공합니다.
 \iffalse
 
-This section answers the question ``what is RCU?'' from the viewpoint
+This section answers the question ``What is RCU?'' from the viewpoint
 of the uses to which RCU can be put.
 Because RCU is most frequently used to replace some existing mechanism,
 we look at it primarily in terms of its relationship to such mechanisms,
@@ -214,6 +214,13 @@ flavor of userspace
 RCU~\cite{MathieuDesnoyers2009URCU,PaulMcKenney2013LWNURCU},
 for which \co{rcu_read_lock()} and \co{rcu_read_unlock()}
 generate a small amount of code.
+% TODO: translate upstream change
+What happens for the QSBR flavor of RCU, which generates no code at all
+for \co{rcu_read_lock()} and \co{rcu_read_unlock()}?
+(See Section~\ref{sec:defer:Introduction to RCU},
+and especially
+Figure~\ref{fig:defer:RCU QSBR: Waiting for Pre-Existing Readers},
+for a discussion of RCU QSBR.)
 What happens for the quiescent-state-based-reclamation (QSBR)
 flavor of RCU, which generates no code for
 \co{rcu_read_lock()} and \co{rcu_read_unlock()}?
@@ -638,9 +645,9 @@ cycle.
 \begin{minipage}[t]{\columnwidth}
 \small
 \begin{verbatim}
-idx = srcu_read_lock(&srcucb);
-synchronize_srcu(&srcucb);
-srcu_read_unlock(&srcucb, idx);
+rcu_read_lock();
+synchronize_rcu();
+rcu_read_unlock();
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
@@ -665,16 +672,17 @@ srcu_read_unlock(&srcucb, idx);
 	update-side 기능들을 실행하지 마세요.
 	\iffalse
 
-	The \co{synchronize_srcu()} cannot return until all
-	pre-existing SRCU read-side critical sections complete, but
-	is enclosed in an SRCU read-side critical section that cannot
-	complete until the \co{synchronize_srcu()} returns.
-	The result is a classic self-deadlock--you get the same
+	% TODO: translate upstream change
+	The \co{synchronize_rcu()} cannot return until all
+	pre-existing RCU read-side critical sections complete, but
+	is enclosed in an RCU read-side critical section that cannot
+	complete until the \co{synchronize_rcu()} returns.
+	The result is a classic self-deadlock---you get the same
 	effect when attempting to write-acquire a reader-writer lock
 	while read-holding it.
 
 	Note that this self-deadlock scenario does not apply to
-	RCU Classic, because the context switch performed by the
+	RCU QSBR, because the context switch performed by the
 	\co{synchronize_rcu()} would act as a quiescent state
 	for this CPU, allowing a grace period to complete.
 	However, this is if anything even worse, because data used
@@ -1207,8 +1215,9 @@ waits for any previously acquired references to be released.
 \iffalse
 
 Of course, RCU can also be combined with traditional reference counting,
-as has been discussed on LKML and as summarized in
-Section~\ref{sec:defer:Reference Counting}.
+% TODO: translate upstream change
+as discussed in
+Section~\ref{sec:together:Refurbish Reference Counting}.
 \fi
 
 \begin{figure}[tb]
@@ -1368,7 +1377,7 @@ RCU 를 처음 공부하는 사람들이 갖는, 희귀하지 않은 감탄 하�
 \iffalse
 
 A not-uncommon exclamation made by people first learning about
-RCU is ``RCU is sort of like a garbage collector!''.
+RCU is ``RCU is sort of like a garbage collector!''
 This exclamation has a large grain of truth, but it can also be
 misleading.
 \fi
