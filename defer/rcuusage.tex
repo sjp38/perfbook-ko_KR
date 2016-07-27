@@ -218,7 +218,6 @@ flavor of userspace
 RCU~\cite{MathieuDesnoyers2009URCU,PaulMcKenney2013LWNURCU},
 for which \co{rcu_read_lock()} and \co{rcu_read_unlock()}
 generate a small amount of code.
-% TODO: translate upstream change
 What happens for the QSBR flavor of RCU, which generates no code at all
 for \co{rcu_read_lock()} and \co{rcu_read_unlock()}?
 (See Section~\ref{sec:defer:Introduction to RCU},
@@ -653,15 +652,15 @@ rcu_read_unlock();
 \end{minipage}
 \vspace{5pt}
 
-	여기서의 \co{synchronize(srcu()} 는 모든 전부터 존재한 SRCU read-side
-	크리티컬 섹션들이 완료되기 전까지 리턴할 수 없습니다만, 이 자체가 SRCU
+	여기서의 \co{synchronize(srcu()} 는 모든 전부터 존재한 RCU read-side
+	크리티컬 섹션들이 완료되기 전까지 리턴할 수 없습니다만, 이 자체가 RCU
 	read-side 크리티컬 섹션 안에 들어가 있고 그 크리티컬 섹션은
-	\co{synchronize_srcu()} 가 리턴하기 전까지 끝날 수 없습니다.
+	\co{synchronize_rcu()} 가 리턴하기 전까지 끝날 수 없습니다.
 	결국 이건 고전적인 self-deadlock 의 결과를 이끌어냅니다--읽기 모드로
 	reader-writer 락을 잡은채로 쓰기 모드로 락을 잡으려 하면 똑같은 효과가
 	나타날 겁니다.
 
-	이 self-deadlock 시나리오는 RCU Classic 에는 적용되지 않는다는 점을
+	이 self-deadlock 시나리오는 RCU QSBR 에는 적용되지 않는다는 점을
 	알아두셔야 하는데, 이는 \co{synchronize_rcu()} 에 의해 수행되는
 	컨텍스트 스위치는 이 CPU 에 정지한 상태처럼 행동할 것이어서 grace
 	period 가 완료되게 할 것이기 때문입니다.
@@ -673,7 +672,6 @@ rcu_read_unlock();
 	update-side 기능들을 실행하지 마세요.
 	\iffalse
 
-	% TODO: translate upstream change
 	The \co{synchronize_rcu()} cannot return until all
 	pre-existing RCU read-side critical sections complete, but
 	is enclosed in an RCU read-side critical section that cannot
@@ -1211,12 +1209,11 @@ waits for any previously acquired references to be released.
 	\fi
 } \QuickQuizEnd
 
-물론, RCU 는 LKML 에서 논의되고 Section~\ref{sec:defer:Reference Counting} 에
-요약되어 있는 것처럼, 전통적인 레퍼런스 카운팅과 함께 조합될 수도 있습니다.
+물론, RCU 는 Section~\ref{sec:together:Refurbish Reference Counting} 에서
+논의된 것처럼, 전통적인 레퍼런스 카운팅과 함께 조합될 수도 있습니다.
 \iffalse
 
 Of course, RCU can also be combined with traditional reference counting,
-% TODO: translate upstream change
 as discussed in
 Section~\ref{sec:together:Refurbish Reference Counting}.
 \fi
