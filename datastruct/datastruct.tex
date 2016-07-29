@@ -3390,6 +3390,21 @@ days of four-kilobyte address spaces.
 \subsection{Bits and Bytes}
 \label{sec:datastruct:Bits and Bytes}
 
+이 챕터에서 논의한 해시 테이블들은 메모리 절약을 위한 시도는 거의 하지 않도록
+만들어졌습니다.
+예를 들어,
+page~\pageref{fig:datastruct:Resizable Hash-Table Data Structures} 의
+Figure~\ref{fig:datastruct:Resizable Hash-Table Data Structures} 에 있는
+\co{ht} 구조체의 \co{->ht_idx} 필드는 항상 0 또는 1 의 값을 갖는데도 32비트의
+메모리를 모두 가집니다.
+이건 예를 들어 \co{->ht_resize_key} 필드에서 비트 하나를 훔쳐다 사용하는 식으로
+제거될 수 있을 겁니다.
+이 방법은 \co{->ht_resize_key} 필드가 메모리의 모든 바이트를 가리킬 수 있을
+만큼 커다랗고 \co{ht_bucket} 구조체는 1 바이트보다 크기 때문에
+\co{->ht_resize_key} 필드는 몇 비트는 아낄 수 있을 것이기 때문에 동작
+가능합니다.
+\iffalse
+
 The hash tables discussed in this chapter made almost no attempt to conserve
 memory.
 For example, the \co{->ht_idx} field in the \co{ht} structure in
@@ -3403,6 +3418,17 @@ This works because the \co{->ht_resize_key} field is large enough to
 address every byte of memory and the \co{ht_bucket} structure
 is more than one byte long, so that
 the \co{->ht_resize_key} field must have several bits to spare.
+\fi
+
+이런 부류의 bit-packing 트릭은 리눅스에서의 \co{page} 구조체와 같이 많이
+복제되는 데이터 구조체들에서 빈번하게 사용됩니다.
+하지만, 이 크기 재조정한 해시 테이블의 \co{ht} 구조체는 그렇게까지 많이
+복제되지는 않습니다.
+대신에 우리가 집중해야 할 것은 \co{ht_bucket} 구조체입니다.
+\co{ht_bucket} 구조체의 크기를 줄일 수 있는 두개의 커다란 기회가 존재합니다:
+(1)~\co{->htb_lock} 필드를 \co{->htb_head} 포인터들 중 하나의 아래쪽 비트에
+위치시키는 것과 (2)~필요한 포인터들의 갯수를 줄이는 것입니다.
+\iffalse
 
 This sort of bit-packing trick is frequently used in data structures
 that are highly replicated, as is the \co{page} structure in the Linux
@@ -3413,14 +3439,31 @@ It is instead the \co{ht_bucket} structures we should focus on.
 There are two major opportunities for shrinking the \co{ht_bucket} structure:
 (1)~Placing the \co{->htb_lock} field in a low-order bit of one of the
 \co{->htb_head} pointers and (2)~Reducing the number of pointers required.
+\fi
+
+첫번째 기회는 \path{include/linux/bit_spinlock.h} 로 제공되는 리눅스 커널의
+비트 스핀락을 사용할 수도 있을겁니다.
+이것들은 리눅스 커널의 공간 크기에 민감한 데이터 구조체들에 사용됩니다만 그
+단점도 존재합니다:
+\iffalse
 
 The first opportunity might make use of bit-spinlocks in the Linux
 kernel, which are provided by the \path{include/linux/bit_spinlock.h}
 header file.
 These are used in space-critical data structures in the Linux kernel,
 but are not without their disadvantages:
+\fi
 
 \begin{enumerate}
+\item	기존의 스핀락 기능들에 비해 상당히 느립니다.
+\item	리눅스 커널의 데드락 파악 도구인
+	lockdep~\cite{JonathanCorbet2006lockdep} 과 함께 사용될 수 없습니다.
+\item	락 소유권을 기록하지 않아서 디버깅을 복잡하게 만듭니다.
+\item	-rt 커널에서 우선권 상승 기능과 함께 동작하지 않는데, 이는 비트
+	스핀락을 잡을 때에는 프리엠션 기능이 꺼져야 해서 리얼타임 대기시간을
+	나쁘게 만들 수 있습니다.
+\iffalse
+
 \item	They are significantly slower than the traditional spinlock
 	primitives.
 \item	They cannot participate in the lockdep deadlock detection
@@ -3430,10 +3473,28 @@ but are not without their disadvantages:
 \item	They do not participate in priority boosting in -rt kernels,
 	which means that preemption must be disabled when holding
 	bit spinlocks, which can degrade real-time latency.
+\fi
 \end{enumerate}
+
+이런 단점들에도 불구하고, 비트 스핀락은 메모리가 가장 중요할 때에 상당히
+유용합니다.
+\iffalse
 
 Despite these disadvantages, bit-spinlocks are extremely useful when
 memory is at a premium.
+\fi
+
+두번째 기회에 대한 한가지 측면은
+Section~\ref{sec:datastruct:Other Resizable Hash Tables} 에서 다루어졌는데,
+Section~\ref{sec:datastruct:Non-Partitionable Data Structures} 에서 보여진 크기
+재조정 가능 해시 테이블에서는 두개의 집합이 필요했던 자리에 한개의 bucket
+리스트 포인터들 집합만을 필요로 했습니다.
+또다른 방법은 이 챕터에서 사용된 양방향 링크드 리스트 대신에 단방향으로 링크된
+bucket 리스트를 사용하는 것이 되겠습니다.
+이 방법의 한가지 단점은 삭제 작업이 추가적 오버헤드를 가져오게 될 것인데,
+차후의 삭제를 위한 바깥으로 향하는 포인터를 마크하거나 삭제될 원소를 위해
+bucket 리스트를 담색하는 작업으로 인한 오버헤드가 될 것입니다.
+\iffalse
 
 One aspect of the second opportunity was covered in
 Section~\ref{sec:datastruct:Other Resizable Hash Tables},
@@ -3447,6 +3508,16 @@ One downside of this approach is that deletion would then require
 additional overhead, either by marking the outgoing pointer
 for later removal
 or by searching the bucket list for the element being deleted.
+\fi
+
+요약해서, 최소한의 메모리 오버헤드와 성능과 단순성 등 사이에는 트레이드오프가
+존재합니다.
+다행히도, 최신 시스템에서는 사용 가능한 비교적 커다란 메모리들은 성능과
+단순성을 메모리 오버헤드보다 우선시 할 수 있도록 해줍니다.
+하지만, 오늘날의 커다란 메모리 시스템들에서도\footnote{
+	기가바이트 단위 메모리의 스마트폰, 있나요?}
+가끔은 메모리 오버헤드를 줄이기 위한 극단적인 조사가 필요합니다.
+\iffalse
 
 In short, there is a tradeoff between minimal memory overhead on
 the one hand, and performance and simplicity on the other.
@@ -3457,6 +3528,7 @@ However, even with today's large-memory systems\footnote{
 	Smartphones with gigabytes of memory, anyone?}
 it is sometime necessary to take extreme measures to reduce
 memory overhead.
+\fi
 
 \subsection{Hardware Considerations}
 \label{sec:datastruct:Hardware Considerations}
