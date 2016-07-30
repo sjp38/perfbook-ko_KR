@@ -3533,6 +3533,21 @@ memory overhead.
 \subsection{Hardware Considerations}
 \label{sec:datastruct:Hardware Considerations}
 
+최신 컴퓨터들은 일반적으로 CPU 와 메인 메모리 사이에서 데이터를 32바이트에서
+256바이트 사이의 고정된 크기의 블록으로 옮깁니다.
+이 블록들은 \emph{캐시 라인} 이라 불리는데,
+Section~\ref{sec:cpu:Overheads} 에서 논의된 것처럼, 높은 성능과 확장성에 있어
+매우 중요합니다.
+성능과 확장성을 모두 죽여버리는 오래된 방법 하나는 호환불가한 변수들을 같은
+캐시라인에 집어넣는 것입니다.
+예를 들어, 크기 재조정 가능한 해시 테이블 데이터 원소가 \co{ht_elem} 구조체를
+상당히 빠르게 증가되는 카운터와 같은 캐시라인에 위치했다고 생각해 보세요.
+잦은 카운터 증가는 해당 캐시라인이 카운터 증가를 하는 CPU 에게만 보여질
+것입니다.
+만약 다른 CPU 가 해당 원소를 담고 있는 bucket 리스트를 횡단하려 하면, 이는 비싼
+캐시 미스를 일으켜서 성능과 확장성을 모두 떨어뜨릴 겁니다.
+\iffalse
+
 Modern computers typically move data between CPUs and main memory in
 fixed-sized blocks that range in size from 32 bytes to 256 bytes.
 These blocks are called \emph{cache lines}, and are extremely important
@@ -3548,6 +3563,7 @@ the CPU doing the incrementing, but nowhere else.
 If other CPUs attempted to traverse the hash bucket list containing
 that element, they would incur expensive cache misses, degrading both
 performance and scalability.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -3564,12 +3580,31 @@ performance and scalability.
 \label{fig:datastruct:Alignment for 64-Byte Cache Lines}
 \end{figure}
 
+64-바이트 캐시 라인의 시스템에서 이 문제를 해결하는 방법 가운데 하나가
+Figure~\ref{fig:datastruct:Alignment for 64-Byte Cache Lines} 에 보여져
+있습니다.
+여기서 gcc \co{aligned} 속성은 \co{->counter} 와 \co{->ht_elem} 구조체가 서로
+다른 캐시 라인에 위치하게 합니다.
+이는 잦은 카운터 증가에도 불구하고 CPU 들이 bucket 리스트를 빠른 속도로 횡단할
+수 있게 해줍니다.
+\iffalse
+
 One way to solve this problem on systems with 64-byte cache line is shown in
 Figure~\ref{fig:datastruct:Alignment for 64-Byte Cache Lines}.
 Here a gcc \co{aligned} attribute is used to force the \co{->counter}
 and the \co{ht_elem} structure into separate cache lines.
 This would allow CPUs to traverse the hash bucket list at full speed
 despite the frequent incrementing.
+\fi
+
+물론, 이는 ``캐시 라인의 크기가 64 바이트라는 걸 어떻게 알았을까?'' 라는 질문을
+떠올리게 합니다.
+리눅스 시스템에서, 이 정보는 \path{/sys/devices/system/cpu/cpu*/cache/}
+디렉토리에서 얻을 수 있고, 설치 과정에서 해당 시스템의 하드웨어 구조에
+적합하도록 어플리케이션을 다시 빌드하게 만들 수도 있습니다.
+더 나아가서, 설령 프로그램을 리눅스에서만 돌릴 생각이라 해도, 그런 스스로
+수정을 하는 설치 방법은 실증을 필요로 합니다.
+\iffalse
 
 Of course, this raises the question ``How did we know that cache lines
 are 64 bytes in size?''
@@ -3581,6 +3616,15 @@ However, this would be more difficult if you wanted your application to
 also run on non-Linux systems.
 Furthermore, even if you were content to run only on Linux, such a
 self-modifying installation poses validation challenges.
+\fi
+
+다행히도, 1995년의 논문~\cite{BenjaminGamsa95a} 에는 합리적인 수준으로 잘
+동작하는, 경험에 의거한 법칙들이 몇가지 있습니다.\footnote{
+	이런 규칙들 여럿은 여기서는 Orran Krieger 의 허락 하에 의역되고
+	확장되었습니다.}
+규칙들의 그룹들 중 첫번째 그룹은 구조체를 적합한 캐시의 기하학적 구조에 맞춰
+재배치 하는 것에 관한 것입니다:
+\iffalse
 
 Fortunately, there are some rules of thumb that work reasonably well in
 practice, which were gathered into a 1995
@@ -3589,8 +3633,27 @@ paper~\cite{BenjaminGamsa95a}.\footnote{
 	with permission from Orran Krieger.}
 The first group of rules involve rearranging structures to accommodate
 cache geometry:
+\fi
 
 \begin{enumerate}
+\item	읽기가 대부분인 데이터를 빈번하게 업데이트되는 데이터와 분리시키세요.
+	예를 들어, 읽기가 대부분인 데이터를 구조체의 앞에 위치시키고 빈번하게
+	업데이트되는 데이터는 끝에 위치시켜야 합니다.
+	가능하다면, 가끔만 접근되는 데이터를 그 사이에 위치시키세요.
+\item	만약 구조체가 여러 그룹의 필드를 가져서 각각의 그룹이 독립적인 코드
+	수행 경로에서 업데이트 된다면, 각각의 그룹들을 분리시키세요.
+	여기서도 역시, 가끔만 접근되는 데이터를 그룹들 사이에 위치시키는 게
+	효과를 발휘할 수 있습니다.
+	일부 경우에 있어서는 각각의 그룹을 원본 구조체에서 레퍼런스될 수 있는
+	별개의 구조체들에 위치시키는 것도 효과를 발휘할 수 있습니다.
+\item	가능하다면, 업데이트가 대부분인 데이터를 CPU, 쓰레드, 또는 태스크와
+	연관지으세요.
+	Chapter~\ref{chp:Counting} 에서의 카운터 구현에서 이 경험적 규칙의
+	효과적인 예를 본 바 있습니다.
+\item	가능하다면 Chapter~\ref{chp:Data Ownership} 에서 논의된 것처럼 데이터를
+	CPU 별로, 쓰레드별로, 또는 태스크별로 분리시켜야 합니다.
+\iffalse
+
 \item	Separate read-mostly data from data that is frequently updated.
 	For example, place read-mostly data at the beginning of the
 	structure and frequently updated data at the end.
@@ -3610,7 +3673,16 @@ cache geometry:
 \item	In fact, where possible, you should partition your data on
 	a per-CPU, per-thread, or per-task basis, as was discussed
 	in Chapter~\ref{chp:Data Ownership}.
+\fi
 \end{enumerate}
+
+최근에는 메모리 액세스 기록에 기반한 구조체 필드 재배열의 자동화를 위한
+노력들이 있었습니다~\cite{Golovanevsky:2010:TDL:2174824.2174835}.
+이는 멀티쓰레드 소프트웨어에서 훌륭한 성능과 확장성을 위해 필요시 되는
+고통스러운 작업의 고통을 경감시켜줄 수 있을 겁니다.
+
+추가적인 경험적 법칙들은 락에 대해 다룹니다:
+\iffalse
 
 There has recently been some work towards automated trace-based
 rearrangement of structure
@@ -3620,8 +3692,19 @@ required to get excellent performance and scalability from
 multithreaded software.
 
 An additional set of rules of thumb deal with locks:
+\fi
 
 \begin{enumerate}
+\item	자주 수정되는 데이터를 보호하며 상당히 경쟁을 받게 되는 락은 다음의
+	방법 중 하나를 따라야 합니다:
+	\begin{enumerate}
+	\item	락을 그것이 보호하는 데이터와 다른 캐시라인에 위치시키는 것.
+	\item	높은 경쟁수위에 맞춰 만들어진, queued 락과 같은 락을 사용할 것.
+	\item	락 경쟁 수위를 줄이기 위해 설계를 다시 할 것.
+		(이 방법이 최고입니다만 상당한 작업을 필요로 합니다.)
+	\end{enumerate}
+\iffalse
+
 \item	Given a heavily contended lock protecting data that is
 	frequently modified, take one of the following approaches:
 	\begin{enumerate}
@@ -3633,17 +3716,33 @@ An additional set of rules of thumb deal with locks:
 		(This approach is best, but can require quite a bit
 		of work.)
 	\end{enumerate}
+\fi
+\item	경쟁을 하지 않는 락들은 그것들이 보호하는 데이터와 같은 캐시 라인에
+	위치시키세요.
+	이 방법은 락을 현재 CPU 로 들고오는 캐시미스가 데이터도 함께 가져오도록
+	함을 의미합니다.
+\item	읽기가 대부분인 데이터를 RCU로 보호하고, 만약 RCU 가 사용될 수 없고
+	크리티컬 섹션이 굉장히 길다면, reader-writer 락을 사용하세요.
+\iffalse
+
 \item	Place uncontended locks into the same cache line as the data
 	that they protect.
 	This approach means that the cache miss that brought the
 	lock to the current CPU also brought its data.
 \item	Protect read-mostly data with RCU, or, if RCU cannot be used and
 	the critical sections are of very long duration, reader-writer locks.
+\fi
 \end{enumerate}
+
+물론, 이것들은 절대적 규칙이 아니라 경험적 규칙입니다.
+특정 상황에서 무엇이 가장 적합한 것인지를 알아내기 위해서는 일부 실험이
+필요합니다.
+\iffalse
 
 Of course, these are rules of thumb rather than absolute rules.
 Some experimentation is required to work out which are most applicable
 to your particular situation.
+\fi
 
 \section{Summary}
 \label{sec:datastruct:Summary}
