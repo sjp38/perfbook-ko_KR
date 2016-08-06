@@ -1009,6 +1009,18 @@ you already have a good test suite.
 \section{Tracing}
 \label{sec:debugging:Tracing}
 
+다른 모든게 실패한다면, \co{printk()} 를 추가하세요!
+또는, 사용자 모드 C-언어 어플리케이션을 작업 중이라면 \co{printf()} 를요.
+
+논리적 근거는 간단합니다: 어떻게 실행이 코드의 특정 지점까지 가게 되었는지
+알아낼 수가 없다면, 무슨 일이 벌어졌는지 알아내기 위해 코드의 앞부분에
+프린트문을 여기저기 집어넣으세요.
+비슷한 효과를 (유저 어플리케이션을 위한) gdb 나 (리눅스 커널 디버깅을 위한)
+kgdb 와 같은 디버거를 이용해서 더 편리하고 유연성 있게 얻을 수도 있습니다.
+훨씬 더 세련된 도구들도 존재하는데, 그 중 최신의 일부는 문제가 발생한 시점부터
+뒤로 시간을 되돌릴 수 있는 기능을 제공합니다.
+\iffalse
+
 When all else fails, add a \co{printk()}!
 Or a \co{printf()}, if you are working with user-mode C-language applications.
 
@@ -1021,12 +1033,40 @@ by using a debugger such as gdb (for user applications) or kgdb
 Much more sophisticated tools exist, with some of the more recent
 offering the ability to rewind backwards in time from the point
 of failure.
+\fi
+
+이런 간단한 테스트 도구들은 모두 가치가 있는데, 일반적인 시스템들이 64K 보다 큰
+메모리와 4MHz 보다 빠른 속도로 동작하는 지금에 있어선 특히 그렇습니다.
+이런 도구들에 대해서는 더 많은 글들이 있으므로, 이 챕터는 그에 대해 조금만 더
+이야기 하겠습니다.
+\iffalse
 
 These brute-force testing tools are all valuable, especially now
 that typical systems have more than 64K of memory and CPUs running
 faster than 4MHz.
 Much has been
 written about these tools, so this chapter will add little more.
+\fi
+
+하지만, 이런 도구들은 모두, 디버깅하려는 일이 고성능의 병렬 알고리즘의 빠른
+수행경로에 뭐가 잘못되어 있는지를 알려고 하는 것일 경우에 심각한 단점을 가지고
+있는데, 달리 말해 대부분의 경우 큰 오버헤드를 갖습니다.
+이런 목적을 위한 특수한 추적 기술들이 있는데, 일반적으로 실행시간 데이터 수집의
+오버헤드를 최소화 하기 위해 데이터 소유권 테크닉
+(Chapter~\ref{chp:Data Ownership}을 참고하세요) 을 사용합니다.
+리눅스 커널에서의 한가지 예는
+``trace events''~\cite{StevenRostedt2010perfTraceEventP1,StevenRostedt2010perfTraceEventP2,StevenRostedt2010perfTraceEventP3,StevenRostedt2010perfHP+DeathlyMacros}
+입니다.
+유저스페이스를 다루는 (하지만 리눅스 커널에는 받아들여지지 않은) 또다른 예는
+LTTng~\cite{MathieuDesnoyers2009LFCollabSummit} 입니다.
+이것들 각각의 사용은 데이터가 극단적으로 낮은 오버헤드만을 가지고 수집될 수
+있도록 하기 위해 CPU 별 버퍼를 사용합니다.
+그렇다 하더라도, 추적 기능을 활성화 시키는 것은 어떤 경우에는 버그를 숨기기
+충분할 만큼 타이밍을 바꿀 수 있어서,
+Section~\ref{sec:debugging:Probability and Heisenbugs} 과
+Section~\ref{sec:debugging:Hunting Heisenbugs} 에서 특별히 다루어질
+\emph{heisenbugs} 를 초래할 수 있습니다.
+\iffalse
 
 However, these tools all have a serious shortcoming when the job at hand
 is to convince a fastpath of a high-performance parallel algorithm
@@ -1046,6 +1086,23 @@ Even so, enabling tracing can sometimes change timing enough to
 hide bugs, resulting in \emph{heisenbugs}, which are discussed in
 Section~\ref{sec:debugging:Probability and Heisenbugs}
 and especially Section~\ref{sec:debugging:Hunting Heisenbugs}.
+\fi
+
+Heisenbug 를 막는다 하더라도, 다른 위험들이 기다리고 있습니다.
+예를 들어, 비록 기계는 모든 것을 알고 있지만, 그것이 알고 있는 것은 거의 항상
+당신의 머리가 쥐고 있을 수 있는 것보다 많은 정보입니다.
+이런 이유로, 높은 품질의 테스트 장비들은 일반적으로 대량의 출력을 분석할 수
+있도록 세련된 스크립트들을 함께 제공합니다.
+하지만 조심하세요---스크립트들은 놀라운 일을 알려줘야만 하는 건 아닙니다.
+제 rcutorture 스크립트는 그런 점에서의 한 경우입니다: 그 스크립트들의 초기
+버전들은 RCU grace period 들이 불명확하게 늦춰지며 동작 (stall) 함에도 문제가
+없다고 판단하고는 했습니다.
+이는 물론 해당 스크립트들이 RCU grace-period stall 문제를 파악할 수 있도록
+수정되었습니다만, 이로 인해 해당 스크립트는 제가 파악할 수 있게 하자고 생각하는
+문제들만을 파악한다는 사실은 바뀌지 않습니다.
+그 스크립트들은 유용합니다만, 가끔 rcutorture 출력을 일일이 읽는 행위를 대체할
+수는 없습니다.
+\iffalse
 
 Even if you avoid heisenbugs, other pitfalls await you.
 For example, although the machine really does know all,
@@ -1061,10 +1118,17 @@ grace-period stalls, but this does not change the fact that the scripts
 will only detects problems that I think to make them detect.
 The scripts are useful, but they are no substitute for occasional
 manual scans of the rcutorture output.
+\fi
+
+추적 기능과 특히 \co{printk()} 호출에 있어서의 또다른 문제는 그 오버헤드가
+제품에 사용되기에는 너무 크다는 것입니다.
+그런 경우들 중 일부에 있어서는, 단정문들이 도움이 될 수 있습니다.
+\iffalse
 
 Another problem with tracing and especially with \co{printk()} calls
 is that their overhead is often too much for production use.
 In some such cases, assertions can be helpful.
+\fi
 
 \section{Assertions}
 \label{sec:debugging:Assertions}
