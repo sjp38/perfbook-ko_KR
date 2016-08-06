@@ -1133,7 +1133,11 @@ In some such cases, assertions can be helpful.
 \section{Assertions}
 \label{sec:debugging:Assertions}
 
+단정문들은 일반적으로 다음과 같은 식으로 구현됩니다:
+\iffalse
+
 Assertions are usually implemented in the following manner:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1146,6 +1150,14 @@ Assertions are usually implemented in the following manner:
 \end{minipage}
 \vspace{5pt}
 
+이 패턴은 종종 C 전처리기 매크로나 프로그래밍 언어의 내재 기능으로 캡슐화
+되어지는데, 예를 들어 리눅스 커널의 경우, 이는
+\co{WARN_ON(something_bad_is_happening())} 으로 표현될 겁니다.
+물론, 만약 \co{something_bad_is_happening()} 이 상당히 자주 벌어진다면 그로
+말미암은 출력은 다른 문제들의 보고를 이해하기 어렵게 만들 수 있는데, 이런
+경우에는 \co{WARN_ON_ONCE(something_bad_is_happening()} 이 더 적절할 겁니다.
+\iffalse
+
 This pattern is often encapsulated into C-preprocessor macros or
 language intrinsics, for example, in the Linux kernel, this might
 be represented as \co{WARN_ON(something_bad_is_happening())}.
@@ -1153,10 +1165,28 @@ Of course, if \co{something_bad_is_happening()} quite frequently,
 the resulting output might obscure reports of other problems,
 in which case
 \co{WARN_ON_ONCE(something_bad_is_happening())} might be more appropriate.
+\fi
 
 \QuickQuiz{}
+	\co{WARN_ON_ONCE()} 는 어떻게 구현할 수 있을까요?
+	\iffalse
+
 	How can you implement \co{WARN_ON_ONCE()}?
+	\fi
 \QuickQuizAnswer{
+	가끔은 두번이나 세번까지는 경고를 날릴 수 있는 \co{WARN_ON_ONCE()} 여도
+	문제가 없다면, 간단히 초기값 0을 갖는 static 변수를 사용하세요.
+	조건이 만족된다면, 이 static 변수를 체크하고, 만약 0이 아니라면, 그냥
+	리턴합니다.
+	그렇지 않다면, 그 값을 1으로 설정하고, 메세지를 출력한 후, 리턴하세요.
+
+	경고 메세지가 굉장히 커다랗거나 해서 메세지가 절대로 두번 이상 나타나선
+	안된다면 앞의 ``그 값을 1로 설정'' 부분을 어토믹 교환 오퍼레이션을
+	사용할 수 있습니다.
+	경고 메세지는 이 어토믹 교환 오퍼레이션이 0을 리턴한 경우에만 프린트
+	하도록 합니다.
+	\iffalse
+
 	If you don't mind having a \co{WARN_ON_ONCE()} that
 	will sometimes warn twice or three times, simply maintain
 	a static variable that is initialized to zero.
@@ -1169,7 +1199,18 @@ in which case
 	operation in place of ``set it to one'' above.
 	Print the message only if the atomic exchange operation returns
 	zero.
+	\fi
 } \QuickQuizEnd
+
+병렬 코드에서, 일어날 수도 있는 한가지 매우 나쁜 일은 특정한 락이 잡힌 상태에서
+호출될 것으로 기대되는 어떤 함수가 그 락이 잡히지 않은 채로 호출되는
+경우입니다.
+그런 함수들은 어떤 경우에는 ``호출자는 반드시 이 함수를 호출할 때 \co{foo_lock}
+을 잡아야만 함''과 같은 이야기를 하는 헤더 코멘트를 가질 수도 있습니다만, 그런
+코멘트는 누군가가 그걸 정말로 읽지 않는다면 어떤 좋은 일도 하지 않습니다.
+\co{lock_is_held(&foo_lock)} 과 같이 실행 가능한 이야기가 훨씬 많은 무게를
+갖습니다.
+\iffalse
 
 In parallel code, one especially bad something that might happen is that
 a function expecting to be called under a particular lock might be called
@@ -1179,6 +1220,19 @@ Such functions sometimes have header comments stating something like
 such a comment does no good unless someone actually reads it.
 An executable statement like \co{lock_is_held(&foo_lock)} carries far
 more weight.
+\fi
+
+리눅스 커널의 lockdep
+기능~\cite{JonathanCorbet2006lockdep,StevenRostedt2011locdepCryptic} 은 이
+과정을 좀 더 크게 취하는데, 잠재적인 데드락을 보고하는 것 뿐만 아니라 함수들이
+올바른 락들을 잡았는지 검증할 수 있게 도와줍니다.
+물론, 이 추가적인 기능은 상당한 오버헤드를 만들어내는데, 그로인해 lockdep 은
+제품에서의 사용에는 적합하지는 않습니다.
+
+그래서 검사가 필요하지만 실행시간에서의 검사로 인한 오버헤드는 용인될 수 없는
+경우들에는 무엇을 해볼 수 있을까요?
+한가지 방법은 정적 분석인데, 다음 섹션에서 이에 대해 논해 보겠습니다.
+\iffalse
 
 The Linux kernel's lockdep
 facility~\cite{JonathanCorbet2006lockdep,StevenRostedt2011locdepCryptic}
@@ -1190,6 +1244,7 @@ so that lockdep is not necessarily appropriate for production use.
 So what can be done in cases where checking is necessary, but where the
 overhead of runtime checking cannot be tolerated?
 One approach is static analysis, which is discussed in the next section.
+\fi
 
 \section{Static Analysis}
 \label{sec:debugging:Static Analysis}
