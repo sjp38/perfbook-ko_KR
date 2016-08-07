@@ -8,10 +8,10 @@ for the original book source.
 You can access the original book and its source from the address below:
 - https://www.kernel.org/pub/linux/kernel/people/paulmck/perfbook/perfbook.html
 
-The translation is just for fun.
-If things goes luckily, however, the translation may help Korean programmers to
-understand the parallel programming well.
-Also, the translation is official; The original author, Paul E. McKenney, also
+This translation is just for fun.
+That said, if things goes luckily, however, the translation may help Korean
+programmers to understand the parallel programming well.
+Also, this translation is official; The original author, Paul E. McKenney, also
 references this repository:
 - https://goo.gl/b8gqMS
 
@@ -19,7 +19,7 @@ references this repository:
 Usage
 =====
 
-The source is in tex format; It is hard to read.
+The source is in tex format;
 Just typing `make` from your linux commandline will give you the complete book
 in PDF format.  However, the build requires few prerequisites. The
 prerequisites may be complex to someone.  For the reason, the final PDF file
@@ -43,7 +43,7 @@ Contribution
 Discussion process is similar to the one of Linux.
 In short, all discussions including problem report, patch contribution, and
 patch review should be made via emails.
-For disucssions archiving, this project maintains a Group of Google Groups.
+To archive whole discussion, this project maintains a Group of Google Groups.
 You can join or see discussions via it.
 If you want to join or create a discussion, you should send a email about your
 opinion to appropriate maintainer(s) with CC to the group.
@@ -59,9 +59,9 @@ Signed-off-by
 -------------
 
 For every patches, you should add a `Signed-off-by` line.
-It means you agree about legal issues of the patch as described at `HOWTO.txt`
+It means you agree about legal issues of the patch as described in `FAQ.txt`
 file.
-For detail, refer to the `HOWTO.txt` file in this repository, please.
+For detail, refer to the `FAQ.txt` file in this repository, please.
 
 
 Author
