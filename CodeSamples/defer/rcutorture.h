@@ -213,7 +213,6 @@ void rperftest(int nreaders, int cpustride)
 	long arg;
 
 	perftestinit();
-	init_per_thread(n_reads_pt, 0LL);
 	for (i = 0; i < nreaders; i++) {
 		arg = (long)(i * cpustride);
 		create_thread(rcu_read_perf_test, (void *)arg);
@@ -227,7 +226,6 @@ void uperftest(int nupdaters, int cpustride)
 	long arg;
 
 	perftestinit();
-	init_per_thread(n_reads_pt, 0LL);
 	for (i = 0; i < nupdaters; i++) {
 		arg = (long)(i * cpustride);
 		create_thread(rcu_update_perf_test, (void *)arg);
@@ -273,7 +271,7 @@ void *rcu_read_stress_test(void *arg)
 			n_mberror++;
 		rcu_read_lock_nest();
 		for (i = 0; i < 100; i++)
-			garbage++;
+			ACCESS_ONCE(garbage)++;
 		rcu_read_unlock_nest();
 		pc = p->pipe_count;
 		rcu_read_unlock();
@@ -387,7 +385,8 @@ void stresstest(int nreaders)
 
 void usage(int argc, char *argv[])
 {
-	fprintf(stderr, "Usage: %s [nreaders [ perf | stress ] ]\n", argv[0]);
+	fprintf(stderr, "Usage: %s [nreaders [ perf | rperf | uperf | stress [cpustride] ] ]\n",
+			argv[0]);
 	exit(-1);
 }
 
