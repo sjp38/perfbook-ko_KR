@@ -21,12 +21,16 @@ Usage
 
 The source is in tex format;
 Just typing `make` from your linux commandline will give you the complete book
-in PDF format.  However, the build requires few prerequisites. The
-prerequisites may be complex to someone.  For the reason, the final PDF file
-will be published to online of offline in future.  It's just a plan for now
-because there is no money, no time to buy printer or host a server.  If you
-need PDF version now and cannot get the build environment, try to send an
-request email to translation author.
+in PDF format.  For detailed build process, refer to `FAQ-BUILD.txt`, please.
+
+
+Complete PDF Version
+--------------------
+
+For those who has problem about building the book by themselves, we provide
+complete book in PDF format.
+To get it, follow a link below:
+ - https://github.com/sjp38/perfbook-ko_KR-pdf
 
 
 License
