@@ -1503,6 +1503,16 @@ If not, walkthroughs are often a waste of time.
 \subsection{Self-Inspection}
 \label{sec:debugging:Self-Inspection}
 
+개발자들이 모두 자신의 코드를 검사하는데 그렇게 효과적이지는 않은 게
+일반적이지만, 합리적인 대안이 없는 상황들도 많이 존재합니다.
+예를 들어, 해당 개발자가 그 코드를 볼 수 있도록 허가된 유일한 사람일 수 있고,
+다른 능력 있는 개발자들은 모두 너무 바빠서일수도 있고, 또는 문제의 해당 코드가
+충분히 기묘하게 생겨서 프로토타입을 선보이기 전까지는 어떤 사람도 그걸 심각하게
+바라보도록 설득할수가 없어서일 수도 있습니다.
+이런 경우들에, 다음과 같은 방법은 상당히 도움이 되는데, 특히 복잡한 병렬
+코드에서 그렇습니다:
+\iffalse
+
 Although developers are usually not all that effective at inspecting
 their own code, there are a number of situations where there is no
 reasonable alternative.
@@ -1513,8 +1523,25 @@ is unable to convince anyone else to take it seriously until after
 demonstrating a prototype.
 In these cases, the following procedure can be quite helpful,
 especially for complex parallel code:
+\fi
 
 \begin{enumerate}
+\item	요구사항, 데이터 구조를 위한 다이어그램, 그리고 설계 선택 사항들에 대한
+	합리적 이유등을 가지고 설계 문서를 작성합니다.
+\item	전문가에게 자문을 구하고 필요하다면 설계 문서를 업데이트 합니다.
+\item	코드를 종이 위에 펜으로 써가면서 에러들을 고칩니다.
+	앞서 존재한 거의 동일한 코드 시퀀스를 참고하려는 유혹을 견뎌내고,
+	작성한 코드의 사본을 만듭니다.
+\item	거기에 에러가 있었다면, 깨끗한 종이에 그 코드를 똑같이 쓰면서 에러들을
+	고쳐갑니다.
+	마지막 두 복사본이 동일할 때까지 이를 반복합니다.
+\item	모든 분명치 않은 코드에 대해 정확성을 증명합니다.
+\item	가능하다면, 코드 조각들을 바닥에서부터 테스트 합니다.
+\item	모든 코드가 합쳐지면, 기능성과 스트레스 테스트를 전부 합니다.
+\item	코드가 모든 테스트를 통과한다면, 코드 레벨 문서를 작성하는데, 이는 앞서
+	이야기한 설계 문서의 확장판이 될수도 있습니다.
+\iffalse
+
 \item	Write design document with requirements, diagrams for data structures,
 	and rationale for design choices.
 \item	Consult with experts, update the design document as needed.
@@ -1530,7 +1557,17 @@ especially for complex parallel code:
 	stress testing.
 \item	Once the code passes all tests, write code-level documentation,
 	perhaps as an extension to the design document discussed above.
+\fi
 \end{enumerate}
+
+제가 새로운 RCU 코드를 위해 성실하게 이 과정을 따라갔을 때, 과정의 마지막에
+이르러서는 몇개의 버그들만이 존재했습니다.
+몇개의 두드러지는 (그리고 당황스러운) 예외가
+있지만~\cite{PaulEMcKenney2011RCU3.0trainwreck}, 전 남들보다 앞서서 이런
+버그들을 잡아내고는 합니다.
+그렇다고는 하나, 리눅스 커널 사용자의 수와 다양성이 증가함에 따라 이는 점점
+어려워지고 있습니다.
+\iffalse
 
 When I faithfully follow this procedure for new RCU code, there are
 normally only a few bugs left at the end.
@@ -1539,16 +1576,40 @@ exceptions~\cite{PaulEMcKenney2011RCU3.0trainwreck},
 I usually manage to locate these bugs before others do.
 That said, this is getting more difficult over time as the number and
 variety of Linux-kernel users increases.
+\fi
 
 \QuickQuiz{}
+	어떤 사람이 존재하는 코드를 종이에 펜으로 사본을 만들려 하겠어요???
+	그건 그냥 필사 과정에서의 에러의 가능성만 증가시키는 거 아닌가요?
+	\iffalse
+
 	Why would anyone bother copying existing code in pen on paper???
 	Doesn't that just increase the probability of transcription errors?
+	\fi
 \QuickQuizAnswer{
+	필사 과정에서의 에러가 걱정된다면, 제가 당신에게 \co{diff} 라는 이름의
+	정말 멋진 도구를 처음으로 소개해줄 수 있게 해주세요.
+	또한, 필사 과정을 진행하는건 상당히 가치있을 수 있습니다:
+	\iffalse
+
 	If you are worried about transcription errors, please allow me
 	to be the first to introduce you to a really cool tool named
 	\co{diff}.
 	In addition, carrying out the copying can be quite valuable:
+	\fi
 	\begin{enumerate}
+	\item	많은 코드를 복사하게 된다면 당신은 추상화를 함으로써 얻을 수
+		있는 이득을 얻을 수 없을 겁니다.
+		코드를 필사하는 행위는 추상화를 위한 커다란 동기 부여를 줄 수
+		있습니다.
+	\item	코드를 필사하는 행위는 코드가 정말로 새로운 환경에서도 잘
+		동작할 것인지 생각해볼 기회를 줍니다.
+		인터럽트를 불가능하게 해야 한다거나 어떤 락을 잡아야 한다거나와
+		같은, 명확치 않은 제약이 있나요?
+	\item	코드를 필사하는 행위는 또한 그 일을 하게 하는데 어떤 더 나은
+		방법이 있을지 고민해 볼 시간을 줍니다.
+	\iffalse
+
 	\item	If you are copying a lot of code, you are probably failing
 		to take advantage of an opportunity for abstraction.
 		The act of copying code can provide great motivation
@@ -1559,21 +1620,49 @@ variety of Linux-kernel users increases.
 		to disable interrupts or to hold some lock?
 	\item	Copying the code also gives you time to consider whether
 		there is some better way to get the job done.
+	\fi
 	\end{enumerate}
+	그러니까, 그래요, 코드를 필사하세요!
+	\iffalse
+
 	So, yes, copy the code!
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	이 과정은 우스꽝스러울 정도로 지나치게 공업화 되어 있어요!
+	어떻게 당신은 합리적인 양의 소프트웨어들이 이런 방식으로 작성되었을
+	거라고 생각할 수 있는거죠?
+	\iffalse
+
 	This procedure is ridiculously over-engineered!
 	How can you expect to get a reasonable amount of software
 	written doing it this way???
+	\fi
 \QuickQuizAnswer{
+	실제로, 코드를 손으로 복사하는 행위를 반복하는 것은 노동집약적이고 느립니다.
+	하지만, 상당한 스트레스 테스트와 정확성 검증과 조합되어진다면, 궁극적인
+	성능과 안정성이 필요하고 디버깅이 어려운 복잡한 병렬 코드에 있어서는 이
+	또한 상당히 효과적입니다.
+	리눅스 커널 RCU 구현이 그런 케이스입니다.
+	\iffalse
+
 	Indeed, repeatedly copying code by hand is laborious and slow.
 	However, when combined with heavy-duty stress testing and
 	proofs of correctness, this approach is also extremely effective
 	for complex parallel code where ultimate performance and
 	reliability are required and where debugging is difficult.
 	The Linux-kernel RCU implementation is a case in point.
+	\fi
+
+	한편으로는, 당신이 어떤 데이터를 조작하기 위해 간단한 싱글 쓰레드 셸
+	스크립트를 작성하고 있다면, 다른 방법론이 가장 잘 당신을 도와줄 겁니다.
+	예를 들어, 당신이 원하는 대로 동작하고 있음을 확신할 수 있도록 하는
+	테스트 데이터와 함께 커맨드 하나 하나를 하나씩 대화형 셸에 입력하고,
+	그러고 나서 성공한 커맨드들을 스크립트 안에 복사해서 붙여넣을 수 있을
+	겁니다.
+	마지막으로, 전체 스크립트를 테스트 하세요.
+	\iffalse
 
 	On the other hand, if you are writing a simple single-threaded
 	shell script to manipulate some data, then you would be
@@ -1583,6 +1672,18 @@ variety of Linux-kernel users increases.
 	sure that it did what you wanted, then copy-and-paste the
 	successful commands into your script.
 	Finally, test the script as a whole.
+	\fi
+
+	도움을 주려 하는 친구나 동료가 있다면, 페어 프로그래밍이 잘 될 수
+	있을텐데, 정식적인 디자인 리뷰와 코드리뷰 프로세스에 있어서도
+	마찬가지입니다.
+
+	그리고 당신이 취미로 코드를 작성하고 있다면, 뭐가 됐든 하고 싶은대로
+	하세요.
+
+	짧게 요약해서, 다른 종류의 소프트웨어는 다른 개발 방법론을 필요로
+	합니다.
+	\iffalse
 
 	If you have a friend or colleague who is willing to help out,
 	pair programming can work very well, as can any number of
@@ -1592,7 +1693,15 @@ variety of Linux-kernel users increases.
 
 	In short, different types of software need different development
 	methodologies.
+	\fi
 } \QuickQuizEnd
+
+앞의 방법은 새로운 코드에 있어서는 잘 동작하빈다만, 이미 작성한 코드에 대해서
+검사가 필요하다면 어떻게 해야 할까요?
+물론 기존의 코드에 앞의 방법을 당신이 투입된 특수한 경우~\cite{Brooks79}에 대해
+적용할 수 있겠습니다만, 덜 절망적인 상황에서는 다음과 같은 방법도 도움이 될 수
+있을 겁니다:
+\iffalse
 
 The above procedure works well for new code, but what if you need to
 inspect code that you have already written?
@@ -1600,8 +1709,18 @@ You can of course apply the above procedure for old code in the special
 case where you wrote one to throw away~\cite{Brooks79},
 but the following approach can also be helpful in less desperate
 circumstances:
+\fi
 
 \begin{enumerate}
+\item	당시이 가장 좋아하는 문서화 도구 (\LaTeX{}, HTML, OpenOffice, 또는
+	ASCII) 를 사용해서 문제가 되는 코드의 설계를 높은 수준에서 묘사하세요.
+	데이터 구조들과 이 구조들이 어떻게 업데이트 되는지를 묘사하기 위해 많은
+	다이어그램들을 사용하세요.
+\item	해당 코드의 복사본을 반들고 모든 코멘트들을 지워버리세요.
+\item	코드가 무슨 일을 하는지를 한줄 한줄씩 문서화 하세요.
+\item	발견되는 대로 버그들을 고치세요.
+\iffalse
+
 \item	Using your favorite documentation tool (\LaTeX{}, HTML,
 	OpenOffice, or straight ASCII), describe the high-level
 	design of the code in question.
@@ -1610,7 +1729,22 @@ circumstances:
 \item	Make a copy of the code, stripping away all comments.
 \item	Document what the code does statement by statement.
 \item	Fix bugs as you find them.
+\fi
 \end{enumerate}
+
+이게 잘 동작하는 이유는 코드를 자세하게 설명하는 것은 버그를 찾아내는 훌륭한
+방법이기 때문입니다~\cite{GlenfordJMyers1979}.
+이 두번째 방법은 어떤 다른 사람의 코드를 이해하는데에도 좋은 방법이긴 합니다만,
+많은 경우에 첫번째 단계만으로도 충분합니다.
+
+다른 사람에 의한 리뷰와 검사가 더 효율적이고 효과적이긴 하지만, 앞의 방법들은
+어떤 이유가 되었든 다른 사람들이 관여할 수가 없는 상황에서 상당히 도움이
+됩니다.
+
+이 시점에서, 당신은 이 모든 지루한 종이와 함께 하는 일들을 하지 않고서 병렬
+코드를 작성하는 방법에 대해 궁금할 겁니다.
+여기 그걸 달성하기 위한, 오랜 시간이 증명한 몇가지 방법이 있습니다:
+\iffalse
 
 This works because describing the code in detail is an excellent way to spot
 bugs~\cite{GlenfordJMyers1979}.
@@ -1624,8 +1758,26 @@ for whatever reason it is not feasible to involve others.
 At this point, you might be wondering how to write parallel code without
 having to do all this boring paperwork.
 Here are some time-tested ways of accomplishing this:
+\fi
 
 \begin{enumerate}
+\item	사용 가능한 병렬 라이브러리 함수의 사용을 통해 확장되는 순차적
+	프로그램을 작성하세요.
+\item	맵리듀스, BOINC 또는 웹 어플리케이션서버와 같은 병렬 프레임워크를 위한
+	순차적 플러그인들을 작성하세요.
+\item	문제가 완전히 분할 가능한 병렬 설계와 같은 멋진 일을 하고, 상호간 통신
+	없이 병렬로 수행되는 순차적 프로그램(들)을 구현하세요.
+\item	어플리케이션 영역들 중 도구들이 자동으로 문제를 분해하고 병렬화 할 수
+	있는, (선형 대수와 같은) 하나만 하세요.
+\item	극단적으로 올바른 방법으로만 병렬 프로그래밍 도구들을 사용해서 그 결과
+	작성된 코드가 올바르단 것이 쉽게 보일 수 있게 하세요.
+	하지만 조심하세요: 항상 더 좋은 성능과 확장성을 위해서 그 규칙들을
+	``아주 조금만'' 깨고 싶은 욕구가 생길겁니다.
+	그 규칙들을 깨는 건 일반적으로 문제를 야기합니다.
+	이 섹션에서 설명한 종이를 가지고 하는 일들을 조심스럽게 하지 않았다면
+	말이죠.
+\iffalse
+
 \item	Write a sequential program that scales through use of
 	available parallel library functions.
 \item	Write sequential plug-ins for a parallel framework,
@@ -1644,7 +1796,18 @@ Here are some time-tested ways of accomplishing this:
 	Breaking the rules often results in general breakage.
 	That is, unless you carefully do the paperwork described in this
 	section.
+\fi
 \end{enumerate}
+
+하지만 슬픈 사실은 당신이 이 종이를 가지고 하는 일을 했거나 종이를 가지고 하는
+일을 회피할 수 있는 더 또는 덜 안전한 방법들을 사용했다고 하더라도 버그는
+존재할 거라는 겁니다.
+모든 걸 제쳐두고, 더 많은 사용자들과 훨씬 많은 사용자의 다양성은 더 많은
+버그들을 더 빨리 노출시킬 것인데, 그런 사용자들이 최초의 개발자들이 고려하지
+못했던 일들을 하게 되면 특히 그렇습니다.
+다음 섹션은 병렬 소프트웨어를 검증하면 너무도 자주 발생하는 확률적인 버그들을
+다루는 방법에 대해 설명하겠습니다.
+\iffalse
 
 But the sad fact is that even if you do the paperwork or use one of
 the above ways to more-or-less safely avoid paperwork,
@@ -1654,6 +1817,7 @@ more bugs more quickly, especially if those users are doing things
 that the original developers did not consider.
 The next section describes how to handle the probabilistic bugs that
 occur all too commonly when validating parallel software.
+\fi
 
 \section{Probability and Heisenbugs}
 \label{sec:debugging:Probability and Heisenbugs}
