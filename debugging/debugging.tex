@@ -2030,12 +2030,28 @@ We therefore start with discrete tests.
 \subsection{Statistics for Discrete Testing}
 \label{sec:debugging:Statistics for Discrete Testing}
 
+버그가 한번의 프로그램 수행 사이에 10\% 의 발생 확률을 가지고 있고 우리는
+프로그램을 다섯번 수행한다고 생각해 봅시다.
+최소 한번의 수행은 실패할 확률을 어떻게 계산하면 될까요?
+그런 한가지 방법은 다음과 같습니다:
+\iffalse
+
 Suppose that the bug had a 10\% chance of occurring in
 a given run and that we do five runs.
 How do we compute that probability of at least one run failing?
 One way is as follows:
+\fi
 
 \begin{enumerate}
+\item	하나의 수행이 성공할 확률을 계산하는데, 이건 90\% 입니다.
+\item	모든 다섯번의 수행이 성공할 확률을 계산하는데, 이는 0.9 의 5승이어서,
+	약 59\% 입니다.
+\item	두개의 가능성만이 존재합니다: 다섯번의 수행이 모두 성공하거나, 최소
+	한번은 실패하거나.
+	따라서, 최소 한번은 실패할 확률은 100\% 에서 59\% 를 제외한 나머지인
+	41\% 입니다.
+\iffalse
+
 \item	Compute the probability of a given run succeeding, which is 90\%.
 \item	Compute the probability of all five runs succeeding, which
 	is 0.9 raised to the fifth power, or about 59\%.
@@ -2043,19 +2059,32 @@ One way is as follows:
 	or at least one fails.
 	Therefore, the probability of at least one failure is
 	59\% taken away from 100\%, or 41\%.
+\fi
 \end{enumerate}
+
+하지만, 많은 사람들이 여러 단계보다는 하나의 공식을 사용하는게 더 쉽다고
+생각하므로, 설령 당신은 앞의 단계들이 더 편하다고 해도, 한번 해봅시다!
+공식을 더 선호하는 사람들을 위해, 한번의 실패할 확률을 $f$ 라고 해봅시다.
+그럼 한번의 성공을 할 확률은 $1-f$ 이고, 따라서 $n$ 개의 테스트들이 모두 성공할
+확률은:
+\iffalse
 
 However, many people find it easier to work with a formula than a series
 of steps, although if you prefer the above series of steps, have at it!
 For those who like formulas, call the probability of a single failure $f$.
 The probability of a single success is then $1-f$ and the probability
 that all of $n$ tests will succeed is then:
+\fi
 
 \begin{equation}
 	S_n = \left(1-f\right)^n
 \end{equation}
 
+실패할 확률은 $1-S_n$ , 또는:
+\iffalse
+
 The probability of failure is $1-S_n$, or:
+\fi
 
 \begin{equation}
 	F_n = 1-\left(1-f\right)^n
@@ -2063,11 +2092,26 @@ The probability of failure is $1-S_n$, or:
 \end{equation}
 
 \QuickQuiz{}
+	뭐라구요???
+	제가 앞의, 각각 10\% 실패 확률을 갖는 다섯번의 테스트의 예를 이 공식에
+	집어넣어보면 59,050\% 를 얻게 되는데 이건 말이 안되잖아요!!!
+	\iffalse
+
 	Say what???
 	When I plug the earlier example of five tests each with a
 	10\% failure rate into the formula, I get 59,050\% and that
 	just doesn't make sense!!!
+	\fi
 \QuickQuizAnswer{
+	당신 말이 맞아요, 전혀 말이 안되죠.
+
+	확률은 0과 1 사이의 숫자여서 당신은 확률을 구하기 위해서는 퍼센티지를
+	100 으로 나눠야 함을 기억하세요.
+	따라서 10\% 의 확률은 0.1 로, 공식에 대입한 확률은 0.4095 값을 얻게
+	되는데, 이는 41\% 로 반올림 되는데, 이렇게 되면 앞의 결과와 상당히
+	일관적이지요.
+	\iffalse
+
 	You are right, that makes no sense at all.
 
 	Remember that a probability is a number between zero and one,
@@ -2076,11 +2120,32 @@ The probability of failure is $1-S_n$, or:
 	So 10\% is a probability of 0.1, which gets a probability
 	of 0.4095, which rounds to 41\%, which quite sensibly
 	matches the earlier result.
+	\fi
 } \QuickQuizEnd
+
+따라서 특정 테스트가 10\% 의 확률로 실패하고 있다고 해봅시다.
+당신의 수정이 정말로 일을 개선시켰다고 99\% 확신할 수 있으려면 얼마나 많은
+테스트를 수행시켜 봐야 할까요?
+\iffalse
 
 So suppose that a given test has been failing 10\% of the time.
 How many times do you have to run the test to be 99\% sure that
 your supposed fix has actually improved matters?
+\fi
+
+이걸 다르게 질문해 보면 ``실패를 일으킬 확률을 99\% 까지 올리려면 얼마나 많은
+테스트를 돌려보아야 할까요?'' 입니다.
+일단, 최소 하나의 실패를 볼 수 있는 확률이 99\% 까지 되도록 테스트를 충분히
+많이 돌린다면, 그리고 거기에 실패가 한번도 없다면, 이는 단지 1\% 확률의 행운
+덕입니다.
+그리고 우리가
+Equation~\ref{eq:debugging:Binomial Failure Rate} 에 $f=0.1$ 을 집어넣고 $n$ 을
+변경시켜보면, 원래의 10\% 라는 테스트당 실패 확률에 대해서 43번의 수행이
+99.03\% 의 최소 한번은 테스트가 실패할 확률을 가져오고, 44번의 수행은 99.03\%
+의 최소 한번은 실패할 확률을 가져옴을 알 수 있습니다.
+따라서 우리가 수정을 한 후에 44번 테스트를 진행하고 실패를 한번도 보지
+못한다면, 우리의 수정이 정말로 실제 개선을 만들어냈을 확률이 99\% 인 것입니다.
+\iffalse
 
 Another way to ask this question is ``How many times would we need
 to run the test to cause the probability of failure to rise above 99\%?''
@@ -2094,10 +2159,17 @@ given the original 10\% per-test failure rate,
 while 44 runs gives us a 99.03\% chance of at least one test failing.
 So if we run the test on our fix 44 times and see no failures, there
 is a 99\% probability that our fix was actually a real improvement.
+\fi
+
+하지만 계속해서 숫자들을
+Equation~\ref{eq:debugging:Binomial Failure Rate}
+에 집어넣어보는 것은 지켜울 수 있으므로, $n$ 을 풀어봅시다:
+\iffalse
 
 But repeatedly plugging numbers into
 Equation~\ref{eq:debugging:Binomial Failure Rate}
 can get tedious, so let's solve for $n$:
+\fi
 
 \begin{eqnarray}
 	F_n = 1-\left(1-f\right)^n \\
@@ -2105,12 +2177,23 @@ can get tedious, so let's solve for $n$:
 	\log \left(1 - F_n\right) = n \; \log \left(1 - f\right)
 \end{eqnarray}
 
+마지막으로 요구되는 테스트의 횟수는 다음과 같이 구해집니다:
+\iffalse
+
 Finally the number of tests required is given by:
+\fi
 
 \begin{equation}
 	n = \frac{\log\left(1 - F_n\right)}{\log\left(1 - f\right)}
 \label{eq:debugging:Binomial Number of Tests Required}
 \end{equation}
+
+Equation~\ref{eq:debugging:Binomial Number of Tests Required} 에
+$f=0.1$ 와 $F_n=0.99$ 를 대입해 보면 43.7 이 나오는데, 이는 우리의 수정이 실제
+개선을 만들어냈음을 99\% 확신하려면 44번의 연속적인 성공적 테스트가 필요함을
+의미합니다.
+이는 안심스럽게도 앞의 방법에서 얻어진 숫자와 맞아떨어집니다.
+\iffalse
 
 Plugging $f=0.1$ and $F_n=0.99$ into
 Equation~\ref{eq:debugging:Binomial Number of Tests Required}
@@ -2118,16 +2201,29 @@ gives 43.7, meaning that we need 44 consecutive successful test
 runs to be 99\% certain that our fix was a real improvement.
 This matches the number obtained by the previous method, which
 is reassuring.
+\fi
 
 \QuickQuiz{}
+	Equation~\ref{eq:debugging:Binomial Number of Tests Required} 에서,
+	로그의 밑은 10인가요, 2인가요, 또는 $e$ 인가요?
+	\iffalse
+
 	In Equation~\ref{eq:debugging:Binomial Number of Tests Required},
 	are the logarithms base-10, base-2, or base-$e$?
+	\fi
 \QuickQuizAnswer{
+	그건 상관 없습니다.
+	어떤 밑의 로그를 취하는가에 관계없이 똑같은 답을 얻을 수 있을텐데 그
+	결과는 로그 값들 간의 비율이기 때문입니다.
+	유일한 제약은 분모와 분자에 둘다 같은 밑을 사용해야 한다는 점입니다.
+	\iffalse
+
 	It does not matter.
 	You will get the same answer no matter what base of logarithms
 	you use because the result is a pure ratio of logarithms.
 	The only constraint is that you use the same base for both
 	the numerator and the denominator.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tb]
@@ -2138,6 +2234,16 @@ is reassuring.
 \end{figure}
 
 Figure~\ref{fig:debugging:Number of Tests Required for 99 Percent Confidence Given Failure Rate}
+는 이 함수를 그래프로 그려보입니다.
+놀랍지 않게, 각각의 테스트가 덜 빈번하게 실패할수록, 그 버그가 고쳐졌음을 99\%
+확신하기 위해선 더 많은 테스트 수행이 필요합니다.
+테스트를 실패하게 하는 버그가 오직 1\% 의 확률만으로 나타난다면, 애끓는 심정의
+458 번의 테스트 수행이 필요합니다.
+실패 확률이 줄어들수록, 필요한 테스트 수행 횟수가 증가해서, 실패 확률을 0으로
+하려면 무한번의 테스트 수행이 필요해집니다.
+\iffalse
+
+Figure~\ref{fig:debugging:Number of Tests Required for 99 Percent Confidence Given Failure Rate}
 shows a plot of this function.
 Not surprisingly, the less frequently each test run fails, the more
 test runs are required to be 99\% confident that the bug has been
@@ -2146,6 +2252,15 @@ If the bug caused the test to fail only 1\% of the time, then a
 mind-boggling 458 test runs are required.
 As the failure probability decreases, the number of test runs required
 increases, going to infinity as the failure probability goes to zero.
+\fi
+
+이 이야기의 교훈은 가끔씩만 일어나는 버그를 발견했다면, 실패 확률을 훨씬
+높이도록 잘 타겟팅 된 테스트를 사용한다면 테스트 업무가 훨씬 쉬워질 것이란
+점입니다.
+예를 들어, 타겟이 된 테스트가 실패 확률을 1\% 에서 30\% 로 늘린다면, 99\%
+확신을 갖기 위해 필요한 테스트 수행 횟수는 458 회에서 단지 13회까지로 떨어질
+겁니다.
+\iffalse
 
 The moral of this story is that when you have found a rarely occurring
 bug, your testing job will be much easier if you can come up with
@@ -2153,21 +2268,45 @@ a carefully targeted test with a much higher failure rate.
 For example, if your targeted test raised the failure rate from 1\%
 to 30\%, then the number of runs required for 99\% confidence
 would drop from 458 test runs to a mere thirteen test runs.
+\fi
+
+하지만 이 열세번의 테스트 수행은 당신의 수정 사항이 ``어떤 개선'' 을
+만들어냈다는 데에 99\% 의 확신만을 제공합니다.
+당신이 원하는건 그게 아니라 당신의 수정 사항이 실패 확률을 10배 가량 줄인
+것이라는 99\%의 확신이라고 생각해 봅시다.
+얼마나 많은 실패하지 않는 테스트 수행이 필요할까요?
+\iffalse
 
 But these thirteen test runs would only give you 99\% confidence that
 your fix had produced ``some improvement''.
 Suppose you instead want to have 99\% confidence that your fix reduced
 the failure rate by an order of magnitude.
 How many failure-free test runs are required?
+\fi
+
+30\% 실패 확률에서 10배 개선된다면 3\% 의 실패 확률입니다.
+이 숫자들을
+Equation~\ref{eq:debugging:Binomial Number of Tests Required} 에 집어넣으면
+다음과 같은 결과가 나옵니다:
+\iffalse
 
 An order of magnitude improvement from a 30\% failure rate would be
 a 3\% failure rate.
 Plugging these numbers into
 Equation~\ref{eq:debugging:Binomial Number of Tests Required} yields:
+\fi
 
 \begin{equation}
 	n = \frac{\log\left(1 - 0.99\right)}{\log\left(1 - 0.03\right)} = 151.2
 \end{equation}
+
+따라서 우리의 10배 개선을 위해서는 대략 10배 이상의 테스트가 필요합니다.
+확신은 불가능하고, 높은 확률은 상당히 비쌉니다.
+테스트들이 수행은 더 빠르게 되고 실패는 더 잘 일어나도록 분명하게 만드는 것이
+높은 수준의 안정성을 갖는 소프트웨어를 개발하는데에 있어 핵심의 기술들입니다.
+이런 기술들은
+Section~\ref{sec:debugging:Hunting Heisenbugs} 에서 다루겠습니다.
+\iffalse
 
 So our order of magnitude improvement requires roughly an order of
 magnitude more testing.
@@ -2176,6 +2315,7 @@ Clearly making tests run more quickly and making failures more probable
 are essential skills in the development of highly reliable software.
 These skills will be covered in
 Section~\ref{sec:debugging:Hunting Heisenbugs}.
+\fi
 
 \subsection{Abusing Statistics for Discrete Testing}
 \label{sec:debugging:Abusing Statistics for Discrete Testing}
