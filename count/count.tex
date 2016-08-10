@@ -1595,6 +1595,21 @@ comes at the cost of the additional thread running \co{eventual()}.
 	따라서 이 구현은 확장성이 쓰레드나 CPU 의 갯수가 아니라 최종적으로
 	일관적인 카운터의 갯수에 제한되는, 또다른 종류의 확장성 한계 문제를
 	갖습니다.
+
+	물론, 다른 트레이드오프를 갖는 것도 가능합니다.
+	예를 들어, 하나의 싱글쓰레드가 모든 최종적으로 일관적인 카운터들을
+	처리하도록 만들어질 수도 있는데, 이는 오버헤드를 하나의 CPU 로
+	제한시킵니다만, 카운터들의 수가 늘어남에 따라 update-to-read 대기시간을
+	증가시키는 결과를 초래할 겁니다.
+	대안으로, 해당 싱글 쓰레드는 자주 업데이트 되는 카운터들을 더 자주
+	방문하는 식으로 카운터들의 업데이트 비율을 추적할 수 있습니다.
+	또한, 카운터들을 쥐고 있는 쓰레드들의 수는 전체 CPU 갯수의 일부로
+	설정될 수도 있으며, 이는 실행시간 도중에 정해질 수도 있습니다.
+	마지막으로, 각 카운터는 자신의 대기시간을 명시할 수 있고, 각 카운터에
+	요구된 대기시간을 지켜주기 위해 deadline\-/scheduling 테크닉이 사용될
+	수도 있습니다.
+
+	이외에도 얼마든지 더 많은 트레이드오프를 만들 수 있음이 분명합니다.
 	\iffalse
 
 	The thread executing \co{eventual()} consumes CPU time.
@@ -1606,7 +1621,6 @@ comes at the cost of the additional thread running \co{eventual()}.
 	terms of the number of eventually consistent counters rather
 	than in terms of the number of threads or CPUs.
 
-	% TODO: apply upstream change
 	Of course, it is possible to make other tradeoffs.
 	For example, a single thread could be created to handle all
 	eventually\-/consistent counters, which would limit the
