@@ -2766,6 +2766,17 @@ generating the corresponding species of anti-heisenbug.
 \subsubsection{Add Delay}
 \label{sec:debugging:Add Delay}
 
+Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?} 의 카운트가
+누실되는 코드를 생각해 봅시다.
+여기에 \co{printf()} 문을 집어넣는 행위는 누실되는 카운트 엄청나게 줄이거나
+심지어 없애버릴 수도 있을 겁니다.
+하지만, 읽어오고-더하고-저장하는 시퀀스를 읽어오고-더하고-기다리고-저장하는
+시퀀스로 바꾸는 것은 누실되는 카운트의 발생률을 엄청나게 증가시킬 겁니다
+(해보세요!).
+경주 상황에 관련되어 있는 버그를 일단 발견했다면, 이런 식으로 딜레이를 추가하는
+것으로 anti-heisenbug 를 만들어내는게 많은 경우에 가능합니다.
+\iffalse
+
 Consider the count-lossy code in
 Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?}.
 Adding \co{printf()} statements will likely greatly reduce or even
@@ -2774,11 +2785,27 @@ However, converting the load-add-store sequence to a load-add-delay-store
 sequence will greatly increase the incidence of lost counts (try it!).
 Once you spot a bug involving a race condition, it is frequently possible
 to create an anti-heisenbug by adding delay in this manner.
+\fi
+
+물론, 이는 첫째로 경주 상황을 어떻게 찾아야 하는지에 대한 질문을 이끌어 냅니다.
+이건 약간 어둠의 예술입니다만, 그것들을 찾기 위해 할 수 있는 것들이 몇가지
+있습니다.
+\iffalse
 
 Of course, this begs the question of how to find the race condition in
 the first place.
 This is a bit of a dark art, but there are a number of things you can
 do to find them.
+\fi
+
+한가지 방법은, 경주 조건은 많은 경우에 그 경주에 관련된 데이터를 오염시키는
+결과를 이끌어 냄을 인식하는 것입니다.
+따라서 모든 오염된 데이터의 동기화를 두번씩 체크하는 것은 좋은 습관입니다.
+설령 당장은 그 경주 조건을 인식할 수 없다고 해도, 오염된 데이터로의 액세스 전과
+후에 딜레이를 추가하는 것은 실패 확률을 바꿀 것입니다.
+딜레이들을 잘 조직된 형태 (ex: 이진 탐색) 로 넣고 빼는 것으로, 경주 조건의
+동작에 대해 좀 더 알 수 있을 겁니다.
+\iffalse
 
 One approach is to recognize that race conditions often end up corrupting
 some of the data involved in the race.
@@ -2789,11 +2816,27 @@ delay before and after accesses to the corrupted data might change
 the failure rate.
 By adding and removing the delays in an organized fashion (e.g., binary
 search), you might learn more about the workings of the race condition.
+\fi
 
 \QuickQuiz{}
+	만약 그 오염이 어떤 관계없는 포인터에 영향을 끼쳐서 그 포인터를
+	따라가서 오염을 일으키는 경우에 이 방법은 어떻게 도움을 줄 수
+	있을까요???
+	\iffalse
+
 	How is this approach supposed to help if the corruption affected some
 	unrelated pointer, which then caused the corruption???
+	\fi
 \QuickQuizAnswer{
+	실제로, 그런 상황이 일어날 수 있습니다.
+	많은 CPU 들이 그런 관계없는 포인터를 찾아내는 것을 도울 수 있는
+	하드웨어 디버깅 기능을 가지고 있습니다.
+	뿐만 아니라, core dump 를 가지고 있다면, 메모리의 오염된 영역을
+	가리키는 포인터들을 위해 core dump 를 조사할 수 있습니다.
+	또한 오염의 데이터 구조를 살펴보고, 그 구조와 맞아떨어지는 포인터들을
+	체크해 볼수도 있습니다.
+	\iffalse
+
 	Indeed, that can happen.
 	Many CPUs have hardware-debugging facilities that can help you
 	locate that unrelated pointer.
@@ -2801,6 +2844,16 @@ search), you might learn more about the workings of the race condition.
 	dump for pointers referencing the corrupted region of memory.
 	You can also look at the data layout of the corruption, and
 	check pointers whose type matches that layout.
+	\fi
+
+	또한 한발자국 떨어져서 프로그램을 구성하는 모듈들을 더 혹독하게 테스트
+	해볼 수 있는데, 이는 오염을 그에 책임이 있는 모듈로 국한시킬 겁니다.
+	만약 이게 오염을 사라지게 한다면, 각각의 모듈에서 노출된 함수들의 인자
+	체크를 더 추가해 보는 걸 고려해 보세요.
+
+	더도 아니고 덜도 아니고, 이건 어려운 문제인데, 그게 제가 ``약간 어둠의
+	예술'' 이라는 말을 사용한 이유입니다.
+	\iffalse
 
 	You can also step back and test the modules making up your
 	program more intensively, which will likely confine the corruption
@@ -2810,7 +2863,15 @@ search), you might learn more about the workings of the race condition.
 
 	Nevertheless, this is a hard problem, which is why I used the
 	words ``a bit of a dark art''.
+	\fi
 } \QuickQuizEnd
+
+또다른 중요한 방법은 소프트웨어와 하드웨어 구성을 다양하게 해가면서 실패 확률의
+통계적으로 심각한 차이를 찾아보는 것입니다.
+그러고 나면 실패 확률에 가장 커다란 차이를 만들어낸 소프트웨어나 하드웨어 구성
+변경점에 의해 암시되는 코드를 더 집중적으로 보는 것입니다.
+예를 들어, 그 코드를 격리시켜서 테스트 해보는 것도 도움이 될 수 있을 겁니다.
+\iffalse
 
 Another important approach is to
 vary the software and hardware configuration and look for statistically
@@ -2819,16 +2880,41 @@ You can then look more intensively at the code implicated by the
 software or hardware configuration changes that make the greatest
 difference in failure rate.
 It might be helpful to test that code in isolation, for example.
+\fi
+
+소프트웨어 구성의 한가지 중요한 측면은 변경의 역사인데, 이게 바로
+\co{git bisect} 이 유용한 이유입니다.
+변경 역사의 이등분된 한쪽은 heisenbug 의 원리에 의해 매우 가치있는 단서를
+제공할 수 있습니다.
+\iffalse
 
 One important aspect of software configuration is the history of
 changes, which is why \co{git bisect} is so useful.
 Bisection of the change history can provide very valuable clues as
 to the nature of the heisenbug.
+\fi
 
 \QuickQuiz{}
+	하지만 제가 그렇게 이등분을 통한 탐색을 해봤는데, 결국 나온 범인은
+	거대한 커밋이었어요.
+	이제 뭘 해야 하죠?
+	\iffalse
+
 	But I did the bisection, and ended up with a huge commit.
 	What do I do now?
+	\fi
 \QuickQuizAnswer{
+	커다란 커밋이요?
+	그건 참 부끄러운 일입니다!
+	이건 왜 당신이 커밋들을 작게 유지할 것이라 기대되는지에 대한 한가지
+	이유일 뿐입니다.
+
+	그리고 그게 당신의 답입니다: 해당 커밋을 바이트 단위의 조각들로 쪼개고
+	그 조각들을 다시 이진탐색 하세요.
+	제 경험상으로, 그 커밋을 쪼개는 일 자체는 대부분의 경우에 그 버그를
+	상당히 분명하게 만들기에 충분합니다.
+	\iffalse
+
 	A huge commit?
 	Shame on you!
 	This is but one reason why you are supposed to keep the commits small.
@@ -2837,7 +2923,18 @@ to the nature of the heisenbug.
 	pieces and bisect the pieces.
 	In my experience, the act of breaking up the commit is often
 	sufficient to make the bug painfully obvious.
+	\fi
 } \QuickQuizEnd
+
+어떻게든 의심스러운 코드 영역을 찾아냈다면, 이제 당신은 실패의 확률을
+증가시키기 위해서 딜레이들을 넣을 수 있습니다.
+앞서서 우리가 본 것처럼, 실패의 확률을 증가시키는 것은 관련된 수정사항에 대한
+높은 신뢰를 얻기 쉽게 해줍니다.
+
+하지만, 일반적인 디버깅 테크닉들을 사용해서 그런 문제를 추적하는 것은 어떤
+경우에는 상당히 복잡합니다.
+뒤따르는 섹션들은 몇가지 다른 대안들을 제시합니다.
+\iffalse
 
 However you locate the suspicious section of code, you can then introduce
 delays to attempt to increase the probability of failure.
@@ -2847,6 +2944,7 @@ easier to gain high confidence in the corresponding fix.
 However, it is sometimes quite difficult to track down the problem using
 normal debugging techniques.
 The following sections present some other alternatives.
+\fi
 
 \subsubsection{Increase Workload Intensity}
 \label{sec:debugging:Increase Workload Intensity}
