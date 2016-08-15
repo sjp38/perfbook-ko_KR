@@ -3056,6 +3056,20 @@ of system-level debugging.
 \subsubsection{Simulate Unusual Events}
 \label{sec:debugging:Simulate Unusual Events}
 
+Heisenbug 들은 어떨 때에는 메모리 할당 실패, 조건적 락 획득 실패, CPU-hotplug
+오퍼레이션, 타임아웃, 패킷 로스, 등등의 일반적이지 않은 이벤트로 인해
+발생하기도 합니다.
+이런 종류의 heisenbug 를 위한 anti-heisenbug 를 구성하는 한가지 방법은 가짜
+실패를 만들어내는 겁니다.
+
+예를 들어, \co{malloc()} 을 곧바로 호출하는 대신에, 그냥 무조건적으로 \co{NULL}
+을 리턴하거나 정말로 \co{malloc()} 을 호출하고 그 결과로 나온 포인터를
+리턴하는데 두가지 경우를 선택하는데에 무작위적 숫자를 사용하는 wrapper 함수를
+호출하는 겁니다.
+가짜 실패를 만들어내는것은 병렬 프로그램들은 물론 순차적 프로그램들에서도
+견고성을 만들어내기 위한 좋은 방법입니다.
+\iffalse
+
 Heisenbugs are sometimes due to unusual events, such as
 memory-allocation failure, conditional-lock-acquisition failure,
 CPU-hotplug operations, timeouts, packet losses, and so on.
@@ -3068,17 +3082,32 @@ to return \co{NULL} unconditionally on the one hand, or to actually
 invoke \co{malloc()} and return the resulting pointer on the other.
 Inducing spurious failures is an excellent way to bake robustness into
 sequential programs as well as parallel programs.
+\fi
 
 \QuickQuiz{}
+	이미 존재하는 조건적 락킹 도구들은 이런 가짜 실패 기능을 제공하지 않는
+	이유가 뭔가요?
+	\iffalse
+
 	Why don't existing conditional-locking primitives provide this
 	spurious-failure functionality?
+	\fi
 \QuickQuizAnswer{
+	조건적 락킹 도구들이 진실만을 말한다는 사실에 의존적인 락킹
+	알고리즘들이 존재합니다.
+	예를 들어, 만약 조건적 락 실패가 어떤 다른 쓰레드가 이미 어떤 일을 하고
+	있음을 나타낸다면, 가짜 실패는 그 일은 결코 완료가 되지 못하게 만들 수
+	있어서, 결과적으로 프로그램 수행이 한 구간에서 나아가지 못하게
+	될겁니다.
+	\iffalse
+
 	There are locking algorithms that depend on conditional-locking
 	primitives telling them the truth.
 	For example, if conditional-lock failure signals that
 	some other thread is already working on a given job,
 	spurious failure might cause that job to never get done,
 	possibly resulting in a hang.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Count Near Misses}
