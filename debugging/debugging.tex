@@ -3113,6 +3113,18 @@ sequential programs as well as parallel programs.
 \subsubsection{Count Near Misses}
 \label{sec:debugging:Count Near Misses}
 
+버그들은 대부분의 경우 그렇거나 아니거인 것들이어서 버그는 발생하거나 그렇지
+않거나일뿐, 중간의 것은 없습니다.
+하지만, 버그가 실패를 만들어내지는 않지만 거의 명백한 경우인 \emph{near miss}
+를 정의하는게 가능한 경우가 간혹 있습니다.
+예를 들어, 당신의 코드가 로봇을 걷게 한다고 생각해 봅시다.
+이 로봇이 넘어지는 일은 당신의 프로그램 안에 버그가 있음을 나타낼 것입니다만,
+비틀거리고서는 회복되는 것은 near miss 를 나타낼 수도 있습니다.
+만약 로봇이 한시간에 한번만 넘어진다면, 하지만 몇분마다 비틀거린다면, 넘어지는
+횟수에 더해서 비틀거리는 횟수를 셈으로써 디버깅 진도를 좀 더 빠르게 만들 수
+있을 겁니다.
+\iffalse
+
 Bugs are often an all-or-nothing thing, so that either the bug happens
 or it doesn't, with nothing in between.
 However, it is sometimes possible to define a \emph{near miss} where
@@ -3123,6 +3135,18 @@ stumbling and recovering might constitute a near miss.
 If the robot falls over only once per hour, but stumbles every few
 minutes, you might be able to speed up your debugging progress by
 counting the number of stumbles in addition to the number of falls.
+\fi
+
+동시성 있는 프로그램에서는 타임스탬프를 찍는 일이 가끔은 near miss 들을 파악해
+내는데 사용될 수 있습니다.
+예를 들어, 락킹 도구들은 상당한 딜레이들을 일으키는데, 같은 락에 대해서 서로
+다른 획득을 통해 보호될 것으로 생각되는 한쌍의 오퍼레이션들 사이에 너무 짧은
+딜레이가 존재한다면, 이 너무 짧은 딜레이는 near miss 로 카운트될 수도 있을
+겁니다.\footnote{
+	물론, 이 경우, \co{lock_held()} 기능과 같은 뭐가 됐든 당신의 환경
+	상에서 사용 가능한 것을 사용하는게 나을 수도 있을 겁니다.
+	만약 \co{lock_hedl()} 기능이 없다면, 하나 만들어서 쓰세요!}
+\iffalse
 
 In concurrent programs, timestamping can sometimes be used to detect
 near misses.
@@ -3134,6 +3158,7 @@ delay might be counted as a near miss.\footnote{
 	whatever \co{lock_held()} primitive is available
 	in your environment.
 	If there isn't a \co{lock_held()} primitive, create one!}
+\fi
 
 \begin{figure}[tbp]
 \centering
@@ -3141,6 +3166,24 @@ delay might be counted as a near miss.\footnote{
 \caption{RCU Errors and Near Misses}
 \label{fig:debugging:RCU Errors and Near Misses}
 \end{figure}
+
+예를 들어, RCU 의 우선순위 올리기에 있는 낮은 확률의 버그는 rcutorture 의
+집중된 테스트에서 대략 100 시간에 한번 일어났습니다.
+그 버그가 일어날 확률이 상당히 감소되었음을 99\% 확신하기 위해서는 거의 500
+시간의 실패 없는 테스트 수행이 필요하기 때문에, 그 실패를 찾아내기 위한 \co{git
+bisect} 과정은 고통스러울 정도로 느릴겁니다---또는 극단적으로 거대한 테스트
+환경을 필요로 할겁니다.
+다행히도, 테스트된 해당 RCU 오퍼레이션은 RCU grace period 를 위한 대기만이
+아니라, 시작하기 위한 그 grace period 에 대한 앞선 대기와 그 RCU grace period
+가 완료된 후에 호출될 RCU callback 을 위한 뒤이은 대기도 존재했습니다.
+\co{rcutorture} 에러와 near miss 사이의 차이가
+Figure~\ref{fig:debugging:RCU Errors and Near Misses} 에 보여져 있습니다.
+완전히 본격적인 에러로 구분되기 위해서, RCU read-side 크리티컬 섹션은 grace
+period 를 시작한 \co{call_rcu()} 로부터 앞의 grace period 의 남아있는 부분과
+\co{call_rcu()} 로 시작된 grace period 전체 (지그재그로 그어진 선으로 표시된
+영역), 그리고 그 grace period 의 끝으로부터 callback 의 호출 사이의 딜레이까지
+확장되는데, 이게 ``Error'' 화살표로 표시되어 있습니다.
+\iffalse
 
 For example, a low-probability bug in RCU priority boosting occurred
 roughly once every hundred hours of focused rcutorture testing.
@@ -3163,6 +3206,22 @@ entirety of the grace period initiated by the \co{call_rcu()}
 (denoted by the region between the jagged lines), and
 through the delay from the end of that grace period to the callback
 invocation, as indicated by the ``Error'' arrow.
+\fi
+하지만, 정식적인 RCU 의 정의는 RCU read-side 크리티컬 섹션이 하나의 grace
+period 사이로 확장되는 것을 금지하는데, 이는 ``Near Miss'' 화살표로 나타내어져
+있습니다.
+이는 near miss 들을 에러 조건으로 사용할 것을 제안하지만, 다른 CPU 들은 해당
+grace period 가 정확히 언제 시작되고 종료되었는지에 대해 지그재그로 그어진
+선으로 보여지듯이 다른 의견을 가질 수 있기 때문에, 이는 문제가 될 수
+있습니다.\footnote{
+	아무일도 하지 않고 있는 CPU 들은 최근의 수백개의 grace period들에
+	대해서도 전혀 알지 못하고 있을 수도 있기 때문에, 이 지그재그로 그어진
+	라인들은 상당히 과소평가 되어 있습니다.}
+따라서 이 near miss 들을 에러 컨디션으로 사용하는 것은 거짓 양성 결과를
+만들어낼 수 있는데, 이는 자동화된 \co{rcutorture} 테스트에서는 제거되어야
+합니다.
+\iffalse
+
 However, the formal definition of RCU prohibits RCU read-side critical
 sections from extending across a single grace period, as indicated by
 the ``Near Miss'' arrow.
@@ -3176,6 +3235,23 @@ grace period starts and ends, as indicated by the jagged lines.\footnote{
 Using the near misses as the error condition could therefore result
 in false positives, which need to be avoided in the automated
 \co{rcutorture} testing.
+\fi
+
+순수히 바보같은 운으로 인해, \co{rcutorture} 는 grace period 의 near-miss
+버전에 민감한 통계를 포함하게 되었습니다.
+앞서 이야기한대로, 이런 통계들은 RCU 의 상태 변수들에 대한 동기화 되지 않은
+액세스로 인해서 거짓 양성 결과에 영향을 받기 쉽습니다만, 이런 거짓 양성 결과는
+IBM 메인프레임이나 x86 과 같은 강한 순서 규칙의 시스템들에서는 상당히 희귀하게
+발생하는 것으로 드러났는데, 1000 시간의 테스트 가운데 한번 보다도 낮은 확률로
+일어납니다.
+
+이런 near miss 들은 대략 한시간에 한번 꼴로 발생했는데, 이는 실제 에러들보다
+100배 이상 빈번하게 발생하는 겁니다.
+이런 near miss 들의 사용은 버그의 원인을 일주일 안되는 시간 내에 파악해내고
+수정된 내용의 효과를 하루 내에 확신하는 것을 가능하게 했습니다.
+반면에, 진짜 에러만을 보기 위해서 near miss 들을 제외시키는 행위는 수개월의
+디버그와 검증 시간을 필요로 했습니다.
+\iffalse
 
 By sheer dumb luck, \co{rcutorture} happens to include some statistics that
 are sensitive to the near-miss version of the grace period.
@@ -3192,6 +3268,22 @@ in less than a week and a high degree of confidence in the fix to be
 built in less than a day.
 In contrast, excluding the near misses in favor of the real errors would
 have required months of debug and validation time.
+\fi
+
+Near-miss 카운팅을 정리하자면, 일반적인 방법은 빈번하지 않게 발생하는 실패의
+횟수를 세는 것을 더 빈번하게 발생하며 그 실패들과 연과노디어 있을 것으로
+여겨지는 near miss 의 횟수를 세는 것으로 대체하는 것입니다.
+이런 near-miss 들은 진짜 실패의 heisenbug 에 대한 anti-heisenbug 로 여겨질 수
+있는데, 더 빈번하게 발생하는 near-miss 들은 예를 들어 디버깅 코드를 추가하기
+위해 만드는 것과 같은 코드의 변경이 있는 상황에서도 그 발생률이 더 일관될
+것이기 때문입니다.
+
+여태까지, 우리는 병렬 프로그램의 기능성에서의 버그들에 대해서만 집중해
+왔습니다.
+하지만, 성능이 병렬 프로그램에서의 첫번째 필요사항이기 때문에 (그렇지 않다면,
+순차적 프로그램을 짜지 그러세요?), 다음 섹션에서는 성능상의 버그들을 찾아내는
+방법을 알아봅니다.
+\iffalse
 
 To sum up near-miss counting, the general approach is to replace counting
 of infrequent failures with more-frequent near misses that are believed
@@ -3206,6 +3298,7 @@ functionality.
 However, because performance is a first-class requirement for a
 parallel program (otherwise, why not write a sequential program?),
 the next section looks into finding performance bugs.
+\fi
 
 \section{Performance Estimation}
 \label{sec:debugging:Performance Estimation}
