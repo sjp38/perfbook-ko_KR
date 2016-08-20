@@ -3637,6 +3637,19 @@ support.
 \subsection{Microbenchmarking}
 \label{sec:debugging:Microbenchmarking}
 
+마이크로벤치마킹은 소프트웨어의 더 큰 부분에 포함되기에 어떤 알고리즘이나
+데이터 구조가 더 적합할지를 결정하는데에 있어 더 깊은 평가를 위해 유용할 수
+있습니다.
+
+마이크로 벤치마킹을 하는 흔한 방법 한가지는 시각을 측정하고, 테스트 되는 코드를
+몇번 반복해서 수행시키고, 다시 시각을 측정하는 것입니다.
+두개의 시각 사이의 차이를 반복 횟수로 나누면 테스트 되는 코드를 수행하는데
+필요한 시간의 측정값이 나옵니다.
+
+불행히도, 측정을 위한 이 방법은 여러개의 에러가 끼어들 수 있게 하는데, 다음과
+같은 것들이 있습니다:
+\iffalse
+
 Microbenchmarking can be useful when deciding which algorithms or
 data structures are worth incorporating into a larger body of software
 for deeper evaluation.
@@ -3649,8 +3662,24 @@ gives the measured time required to execute the code under test.
 
 Unfortunately, this approach to measurement allows any number of errors
 to creep in, including:
+\fi
 
 \begin{enumerate}
+\item	이 측정은 시각 측정의 오버헤드가 포함될 수 있습니다.
+	이런 에러는 수행 반복 횟수를 증가시킴으로써 임의의 작은 값으로 줄일 수
+	있습니다.
+\item	처음 몇번의 테스트 수행 반복은 캐시 미스난 (더 나쁜) 페이지 폴트를
+	유발할 수도 있는데, 이는 측정된 값을 부풀릴 수도 있을 겁니다.
+	이런 에러는 역시 수행 반복의 수를 늘림으로써 줄일 수 있으며, 측정
+	기간이 시작되기 전에 몇번의 웜업 수행 반복을 수행시킴으로써 완전히
+	없앨수 있는 경우도 많습니다.
+\item	예를 들어 임의의 메모리 에러와 같은 간섭의 일부 종류들은 테스트의 수행
+	반복의 여러 세트를 수행시킴으로써 조치가 될 수 있을 정도로 드물게
+	발생합니다.
+	만약 간섭의 정도가 통계적으로 심각하다면, 모든 유난스럽게 다른 성능
+	결과들을 통계적으로 제거시킬 수 있습니다.
+\iffalse
+
 \item	The measurement will include some of the overhead of
 	the time measurement.
 	This source of error can be reduced to an arbitrarily small
@@ -3667,6 +3696,16 @@ to creep in, including:
 	of sets of iterations of the test.
 	If the level of interference was statistically significant,
 	any performance outliers could be rejected statistically.
+\fi
+\item	모든 테스트 반복 수행이 시스템의 다른 활동에 의해 간섭을 받을 수
+	있습니다.
+	간섭의 근원은 다른 어플리케이션들, 시스템 유틸리티들과 데몬, 디바이스
+	인터럽트, 펌웨어 인터럽트 (시스템 관리 인터럽트인 SMI 포함), 가상화,
+	메모리 에러, 그리고 그 외에도 다른 여러가지가 있을 수 있습니다.
+	이런 간섭 유발사건들이 무작위적으로 발생한다고 가정하면, 그것들의
+	효과는 반복 횟수를 줄임으로써 최소화 시킬 수 있습니다.
+\iffalse
+
 \item	Any iteration of the test might be interfered with by other
 	activity on the system.
 	Sources of interference include other applications, system
@@ -3676,16 +3715,38 @@ to creep in, including:
 	Assuming that these sources of interference occur randomly,
 	their effect can be minimized by reducing the number of
 	iterations.
+\fi
 \end{enumerate}
+
+간섭 유발 사건들 중 첫번째와 네번째 것은 서로 상충되는 조언을 하고 있는데, 이건
+우리가 실제 세계에 살고 있다는 한가지 증거입니다.
+이 섹션의 나머지 부분에서는 이런 상충되는 것을 어떻게 해결해야 할지 알아봅니다.
+\iffalse
 
 The first and fourth sources of interference provide conflicting advice,
 which is one sign that we are living in the real world.
 The remainder of this section looks at ways of resolving this conflict.
+\fi
 
 \QuickQuiz{}
+	하지만, 예를 들어 캐시와 메모리 배치 사이의 간섭에 의한 것과 같은 다른
+	에러 유발 원인들은 어떻게 하죠?
+	\iffalse
+
 	But what about other sources of error, for example, due to
 	interactions between caches and memory layout?
+	\fi
 \QuickQuizAnswer{
+	메모리 배치의 변경은 실제로 비현실적으로 수행 시간을 줄여버리는 결과를
+	초래할 수 있습니다.
+	예를 들어, 어떤 마이크로벤치마크는 거의 항상 L0 캐시의 associativity 를
+	오버플로우 시키지만, 올바른 메모리 배치에서만큼은 모두 맞아떨어진다고
+	생각해보세요.
+	이게 정말 문제라면, 메모리 배치를 완전히 제어할 수 있도록
+	마이크로벤치마크를 huge page 를 사용해서 수행해보는 방안 (또는 커널에서
+	수행하거나 기계 위에서 곧바로)을 생각해 보세요.
+	\iffalse
+
 	Changes in memory layout can indeed result in unrealistic
 	decreases in execution time.
 	For example, suppose that a given microbenchmark almost
@@ -3694,7 +3755,15 @@ The remainder of this section looks at ways of resolving this conflict.
 	If this is a real concern, consider running your microbenchmark
 	using huge pages (or within the kernel or on bare metal) in
 	order to completely control the memory layout.
+	\fi
 } \QuickQuizEnd
+
+다음의 섹션들은 측정 에러들을 처리하는 방법들을 이야기 해보는데,
+Section~\ref{sec:debugging:Isolation} 에서는 일부 형태의 간섭들을 막기 위해서
+사용될 수 있는 격리화 테크닉들을 다루고,
+Section~\ref{sec:debugging:Detecting Interference} 는 간섭으로 인해 오염되었을
+수 있는 측정 데이터를 버릴 수 있도록 간섭을 파악하는 방법들을 다룹니다.
+\iffalse
 
 The following sections discuss ways of dealing with these measurement
 errors, with
@@ -3705,6 +3774,7 @@ and with
 Section~\ref{sec:debugging:Detecting Interference}
 covering methods for detecting interference so as to reject measurement
 data that might have been corrupted by that interference.
+\fi
 
 \subsection{Isolation}
 \label{sec:debugging:Isolation}
