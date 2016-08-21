@@ -4074,15 +4074,38 @@ a topic addressed in the next section.
 \subsubsection{Detecting Interference Via Statistics}
 \label{sec:debugging:Detecting Interference Via Statistics}
 
+모든 통계 분석은 데이터에 대한 가정을 기반으로 가지고 있고, 성능 마이크로
+벤치마크는 많은 경우 다음과 같은 가정을 지원합니다:
+\iffalse
+
 Any statistical analysis will be based on assumptions about the data,
 and performance microbenchmarks often support the following assumptions:
+\fi
 
 \begin{enumerate}
+\item	작은 측정이 커다란 측정보다 더 정확할 것이다.
+\item	좋은 데이터의 측정에 대한 불확실성은 알려져 있다.
+\item	테스트 수행 결과중에는 합리적인 양의 좋은 데이터를 가지고 있을 것이다.
+\iffalse
+
 \item	Smaller measurements are more likely to be accurate than
 	larger measurements.
 \item	The measurement uncertainty of good data is known.
 \item	A reasonable fraction of the test runs will result in good data.
+\fi
 \end{enumerate}
+
+더 작은 측정이 더 커다란 측정에 비해서 더 정확할 수 있다는 사실은 측정을 크기가
+증가하는 순서대로 정렬하는 것이 생산적일 것임을 암시합니다.\footnote{
+	오랜 격언을 바꿔 말하자면, ``정렬부터 하고 질문은 그다음에 하라.''}
+측정의 불확실성이 알려졌다는 사실은 이 불확실성에 기반한 측정을 받아들일 수
+있도록 합니다: 만약 간섭의 효과가 이 불확실성에 비해서 커다랗다면, 이는 나쁜
+데이터를 버리는 것을 덜어줄 겁니다.
+마지막으로, 일부 분량 (예를 들어, 3분의 1) 은 좋은 데이터일 것이라 가정될 수
+있다는 사실은 정렬된 리스트에서 첫번째 부분을 별다른 검사 없이 받아들이는 것을
+가능하게 할 것이고, 이 데이터는 측정된 데이터의 자연적인 분포도를 가정된 측정의
+오류를 넘어서서 추정하는 데에 사용될 수 있을 것입니다.
+\iffalse
 
 The fact that smaller measurements are more likely to be accurate than
 larger measurements suggests that sorting the measurements in increasing
@@ -4097,6 +4120,19 @@ assumed to be good allows us to blindly accept the first portion of the
 sorted list, and this data can then be used to gain an estimate of the
 natural variation of the measured data, over and above the assumed
 measurement error.
+\fi
+
+이 방법은 정렬된 리스트의 앞쪽의 특정 갯수의 원소들을 취하고, 이것들을 일반적인
+원소간의 차이를 추정하는데에 사용하는 것으로, 이렇게 추정된 값은 받아들여질 수
+있는 값의 최대 한계치를 얻기 위해서 리스트의 원소의 수를 곱하게 될수도 있을
+겁니다.
+이 알고리즘은 이제 리스트의 다음 원소들을 반복적으로 받아들일 수 있을지
+고려하게 됩니다.
+만약 다음 원소의 값이 앞서 구한 최대 한계치 아래라면, 그리고 이 원소와 그 앞의
+원소 사이의 거리가 앞서 받아들여진 리스트의 원소들 사이의 평균적 원소간
+거리보다 너무 크지 않다면 그 원소는 받아들여지고 이 과정이 반복됩니다.
+만약 그렇지 않다면, 리스트의 나머지 값들은 버려집니다.
+\iffalse
 
 The approach is to take the specified number of leading elements from the
 beginning of the sorted list, and use these to estimate a typical
@@ -4108,6 +4144,7 @@ the next element and the previous element is not too much greater than
 the average inter-element distance for the portion of the list accepted
 thus far, then the next element is accepted and the process repeats.
 Otherwise, the remainder of the list is rejected.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -4173,23 +4210,59 @@ Otherwise, the remainder of the list is rejected.
 \label{fig:count:Statistical Elimination of Interference}
 \end{figure}
 
+Figure~\ref{fig:count:Statistical Elimination of Interference} 는 이 방법을
+구현한 \co{sh}/\co{awk} 스크립트를 보입니다.
+입력값은 x축의 값에 이어 임의의 긴 y 축 값이고, 출력은 각각의 입력 라인에 대한
+한 라인으로, 다음과 같은 필드를 갖습니다:
+\iffalse
+
 Figure~\ref{fig:count:Statistical Elimination of Interference}
 shows a simple \co{sh}/\co{awk} script implementing this notion.
 Input consists of an x-value followed by an arbitrarily long list of y-values,
 and output consists of one line for each input line, with fields as follows:
+\fi
 
 \begin{enumerate}
+\item	x축 값.
+\item	선택된 데이터의 평균.
+\item	선택된 데이터의 최소값.
+\item	선택된 데이터의 최대값.
+\item	선택된 데이터 항목들의 갯수.
+\item	입력 데이터 항목들의 갯수.
+\iffalse
+
 \item	The x-value.
 \item	The average of the selected data.
 \item	The minimum of the selected data.
 \item	The maximum of the selected data.
 \item	The number of selected data items.
 \item	The number of input data items.
+\fi
 \end{enumerate}
 
+이 스크립트는 다음과 같은 선택적 인자들을 갖습니다:
+\iffalse
+
 This script takes three optional arguments as follows:
+\fi
 
 \begin{itemize}
+\item	\co{--divisor}: 리스트를 나누게 될 세그먼트들의 갯수로, 예를 들어 4의
+	값을 갖게 되면 데이터 원소들의 앞쪽 4분의 1이 좋은 데이터라고
+	가정됩니다.
+	기본값은 3입니다.
+\item	\co{--relerr}: 상대적 측정 에러.  이 스크립트는 이 에러보다 적은
+	차이값을 갖는 값들은 모두 같은 의도로 만들어진 것이고 같은 목적을 위한
+	것이라고 가정합니다.
+	기본값은 0.01 로, 이는 1\% 와 동일합니다.
+\item	\co{--trendbreak}: 데이터의 추세를 깨놓는 것으로 간주되는 원소간 거리의
+	비율.
+	예를 들어, 받아들여진 데이터의 평균 구간이 1.5라면, 그리고 만약 추세를
+	깨놓는 것으로 간주되는 비율이 2.0 이라면, 다음 데이터 값이 마지막 것과
+	3.0 이상 차이나면, 이는 추세를 깨놓는 것으로 간주됩니다.
+	(물론, 상대적 에러가 3.0 보다 크지 않다면, 이 ``깨짐'' 은 무시됩니다.)
+\iffalse
+
 \item	\co{--divisor}: Number of segments to divide the list into,
 	for example, a divisor of four means that the first quarter
 	of the data elements will be assumed to be good.
@@ -4206,7 +4279,20 @@ This script takes three optional arguments as follows:
 	constitutes a break in the trend.
 	(Unless of course, the relative error is greater than 3.0, in
 	which case the ``break'' will be ignored.)
+\fi
 \end{itemize}
+
+Figure~\ref{fig:count:Statistical Elimination of Interference} 의 Line~1-3 는
+패러미터들의 기본값을 설정하고, line~4-21 은 이 패러미터들에 대한 커맨드 라인을
+통한 재설정을 처리합니다.
+Line~23 과~24 의 \co{awk} 호출은 \co{divisor}, \co{relerr}, 그리고
+\co{trendbreak} 의 \co{sh} 에서의 것에대한 상대역을 설정합니다.
+일반적은 \co{awk} 매너로, line~25-52 는 각각의 입력 라인에 대해서 실행됩니다.
+Line~24 와 26 의 루프는 입력값의 y축 값들을 line~27 에서 오름차순으로 정렬되는
+\co{d} 배열에 복사합니다.
+Line~28 은 \co{divisor} 를 적용하고 반올림해서 절대적으로 믿을 수 있는  y축
+값들의 수를 계산합니다.
+\iffalse
 
 Lines~1-3 of
 Figure~\ref{fig:count:Statistical Elimination of Interference}
@@ -4221,6 +4307,18 @@ The loop spanning lines~24 and~26 copies the input y-values to the
 \co{d} array, which line~27 sorts into increasing order.
 Line~28 computes the number of y-values that are to be trusted absolutely
 by applying \co{divisor} and rounding up.
+\fi
+
+Line~29-33 은 y 축 값들의 하한과 상한으로 사용될 값인 \co{maxdelta} 를
+계산합니다.
+여기까지 해서, line~29 와 30 은 신뢰되는 구간의 값들의 차이들을 \co{divisor} 로
+곱하는데, 이 값은 신뢰되는 구간에서의 값들의 차이를 y 축 값들 전체 집합에
+적용하게 됩니다.
+하지만, 이 값은 상대적 에러에 비해서는 상당히 작을 수 있으므로, line~31 에서는
+절대적 에러값 (\co{d[i] * relerr}) 을 구하고 이를 데이터의 신뢰되는 구간에서의
+차이값 \co{delta} 에 더합니다.
+Line~32 와 ~33 은 이 두 값들의 최대값을 계산합니다.
+\iffalse
 
 Lines~29-33 compute the \co{maxdelta} value used as a lower bound on
 the upper bound of y-values.
@@ -4232,6 +4330,22 @@ However, this value might well be much smaller than the relative error,
 so line~31 computes the absolute error (\co{d[i] * relerr}) and adds
 that to the difference \co{delta} across the trusted portion of the data.
 Lines~32 and~33 then compute the maximum of these two values.
+\fi
+
+Line~34-43 의 루프의 각 패스는 다른 데이터 값을 좋은 데이터 집합에 더하려
+시도합니다.
+Line~35-39 는 추세를 깨는 차이값을 계산하고, line~36 에서는 아직 추세를
+계산하기에 충분한 값을 가지고 있지 않다면 이 한계점을 폐기하고, line~38 와 39
+에서는 \co{trendbreak} 를 좋은 데이터 집합의 데이터 값들의 쌍 사이의 차이값의
+평균에 곱합니다.
+만약 line~40 에서 후보 데이터 값은 최대 상한값 (\co{maxdelta}) 의 최소 하한을
+넘기게 되었음이 파악되었다면, \emph{그리고} line~41 에서 후보 데이터 값과 그
+앞의 값 사이의 차이가 추세를 깨는 차이값 (\co{maxdiff}) 를 넘어선다고
+판단된다면, line~42 에서는 루프를 빠져나갑니다: 이제 모든 좋은 데이터를
+얻었습니다.
+
+Line~44-52 는 이 데이터 셋의 통계를 출력합니다.
+\iffalse
 
 Each pass through the loop spanning lines~34-43 attempts to add another
 data value to the set of good data.
@@ -4246,15 +4360,28 @@ and its predecessor exceeds the trend-break difference (\co{maxdiff}),
 then line~42 exits the loop: We have the full good set of data.
 
 Lines~44-52 then compute and print the statistics for the data set.
+\fi
 
 \QuickQuiz{}
+	이 방법은 좀 이상하군요!
+	왜 우리가 통계 수업시간에 배웠던 것처럼 평균과 표준편차를 사용하지
+	않죠?
+	\iffalse
+
 	This approach is just plain weird!
 	Why not use means and standard deviations, like we were taught
 	in our statistics classes?
+	\fi
 \QuickQuizAnswer{
+	평균과 표준편차는 이런 일을 하라고 만들어진게 아니기 때문입니다.
+	이를 확인하기 위해, 다음의 데이터 집합에 평균과 표준편차를 적용하게
+	되면, 1\% 의 측정 에러가 나옵니다:
+	\iffalse
+
 	Because mean and standard deviation were not designed to do this job.
 	To see this, try applying mean and standard deviation to the
 	following data set, given a 1\% relative error in measurement:
+	\fi
 
 	\begin{quote}
 		49,548.4 49,549.4 49,550.2 49,550.9 49,550.9 49,551.0
@@ -4262,6 +4389,19 @@ Lines~44-52 then compute and print the statistics for the data set.
 		49,900.1 49,900.4 52,244.9 53,333.3 53,333.3 53,706.3
 		53,706.3 54,084.5
 	\end{quote}
+
+	문제는 평균과 표준편차는 측정 에러에 대한 가정을 전혀 하고 있지 않다는
+	것이고, 따라서 49,500 근처의 값과 49,900 근처의 값들 사이의 차이가
+	통계적으로 상당하다고 생각하게 될것인데, 실은 추정된 측정 에러의 한계선
+	안에 있습니다.
+
+	물론, 절대적인 차이보다 표준편차를 사용해서 비슷한 효과를 얻을 수 있도록
+	Figure~\ref{fig:count:Statistical Elimination of Interference} 와
+	비슷한 스크립트를 만드는 것도 가능할 것인데, 이는 흥미 있는 독자
+	여러분의 몫으로 남겨두겠습니다.
+	동일한 데이터 값의 문자열들로부터 나타날 수 있는 divide-by-zero 에러를
+	없앨 수 있도록 조심하세요!
+	\iffalse
 
 	The problem is that mean and standard deviation do not rest on
 	any sort of measurement-error assumption, and they will therefore
@@ -4277,13 +4417,27 @@ Lines~44-52 then compute and print the statistics for the data set.
 	and this is left as an exercise for the interested reader.
 	Be careful to avoid divide-by-zero errors arising from strings
 	of identical data values!
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 신뢰되는 데이터 그룹의 y축 값들이 모조리 0이면 어떡하죠?
+	그러면 스크립트는 0이 아닌 값들을 제거하지 않을까요?
+	\iffalse
+
 	But what if all the y-values in the trusted group of data
 	are exactly zero?
 	Won't that cause the script to reject any non-zero value?
+	\fi
 \QuickQuizAnswer{
+	실제로 그럴 겁니다!
+	하지만 당신의 성능 측정이 자주 정확히 0이란 값을 내놓는다면, 당신의
+	성능 측정 코드를 좀 더 자세히 들여다 볼 필요가 있을 수 있습니다.
+
+	평균과 표준편차에 기반하는 많은 방법들이 이런 종류의 데이터 집합에 대햇
+	비슷한 문제를 가지고 있음을 알아두시기 바랍니다.
+	\iffalse
+
 	Indeed it will!
 	But if your performance measurements often produce a value of
 	exactly zero, perhaps you need to take a closer look at your
@@ -4291,7 +4445,17 @@ Lines~44-52 then compute and print the statistics for the data set.
 
 	Note that many approaches based on mean and standard deviation
 	will have similar problems with this sort of dataset.
+	\fi
 } \QuickQuizEnd
+
+통계적 간섭 파악 방법은 상당히 유용할 수 있긴 하지만, 이는 마지막 방법으로만
+사용되어야 합니다.
+첫번째로는 간섭을 제거하려 하는 것이
+(Section~\ref{sec:debugging:Isolation}), 그럴 수가 없다면 측정을 통해 간섭을
+파악하는 것이
+(Section~\ref{sec:debugging:Detecting Interference Via Measurement})
+훨씬 낫습니다.
+\iffalse
 
 Although statistical interference detection can be quite useful, it should
 be used only as a last resort.
@@ -4299,6 +4463,7 @@ It is far better to avoid interference in the first place
 (Section~\ref{sec:debugging:Isolation}), or, failing that,
 detecting interference via measurement
 (Section~\ref{sec:debugging:Detecting Interference Via Measurement}).
+\fi
 
 \section{Summary}
 \label{sec:debugging:Summary}
