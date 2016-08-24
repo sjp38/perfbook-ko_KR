@@ -164,6 +164,22 @@ more complex uses.
 \end{figure}
 
 Figure~\ref{fig:analysis:Promela Code for Non-Atomic Increment}
+는 어토믹하지 않은 값 증가로 인해 발생하는, 교재에도 있는 race condition 을
+보이고 있습니다.
+Line~1 은 수행할 프로세스들의 수를 정의하고 (우린 상태 공간에의 영향을 보기
+위해 이 값을 바꿔볼 겁니다), line~3 은 카운터를 정의하고, line~4 는 line~29-39
+에 있는 단정문을 구현하는데 사용될 겁니다.
+
+Line~6-13 은 카운터를 어토믹하지 않게 증가시키는 프로세스를 정의합니다.
+인자 \co{me} 는 프로세스의 번호로, 코드의 뒤에 있는 초기화 블락에서 설정됩니다.
+간단한 Promela 구문들은 모두 어토믹한 것으로 가정되기 때문에, 우리는 이 값
+증가를 line~10-11 의 두개의 문장으로 쪼개야만 합니다.
+Line~12 에서의 값 할당은 프로세스의 완료를 표시합니다.
+Spin 시스템은 모든 가능한 상태들의 시퀀스들을 포함해 상태 공간을 모두 탐색하기
+때문에, 전통적인 테스트에서라면 사용되었을 수 있는 루프는 필요치 않습니다.
+\iffalse
+
+Figure~\ref{fig:analysis:Promela Code for Non-Atomic Increment}
 demonstrates the textbook race condition
 resulting from non-atomic increment.
 Line~1 defines the number of processes to run (we will vary this
@@ -180,6 +196,25 @@ The assignment on line~12 marks the process's completion.
 Because the Spin system will fully search the state space, including
 all possible sequences of states, there is no need for the loop
 that would be used for conventional testing.
+\fi
+
+Line~15-40 은 초기화 블락으로, 제일 처음에 수행됩니다.
+Line~19-28 은 정말로 초기화를 하고, line~29-39 는 단정을 수행합니다.
+이 두 부분은 불필요하게 상태 공간을 증가시키는 걸 막기 위해 모두 어토믹
+블락으로 되어 있습니다: 이것들은 테스트 하려는 알고리즘의 부분이 아니기 때문에,
+그것들을 어토믹으로 만듬으로써 검증 범위를 줄이는 것입니다.
+
+Line~21-27 의 do-od 구조는 Promela 루프를 구현하는데, case 라벨에 expression
+들을 허용하는 \co{switch} 문을 담고 있는 C {\tt for (;;)} 루프로 생각될 수
+있습니다.
+({\tt ::} 접두사를 갖는) 조건 블락들은 비결정론적으로 스캔됩니다만, 이 경우에는
+한번에 하나의 조건만이 참이 될 것입니다.
+Line~22-25 에 있는 do-od 의 첫번째 블락은 i-번째 카운터 증가 프로세스의
+progress 셀을 초기화하고, i-번째 카운터 증가 프로세스를 수행시키고, 변수 \co{i}
+를 증가시킵니다.
+line~26 에 있는 do-od 의 두번째 블락은 이 프로세스들이 모두 시작되면 루프를
+빠져나옵니다.
+\iffalse
 
 Lines~15-40 are the initialization block, which is executed first.
 Lines~19-28 actually do the initialization, while lines~29-39
@@ -200,6 +235,15 @@ incrementer's progress cell, runs the i-th incrementer's process, and
 then increments the variable \co{i}.
 The second block of the do-od on line~26 exits the loop once
 these processes have been started.
+\fi
+
+Line~29-39 의 어토믹 블락 또한 프로그레스 카운터를 더하는, 비슷한 do-od 루프를
+담고 있습니다.
+Line~38 의 {\tt assert()} 문은 모든 프로세스가 완료되었는지, 그렇다면 모든
+카운트가 정확히 기록되었는지 검증합니다.
+
+독자 여러분은 이 프로그램들을 다음과 같이 빌드하고 실행해 볼 수 있습니다:
+\iffalse
 
 The atomic block on lines~29-39 also contains a similar do-od
 loop that sums up the progress counters.
@@ -207,6 +251,7 @@ The {\tt assert()} statement on line~38 verifies that if all processes
 have been completed, then all counts have been correctly recorded.
 
 You can build and run this program as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -250,6 +295,24 @@ hash conflicts: 0 (resolved)
 \label{fig:analysis:Non-Atomic Increment spin Output}
 \end{figure*}
 
+이 수행의 결과로 나올 수 있는 출력이
+Figure~\ref{fig:analysis:Non-Atomic Increment spin Output}
+에 보여져 있습니다.
+첫번째 줄은 우리의 단정이 깨졌음을 이야기 합니다 (어토믹하지 않은 값 증가로
+인해 예상되었던대로입니다!).
+두번째 줄은 어떻게 이 단정이 깨졌는지에 대한 설명을 \co{trail} 파일에 썼음을
+이야기 합니다.
+``Warning''  줄은 우리의 모델에 있어서 모든 것이 좋지 않았음을 반복합니다.
+두번째 문단은 진행된 상태 탐색의 타입을 설명하는데, 이 경우에는 단정 위반과
+무효한 종료 상태들이었습니다.
+세번째 문단은 상태 크기에 대한 통계를 보여줍니다: 이 작은 모델은 45개의
+상태만을 가졌습니다.
+마지막 줄은 메모리 사용량을 보입니다.
+
+\co{trail} 파일 안의 정보는 다음의 커맨드를 통해 사람이 읽을 수 있는 형태로
+만들어질 수 있습니다:
+\iffalse
+
 This will produce output as shown in
 Figure~\ref{fig:analysis:Non-Atomic Increment spin Output}.
 The first line tells us that our assertion was violated (as expected
@@ -264,6 +327,7 @@ The third paragraph gives state-size statistics: this small model had only
 The final line shows memory usage.
 
 The \co{trail} file may be rendered human-readable as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -327,12 +391,22 @@ spin: trail ends after 21 steps
 \label{fig:analysis:Non-Atomic Increment Error Trail}
 \end{figure*}
 
+이는
+Figure~\ref{fig:analysis:Non-Atomic Increment Error Trail}
+에 보여진 것과 같은 결과를 보일 겁니다.
+보여지듯이, 초기화 블락의 첫번째 부분이 두개의 카운터 증가 프로세스들을
+생성했고, 두 프로세스는 모두 카운터 값을 가져간 후에 값을 증가하고 다시
+저장시켰으며, 그중 하나의 카운트를 잃었습니다.
+그리고 나서, 전체 상태가 표시된 후에 단정문이 판정되었습니다.
+\iffalse
+
 This gives the output shown in
 Figure~\ref{fig:analysis:Non-Atomic Increment Error Trail}.
 As can be seen, the first portion of the init block created both
 incrementer processes, both of which first fetched the counter,
 then both incremented and stored it, losing a count.
 The assertion then triggered, after which the global state is displayed.
+\fi
 
 \subsubsection{Promela Warm-Up: Atomic Increment}
 \label{sec:formal:Promela Warm-Up: Atomic Increment}
