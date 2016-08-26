@@ -538,9 +538,31 @@ elaborate examples.
 \subsection{How to Use Promela}
 \label{sec:formal:How to Use Promela}
 
+소스 파일 \path{qrcu.spin} 을 가지고서, 다음과 같은 커맨드들을 사용할 수
+있습니다:
+\iffalse
+
 Given a source file \path{qrcu.spin}, one can use the following commands:
+\fi
 
 \begin{itemize}
+\item	\co{spin -a qrcu.spin}
+	상태 머신을 완전히 탐색하는 \path{pan.c} 파일을 만들어 냅니다.
+\item	\co{cc -DSAFETY -o pan pan.c}
+	생성된 상태 머신 탐색을 컴파일 합니다.  \co{-DSAFETY} 는 단정문만을
+	(그리고 \co{never} statement 들을) 가지고 있다면 적절한 최적화를
+	만들어냅니다.  만약 당신이 liveness, fairness, 또는 forward-progress
+	체크를 가지고 있다면, \co{-DSAFETY} 없이 컴파일을 해야할 수도 있습니다.
+	당신이 그것을 사용할 수 있으면서 \co{-DSAFETY} 를 사용하지 않는다면,
+	프로그램은 당신에게 그걸 알릴 것입니다.
+
+	\co{-DSAFETY} 로 만들어지는 최적화들은 일들의 속도를 엄청나게 높여줄
+	것이므로, 사용할 수 있다면 사용해야 합니다.
+	\co{-DSAFETY} 를 사용할 수 없는 환경 가운데 예를 들어보자면 \co{-DNP}
+	를 통해 (``non-progress cycles'' 라고도 알려져 있는) livelock 을 체크할
+	때입니다.
+\iffalse
+
 \item	\co{spin -a qrcu.spin}
 	Create a file \path{pan.c} that fully searches the state machine.
 \item	\co{cc -DSAFETY -o pan pan.c}
@@ -556,6 +578,24 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 	An example situation where you cannot use \co{-DSAFETY} is
 	when checking for livelocks (AKA ``non-progress cycles'')
 	via \co{-DNP}.
+\fi
+\item	\co{./pan}
+	이 커맨드는 정말로 상태 공간을 탐색하게 합니다.  매우 작은 상태 머신을
+	가지고도 상태의 갯수는 수천개에 달할 수 있으므로, 커다란 메모리를 가진
+	기계가 필요할 겁니다.
+	예를 들어, \path{qrcu.spin} 을 3개의 읽기 쓰레드와 2개의 업데이트
+	쓰레드와 함께 동작시키려면 2.7GB 의 메모리가 필요합니다.
+
+	당신의 기계가 충분한 메모리를 가지고 있는지 분명치 않다면, 한
+	윈도우에서는 \co{top} 을 동작시키고 다른 윈도우에서 \co{./pan} 을
+	수행하세요.  만약 필요하다면 곧바로 실행을 멈출 수 있게 할 수 있도록
+	포커스는 \co{./pan} 윈도우에 두세요.  CPU 시간이 100\% 아래로 떨어지기
+	시작하면, \co{./pan} 의 수행을 중지시키세요.  당신이 \co{./pan} 을
+	수행중인 윈도우로부터 포커스를 옮겨 두었다면, 윈도우 시스템이 당신을
+	위해 뭔가 하기 위해 충분한 메모리를 가질 수 있을때까지 긴 시간을
+	기다려야 할겁니다.
+\iffalse
+
 \item	\co{./pan}
 	This actually searches the state space.  The number of states
 	can reach into the tens of millions with very small state
@@ -571,6 +611,17 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 	window running \co{./pan}, you may wait a long time for the
 	windowing system to grab enough memory to do anything for
 	you.
+\fi
+
+	출력을 캡쳐해 두는 것을 잊지 마세요, 특히나 당신이 원격의 기계에서
+	작업하고 있다면요.
+
+	만약 당신의 모델이 forward-progress 체크를 포함하고 있다면, \co{./pan}
+	에 커맨드 라인 인자로 \co{-f} 를 줌으로써 ``weak fairness'' 를 활성화
+	시켜야 할 수 있을 겁니다.
+	당신의 forward-progress 체크가 \co{accept} 라벨과 관련되어 있다면,
+	\co{-a} 인자 또한 필요할 겁니다.
+\iffalse
 
 	Don't forget to capture the output, especially
 	if you are working on a remote machine.
@@ -582,12 +633,21 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 	you will also need the \co{-a} argument.
 	% forward reference to model: formal.2009.02.19a in
 	% /home/linux/git/userspace-rcu/formal-model.
+\fi
+\item	\co{spin -t -p qrcu.spin}
+	에러를 만나게 된 수행 시에 나온 결과 파일인 \co{trail} 파일을 받아서 그
+	에러를 마주하게 된 과정의 시퀀스를 출력합니다.
+	\co{-g} 플래그는 또한 변경된 전역 변수들의 값들 또한 포함시킬 것이고,
+	\co{-l} 플래그는 변경된 지역 변수들의 값들도 포함시킬 겁니다.
+\iffalse
+
 \item	\co{spin -t -p qrcu.spin}
 	Given \co{trail} file output by a run that encountered an
 	error, output the sequence of steps leading to that error.
 	The \co{-g} flag will also include the values of changed
 	global variables, and the  \co{-l} flag will also include
 	the values of changed local variables.
+\fi
 \end{itemize}
 
 \subsubsection{Promela Peculiarities}
