@@ -785,15 +785,29 @@ C++, or Java.
 \subsubsection{Promela Coding Tricks}
 \label{sec:formal:Promela Coding Tricks}
 
+Promela 는 프로토콜들을 분석하기 위해 설계되었으므로, 병렬 프로그램에
+사용하는건 약간 오용하는 것입니다.
+다음의 트릭들은 Promela 를 안전하게 오용하는데 도움을 줄 겁니다:
+\iffalse
+
 Promela was designed to analyze protocols, so using it on parallel programs
 is a bit abusive.
 The following tricks can help you to abuse Promela safely:
+\fi
 
 \begin{enumerate}
+\item	메모리 재배치.
+	전역 변수 x 와 y 를 지역 변수 r1 과 r2 에 복사하는 두개의 statement 가
+	있는데, 이것들은 그 순서가 중요한데 (ex: 락으로 보호되지 않음), 메모리
+	배리어를 사용하지 않았다고 생각해 봅시다.
+	이는 Promela 에서 다음과 같이 모델링될 수 있습니다:
+\iffalse
+
 \item	Memory reordering.  Suppose you have a pair of statements
 	copying globals x and y to locals r1 and r2, where ordering
 	matters (e.g., unprotected by locks), but where you have
 	no memory barriers.  This can be modeled in Promela as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -809,6 +823,16 @@ The following tricks can help you to abuse Promela safely:
 \end{minipage}
 \vspace{5pt}
 
+	\co{if} 문의 두갈래 경우들은 비결정적으로 선택될 것인데, 둘 다 선택되는
+	것이 가능하기 때문입니다.
+	전체 상태 공간이 탐색될 것이므로, \emph{둘 다의} 선택들이 결국은 모든
+	경우들에 대해 만들어질 것입니다.
+
+	물론, 이 트릭은 너무 과하게 사용된다면 상태 공간을 폭증시켜 버릴 수
+	있습니다.
+	또한, 이 트릭은 가능한 재배치들을 예측할 것을 필요로 합니다.
+	\iffalse
+
 	The two branches of the \co{if} statement will be selected
 	nondeterministically, since they both are available.
 	Because the full state space is searched, \emph{both} choices
@@ -817,6 +841,7 @@ The following tricks can help you to abuse Promela safely:
 	Of course, this trick will cause your state space to explode
 	if used too heavily.
 	In addition, it requires you to anticipate possible reorderings.
+	\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -864,6 +889,26 @@ The following tricks can help you to abuse Promela safely:
 \label{fig:analysis:Atomic Block for Complex Promela Assertion}
 \end{figure}
 
+\item	상태 감축.
+	복잡한 단정문들을 가지고 있다면, 그것들을 \co{atomic} 하에서
+	수행하세요.
+	무엇보다, 그것들은 알고리즘의 한 부분이 아닙니다.
+	복잡한 단정문의 한 예는 (뒤에서 더 자세히 다루겠습니다만)
+	Figure~\ref{fig:analysis:Complex Promela Assertion} 에 보여져 있습니다.
+
+	이 단정문을 어토믹하지 않게 수행할 이유가 없는데, 이는 알고리즘의 실제
+	부분이 아니기 때문입니다.
+	각각의 statement 가 상태에 영향을 끼치므로,
+	Figure~\ref{fig:analysis:Atomic Block for Complex Promela Assertion}
+	에 보여진 것처럼 복잡한 단정문들을 \co{atomic} 안에 집어넣음으로써
+	불필요한 상태들의 수를 줄일 수 있습니다.
+
+\item	Promela 는 함수를 제공하지 않습니다.
+	그대신에 C 전처리기 매크로들을 사용해야만 합니다.
+	하지만, 조합에 의한 상태 수의 폭증을 막기 위해 그것들은 조심스럽게
+	사용되어야만 합니다.
+\iffalse
+
 \item	State reduction.  If you have complex assertions, evaluate
 	them under \co{atomic}.  After all, they are not part of the
 	algorithm.  One example of a complex assertion (to be discussed
@@ -881,9 +926,14 @@ The following tricks can help you to abuse Promela safely:
 	You must instead use C preprocessor macros.
 	However, you must use them carefully in order to avoid
 	combinatorial explosion.
+\fi
 \end{enumerate}
 
+이제 더 복잡한 예제들을 볼 준비가 되었습니다.
+\iffalse
+
 Now we are ready for more complex examples.
+\fi
 
 \subsection{Promela Example: Locking}
 \label{sec:formal:Promela Example: Locking}
