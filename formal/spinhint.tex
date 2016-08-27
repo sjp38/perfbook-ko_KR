@@ -653,11 +653,32 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 \subsubsection{Promela Peculiarities}
 \label{sec:formal:Promela Peculiarities}
 
+모든 컴퓨터 언어들은 유사한 점들을 가지고 있음에도 불구하고, C, C++, 또는 Java
+를 가지고 코딩하던 사람들에게 Pormela 는 조금 놀라운 것들을 제공할 겁니다.
+\iffalse
+
 Although all computer languages have underlying similarities,
 Promela will provide some surprises to people used to coding in C,
 C++, or Java.
+\fi
 
 \begin{enumerate}
+\item	C 에서, ``\co{;}'' 는 statement 의 종료를 알립니다.
+	Promela 에서는 statement 들을 분리합니다.
+	다행히도, Sping 의 더 최신 버전들은 ``여분의'' 세미콜론들에 훨씬 더
+	너그러워졌습니다.
+\item	Promela 에서 루프를 만드는 데 사용되는 \co{do} 문은 조건들을 갖습니다.
+	이 \co{do} 문은 if-then-else 로 구성된 루프 문과 상당히 닮아 있습니다.
+\item	C 의 \co{switch} 문에서, 맞는 케이스가 존재하지 않는다면, 전체
+	statement 가 건너뛰어 집니다.
+	Promela 의 같은 기능에서, 잘못 사용된 \co{if} 문에서, 맞아 떨어지는
+	조건이 없다면, 알아들을 수 있는 관련된 에러 메세지 없이 에러를 내게
+	됩니다.
+	따라서, 에러 출력이 문제 없는 코드 라인을 가리킨다면, \co{if} 나
+	\co{do} 문에서 해당되지 않는 조건을 남겨둔 건 아닌지 확인해 보시기
+	바랍니다.
+\iffalse
+
 \item	In C, ``\co{;}'' terminates statements.  In Promela it separates them.
 	Fortunately, more recent versions of Spin have become
 	much more forgiving of ``extra'' semicolons.
@@ -672,6 +693,24 @@ C++, or Java.
 	So, if the error output indicates an innocent line of code,
 	check to see if you left out a condition from an \co{if} or \co{do}
 	statement.
+\fi
+\item	C 에서 스트레스 테스트를 만들 때, 어떤 사람은 의심되는 오퍼레이션들을
+	서로에 대해 반복적으로 경주시키곤 할겁니다.
+	Promela 에서, 어떤 사람은 그 대신에 하나의 경주만을 만들텐데, Promela
+	는 그 한번의 경주로부터 가능한 모든 결과를 탐색할 것이기 때문입니다.
+	어떤 경우에는 Promela 에서 루프를 돌 필요가 있는데, 예를 들어 여러
+	오퍼레이션들이 겹치지만, 그렇게 하는게 당신의 상태 공간을 굉장히
+	증가시키는 경우가 그런 경우입니다.
+\item	C 에서, 하기 가장 쉬운 일은 루프의 진행 정도를 추적하고 종료하기 위해
+	루프 카운터를 사용하는 것입니다.
+	Promela 에서, 루프 카운터들은 역병처럼 방지되어야만 하는데, 그것들은
+	상태 공간을 폭발적으로 증가시키기 때문입니다.
+	다른 한편, Promela 에서 무한 루프들은 변수들 가운데 단조적으로
+	증가하거나 감소하는 것들이 없다면 문제가 없습니다---Promela 는 루프에서
+	얼마나 수행이 돌아가면 정말로 영향을 끼칠 것인지를 알아챌 것이고,
+	자동적으로 그 지점 뒤의 실행을 없애버릴 겁니다.
+\iffalse
+
 \item	When creating stress tests in C, one usually races suspect operations
 	against each other repeatedly.	In Promela, one instead sets up
 	a single race, because Promela will search out all the possible
@@ -686,6 +725,36 @@ C++, or Java.
 	monotonically increase or decrease---Promela will figure out
 	how many passes through the loop really matter, and automatically
 	prune execution beyond that point.
+\fi
+\item	C 고문 테스트 코드에서는 태스크별 제어 변수들을 두는 것이 종종
+	현명합니다.
+	그것들은 읽기에 편하고, 테스트 코드를 디버깅 하는데에 매우 도움이
+	됩니다.
+	Promela 에서 태스크별 제어 변수는 다른 대안이 없을 때에만 사용되어야
+	합니다.
+	이를 자세히 보기 위해, 다섯개의 태스크 검증을 해야 하는데 태스크 각각
+	작업 완료를 나타내는 하나의 비트를 갖는다고 생각해 봅시다.
+	이는 32개의 상태들을 만들어냅니다.
+	반면에, 하나의 간단한 카운터만을 사용한다면 6개의 상태만을 가질
+	것이어서, 다섯배가 넘는 상태 갯수의 감소를 이루어냅니다.
+	이 다섯배는 문제처럼 보이지 않을 수도 있는데, 검증 프로그램이 1억
+	5천만개의 상태들을 10GB 가 넘는 메모리를 소모해 가면서 처리하느라
+	고생하고 있지 않을 때에는 그럴 겁니다!
+\item	C 고문 테스트 코드와 Promela 둘 다에서 가장 어려운 일들 중 하나는 좋은
+	단정문들을 만들어내는 것입니다.
+	Promela 는 또한 \co{never} 가 모든 코드 라인들 사이에 복사되어 있는
+	단정문과 같은 것들에 대해서 주의를 내도록 하는 것도 가능하게 합니다.
+\item	분할하고 지배하기는 Promela 에서 상태 공간을 제어하기에 굉장히 도움이
+	됩니다.
+	커다란 모델을 두개의 대략적으로 절반씩을 갖는 것들로 분할하는 것은
+	각각의 절반이 상태 공간의 루트 값만큼의 양을 갖는 결과를 만들 겁니다.
+	예를 들어, 백만개의 상태가 결합된 모델은 두개의 천개 상태 모델들로
+	나뉘어질 수 수 있을 겁니다.
+	Promela 가 두개의 더 작은 모델들을 더 적은 메모리를 가지고 더 빨리
+	처리할 뿐만 아니라, 두개의 작은 알고리즘들이 사람이 이해하기에 더
+	쉽습니다.
+\iffalse
+
 \item	In C torture-test code, it is often wise to keep per-task control
 	variables.  They are cheap to read, and greatly aid in debugging the
 	test code.  In Promela, per-task control variables should be used
@@ -709,6 +778,7 @@ C++, or Java.
 	Not only will Promela handle the two smaller models much more
 	quickly with much less memory, but the two smaller algorithms
 	are easier for people to understand.
+\fi
 \end{enumerate}
 
 
