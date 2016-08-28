@@ -963,6 +963,22 @@ Now we are ready for more complex examples.
 \label{fig:analysis:Promela Code for Spinlock}
 \end{figure}
 
+락들은 일반적으로 유용하기 때문에,
+Figure~\ref{fig:analysis:Promela Code for Spinlock} 에서 보여진 것처럼 여러
+Promela 모델들에 include 될 수 있는 \path{lock.h} 에서 \co{spin_lock()} 과
+\co{spin_unlock()}  매크로들을 제공합니다.
+\co{spin_lock()} 매크로는 line~3 의 단 하나의 조건 ``1'' 덕분에 line~2-11 의
+무한한 do-od 루프를 가지고 있습니다.
+이 루프의 몸통은 하나의 if-fi 문을 담고 있는 하나의 어토믹 블락입니다.
+이 if-fi 문은 루프를 돌기보다는 한번의 패스만을 취한다는 점을 제외하고는 do-od
+문과 비슷합니다.
+락이 lind~5 에서 잡혀있지 않다면 line~6 에서 이를 획득하고 line~7 에서 감싸고
+있는 do-od 루프를 깨고 나갑니다 (그리고 어토믹 블락에서도 나갑니다).
+한편으로는, 만약 락이 line~8 에서 이미 잡혀 있었다면, 아무 일도 하지 않고
+(\co{skip}), if-fi 문과 어토믹 블락을 빠져나오고 그 바깥 루프의 다음 반복을
+진행해서 락이 획득 가능해질 때까지 반복하게 됩니다.
+\iffalse
+
 Since locks are generally useful, \co{spin_lock()} and
 \co{spin_unlock()}
 macros are provided in \path{lock.h}, which may be included from
@@ -982,6 +998,20 @@ On the other hand, if the lock is already held on line~8,
 we do nothing (\co{skip}), and fall out of the if-fi and the
 atomic block so as to take another pass through the outer
 loop, repeating until the lock is available.
+\fi
+
+\co{spin_unlock()} 매크로는 단순히 이 락을 더이상 잡혀 있지 않았다고
+표시합니다.
+
+Promela 는 완전한 순서 규칙을 가정하기 때문에 메모리 배리어들은 필요치 않다는
+점을 알아두세요.
+어떤 Promela 상태에서도, 모든 프로세스들은 현재 상태와 우리가 현재의 상태에
+도달하게 되는 과정에서의 상태 변화의 순서들에 동의하게 됩니다.
+이는 (MIPS 와 PA-RISC 같은) 일부 컴퓨터 시스템들에서 사용되는 ``sequentially
+consistent'' 메모리 모델과 비슷합니다.
+앞서 언급되었듯이, 그리고 뒤의 예제에서 알아보게 되듯이, 약한 메모리 순서
+규칙은 명시적으로 코딩되어야만 합니다.
+\iffalse
 
 The \co{spin_unlock()} macro simply marks the lock as no
 longer held.
@@ -995,6 +1025,7 @@ This is analogous to the ``sequentially consistent'' memory model
 used by a few computer systems (such as MIPS and PA-RISC).
 As noted earlier, and as will be seen in a later example,
 weak memory ordering must be explicitly coded.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -1051,6 +1082,20 @@ weak memory ordering must be explicitly coded.
 \label{fig:analysis:Promela Code to Test Spinlocks}
 \end{figure}
 
+이 매크로들은
+Figure~\ref{fig:analysis:Promela Code to Test Spinlocks}
+에 보여진 Promela 코드에 의해 테스트 되었습니다.
+이 코드는 line~3 에서의 \co{N_LOCKERS} 정의로 정의된 락킹 프로세스의 숫자에
+의해 값 증가를 테스트하는데 사용되었던 코드와 비슷합니다.
+뮤텍스 자체는 line~5 에 정의되었고, 락 소유자를 추적하기 위한 배열이 line~6 에
+정의되어 있으며, line~7 은 하나의 프로세스만이 락을 잡고 있음을 증명하기 위한
+단정문 코드에 사용됩니다.
+
+락을 잡는 프로세스는 line~9-18 에 있는데, line~13 에서 락을 획득하고 line~14
+에서 락을 잡았음을 공표하고 line~15 에서 락을 잡지 않고 있다고 이야기한 후,
+line~16 에서 락을 놓습니다.
+\iffalse
+
 These macros are tested by the Promela code shown in
 Figure~\ref{fig:analysis:Promela Code to Test Spinlocks}.
 This code is similar to that used to test the increments,
@@ -1063,6 +1108,21 @@ code to verify that only one process holds the lock.
 The locker process is on lines~9-18, and simply loops forever
 acquiring the lock on line~13, claiming it on line~14,
 unclaiming it on line~15, and releasing it on line~16.
+\fi
+
+Line~20-44 의 init 블락은 현재 락 잡는 프로세스의 havelock 배열 원소를 line~26
+에서 초기화 하고, 현재 락 잡는 프로세스를 line~27 에서 시작시키며, line~28 에서
+다음 락 잡는 프로세스로 넘어갑니다.
+일단 모든 락 잡는 프로세스들이 시작되면, do-od 루프의 수행은 단정문을 체크하는
+line~29 로 넘어갑니다.
+Line~30 과 31 은 제어 변수들을 초기화 하고, line~32-40 은 어토믹하게 havelock
+배열 원소들의 합을 구하고, line~41 에서 단정문을 수행하고, line~42 에서 루프를
+빠져나옵니다.
+
+우리는 앞의 두개의 코드 조각들을 \path{lock.h} 와 \path{lock.spin} 에 각각
+집어넣는 것으로 이 모델을 수행할 수 있게 되며, 다음의 커맨드들을 사용해 돌릴 수
+있습니다:
+\iffalse
 
 The init block on lines~20-44 initializes the current locker's
 havelock array entry on line~26, starts the current locker on
@@ -1076,6 +1136,7 @@ line~41 is the assertion, and line~42 exits the loop.
 We can run this model by placing the above two code fragments into
 files named \path{lock.h} and \path{lock.spin}, respectively, and then running
 the following commands:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1122,27 +1183,66 @@ unreached in proctype :init:
 \label{fig:analysis:Output for Spinlock Test}
 \end{figure}
 
+출력되는 결과는
+Figure~\ref{fig:analysis:Output for Spinlock Test} 에 보여진 것과 비슷할
+것입니다.
+예상되었듯이, 이 수행은 단정문 실패가 없습니다 (``errors: 0'').
+\iffalse
+
 The output will look something like that shown in
 Figure~\ref{fig:analysis:Output for Spinlock Test}.
 As expected, this run has no assertion failures (``errors: 0'').
+\fi
 
 \QuickQuiz{}
+	왜 locker 에 미치지 못한 statement 가 있는 거죠?
+	이건 \emph{전체} 상태-공간 탐색이 아니었나요?
+	\iffalse
+
 	Why is there an unreached statement in
 	locker?  After all, isn't this a \emph{full} state-space
 	search?
+	\fi
 \QuickQuizAnswer{
+	locker 프로세스는 무한 루프이므로, 이 프로세스의 종료까지 제어가 닿지를
+	않습니다.
+	하지만, 단조적으로 증가되는 변수가 존재하지 않기 때문에, Promela 는 이
+	무한 루프를 작은 수의 상태만 가지고도 모델링 할수가 있습니다.
+	\iffalse
+
 	The locker process is an infinite loop, so control
 	never reaches the end of this process.
 	However, since there are no monotonically increasing variables,
 	Promela is able to model this infinite loop with a small
 	number of states.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	이 예제에 있어서 Promela 코딩 스타일 문제들은 뭐가 있나요?
+	\iffalse
+
 	What are some Promela code-style issues with this example?
+	\fi
 \QuickQuizAnswer{
+	몇가지가 있습니다:
+	\iffalse
+
 	There are several:
+	\fi
 	\begin{enumerate}
+	\item	{\tt sum} 의 선언은 init 블락 안으로 옮겨져야 하는데, 그 외의
+		곳에서는 어디서도 사용되지 않기 때문입니다.
+	\item	단정문 코드는 초기화 루프 바깥으로 옮겨져야 합니다.
+		그렇게 되면 초기화 루프는 하나의 어토믹 블락 안에 위치할 수
+		있어서, 상태 공간을 훨씬 줄일 수 있습니다 (얼마나 줄일 수
+		있을까요?).
+	\item	단정문 코드를 감싸고 있는 어토믹 블락은 {\tt sum} 과 {\tt j} 의
+		초기화를, 그리고 단정문도 포함하도록 확장되어야 합니다.
+		이것 역시 상태 공간을 줄일 것입니다 (이번에도, 얼마나 줄일 수
+		있을까요?).
+	\iffalse
+
 	\item	The declaration of {\tt sum} should be moved to within
 		the init block, since it is not used anywhere else.
 	\item	The assertion code should be moved outside of the
@@ -1154,6 +1254,7 @@ As expected, this run has no assertion failures (``errors: 0'').
 		and {\tt j}, and also to cover the assertion.
 		This also reduces the state space (again, by how
 		much?).
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
 
