@@ -1262,6 +1262,13 @@ As expected, this run has no assertion failures (``errors: 0'').
 \subsection{Promela Example: QRCU}
 \label{sec:formal:Promela Example: QRCU}
 
+이 마지막 예제는 \co{synchronize_qrcu()} 의 빠른 수행경로를 더 빠르게 하기 위해
+수정된 Oleg Nesterov 의 QRCU~\cite{OlegNesterov2006QRCU,OlegNesterov2006aQRCU}
+를 위한 실제 세계에서의 Promela 사용을  보입니다.
+
+하지만 먼저, QRCU 란 무엇일까요?
+\iffalse
+
 This final example demonstrates a real-world use of Promela on Oleg
 Nesterov's
 QRCU~\cite{OlegNesterov2006QRCU,OlegNesterov2006aQRCU},
@@ -1269,6 +1276,15 @@ but modified to speed up the \co{synchronize_qrcu()}
 fastpath.
 
 But first, what is QRCU?
+\fi
+
+QRCU 는 극단적으로 낮은 grace period 대기시간이라는 장점을 더 높은 읽기
+오버헤드 (전역 변수에의 어토믹한 값 증가와 감소) 와 맞바꾸기 하는,
+SRCU~\cite{PaulEMcKenney2006c} 의 한 변종입니다.
+읽기 쓰레드가 없다면, grace period 는 1 마이크로세컨드도 되지 않는 시간에
+파악되는데, 이는 대부분의 다른 RCU 구현들의 수 밀리세컨드 grace period
+대기시간과 비교됩니다.
+\iffalse
 
 QRCU is a variant of SRCU~\cite{PaulEMcKenney2006c}
 that trades somewhat higher read overhead
@@ -1277,8 +1293,21 @@ low grace-period latencies.
 If there are no readers, the grace period will be detected in less
 than a microsecond, compared to the multi-millisecond grace-period
 latencies of most other RCU implementations.
+\fi
 
 \begin{enumerate}
+\item	QRCU 도메인을 정의하는 \co{qrcu_struct} 가 존재합니다.
+	SRCU 처럼 (그리고 다른 RCU 변종들과는 달리) QRCU 의 동작은 글로벌하지
+	않고, 그대신에 특정한 \co{qrcu_struct} 에 집중됩니다.
+\item	QRCU read-side 크리티컬 섹션들을 구분짓는 \co{qrcu_read_lock()} 과
+	\co{qrcu_read_unlock()} 이 있습니다.
+	연관되는 \co{qrcu_struct} 는 이 함수들에 넘겨져야 하고,
+	\co{rcu_read_lock()} 으로부터의 리턴값은 \co{rcu_read_unlock()} 으로
+	넘겨져야만 합니다.
+
+	예를 들면 다음과 같습니다:
+\iffalse
+
 \item	There is a \co{qrcu_struct} that defines a QRCU domain.
 	Like SRCU (and unlike other variants of RCU) QRCU's action
 	is not global, but instead focused on the specified
@@ -1290,6 +1319,7 @@ latencies of most other RCU implementations.
 	must be passed to \co{rcu_read_unlock()}.
 
 	For example:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1301,6 +1331,18 @@ qrcu_read_unlock(&my_qrcu_struct, idx);
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+\item	이전부터 존재해온 QRCU read-side 크리티컬 섹션들이 모두 완료될 때까지
+	기다리는 \co{synchronize_qrcu()} 기능이 있습니다만, SRCU 의
+	\co{synchronize_srcu()} 처럼, QRCU 의 \co{synchronize_qrcu()} 는 같은
+	\co{qrcu_struct} 를 사용하는 read-side 크리티컬 섹션들만을 기다리면
+	됩니다.
+
+	앞의 예에 이어 예를 들면, \co{synchronize_qruc(&your_qrcu_struct} 는
+	이전의 QRCU read-side 크리티컬 섹션을 기다릴 필요가 \co{없습니다}.
+	반면에, \co{synchronize_qrcu(&my_qrcu_struct)} 는 기다려야 \emph{할 수}
+	있는데, 같은 \co{qrcu_struct} 를 공유하기 때문입니다.
+\iffalse
 
 \item	There is a \co{synchronize_qrcu()} primitive that blocks until
 	all pre-existing QRCU read-side critical sections complete,
@@ -1314,12 +1356,19 @@ qrcu_read_unlock(&my_qrcu_struct, idx);
 	In contrast, \co{synchronize_qrcu(&my_qrcu_struct)}
 	\emph{would} need to wait, since it shares the same
 	\co{qrcu_struct}.
+\fi
 \end{enumerate}
+
+QRCU 를 위한 리눅스 커널 패치도
+만들어졌습니다만~\cite{PaulMcKenney2007QRCUpatch}, 2008년 4월 현재까지는 리눅스
+커널에 포함되지 않았습니다.
+\iffalse
 
 A Linux-kernel patch for QRCU has been
 produced~\cite{PaulMcKenney2007QRCUpatch},
 but has not yet been included in the Linux kernel as of
 April 2008.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -1341,6 +1390,20 @@ April 2008.
 \label{fig:analysis:QRCU Global Variables}
 \end{figure}
 
+QRCU 를 위한 Promela 코드로 돌아와서, 전역 변수들은
+Figure~\ref{fig:analysis:QRCU Global Variables} 에 보인 것과 같습니다.
+이 예제는 락킹을 사용하므로, \path{lock.h} 를 include 하고 있습니다.
+읽기 쓰레드들의 갯수와 쓰기 쓰레드들의 갯수는 두개의 \co{#define} 문을 통해
+변경될 수 있어서, 두개의 조합 증폭 가능한 방법을 제공합니다.
+\co{idx} 변수는 \co{ctr} 배열의 두 원소들 중 무엇이 읽기 쓰레드들에 의해 사용될
+것인지 결정하며, \co{readerprogress} 변수는 단정문이 언제 모든 읽기 쓰레드들이
+종료되었는지를 판단할 수 있게 합니다 (QRCU 업데이트는 모든 앞서 존재한 읽기
+쓰레드들이 그들의 QRCU read-side 크리티컬 섹션을 완료하기 전까지는 완료될 수
+없기 때문입니다).
+\co{readerprogress} 배열의 원소들은 다음과 같이 값을 가져서 연관된 읽기
+쓰레드의 상태를 알립니다:
+\iffalse
+
 Returning to the Promela code for QRCU, the global variables are as shown in
 Figure~\ref{fig:analysis:QRCU Global Variables}.
 This example uses locking, hence including \path{lock.h}.
@@ -1355,14 +1418,26 @@ pre-existing readers have completed their QRCU read-side critical
 sections).
 The \co{readerprogress} array elements have values as follows,
 indicating the state of the corresponding reader:
+\fi
 
 \begin{enumerate}
+\item	0: 시작되지 않았음.
+\item	1: QRCU read-side 크리티컬 섹션 안에 있음.
+\item	2: QRCU read-side 크리티컬 섹션을 끝냈음.
+\iffalse
+
 \item	0: not yet started.
 \item	1: within QRCU read-side critical section.
 \item	2: finished with QRCU read-side critical section.
+\fi
 \end{enumerate}
 
+마지막으로, \co{mutex} 변수는 업데이트 쓰레드들의 느린 수행경로들을 직렬화
+하는데 사용됩니다.
+\iffalse
+
 Finally, the \co{mutex} variable is used to serialize updaters' slowpaths.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -1395,6 +1470,21 @@ Finally, the \co{mutex} variable is used to serialize updaters' slowpaths.
 \label{fig:analysis:QRCU Reader Process}
 \end{figure}
 
+QRCU 읽기 쓰레드들은
+Figure~\ref{fig:analysis:QRCU Reader Process} 에 보여진 \co{qrcu_reader()}
+프로세스에 의해 모델링 됩니다.
+do-od 루프가 line~5-16 에 있는데, 하나의 ``1'' 조건을 line~6 에 가지고 있어서
+이를 무한 루프로 만들어 줍니다.
+Line~7 은 글로벌 인덱스의 현재 값을 가져오고, line~8-15 는 그 값이 0이
+아니었다면 이를 원자적으로 증가 (\co{atomic_inc_not_zero()}) 시킵니다 (그리고
+루프를 나옵니다).
+Line~17 은 RCU read-side 크리티컬 섹션으로의 진입을 표시하고, line~18 은 이
+크리티컬 섹션으로부터 나오는 것을 표시하는데, 두 라인 모두 우리가 뒤에서
+마주하게 될 {\tt assert()} 문을 위해서입니다.
+Line~19 는 우리가 증가시켰던 같은 카운터를 어토믹하게 감소시키는데, 이렇게
+함으로써 RCU read-side 크리티컬 섹션을 빠져나오게 됩니다.
+\iffalse
+
 QRCU readers are modeled by the \co{qrcu_reader()} process shown in
 Figure~\ref{fig:analysis:QRCU Reader Process}.
 A do-od loop spans lines~5-16, with a single guard of ``1''
@@ -1407,6 +1497,7 @@ line~18 marks exit from this critical section, both lines for the benefit of
 the {\tt assert()} statement that we shall encounter later.
 Line~19 atomically decrements the same counter that we incremented,
 thereby exiting the RCU read-side critical section.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -1433,6 +1524,21 @@ thereby exiting the RCU read-side critical section.
 \label{fig:analysis:QRCU Unordered Summation}
 \end{figure}
 
+Figure~\ref{fig:analysis:QRCU Unordered Summation}
+에 보인 C 전처리기 매크로는 약한 메모리 순서 규칙을 에뮬레이션 하기 위해 두개의
+카운터들의 합을 구합니다.
+Line~2-13 은 카운터들 중 하나를 가져오고, line~14 는 나머지 하나를 가져와서
+그것들을 더합니다.
+어토믹 블락은 하나의 do-od 문으로 구성되어 있습니다.
+이 do-od 문 (line~3-12) 은 line~4 와 8 에 있는 두개의 무조건적인 브랜치들을
+가지고 있다는 점에서 일반적이지 않은데, 이는 Promela 가 비결정적으로 두개의
+브랜치 중 하나를 선택하게 합니다 (하지만 다시 말하지만, 전체 상태 공간 탐색은
+Promela 가 결국은 모든 가능한 상황의 선택지를 만들게 할 겁니다).
+첫번째 브랜치는 0번째 카운터를 가져오고 \co{i} 를 1 로 설정하고 (line~14 가
+첫번째 카운터를 가져오도록), 두번째 브랜치는 그 반대 일을 해서, 첫번째 카운터를
+가져오고 \co{i} 를 0으로 설정합니다 (line~14 에서 두번째 카운터를 가져오도록).
+\iffalse
+
 The C-preprocessor macro shown in
 Figure~\ref{fig:analysis:QRCU Unordered Summation}
 sums the pair of counters so as to emulate weak memory ordering.
@@ -1449,12 +1555,22 @@ The first branch fetches the zero-th counter and sets \co{i} to 1 (so
 that line~14 will fetch the first counter), while the second
 branch does the opposite, fetching the first counter and setting \co{i}
 to 0 (so that line~14 will fetch the second counter).
+\fi
 
 \QuickQuiz{}
+	이 do-od 문을 좀 더 간단하게 코딩하는 방법은 없을까요?
+	\iffalse
+
 	Is there a more straightforward way to code the do-od statement?
+	\fi
 \QuickQuizAnswer{
+	있습니다.
+	이걸 {\tt if-fi} 로 바꾸고 {\tt break} 문을 없애버리세요.
+	\iffalse
+
 	Yes.
 	Replace it with {\tt if-fi} and remove the two {\tt break} statements.
+	\fi
 } \QuickQuizEnd
 
 { \scriptsize
@@ -1526,6 +1642,18 @@ to 0 (so that line~14 will fetch the second counter).
 \label{fig:analysis:QRCU Updater Process}
 \end{figure}
 
+\co{sum_unordered} 매크로와 함께, 우리는 이제
+Figure~\ref{fig:analysis:QRCU Updater Process} 에 보여진 update-side 프로세스로
+넘어갈 수가 있게 되었습니다.
+이 update-side 프로세스는 line~7-57 의 관련된 do-od 루프를 애매하게 반복하게
+됩니다.
+이 루프를 통하는 각각의 패스는 먼저 line~12-21 에서 글로벌한 {\tt
+readerprogress} 배열을 로컬의 {\tt readerstart} 어레이로 스냅샷 뜹니다.
+이 스냅샷은 line~53 에서의 단정문에 사용될 겁니다.
+Line~23 은 \co{sum_unordered} 를 호출하고, 빠른 수행경로가 잠재적으로 사용
+가능하다면 line~24-27 에서 \co{sum_unordered} 를 다시 호출합니다.
+\iffalse
+
 With the \co{sum_unordered} macro in place, we can now proceed
 to the update-side process shown in
 Figure~\ref{fig:analysis:QRCU Updater Process}.
@@ -1537,6 +1665,16 @@ This snapshot will be used for the assertion on line~53.
 Line~23 invokes \co{sum_unordered}, and then lines~24-27
 re-invoke \co{sum_unordered} if the fastpath is potentially
 usable.
+\fi
+
+Line~28-40 은 필요하다면 느린 수행 경로의 코드를 수행하는데, line~30 과 38 에서
+update-side 락을 각각 획득하고 해제하며, line~31-33 에서 인덱스를 뒤집고,
+line~34-37 에서 모든 이전부터 존재한 읽기 쓰레드들이 완료되길 기다립니다.
+
+Line~44-56 에서는 이제 {\tt readerprogress} 배열의 현재 값들과 {\tt
+readerstart} 배열 안의 앞서 수집된 값들과 비교하며, 이 업데이트 전에 시작된
+읽기 쓰레드가 여전히 진행중이라면 단정문이 실패하도록 합니다.
+\iffalse
 
 Lines~28-40 execute the slowpath code if need be, with
 lines~30 and~38 acquiring and releasing the update-side lock,
@@ -1547,29 +1685,73 @@ Lines~44-56 then compare the current values in the {\tt readerprogress}
 array to those collected in the {\tt readerstart} array,
 forcing an assertion failure should any readers that started before
 this update still be in progress.
+\fi
 
 \QuickQuiz{}
+	왜 line~12-21 과 line~44-56 에 어토믹 블락이 있나요, 그 어토믹 블락들
+	안의 오퍼레이션들은 현존하는 제품화된 마이크로프로세서 중 어떤 것도
+	어토믹한 구현을 제공하지 않는데도 말이죠?
+	\iffalse
+
 	Why are there atomic blocks at lines~12-21
 	and lines~44-56, when the operations within those atomic
 	blocks have no atomic implementation on any current
 	production microprocessor?
+	\fi
 \QuickQuizAnswer{
+	그 오퍼레이션들은 단정문을 위한 것들일 뿐이기 때문입니다.
+	그것들은 알고리즘 자체를 위한 것이 아닙니다.
+	따라서 그것들을 어토믹으로 표시해도 문제가 되지 않고, 따라서 그것들을
+	어토믹으로 표시하는 것은 Promela 모델을 통해 탐색되어야 하는 상태
+	공간을 굉장히 줄여주게 됩니다.
+	\iffalse
+
 	Because those operations are for the benefit of the
 	assertion only.  They are not part of the algorithm itself.
 	There is therefore no harm in marking them atomic, and
 	so marking them greatly reduces the state space that must
 	be searched by the Promela model.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Line~24-27 에서 카운터들을 다시 합해보는 것은 \emph{정말로} 필요한
+	건가요?
+	\iffalse
+
 	Is the re-summing of the counters on lines~24-27
 	\emph{really} necessary?
+	\fi
 \QuickQuizAnswer{
+	그렇습니다. 이걸 확실히 모기 위해서, 이 라인들을 지우고 모델을
+	돌려보세요.
+
+	대안적으로는, 다음과 같은 단계들을 생각해 보세요:
+	\iffalse
+
 	Yes.  To see this, delete these lines and run the model.
 
 	Alternatively, consider the following sequence of steps:
+	\fi
 
 	\begin{enumerate}
+	\item	한 프로세스가 RCU read-side 크리티컬 섹션 안에 있어서, {\tt
+		ctr[0]} 의 값은 0이고 {\tt ctr[1]} 은 2 입니다.
+	\item	한 업데이트 쓰레드가 수행을 시작하고, 카운터들의 합이 2임을
+		보게 되고 따라서 빠른 수행경로는 실행될 수 없습니다.
+		따라서 락을 잡습니다.
+	\item	두번째 업데이트 쓰레드가 수행을 시작하고, {\tt ctr[0]} 을 값,
+		0을 가져옵니다.
+	\item	첫번째 업데이트 쓰레드가 {\tt ctr[0]} 에 1을 더하고, 인덱스를
+		바꾸고 (이제 0이 됩니다), {\tt ctr[1]} 에서 1을 뺍니다 (이제
+		1이 됩니다).
+	\item	두번째 업데이트 쓰레드가 {\tt ctr[1]} 의 값을 가져오는데,
+		지금은 1입니다.
+	\item	두번째 업데이트 쓰레드는 이제 원래의 읽기 쓰레드가 아직
+		완료되지 않았음에도 빠른 수행 경로를 진행해도 된다고 잘못된
+		결론을 내리게 됩니다.
+	\iffalse
+
 	\item	One process is within its RCU read-side critical
 		section, so that the value of {\tt ctr[0]} is zero and
 		the value of {\tt ctr[1]} is two.
@@ -1586,6 +1768,7 @@ this update still be in progress.
 	\item	The second updater now incorrectly concludes that it
 		is safe to proceed on the fastpath, despite the fact
 		that the original reader has not yet completed.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
 
@@ -1623,12 +1806,20 @@ this update still be in progress.
 \label{fig:analysis:QRCU Initialization Process}
 \end{figure}
 
+이제 남은건
+Figure~\ref{fig:analysis:QRCU Initialization Process} 의 초기화 블락 뿐입니다.
+이 블락은 단순히 카운터 쌍을 line~5-6 에서 초기화 하고, line~7-14 에서 읽기
+프로세스들을 시작시킨 후, line~15-21 에서 업데이트 프로세스들을 시작시킵니다.
+이는 상태 공간의 크기를 줄이기 위해 모두 하나의 어토믹 블락 안에서 수행됩니다.
+\iffalse
+
 All that remains is the initialization block shown in
 Figure~\ref{fig:analysis:QRCU Initialization Process}.
 This block simply initializes the counter pair on lines~5-6,
 spawns the reader processes on lines~7-14, and spawns the updater
 processes on lines~15-21.
 This is all done within an atomic block to reduce state space.
+\fi
 
 \subsubsection{Running the QRCU Example}
 \label{sec:formal:Running the QRCU Example}
