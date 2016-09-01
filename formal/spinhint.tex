@@ -1962,10 +1962,30 @@ the full proof of correctness described in the next section.
 \subsubsection{Alternative Approach: Proof of Correctness}
 \label{sec:formal:Alternative Approach: Proof of Correctness}
 
+비형식적인 증명~\cite{PaulMcKenney2007QRCUpatch} 는 다음과 같습니다:
+\iffalse
+
 An informal proof~\cite{PaulMcKenney2007QRCUpatch}
 follows:
+\fi
 
 \begin{enumerate}
+\item	\co{synchronize_qrcu()} 가 너무 일찍 종료되려면, 정의에 의해
+	\co{synchronize_qrcu()} 의 전체 수행 사이에 최소 하나의 읽기 쓰레드가
+	존재해야 합니다.
+\item	이 읽기 쓰레드에 연관된 카운터는 이 시간 간격 동안 최소 1이 되었을
+	겁니다.
+\item	\co{synchronize_qruc()} 코드는 최소 하나의 카운터는 최소 1이 되도록
+	강제합니다.
+\item	따라서, 어떤 시점에서든, 카운터들 가운데 하나는 최소 2가 되거나, 두개의
+	카운터들이 최소 1을 가질 겁니다.
+\item	하지만, \co{synchronize_qrcu()} 빠른 수행 경로 코드는 한번에 하나의
+	카운터의 값밖에 읽지 못합니다.
+	따라서 빠른 수행 경로 코드가 첫번째 카운터를 값이 0일 동안 읽어오지만
+	카운터 뒤집기에서는 경주 상황이 벌어져서 두번째 카운터가 1로 보이는
+	경우가 있을 수 있습니다.
+\iffalse
+
 \item	For \co{synchronize_qrcu()} to exit too early, then
 	by definition there must have been at least one reader
 	present during \co{synchronize_qrcu()}'s full
@@ -1982,6 +2002,24 @@ follows:
 	It is therefore possible for the fastpath code to fetch
 	the first counter while zero, but to race with a counter
 	flip so that the second counter is seen as one.
+\fi
+\item	그런 경주 조건 동안에 존재하는 최대 하나의 읽기 쓰레드가 있을 수
+	있는데, 그렇지 않다면 그 합은 2 이상이 될 것이기 때문인데, 이는
+	업데이트 쓰레드가 느린 수행경로를 취하도록 만들 것입니다.
+\item	하지만 그 경주 상황이 빠른 수행경로의 첫번째 카운터 읽기에서
+	발생한다면, 그리고 그 두번째 읽기에서 다시 일어난다면, 두개의 카운터
+	뒤집기가 있었어야만 합니다.
+\item	업데이트 쓰레드는 카운터를 한번만 뒤집으므로, 그리고 업데이트 쪽 락은
+	두개의 업데이트 쓰레드들이 동시적으로 카운터를 뒤집는 것을 방지하므로,
+	빠른 수행경로 코드가 뒤집기와 두번 경주상황을 만들 수 있는건 첫번째
+	업데이트 쓰레드가 완료했을 때입니다.
+\item	하지만 첫번째 업데이트 쓰레드는 모든 앞서 존재한 읽기 쓰레드들이
+	완료되기 전까지는 완료될 수 없습니다.
+\item	따라서, 카운터를 두번 뒤집으며 빠른 수행경로 경주상황이 완료된다면,
+	모든 앞서 존재한 읽기 쓰레드들은 완료되었어야만 하고, 따라서 빠른
+	수행경로를 취해도 안전합니다.
+\iffalse
+
 \item	There can be at most one reader persisting through such
 	a race condition, as otherwise the sum would be two or
 	greater, which would cause the updater to take the slowpath.
@@ -1998,10 +2036,16 @@ follows:
 \item	Therefore, if the fastpath races with a counter flip
 	twice in succession, all pre-existing readers must have
 	completed, so that it is safe to take the fastpath.
+\fi
 \end{enumerate}
+
+물론 모든 병렬 알고리즘에 이런 간단한 증명이 통하지는 않습니다.
+그런 경우에 있어서는 더 적합한 도구들을 모을 필요가 있을 겁니다.
+\iffalse
 
 Of course, not all parallel algorithms have such simple proofs.
 In such cases, it may be necessary to enlist more capable tools.
+\fi
 
 \subsubsection{Alternative Approach: More Capable Tools}
 \label{sec:formal:Alternative Approach: More Capable Tools}
