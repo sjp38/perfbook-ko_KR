@@ -196,18 +196,42 @@ lessons (re)learned during this effort.
 \subsubsection{Introduction to Preemptible RCU and dynticks}
 \label{sec:formal:Introduction to Preemptible RCU and dynticks}
 
+Per-CPU \co{dynticks_progress_counter} 변수가 dyntick 과 preemption 가능한 RCU
+사이의 인터페이스의 중심 역할을 합니다.
+이 변수는 연관된 CPU 가 dynticks-idle 모드일 때에는 짝수를 가지게 되고, 그렇지
+않을 때에는 홀수를 갖게 됩니다.
+CPU 는 다음의 세가지 이유로 dynticks-idle 모드를 빠져나갑니다:
+\iffalse
+
 The per-CPU \co{dynticks_progress_counter} variable is
 central to the interface between dynticks and preemptible RCU.
 This variable has an even value whenever the corresponding CPU
 is in dynticks-idle mode, and an odd value otherwise.
 A CPU exits dynticks-idle mode for the following three reasons:
+\fi
 
 \begin{enumerate}
+\item	태스크를 수행하기 시작하기 위해서,
+\item	중첩되어 있을 수 있는 인터럽트 핸들러들 가운데 가장 바깥쪽의 것에
+	들어가기 위해서, 그리고
+\item	NMI 핸들러에 들어갈 때.
+\iffalse
+
 \item	to start running a task,
 \item	when entering the outermost of a possibly nested set of interrupt
 	handlers, and
 \item	when entering an NMI handler.
+\fi
 \end{enumerate}
+
+Preemption 가능한 RCU 의 grace-period 장치는 언제 dynticks-idle CPU 가 안전하게
+무시될 수 있을지를 판단하기 위해서 \co{dynticks_progress_counter} 변수의 값을
+샘플링 합니다.
+
+다음의 세개의 섹션들은 태스크 인터페이스, 인터럽트/NMI 인터페이스, 그리고
+grace-period 장치에 의한 \co{dynticks_progress_counter} 변수의 사용에 대해서
+알아봅니다.
+\iffalse
 
 Preemptible RCU's grace-period machinery samples the value of
 the \co{dynticks_progress_counter} variable in order to
@@ -217,6 +241,7 @@ The following three sections give an overview of the task
 interface, the interrupt/NMI interface, and the use of
 the \co{dynticks_progress_counter} variable by the
 grace-period machinery.
+\fi
 
 \subsubsection{Task Interface}
 \label{sec:formal:Task Interface}
