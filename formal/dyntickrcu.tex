@@ -3,6 +3,14 @@
 \subsection{Promela Parable: dynticks and Preemptible RCU}
 \label{sec:formal:Promela Parable: dynticks and Preemptible RCU}
 
+2005년 8월부터 시작된 -rt 패치셋~\cite{IngoMolnar05a} 의 RCU 구현과 비슷한, RCU
+의 preemption 가능한 변종이 2008년 초에 메인라인 리눅스에 realtime 워크로드에
+대한 지원과 함께 받아들여졌습니다.
+Preemption 가능한 RCU 는 기존의 RCU 구현들은 RCU read-side 크리티컬 섹션
+내에서의 preemption 을 불가능하게 했기 때문에 지나친 real-time 대기시간을
+초래했기 때문에 real-time 워크로드를 위해 필요했습니다.
+\iffalse
+
 In early 2008, a preemptible variant of RCU was accepted into
 mainline Linux in support of real-time workloads,
 a variant similar to the RCU implementations in
@@ -11,6 +19,22 @@ since August 2005.
 Preemptible RCU is needed for real-time workloads because older
 RCU implementations disable preemption across RCU read-side
 critical sections, resulting in excessive real-time latencies.
+\fi
+
+하지만, 기존의 -rt 구현의 한가지 단점은 각각의 grace period 가 모든 각각의 CPU
+위에서, 설령 그 CPU 가 저전력의 ``dynticks-idle'' 상태에 있더라도, 작업을 해야
+하고, 그로 인해 RCU read-side 크리티컬 섹션들을 수행하기가 불가능하다는
+점이었습니다.
+Dynticks-idle 상태의 아이디어는 idle CPU 들은 에너지를 아끼기 위해 물리적으로
+성능을 낮춰야 한다는 것입니다.
+짤게 말해서, preemption 가능한 RCU 는 최신 리눅스 커널에서의 가치있는 에너지
+절약 기능을 무효화 시킬 수 있다는 점입니다.
+Josh Triplett 과 Paul McKenney 가 CPU 들이 RCU graceperiod 사이에도 저전력
+상태를 유지할 수 있는 (따라서 리눅스 커널의 에너지 절약 기능을 유지할 수 있는)
+방법에 대해서 토론을 가졌습니다만, Steve Rostedt 가 새로운 dyntick 구현을 -rt
+패치셋의 preemtpion 가능한 RCU 와 결합시키기 전까지는 해결책이 나오지
+않았습니다.
+\iffalse
 
 However, one disadvantage of the older -rt implementation
 was that each grace period
@@ -27,6 +51,21 @@ CPUs to remain in low-power state throughout an RCU grace period
 (thus preserving the Linux kernel's ability to conserve energy), matters
 did not come to a head until Steve Rostedt integrated a new dyntick
 implementation with preemptible RCU in the -rt patchset.
+\fi
+
+이 조합은 Steve 의 시스템들 중 하나를 부팅 과정에서 멈춰있게 만들었고, 따라서
+10월에, Paul 은 preemption 가능한 RCU 의 grace-period 처리 부분에 dynticks 에
+친화적인 수정사항을 코딩 했습니다.
+Steve 는 \co{irq_enter()} 와 \co{irq_exit()} 인터럽트 진입/퇴장 함수들로부터
+호출되는 \co{rcu_irq_enter()} 와 \co{rcu_irq_exit()} 인터페이스들을
+코딩했습니다.
+이 \co{rcu_riq_enter()} 와 \co{rcu_irq_exit()} 함수들은 dynticks-idle CPU 들이
+RCU read-side 크리티컬 섹션들을 포함하고 있는 인터럽트 핸들러에 의해 순간적으로
+성능을 올리게 되는 상황을 안정적으로 처리하기 위해 필요했습니다.
+이런 변경 사항들과 함께, Steve 의 시스템은 안정적으로 부팅되었습니다만, Paul 은
+첫번째 시도만에 코드가 올바르게 작성되지는 않았을 것이라는 가정 하에 지속적으로
+코드를 검사하기를 계속했습니다.
+\iffalse
 
 This combination caused one of Steve's systems to hang on boot, so in
 October, Paul coded up a dynticks-friendly modification to preemptible RCU's
@@ -42,6 +81,23 @@ handler containing RCU read-side critical sections.
 With these changes in place, Steve's system booted reliably,
 but Paul continued inspecting the code periodically on the assumption
 that we could not possibly have gotten the code right on the first try.
+\fi
+
+Paul 은 2007년 10월부터 2008년 2월까지 반복적으로 코드를 리뷰했고 거의 매번
+최소 하나의 버그는 찾아냈습니다.
+한 경우에는, Paul 은 심지어 그 버그가 실체가 없는 것이란 것을 깨닫기 전에도
+수정사항을 코딩하고 테스트 하기도 했고, 사실 모든 경우들에 있어서, ``버그'' 는
+실체가 없는 것으로 드러났습니다.
+
+2월 말 즈음에, Paul 은 이 게임에 지쳐버렸습니다.
+따라서 그는
+Section~\ref{chp:formal:Formal Verification} 에서 이야기한 것처럼
+Promela 와 spin~\cite{Holzmann03a} 의 도움을 받기로 했습니다.
+다음의 내용은 일곱개의 갈수록 현실적인 Promela 모델들을 보이는데, 그 중
+마지막의 것은 상태 공간으로 약 40GB 의 메인 메모리를 소비합니다.
+
+더 중요한건, Promela 와 Spin 은 제게 매우 미묘한 버그를 찾아줬습니다!
+\iffalse
 
 Paul reviewed the code repeatedly from October 2007 to February 2008,
 and almost always found at least one bug.
@@ -58,15 +114,40 @@ Promela models, the last of which passes, consuming about
 40GB of main memory for the state space.
 
 More important, Promela and Spin did find a very subtle bug for me!
+\fi
 
 \QuickQuiz{}
+	와우, 거 참 대단하네요!
+	이제, 저는 40GB 의 메인 메모리를 가진 기계가 없다면 뭘 해야 하는거죠???
+	\iffalse
+
 	Yeah, that's just great!
 	Now, just what am I supposed to do if I don't happen to have a
 	machine with 40GB of main memory???
+	\fi
 \QuickQuizAnswer{
+	진정하세요, 이 질문에 대한 많은 정당한 답들이 있습니다:
+	\iffalse
+
 	Relax, there are a number of lawful answers to
 	this question:
+	\fi
 	\begin{enumerate}
+	\item	해당 모델을 더 최적화 해서, 메모리 소비량을 줄이세요.
+	\item	리눅스 커널의 코드에 있는 주석부터 시작해서 연필과 종이 증명
+		방법을 실행하세요.
+	\item	비록 코드의 정확성을 증명할 수는 없지만 숨겨진 버그들을 찾아줄
+		수 있는, 신중히 생각한 고문 테스트들을 고안하세요.
+	\item	작은 기계들의 클러스터들을 사용해서 모델 체크를 하는 도구들을
+		만들고 사용하려는 움직임이 일부 있습니다.
+		하지만, Paul 은 사용할 수 있는 일부 커다란 기계들로 인해서 그런
+		도구들을 직접 사용해 본 적은 없음을 알아두시기 바랍니다.
+	\item	당신의 문제를 적용하기에 맞는 크기의 메모리 크기를 가진, 구매할
+		만한 각겨대의 시스템이 나오길 기다리세요.
+	\item	짧은 시간 동안 커다란 시스템을 대여하기 위해 클라우드 컴퓨팅
+		서비스들 가운데 하나를 고려해 보세요.
+	\iffalse
+
 	\item	Further optimize the model, reducing its memory consumption.
 	\item	Work out a pencil-and-paper proof, perhaps starting with the
 		comments in the code in the Linux kernel.
@@ -81,13 +162,28 @@ More important, Promela and Spin did find a very subtle bug for me!
 		to fit your problem.
 	\item	Use one of a number of cloud-computing services to rent
 		a large system for a short time period.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
+
+여전히 더 나은 방향은 더 작은 상태 공간을 갖는, 더 간단하고 더 빠른 알고리즘을
+사용하는 것일 겁니다.
+그보다도 더 나은 방법은 그 정확성이 평상시의 관찰자에 의해서도 분명할 수
+있을만큼 간단한 알고리즘들을 사용하는 것이겠죠!
+\iffalse
 
 Still better would be to come up with a simpler and faster algorithm
 that has a smaller state space.
 Even better would be an algorithm so simple that its correctness was
 obvious to the casual observer!
+\fi
+
+Section~\ref{sec:formal:Introduction to Preemptible RCU and dynticks}
+은 preemption 가능한 RCU 의 dynticks 인터페이스에 대해 전체적으로 살펴보고,
+Section~\ref{sec:formal:Validating Preemptible RCU and dynticks} 와
+Section~\ref{sec:formal:Lessons (Re)Learned} 은 이로써 (다시) 배운 교훈들을
+나열합니다.
+\iffalse
 
 Section~\ref{sec:formal:Introduction to Preemptible RCU and dynticks}
 gives an overview of preemptible RCU's dynticks interface,
@@ -95,6 +191,7 @@ Section~\ref{sec:formal:Validating Preemptible RCU and dynticks},
 and
 Section~\ref{sec:formal:Lessons (Re)Learned} lists
 lessons (re)learned during this effort.
+\fi
 
 \subsubsection{Introduction to Preemptible RCU and dynticks}
 \label{sec:formal:Introduction to Preemptible RCU and dynticks}
