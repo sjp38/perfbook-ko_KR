@@ -389,6 +389,26 @@ void smoketest(void)
 	printf("\nsl_dump():\n");
 	sl_dump(&eh.sle_e);
 
+	printf("\nRebalancing:\n");
+	skiplist_init(&eh.sle_e, testcmp);
+	e0.data = 1;
+	testsl_insert(&e0, &eh);
+	e1.data = 2;
+	testsl_insert(&e1, &eh);
+	e2.data = 3;
+	testsl_insert(&e2, &eh);
+	e3.data = 4;
+	testsl_insert(&e3, &eh);
+	e00.data = 5;
+	testsl_insert(&e00, &eh);
+	sl_dump(&eh.sle_e);
+	printf("--- Node 0 to level 7:\n");
+	skiplist_balance_node(&eh.sle_e, (void *)0, 7);
+	sl_dump(&eh.sle_e);
+	printf("--- Node 1 to level 6:\n");
+	skiplist_balance_node(&eh.sle_e, (void *)1, 6);
+	sl_dump(&eh.sle_e);
+
 	printf("\nRandom insertions:\n");
 	for (i = 0; i < 100000; i++) {
 		skiplist_init(&eh.sle_e, testcmp);
@@ -418,6 +438,8 @@ void smoketest(void)
 
 
 /* Parameters for performance test. */
+int dump_skiplists = 0;
+int no_scan = 0;
 int nreaders = 2;
 int nupdaters = 5;
 int updatewait = 1;
@@ -443,6 +465,7 @@ struct stresstest_attr {
 	long long nscans;
 	long long nadds;
 	long long naddfails;
+	long long nbals;
 	long long ndels;
 	long long ndelfails;
 	int mycpu;
@@ -504,6 +527,56 @@ int stresstest_del(unsigned long key)
 	return 0;
 }
 
+/* Do a forward and a reverse scan of the entire skiplist. */
+int stresstest_reader_scan(void)
+{
+	struct skiplist_iter sli;
+	struct skiplist *slp;
+	struct testsl *tslp;
+
+	/* Value-based iterators. */
+	rcu_read_lock();
+	slp = skiplist_valiter_first(&head_sl.sle_e);
+	while (slp) {
+		rcu_read_unlock();
+		tslp = container_of(slp, struct testsl, sle_e);
+		slp = skiplist_valiter_next(&head_sl.sle_e,
+					    (void *)tslp->data);
+		rcu_read_lock();
+	}
+	slp = skiplist_valiter_last(&head_sl.sle_e);
+	while (slp) {
+		rcu_read_unlock();
+		tslp = container_of(slp, struct testsl, sle_e);
+		slp = skiplist_valiter_prev(&head_sl.sle_e,
+					    (void *)tslp->data);
+		rcu_read_lock();
+	}
+	rcu_read_unlock();
+
+	/* Pointer-hint-based iterators. */
+	rcu_read_lock();
+	slp = skiplist_ptriter_first(&head_sl.sle_e, &sli);
+	while (slp) {
+		rcu_read_unlock();
+		tslp = container_of(slp, struct testsl, sle_e);
+		slp = skiplist_ptriter_next(&head_sl.sle_e,
+					    (void *)tslp->data, &sli);
+		rcu_read_lock();
+	}
+	slp = skiplist_ptriter_last(&head_sl.sle_e, &sli);
+	while (slp) {
+		rcu_read_unlock();
+		tslp = container_of(slp, struct testsl, sle_e);
+		slp = skiplist_ptriter_prev(&head_sl.sle_e,
+					    (void *)tslp->data, &sli);
+		rcu_read_lock();
+	}
+	rcu_read_unlock();
+
+	return 4;
+}
+
 /* Stress test reader thread. */
 void *stresstest_reader(void *arg)
 {
@@ -513,8 +586,6 @@ void *stresstest_reader(void *arg)
 	long long nlookups = 0;
 	long long nlookupfails = 0;
 	long long nscans = 0;
-	struct skiplist *slp;
-	struct testsl *tslp;
 
 	run_on(pap->mycpu);
 	rcu_register_thread();
@@ -549,22 +620,8 @@ void *stresstest_reader(void *arg)
 		i++;
 		if (i >= valsperupdater * nupdaters)
 			i = 0;
-		rcu_read_lock();
-		slp = skiplist_valiter_first(&head_sl.sle_e);
-		while (slp) {
-			tslp = container_of(slp, struct testsl, sle_e);
-			slp = skiplist_valiter_next(&head_sl.sle_e,
-						    (void *)tslp->data);
-		}
-		nscans++;
-		slp = skiplist_valiter_last(&head_sl.sle_e);
-		while (slp) {
-			tslp = container_of(slp, struct testsl, sle_e);
-			slp = skiplist_valiter_prev(&head_sl.sle_e,
-						    (void *)tslp->data);
-		}
-		nscans++;
-		rcu_read_unlock();
+		if (!no_scan)
+			nscans += stresstest_reader_scan();
 	}
 	pap->nlookups = nlookups;
 	pap->nlookupfails = nlookupfails;
@@ -579,6 +636,7 @@ void *stresstest_updater(void *arg)
 	long i;
 	long j;
 	long k;
+	void *key;
 	int gf;
 	struct stresstest_attr *pap = arg;
 	int myid = pap->myid;
@@ -586,6 +644,7 @@ void *stresstest_updater(void *arg)
 	struct testsl *tslp;
 	long long nadds = 0;
 	long long naddfails = 0;
+	long long nbals = 0;
 	long long ndels = 0;
 	long long ndelfails = 0;
 
@@ -620,6 +679,7 @@ void *stresstest_updater(void *arg)
 				/* Still initializing, kill statistics. */
 				nadds = 0;
 				naddfails = 0;
+				nbals = 0;
 				ndels = 0;
 				ndelfails = 0;
 			}
@@ -637,8 +697,14 @@ void *stresstest_updater(void *arg)
 				nadds++;
 				if (stresstest_add(&tslp[i]))
 					naddfails++;
-				if ((nadds & 0xff) == 0)
+				if ((nadds & 0xff) == 0) {
 					quiescent_state();
+					k = random() % SL_MAX_LEVELS;
+					key = (void *)tslp[i].data;
+					skiplist_balance_node(&head_sl.sle_e,
+							      key, k);
+					nbals++;
+				}
 			}
 			ndels++;
 			if (stresstest_del((unsigned long)j))
@@ -660,10 +726,15 @@ void *stresstest_updater(void *arg)
 	for (i = 0; i < elperupdater; i++) {
 		if (tslp[i].in_table != 1)
 			continue;
-		(void)stresstest_del((unsigned long)i);
+		(void)stresstest_del(tslp[i].data);
 	}
 
 	skiplist_lock(&head_sl.sle_e);
+	if (dump_skiplists) {
+		printf("Skiplist dump 2 from thread %d\n:", pap->myid);
+		sl_dump(&head_sl.sle_e);
+		fflush(stdout);
+	}
 	skiplist_fsck(&head_sl.sle_e);
 	skiplist_unlock(&head_sl.sle_e);
 
@@ -672,10 +743,20 @@ void *stresstest_updater(void *arg)
 	poll(NULL, 0, 100);
 	synchronize_rcu();
 
+	skiplist_lock(&head_sl.sle_e);
+	if (dump_skiplists) {
+		printf("Skiplist dump 2 from thread %d\n:", pap->myid);
+		sl_dump(&head_sl.sle_e);
+		fflush(stdout);
+	}
+	skiplist_fsck(&head_sl.sle_e);
+	skiplist_unlock(&head_sl.sle_e);
+
 	rcu_unregister_thread();
 	free(tslp);
 	pap->nadds = nadds;
 	pap->naddfails = naddfails;
+	pap->nbals = nbals;
 	pap->ndels = ndels;
 	pap->ndelfails = ndelfails;
 	return NULL;
@@ -692,6 +773,7 @@ void stresstest(void)
 	long long nscans = 0;
 	long long nadds = 0;
 	long long naddfails = 0;
+	long long nbals = 0;
 	long long ndels = 0;
 	long long ndelfails = 0;
 	long long starttime;
@@ -713,6 +795,7 @@ void stresstest(void)
 		pap[i].nscans = 0;
 		pap[i].nadds = 0;
 		pap[i].naddfails = 0;
+		pap[i].nbals = 0;
 		pap[i].ndels = 0;
 		pap[i].ndelfails = 0;
 		pap[i].mycpu = (i * cpustride) % maxcpus;
@@ -739,6 +822,14 @@ void stresstest(void)
 	ACCESS_ONCE(goflag) = GOFLAG_STOP;
 	wait_all_threads();
 
+	/* Don't need to lock anything here: No more updates happening. */
+	if (dump_skiplists) {
+		printf("Skiplist dump from parent thread\n:");
+		sl_dump(&head_sl.sle_e);
+		fflush(stdout);
+	}
+	skiplist_fsck(&head_sl.sle_e);
+
 	/* Collect stats and output them. */
 	for (i = 0; i < nreaders + nupdaters; i++) {
 		nlookups += pap[i].nlookups;
@@ -746,11 +837,12 @@ void stresstest(void)
 		nscans += pap[i].nscans;
 		nadds += pap[i].nadds;
 		naddfails += pap[i].naddfails;
+		nbals += pap[i].nbals;
 		ndels += pap[i].ndels;
 		ndelfails += pap[i].ndelfails;
 	}
-	printf("nlookups: %lld %lld scans: %lld  nadds: %lld %lld  ndels: %lld %lld  duration: %g\n",
-	       nlookups, nlookupfails, nscans, nadds, naddfails, ndels, ndelfails, starttime / 1000.);
+	printf("nlookups: %lld %lld scans: %lld  nadds: %lld %lld  nbals: %lld  ndels: %lld %lld  duration: %g\n",
+	       nlookups, nlookupfails, nscans, nadds, naddfails, nbals, ndels, ndelfails, starttime / 1000.);
 	printf("ns/read+scan: %g  ns/update: %g\n",
 	       (starttime * 1000. * (double)nreaders) / (double)(nlookups + nscans),
 	       ((starttime * 1000. * (double)nupdaters) /
@@ -773,7 +865,9 @@ void usage(char *progname, const char *format, ...)
 	fprintf(stderr, "\t--cpustride\n");
 	fprintf(stderr, "\t\tCPU stride, defaults to 1.\n");
 	fprintf(stderr, "\t--debug\n");
-	fprintf(stderr, "\t\tEnable additional debug checks..\n");
+	fprintf(stderr, "\t\tEnable additional debug checks.\n");
+	fprintf(stderr, "\t--dump_skiplists\n");
+	fprintf(stderr, "\t\tDump skiplists at end of stresstest.\n");
 	fprintf(stderr, "\t--duration\n");
 	fprintf(stderr, "\t\tDuration of test, in milliseconds, defaults.\n");
 	fprintf(stderr, "\t\tto 10.\n");
@@ -781,6 +875,8 @@ void usage(char *progname, const char *format, ...)
 	fprintf(stderr, "\t\tSkiplist elements per updater.  A largish\n");
 	fprintf(stderr, "\t\tnumber is required to allow for grace-period\n");
 	fprintf(stderr, "\t\tlatency.  Defaults to 2048.\n");
+	fprintf(stderr, "\t--no-scan\n");
+	fprintf(stderr, "\t\tOmit full-skiplist scans from stresstest.\n");
 	fprintf(stderr, "\t--nreaders\n");
 	fprintf(stderr, "\t\tNumber of reader threads.\n");
 	fprintf(stderr, "\t--nupdaters\n");
@@ -827,6 +923,8 @@ int main(int argc, char *argv[])
 				      "%s must be > 0\n", argv[i - 1]);
 		} else if (strcmp(argv[i], "--debug") == 0) {
 			debug = 1;
+		} else if (strcmp(argv[i], "--dump-skiplists") == 0) {
+			dump_skiplists = 1;
 		} else if (strcmp(argv[i], "--duration") == 0) {
 			duration = strtol(argv[++i], NULL, 0);
 			if (duration < 0)
@@ -837,6 +935,8 @@ int main(int argc, char *argv[])
 			if (elperupdater <= 0)
 				usage(argv[0],
 				      "%s must be > 0\n", argv[i - 1]);
+		} else if (strcmp(argv[i], "--no-scan") == 0) {
+			no_scan = 1;
 		} else if (strcmp(argv[i], "--nreaders") == 0) {
 			nreaders = strtol(argv[++i], NULL, 0);
 			if (nreaders < 0)
