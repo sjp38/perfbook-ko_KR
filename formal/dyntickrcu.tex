@@ -246,8 +246,13 @@ grace-period machinery.
 \subsubsection{Task Interface}
 \label{sec:formal:Task Interface}
 
+특정 CPU 가 더이상 수행할 태스크가 존재하지 않아 dynticks-idle 모드로 들어갈
+때에, 해당 CPU 는 \co{rcu_enter_nohz()} 를 호출합니다:
+\iffalse
+
 When a given CPU enters dynticks-idle mode because it has no more
 tasks to run, it invokes \co{rcu_enter_nohz()}:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -261,6 +266,15 @@ tasks to run, it invokes \co{rcu_enter_nohz()}:
 \end{verbatim}
 }
 
+이 함수는 단순히 \co{dynticks_progress_counter} 의 값을 증가시키고 그 결과가
+짝수인지를 체크합니다만, 그전에 먼저, \co{dynticks_progress_counter} 의 새로운
+값을 보게될 다른 CPU 가 앞의 RCU read-side 크리티컬 섹션의 완료 역시 보게 될
+것을 보장하기 위해 메모리 배리어를 실행합니다.
+
+비슷하게, dynticks-idle 모드에 있는 CPU 가 새로운 수행가능한 태스크를
+실행하기를 시작할 준비를 할 때에는, \co{rcu_exit_nohz} 를 수행합니다:
+\iffalse
+
 This function simply increments \co{dynticks_progress_counter} and
 checks that the result is even, but first executing a memory barrier
 to ensure that any other CPU that sees the new value of
@@ -270,6 +284,7 @@ of any prior RCU read-side critical sections.
 Similarly, when a CPU that is in dynticks-idle mode prepares to
 start executing a newly runnable task, it invokes
 \co{rcu_exit_nohz}:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -283,6 +298,13 @@ start executing a newly runnable task, it invokes
 \end{verbatim}
 }
 
+이 함수는 한번더 \co{dynticks_progress_counter} 의 값을 증가시킵니다만, 어떤
+다른 CPU 가 뒤의 RCU read-side 크리티컬 섹션의 결과를 보게 된다면 그 CPU 는
+\co{dynticks_progress_counter} 의 증가된 값 엯 비로 수 있을 것을 보장하기 위해
+값 증가에 이어 메모리 배리어를 실행시킵니다.
+마지막으로, \co{rcu_exit_nohz()} 는 값 증가의 결과가 홀수임을 확인합니다.
+\iffalse
+
 This function again increments \co{dynticks_progress_counter},
 but follows it with a memory barrier to ensure that if any other CPU
 sees the result of any subsequent RCU read-side critical section,
@@ -295,6 +317,7 @@ The \co{rcu_enter_nohz()} and \co{rcu_exit_nohz}
 functions handle the case where a CPU enters and exits dynticks-idle
 mode due to task execution, but does not handle interrupts, which are
 covered in the following section.
+\fi
 
 \subsubsection{Interrupt Interface}
 \label{sec:formal:Interrupt Interface}
