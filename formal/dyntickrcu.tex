@@ -322,6 +322,18 @@ covered in the following section.
 \subsubsection{Interrupt Interface}
 \label{sec:formal:Interrupt Interface}
 
+\co{rcu_irq_enter()} 와 \co{rcu_irq_exit()} 함수들은 인터럽트/NMI 진입과 종료를
+각각 처리합니다.
+물론, 중첩된 인터럽트들 또한 적절하게 처리되어야만 합니다.
+중첩 인터럽트의 가능성은 인터럽트나 NMI 핸들러 로의 진입 시에
+(\co{rcu_irq_enter()} 에서) 값이 증가되고 종료 시에(\co{rcu_irq_exit()} 에서)
+값이 감소되는 두번째 per-CPU 변수, \co{rcu_update_flag} 에 의해 처리됩니다.
+추가적으로, 앞서서부터 존재해온 \co{in_interrupt()} 기능은 인터럽트/NMI 가 가장
+바깥의 것인지 중첩된 것인지 구별해 내는데에 사용됩니다.
+
+인터럽트 진입은 아래 보여진 \co{rcu_irq_enter()} 에서 처리됩니다:
+\iffalse
+
 The \co{rcu_irq_enter()} and \co{rcu_irq_exit()}
 functions handle interrupt/NMI entry and exit, respectively.
 Of course, nested interrupts must also be properly accounted for.
@@ -334,6 +346,7 @@ used to distinguish between an outermost or a nested interrupt/NMI.
 
 Interrupt entry is handled by the \co{rcu_irq_enter()}
 shown below:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -354,6 +367,19 @@ shown below:
 \end{verbatim}
 }
 
+Line~3 는 현재 CPU 의 숫자를 가져오고, line~5 와 6 는 \co{rcu_update_flag} 중첩
+카운터가 0이 아니라면 그 값을 증가시킵니다.
+Line~7-9 는 자신이 인터럽트의 가장 바깥 단계인지를 체크하고, 만약 그렇다면
+\co{dynticks_progress_counter} 가 증가되어야 합니다.
+그렇다면, line~10 에서 \co{dynticks_progress_counter} 의 값을 증가시키고,
+line~11 에서 메모리 배리어를 실행한 후, line~12 에서 \co{rcu_update_flag} 의
+값을 증가시킵니다.
+\co{rcu_exit_nohz()} 에서와 마찬가지로, 이 메모리 배리어는 이 인터럽트 핸들러
+안에서의 RCU read-side 크리티컬 섹션의 영향을 본 CPU 는
+\co{dynticks_progress_counter} 의 값의 증가 결과 역시 볼 수 있을 것을
+보장합니다.
+\iffalse
+
 Line~3 fetches the current CPU's number, while lines~5 and~6
 increment the \co{rcu_update_flag} nesting counter if it
 is already non-zero.
@@ -368,12 +394,35 @@ any other CPU that sees the effects of an RCU read-side critical section
 in the interrupt handler (following the \co{rcu_irq_enter()}
 invocation) will also see the increment of
 \co{dynticks_progress_counter}.
+\fi
 
 \QuickQuiz{}
+	왜 간단하게 \co{rcu_update_flag} 의 값을 증가시키고,
+	\co{rcu_update_flag} 의 기존 값이 0일 경우에만
+	\co{dynticks_progress_counter} 의 값을 증가시키는 방식을 사용하지
+	않는거죠???
+	\iffalse
+
 	Why not simply increment \co{rcu_update_flag}, and then only
 	increment \co{dynticks_progress_counter} if the old value
 	of \co{rcu_update_flag} was zero???
+	\fi
 \QuickQuizAnswer{
+	이는 NMI 의 존재 시에 실패합니다.
+	이를 자세히 보기 위해, \co{rcu_irq_enter()} 가 \co{rcu_update_flag} 를
+	증가시킨 직후, 하지만 \co{dynticks_progress_counter} 를 증가시키기 전에
+	NMI 를 받았다고 생각해 봅시다.
+	NMI 에 의해 호출된 \co{rcu_irq_enter()} 의 인스턴스는
+	\co{rcu_update_flag} 의 원래 값이 0이 아닌 것으로 보게 될 것이고,
+	따라서 \co{dynticks_progress_counter} 의 값을 증가시키지 않을 겁니다.
+	이는 RCU grace-period 치가 이 CPU 에서 NMI 핸들러가 실행되었음을 알 수
+	있는 증거를 남기지 않을 것이고, 따라서 이 NMI 핸들러 내에서의 모든 RCU
+	red-side 크리티컬 섹션들은 RCU 보호를 깨트릴 겁니다.
+
+	그 정의에 의해 마스킹 될 수 없는 NMI 핸들러들의 존재 가능성은 정말로 이
+	코드를 복잡하게 만듭니다.
+	\iffalse
+
 	This fails in presence of NMIs.
 	To see this, suppose an NMI was received just after
 	\co{rcu_irq_enter()} incremented \co{rcu_update_flag},
@@ -388,21 +437,39 @@ invocation) will also see the increment of
 
 	The possibility of NMI handlers, which, by definition cannot
 	be masked, does complicate this code.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 line~7 이 우리가 가장 바깥의 인터럽트에 있음을 알게 된다면, 우린
+	\emph{항상} \co{dynticks_progress_counter} 의 값을 증가시켜야 하는 것
+	아닌가요?
+	\iffalse
+
 	But if line~7 finds that we are the outermost interrupt,
 	wouldn't we \emph{always} need to increment
 	\co{dynticks_progress_counter}?
+	\fi
 \QuickQuizAnswer{
+	수행 중인 태스크를 인터럽트 했다면 그렇지 않습니다!
+	그런 경우에는, \co{dynticks_progress_counter} 는 이미
+	\co{rcu_exit_nohz()} 에 의해 값이 증가되었을 것이고, 이 경우에 대해서는
+	값을 한번 더 증가시킬 필요가 없을 겁니다.
+	\iffalse
+
 	Not if we interrupted a running task!
 	In that case, \co{dynticks_progress_counter} would
 	have already been incremented by \co{rcu_exit_nohz()},
 	and there would be no need to increment it again.
+	\fi
 } \QuickQuizEnd
+
+인터럽트 종료는 \co{rcu_irq_exit()} 에 의해 비슷하게 처리됩니다:
+\iffalse
 
 Interrupt exit is handled similarly by
 \co{rcu_irq_exit()}:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -423,6 +490,22 @@ Interrupt exit is handled similarly by
 \end{verbatim}
 }
 
+Line~3 은 앞에서처럼 현재 CPU 의 번호를 가져옵니다.
+Line~5 는 \co{rcu_update_flag} 의 값이 0이 아닌지 확인해보고, 그렇지 않다면
+곧바로 (함수의 마지막으로 제어를 넘김으로써) 리턴합니다.
+그렇지 않다면, line~6 부터 12 가 수행됩니다.
+Line~6 은 \co{rcu_update_flag} 의 값을 감소시키고, 그 결과가 0이 아니라면
+리턴합니다.
+Line~8 은 우리가 정말로 중첩된 인터럽트들 가운데 가장 마지막 단계를 빠져나가고
+있음을 검증하고, line~9 에서 메모리 배리어를 수행한 후, line~10 에서
+\co{dynticks_progress_counter} 의 값을 증가시키고, line~11 과~12 에서 이 변수가
+이제는 짝수임을 검증합니다.
+\co{rcu_enter_nohz()} 에서와 같이, 메모리 배리어는
+\co{dynticks_progress_counter} 의 값 증가를 본 다른 CPU 는 해당 인터럽트 핸들러
+내에서의 (\co{rcu_irq_exit()} 호출을 앞서 수행된) RCU read-side 크리티컬 섹션의
+결과 역시 보게 될것을 보장합니다.
+\iffalse
+
 Line~3 fetches the current CPU's number, as before.
 Line~5 checks to see if the \co{rcu_update_flag} is
 non-zero, returning immediately (via falling off the end of the
@@ -440,6 +523,14 @@ any other CPU that sees the increment of
 will also see the effects of an RCU read-side critical section
 in the interrupt handler (preceding the \co{rcu_irq_exit()}
 invocation).
+\fi
+
+이 두 섹션들은 \co{dynticks_progress_counter} 변수가 태스크들과 인터럽트, NMI
+에 의해 dynticks-idle 모드로 들어갈 때와 빠져나올 때에 어떻게 관리되는지를
+설명했습니다.
+다음 섹션은 이 변수가 preemption 가능한 RCU 의 grace-period 장치에 의해 어떻게
+사용되는지를 설명합니다.
+\iffalse
 
 These two sections have described how the
 \co{dynticks_progress_counter} variable is maintained during
@@ -447,6 +538,7 @@ entry to and exit from dynticks-idle mode, both by tasks and by
 interrupts and NMIs.
 The following section describes how this variable is used by
 preemptible RCU's grace-period machinery.
+\fi
 
 \subsubsection{Grace-Period Interface}
 \label{sec:formal:Grace-Period Interface}
