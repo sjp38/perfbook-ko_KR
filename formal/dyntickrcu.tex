@@ -550,6 +550,19 @@ preemptible RCU's grace-period machinery.
 \label{fig:formal:Preemptible RCU State Machine}
 \end{figure}
 
+Figure~\ref{fig:formal:Preemptible RCU State Machine} 에 보인 네개의 preemption
+가능한 RCU grace-period 상태등 가운데, \co{rcu_try_flip_waitack_state()} 와
+\co{rcu_try_flip_waitmb_state()} 상태들만이 다른 CPU 들이 응답하길 기다려야
+합니다.
+
+물론, 한 CPU 가 dynticks-idle 상태에 있다면, 그걸 기다릴 수는 없습니다.
+따라서, 이 두개의 상태들 중 하나에 들어가기 직전에, 앞의 상태는 각 CPU 들의
+\co{dynticks_progress_counter} 변수의 값들의 스탭샷을 떠놓고, 그 스냅샷을
+또다른 per-CPU 변수인 \co{rcu_dyntick_snapshot} 에 넣어둡니다.
+이는 아래에 보여진 것과 같은 \co{dyntick_save_progress_counter()} 를
+호출함으로써 이뤄집니다:
+\iffalse
+
 Of the four preemptible RCU grace-period states shown in
 Figure~\ref{fig:formal:Preemptible RCU State Machine},
 only the \co{rcu_try_flip_waitack_state()}
@@ -565,6 +578,7 @@ snapshot in another per-CPU variable,
 \co{rcu_dyntick_snapshot}.
 This is accomplished by invoking
 \co{dyntick_save_progress_counter()}, shown below:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -576,8 +590,13 @@ This is accomplished by invoking
 \end{verbatim}
 }
 
+The \co{rcu_try_flip_waitack_state()} 상태는 아래에 보여진 것과 같은
+\co{rcu_try_flip_waitack_needed()} 를 호출합니다:
+\iffalse
+
 The \co{rcu_try_flip_waitack_state()} state invokes
 \co{rcu_try_flip_waitack_needed()}, shown below:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -599,6 +618,20 @@ The \co{rcu_try_flip_waitack_state()} state invokes
 \end{verbatim}
 }
 
+Line~7 과 8 은 \co{dynticks_progress_counter} 의 현재 버전과 스탭샷 버전을 각각
+가져옵니다.
+Line~9 에서의 메모리 배리어는 뒤의 \co{rcu_try_flip_waitzero_state} 에서의
+카운터 체크가 이 카운터들을 읽어오는 행위 뒤에 이뤄짐을 분명히
+ㅎㅎㅎㅎㅎㅎ합니다.
+Line~10 과 11 은 해당 CPU 가 스냅샷이 찍힌 후로 dynticks-idle 상태를 유지했다면
+0을 리턴 (해당 CPU 와의 커뮤니케이션이 필요치 않음을 의미) 합니다.
+비슷하게, Line~12 와 13 은 해당 CPU 가 초기에 dynticks-idle 상태였거나
+dynticks-idle 상태를 완전히 지나왔다면 0을 리턴합니다.
+이 두가지 경우 모두에 있어서, 해당 CPU 가 grace-period zk운터의 옜날 값을
+가져왔을 수는 없습니다.
+이런 조건들 가운데 하나도 해당되지 않는다면, line~14 에서 1을 리턴해서 해당 CPU
+는 명시적인 응답을 필요로 함을 의미합니다.
+
 Lines~7 and~8 pick up current and snapshot versions of
 \co{dynticks_progress_counter}, respectively.
 The memory barrier on line~9 ensures that the counter checks
@@ -615,8 +648,13 @@ the old value of the grace-period counter.
 If neither of these conditions hold, line~14 returns one, meaning
 that the CPU needs to explicitly respond.
 
+\co{rcu_try_flip_waitmb_state} 상태는 아래에 보인 것과 같은
+\co{rcu_try_flip_waitmb_needed()} 를 호출합니다:
+\iffalse
+
 For its part, the \co{rcu_try_flip_waitmb_state} state
 invokes \co{rcu_try_flip_waitmb_needed()}, shown below:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -638,6 +676,16 @@ invokes \co{rcu_try_flip_waitmb_needed()}, shown below:
 \end{verbatim}
 }
 
+이는 \co{rcu_try_flip_waitack_needed()} 와 유사한데, 차이점은 line~12 와 13
+뿐으로, dynticks-idle 상태로부터 또는 dynticks-idle 상태로의 상태 전환은 모두
+\co{rcu_try_flip_waitmb_state()} 상태에 의해 필요한 메모리 배리어를 실행하기
+때문입니다.
+
+이제 우리는 RCU 와 dynticks-idle 상태 사이의 인터페이스에 관여된 모든 코드를
+봤습니다.
+다음 섹션은 이 코드를 검증하기 위핸 Promela 모델을 만들어 봅니다.
+\iffalse
+
 This is quite similar to \co{rcu_try_flip_waitack_needed()},
 the difference being in lines~12 and~13, because any transition
 either to or from dynticks-idle state executes the memory barrier
@@ -647,11 +695,20 @@ We now have seen all the code involved in the interface between
 RCU and the dynticks-idle state.
 The next section builds up the Promela model used to verify this
 code.
+\fi
 
 \QuickQuiz{}
+	이 섹션에서 보인 모든 코드 가운데 버그들을 찾아냈나요?
+	\iffalse
+
 	Can you spot any bugs in any of the code in this section?
+	\fi
 \QuickQuizAnswer{
+	당신이 맞았는지 보기 위해 다음 섹션을 읽어보세요.
+	\iffalse
+
 	Read the next section to see if you were correct.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Validating Preemptible RCU and dynticks}
