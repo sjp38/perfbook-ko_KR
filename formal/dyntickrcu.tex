@@ -1038,11 +1038,18 @@ The next section therefore adds safety assertions.
 \subsubsection{Validating Safety}
 \label{sec:formal:Validating Safety}
 
+안전한 RCU 구현에서 grace period 는 그 grace period 의 시작 전에 시작된 모든
+RCU 읽기 쓰레드들이 완료되기 전에는 절대 완료될 수 없어야 합니다.
+이는 다음과 같은 세개의 상태를 취할 수 있는 \co{gp_state} 변수를 사용해 모델링
+될 수 있습니다:
+\iffalse
+
 A safe RCU implementation must never permit a grace period to
 complete before the completion of any RCU readers that started
 before the start of the grace period.
 This is modeled by a \co{gp_state} variable that
 can take on three states as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1055,8 +1062,13 @@ can take on three states as follows:
 \end{minipage}
 \vspace{5pt}
 
+\co{grace_period()} 프로세스는 이 변수를 아래에 보여진 것과 같이 grace-period
+단계를 통해 진행되는 것처럼 설정합니다:
+\iffalse
+
 The \co{grace_period()} process sets this variable as it
 progresses through the grace-period phases, as shown below:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1108,6 +1120,14 @@ progresses through the grace-period phases, as shown below:
 \end{verbatim}
 }
 
+Line~6, 10, 25, 26, 29, 그리고 44 는 기본적인 RCU 안전성을 검증하기 위해
+\co{dyntick_nohz()} 프로세스를 허용할 수 있도록 이 변수를 (적당한 알고리즘적
+오퍼레이션들을 어토믹하게 섞어서) 업데이트 합니다.
+이 검증의 형태는 RCU 읽기 쓰레드들이 그럴듯하게 존재하는 시간동안 \co{gp_state}
+변수의 값이 \co{GP_IDLE} 에서 \co{GP_DONE} 으로바뀔 수 없음을 단정하려는
+것입니다.
+\iffalse
+
 Lines~6, 10, 25, 26, 29, and~44 update this variable (combining
 atomically with algorithmic operations where feasible) to
 allow the \co{dyntick_nohz()} process to verify the basic
@@ -1116,22 +1136,40 @@ The form of this verification is to assert that the value of the
 \co{gp_state} variable cannot jump from
 \co{GP_IDLE} to \co{GP_DONE} during a time period
 over which RCU readers could plausibly persist.
+\fi
 
 \QuickQuiz{}
+	Line~25 와 26 에 \co{gp_state} 의 연속된 두개의 변경이 있는데, 어떻게
+	line~25 에서의 변경이 사라지지 않을거라고 확신할 수 있을까요?
+	\iffalse
+
 	Given there are a pair of back-to-back changes to
 	\co{gp_state} on lines~25 and~26,
 	how can we be sure that line~25's changes won't be lost?
+	\fi
 \QuickQuizAnswer{
+	Promela 와 spin 이 모든 가능한 상태 변경의 시퀀스를 추적한다는 점을
+	다시 상기하시기 바랍니다.
+	따라서, 타이밍은 무의미합니다: Promela/spin 은 어떤 상태 변수가
+	명시적으로 방해를 하지 않는 한은 그 두개의 상태들 사이의 모든 모델을
+	적당히 섞어낼 겁니다.
+	\iffalse
+
 	Recall that Promela and spin trace out
 	every possible sequence of state changes.
 	Therefore, timing is irrelevant: Promela/spin will be quite
 	happy to jam the entire rest of the model between those two
 	statements unless some state variable specifically prohibits
 	doing so.
+	\fi
 } \QuickQuizEnd
+
+\co{dyntick_nohz()} Promela 프로세스는 이 검증을 아래와 같이 구현합니다:
+\iffalse
 
 The \co{dyntick_nohz()} Promela process implements
 this verification as shown below:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1165,6 +1203,20 @@ this verification as shown below:
 \end{verbatim}
 }
 
+Line~13 은 \co{gp_state} 변수의 값이 태스크 수행 시작 시점에서 \co{GP_IDLE}
+이라면 \co{old_gp_idle} 플래그를 설정하고, \co{gp_state} 변수가 태스크 수행
+중간에 \co{GP_DONE} 으로 바뀌었다면 하나의 RCU read-side 크리티컬 섹션이 전체
+시간동안 존재할 수 있다는 점에서 비합법적이므로 line~18 과 19 에서의 단정문이
+실패합니다.
+
+결과적으로 만들어지는 모델 (\path{dyntickRCU-base-s.spin}) 은 \path{runspin.sh}
+스크립트를 통해 수행될 때, 964 개의 상태들을 생성하고 안심되게도 에러없이
+돌아갑니다.
+그렇다곤 하나, 안전성이 상당히 중요하긴 하지만, 불명확하게 지연되는 grace
+period 를 막는 것 역시 굉장히 중요합니다.
+따라서 다음 섹션에서는 liveness 의 검증을 다룹니다.
+\iffalse
+
 Line~13 sets a new \co{old_gp_idle} flag if the
 value of the \co{gp_state} variable is
 \co{GP_IDLE} at the beginning of task execution,
@@ -1180,6 +1232,7 @@ generates 964 states and passes without errors, which is reassuring.
 That said, although safety is critically important, it is also quite
 important to avoid indefinitely stalling grace periods.
 The next section therefore covers verifying liveness.
+\fi
 
 \subsubsection{Validating Liveness}
 \label{sec:formal:Validating Liveness}
