@@ -728,6 +728,13 @@ adding assertions, interrupts, and finally NMIs.
 \subsubsection{Basic Model}
 \label{sec:formal:Basic Model}
 
+이 섹션은 프로세스 단계 dynticks 진입/종료 코드와 grace-period 처리를 Promela
+로 변환해 봅니다~\cite{Holzmann03a}.
+우리는 2.6.25-rc4 커널에서의 \co{rcu_exit_nohz()} 와 \co{rcu_enter_nohz()} 로
+시작해서, 이것들을 dynticks-idle 모드를 들어가고 빠져나오는 과정을 모델링하는
+Promela 프로세스를 다음의 루프와 같이 만들 겁니다:
+\iffalse
+
 This section translates the process-level dynticks entry/exit
 code and the grace-period processing into
 Promela~\cite{Holzmann03a}.
@@ -736,6 +743,7 @@ We start with \co{rcu_exit_nohz()} and
 from the 2.6.25-rc4 kernel, placing these in a single Promela
 process that models exiting and entering dynticks-idle mode in
 a loop as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -763,6 +771,22 @@ a loop as follows:
 \end{verbatim}
 }
 
+Line~6 과 20 은 루프를 정의합니다.
+Line~7 은 \co{i} 의 값이 \co{MAX_DYNTICK_LOOP_NOHZ} 를 넘어서면 루프를
+빠져나가게 합니다.
+Line~8 은 루프의 각 패스가 line~9-19 를 수행하도록 구성합니다.
+Line~7 과 8 의 조건들은 서로에게 배타적이기 때문에, 일반적인 Promela 의 옳은
+조건에 대한 무작위 선택은 무효화 됩니다.
+Line~9 와 11 은 \co{rcu_exit_nohz()} 의 어토믹하지 않은
+\co{dynticks_progress_counter} 의 값 증가를 모델링 하며, line~12 는
+\co{WARN_ON()} 을 모델링 합니다.
+여기서의 \co{atomic}  은 \co{WARN_ON()} 이 엄밀히 말해선 알고리즘의 한 부분이
+아닌 만큼 단순히 Promela 상태 공간의 크기를 줄여주는 역할을 합니다.
+Line~14-18 은 비슷하게 \co{rcu_enter_nohz()} 의 값 증가와 \co{WARN_ON()} 을
+모델링 합니다.
+마지막으로, line~19 는 루프 카운터의 값을 증가시킵니다.
+\iffalse
+
 Lines~6 and~20 define a loop.
 Line~7 exits the loop once the loop counter \co{i}
 has exceeded the limit \co{MAX_DYNTICK_LOOP_NOHZ}.
@@ -780,31 +804,77 @@ of the algorithm.
 Lines~14-18 similarly models the increment and
 \co{WARN_ON()} for \co{rcu_enter_nohz()}.
 Finally, line~19 increments the loop counter.
+\fi
+
+따라서 루프의 각 패스는 (예를 들어, 태스크를 시작하려고 해서) dynticks-idle
+모드를 빠져나가는, 그리고 나서 다시 (예를 들어, 그 태스크가 블락 당해서)
+dynticks-idle 모드로 들어가는 CPU 를 모델링합니다.
+\iffalse
 
 Each pass through the loop therefore models a CPU exiting
 dynticks-idle mode (for example, starting to execute a task), then
 re-entering dynticks-idle mode (for example, that same task blocking).
+\fi
 
 \QuickQuiz{}
+	왜 \co{rcu_exit_nohz()} 와 \co{rcu_enter_nohz()}  사이의 메모리
+	배리어는 Promela 에 모델링 되지 않은거죠?
+	\iffalse
+
 	Why isn't the memory barrier in \co{rcu_exit_nohz()}
 	and \co{rcu_enter_nohz()} modeled in Promela?
+	\fi
 \QuickQuizAnswer{
+	Promela 는 sequential consistency 를 가정하므로, 메모리 배리어를
+	모델링할 필요가 없습니다.
+	사실, 그대신
+	page~\pageref{fig:analysis:QRCU Unordered Summation} 의
+	Figure~\ref{fig:analysis:QRCU Unordered Summation}
+	처럼 명시적으로 메모리 배리어의 부재를 모델링 해야 합니다.
+	\iffalse
+
 	Promela assumes sequential consistency, so
 	it is not necessary to model memory barriers.
 	In fact, one must instead explicitly model lack of memory barriers,
 	for example, as shown in
 	Figure~\ref{fig:analysis:QRCU Unordered Summation} on
 	page~\pageref{fig:analysis:QRCU Unordered Summation}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	\co{rcu_exit_nohz()} 에 이어서 \co{rcu_enter_nohz()} 가 뒤따르는 경우를
+	모델링 하는건 좀 이상하지 않나요?
+	그보다는 진입 후에 빠져나가는 상황을 모델링하는게 더 자연스럽지
+	않을까요?
+	\iffalse
+
 	Isn't it a bit strange to model \co{rcu_exit_nohz()}
 	followed by \co{rcu_enter_nohz()}?
 	Wouldn't it be more natural to instead model entry before exit?
+	\fi
 \QuickQuizAnswer{
+	그게 더 자연스러울 수 있습니다만, 우린 우리가 뒤에서 추가할 liveness
+	체크를 위해 이 특정한 순서가 필요합니다.
+	\iffalse
+
 	It probably would be more natural, but we will need
 	this particular order for the liveness checks that we will add later.
+	\fi
 } \QuickQuizEnd
+
+다음 단계는 RCU 의 grace-period 처리를 위한 인터페이스의 모델링입니다.
+이를 위해, 우리는 2.6.25-rc4 커널의
+\co{dyntick_save_progress_counter()},
+\co{rcu_try_flip_waitack_needed()},
+\co{rcu_try_flip_waitmb_needed()},
+뿐만 아니라
+\co{rcu_try_flip_waitack()} 와
+\co{rcu_try_flip_waitmb()} 를 모델링 해야 합니다.
+다음의 \co{grace_period()} Promela 프로세스는 이 함수들을 그것들이 하나의
+preemption 가능한 RCU 의 grace-period 처리 과정 사이에서 호출될 것처럼 모델링
+합니다.
+\iffalse
 
 The next step is to model the interface to RCU's grace-period
 processing.
@@ -818,6 +888,7 @@ as well as portions of
 The following \co{grace_period()} Promela process models
 these functions as they would be invoked during a single pass
 through preemptible RCU's grace-period processing.
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -861,6 +932,18 @@ through preemptible RCU's grace-period processing.
 \end{verbatim}
 }
 
+Line~6-9 은 루프 리미트를 (에러가 났을 경우에 한해 .trail 파일에) 프린트하고
+현재 CPU 의 \co{dynticks_progress_counter} 변수의 스탭샷을 얻어오는,
+\co{rcu_try_flip_idle()} 의 코드 한줄과 \co{dyntick_save_progress_counter()}
+호출을 모델링 합니다.
+이 두 라인들은 상태 공간의 크기를 줄이기 위해 어토믹하게 수행됩니다.
+
+Line~10-22 는 \co{rcu_try_flip_waitack()} 그 함수의
+\co{rcu_try_flip_waitack_needed()} 함수 호출을 모델링합니다.
+이 루프는 각 CPU 로부터 카운터 뒤집기 응답을 기다리는 grace-period 상태 머신을,
+하지만 그 중에서도 dynticks-idle CPU 들과 상호작용하는 부분만을 모델링 합니다.
+\iffalse
+
 Lines~6-9 print out the loop limit (but only into the .trail file
 in case of error) and models a line of code
 from \co{rcu_try_flip_idle()} and its call to
@@ -875,6 +958,17 @@ Lines~10-22 model the relevant code in
 This loop is modeling the grace-period state machine waiting for
 a counter-flip acknowledgement from each CPU, but only that part
 that interacts with dynticks-idle CPUs.
+\fi
+
+Line~23 은 또다시 CPU 의 \co{dynticks_progress_counter} 변수의 스탭샷을
+얻어오는 \co{rcu_try_flip_waitzero()} 의 코드 중 한줄과 그것의
+\co{dyntick_save_progress_counter()} 함수 호출을 모델링 합니다.
+
+마지막으로, line~24-36 은 \co{rcu_try_flip_waitack()} 과 그 함수의
+\co{rcu_try_flip_waitack_needed()} 호출을 모델링합니다.
+이 루프는 각각의 CPU 가 메모리 배리어를 실행하기를 기다리는, 하지만 여기서도
+역시 dynticks-idle CPU 들과 상호작용하는 부분만을 모델링 합니다.
+\iffalse
 
 Line~23 models a line from \co{rcu_try_flip_waitzero()}
 and its call to \co{dyntick_save_progress_counter()}, again
@@ -887,13 +981,32 @@ Finally, lines~24-36 model the relevant code in
 This loop is modeling the grace-period state-machine waiting for
 each CPU to execute a memory barrier, but again only that part
 that interacts with dynticks-idle CPUs.
+\fi
 
 \QuickQuiz{}
+	잠깐만요!
+	이 리눅스 커널에서, \co{dynticks_progress_counter} 와
+	\co{rcu_dyntick_snapshot} 은 per-CPU 변수들입니다.
+	그런데 왜 그것들이 per-CPU 변수들이 아니라 하나의 글로벌 변수로 모델링
+	된거죠?
+	\iffalse
+
 	Wait a minute!
 	In the Linux kernel, both \co{dynticks_progress_counter} and
 	\co{rcu_dyntick_snapshot} are per-CPU variables.
 	So why are they instead being modeled as single global variables?
+	\fi
 \QuickQuizAnswer{
+	해당 grace-period 코드는 각각의 CPU 의 \co{dynticks_progress_counter}
+	와 \co{rcu_dyntick_snapshot} 을 분리해서 처리하기 때문에, 우린 이
+	상태를 하나의 CPU 로 뭉칠 수 있습니다.
+	만약 그 grace-period 코드가 특정 CPU 의 특정 값을 가지고 뭔ㄱ 타그별한
+	일을 하려 했다면, 우린 정말로 여러개의 CPU 들을 모델링 해야 할겁니다.
+	하지만 다행히도, 우린 하나의 CPU 는 grace-period 처리를 수행하고 있고
+	다른 하나는 dynticks-idle 모드를 들어가고 빠져나오는 두개의 CPU 들에만
+	우리를 안전히 국한시킬 수 있습니다.
+	\iffalse
+
 	Because the grace-period code processes each
 	CPU's \co{dynticks_progress_counter} and
 	\co{rcu_dyntick_snapshot} variables separately,
@@ -904,7 +1017,14 @@ that interacts with dynticks-idle CPUs.
 	But fortunately, we can safely confine ourselves to two CPUs, the
 	one running the grace-period processing and the one entering and
 	leaving dynticks-idle mode.
+	\fi
 } \QuickQuizEnd
+
+최종적인 모델 (\path{dyntickRCU-base.spin}) 은 \path{runspin.sh} 스크립트를
+통해 돌아갈 때, 691 개의 상태를 생성하고 에러 없이 수행되는데, 이것은 실패를
+찾을 수 있는 단정문이 존재하지 않는다는 점을 생각해 보면 놀라울 일이 아닙니다.
+따라서 다음 섹션에서는 안전성을 위한 단정문들을 추가해 봅니다.
+\iffalse
 
 The resulting model (\path{dyntickRCU-base.spin}),
 when run with the
@@ -913,6 +1033,7 @@ generates 691 states and
 passes without errors, which is not at all surprising given that
 it completely lacks the assertions that could find failures.
 The next section therefore adds safety assertions.
+\fi
 
 \subsubsection{Validating Safety}
 \label{sec:formal:Validating Safety}
