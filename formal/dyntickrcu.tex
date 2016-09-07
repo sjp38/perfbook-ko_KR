@@ -1237,11 +1237,18 @@ The next section therefore covers verifying liveness.
 \subsubsection{Validating Liveness}
 \label{sec:formal:Validating Liveness}
 
+Liveness 는 증명되기에 어려울 수 있지만, 여기 적용할 수 있는 간단한 트릭이
+있습니다.
+첫번째 단계는 다음의 line~27 에서 보이는 것과 같이 \co{dyntick_nohz()} 가
+\co{dyntick_nohz_done} 을 통해 할일을 마쳤음을 알리는 것입니다:
+\iffalse
+
 Although liveness can be difficult to prove, there is a simple
 trick that applies here.
 The first step is to make \co{dyntick_nohz()} indicate that
 it is done via a \co{dyntick_nohz_done} variable, as shown on
 line~27 of the following:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1276,9 +1283,14 @@ line~27 of the following:
 \end{verbatim}
 }
 
+이 변수를 두면, 불필요한 블록들을 체크하기 위해 다음과 같이 \co{grace_period()}
+에 단정문들을 추가할 수 있습니다:
+\iffalse
+
 With this variable in place, we can add assertions to
 \co{grace_period()} to check for unnecessary blockage
 as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1337,6 +1349,22 @@ as follows:
 \end{verbatim}
 }
 
+우리는 line~10 에서 0으로 초기화되는 \co{shouldexit} 변수를 line~5 에서
+추가했습니다.
+Line~17 은 \co{shouldexit} 가 아직 0일 것을 단정하며, line~18 에서는
+\co{shouldexit} 를 \co{dyntick_nohz()} 에 의해 관리되는 \co{dyntick_nohz_done}
+의 값으로 설정합니다.
+따라서 이 단정은 \co{dyntick_nohz()} 가 수행 완료된 후의 카운터가 뒤집히는
+응답을 기다리는 과정에서 하나 이상의 패스를 시도하게 되면 실패할 것입니다.
+무엇보다, \co{dyntick_nohz()} 가 완료되었다면, 더이상 우리를 해당 루프의
+바깥으로 나가게 할 상태 변화는 더이상 없고, 따라서 이 상태를 두번 이상 수행하게
+됨은 곧 무한루프를 의미해서, grace period 가 끝나지 않을 것임을 의미하게
+됩니다.
+
+Line~32, 39, 그리고 40 은 두번째 (메모리 배리어) 루프를 위해 비슷한 방식으로
+수행됩니다.
+\iffalse
+
 We have added the \co{shouldexit} variable on line~5,
 which we initialize to zero on line~10.
 Line~17 asserts that \co{shouldexit} is not set, while
@@ -1353,6 +1381,23 @@ grace period.
 
 Lines~32, 39, and~40 operate in a similar manner for the
 second (memory-barrier) loop.
+\fi
+
+하지만, 이 모델 (\path{dyntickRCU-base-sl-busted.spin}) 을 수행하는 것은 실패로
+끝나게 되는데, line`23 이 잘못된 변수는 짝수라고 체크를 하기 때문입니다.
+실패하게 되면, \co{spin} 은 ``trail'' 파일
+(\path{dyntickRCU-base-sl-busted.spin.trail}) 을 쓰게 되는데, 이 파일은 실패로
+이르게 된 상태들의 시퀀스를 기록합니다.
+\co{spin} 이 이 상태들의 시퀀스를 재추적하게 하고 실행된 statement 들과
+변수들의 값
+(\path{dyntickRCU-base-sl-busted.spin.trail.txt})
+을 프린트 하려면 {\tt spin -t -p -g -l dyntickRCU-base-sl-busted.spin} 커맨드를
+사용하세요.
+Spin 은 두 함수를 모두 하나의 파일에서 취할 것이기 때문에 위에 리스트된 코드와
+라인 넘버가 맞지 않을 수 있음을 알아 두세요.
+하지만, 라인 넘버들은 전체 모델 (\path{dyntickRCU-base-sl-busted.spin} 과는
+\emph{맞아떨어질} 겁니다.
+\iffalse
 
 However, running this
 model (\path{dyntickRCU-base-sl-busted.spin})
@@ -1370,6 +1415,20 @@ Note that the line numbers do not match the listing above due to
 the fact that spin takes both functions in a single file.
 However, the line numbers \emph{do} match the full
 model (\path{dyntickRCU-base-sl-busted.spin}).
+\fi
+
+\co{dyntick_nohz()} 프로세스가 step 34 에서 (``34:'' 를 검색해 보세요)
+완료되었지만, \co{grace_period()} 프로세스는 루프를 빠져나가는데 실패했음을 볼
+수 있습니다.
+\co{curr} 의 값은 \co{6} 이고 (step 35 를 보세요) \co{snap} 의 값은 \co{5}
+(step 17 을 보세요) 입니다.
+따라서 line~21 에서의 첫번째 조건은 \co{curr != snap} 이므로 성립되지 않고,
+line~23 에서의 두번째 조건은 \co{snap} 이 홀수이고 \co{curr} 는 \co{snap} 보다
+1 만큼 클 뿐이기 때문에 성립되지 않습니다.
+
+따라서 이 두개의 조건들 중 하나는 올바르지 않습니다.
+\co{rcu_try_flip_waitack_needed()} 의 첫번째 조건에 대한 코멘트를 따르면:
+\iffalse
 
 We see that the \co{dyntick_nohz()} process completed
 at step 34 (search for ``34:''), but that the
@@ -1384,26 +1443,59 @@ does not hold either because \co{snap} is odd and because
 So one of these two conditions has to be incorrect.
 Referring to the comment block in \co{rcu_try_flip_waitack_needed()}
 for the first condition:
+\fi
 
 \begin{quote}
+	CPU 가 전체 시간동안 dynticks 모드에 빠져있고 인터럽트, NMI, SNMI, 또는
+	뭐든 받지 않았다면, 해당 CPU 는 \co{rcu_read_lock()} 의 중간에 있을 수
+	없고, 따라서 그것이 수행하게 되는 다음의 \co{rcu_read_lock()} 는
+	카운터의 새로운 값을 사용해야만 한다.  따라서 우리는 안전하게 이 CPU 가
+	이미 그 카운터에 응답을 한 것처럼 행동을 한다.
+	\iffalse
+
 	If the CPU remained in dynticks mode for the entire time
 	and didn't take any interrupts, NMIs, SMIs, or whatever,
 	then it cannot be in the middle of an \co{rcu_read_lock()}, so
 	the next \co{rcu_read_lock()} it executes must use the new value
 	of the counter.  So we can safely pretend that this CPU
 	already acknowledged the counter.
+	\fi
 \end{quote}
+
+첫번째 조건은 실제로 이와 들어맞는데, \co{curr == snap} 이고 \co{curr} 가
+짝수라면, 연관된 CPU 는 요구된 대로 dynticks-idle 모드에 전체 시간동안 존재한
+것이기 때문입니다.
+따라서 두번째 조건에 대한 코멘트를 보도록 합시다:
+\iffalse
 
 The first condition does match this, because if \co{curr == snap}
 and if \co{curr} is even, then the corresponding CPU has been
 in dynticks-idle mode the entire time, as required.
 So let's look at the comment block for the second condition:
+\fi
 
 \begin{quote}
+	CPU 가 dynticks idle 단계를 활성화된 irq 핸들러 없이 거쳐왔거나
+	진입했다면, 앞에서와 같이, 우린 이 CPU 가 카운터에 응답을 이미 한것처럼
+	안전하게 행동할 수 있다.
+	\iffalse
+
 	If the CPU passed through or entered a dynticks idle phase with
 	no active irq handlers, then, as above, we can safely pretend
 	that this CPU already acknowledged the counter.
+	\fi
 \end{quote}
+
+조건의 첫번째 부분은 올바른데, \co{curr} 와 \co{snap} 이 2만큼 차이가 나면 그
+사이에 최소 하나의 짝수가 존재할 수 있어서, 하나의 dynticks-idle 단계를 완전히
+지나왔다고 볼 수 있기 때문입니다.
+하지만, 조건의 두번째 부분은 dynticks-idle 모드가 \emph{시작되었}지만, 이
+모드가 아직 \emph{끝나지} 않았음을 의미합니다.
+따라서 우리는 짝수가 되어야 할 겂으로 \co{snap} 이 아니라 \co{curr} 를 테스트
+해야합니다.
+
+고쳐진 C 코드는 다음과 같습니다:
+\iffalse
 
 The first part of the condition is correct, because if \co{curr}
 and \co{snap} differ by two, there will be at least one even
@@ -1416,6 +1508,7 @@ We therefore need to be testing \co{curr} rather than
 \co{snap} for being an even number.
 
 The corrected C code is as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1437,10 +1530,15 @@ The corrected C code is as follows:
 \end{verbatim}
 }
 
+Line~10-13 은 이제 다음과 같이 간단하게 결합될 수 있습니다.
+비슷한 단순화가 \co{rcu_try_flip_waitmb_needed()} 에 적용될 수 있습니다.
+\iffalse
+
 Lines~10-13 can now be combined and simplified,
 resulting in the following.
 A similar simplification can be applied to
 \co{rcu_try_flip_waitmb_needed()}.
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1460,6 +1558,18 @@ A similar simplification can be applied to
 \end{verbatim}
 }
 
+해당 모델에 연관된 수정을 가하면 (\path{dyntickRCU-base-sl.spin}) 에러 없이
+통과되는 661 개의 상태들을 통한 올바른 검증을 얻을 수 있습니다.
+하지만, 첫번째 버전의 liveness 검증은 liveness 검증 자체의 버그로 인해서, 이
+버그를 잡는데 실패했음은 알려둘 가치가 있습니다.
+이 liveness 증명 버그는 \co{grace_period()} 프로세스 안에 무한루프를
+넣어둠으로써 발생했습니다!
+
+우린 이제 안전성과 liveness 조건을 모두 성공적으로 검증했습니다만, 동작하고
+블락킹 되는 프로세스들에 대해서만 그렇습니다.
+인터럽트들 역시 처리해야 할텐데, 이는 다음 섹션에서 처리하도록 하겠습니다.
+\iffalse
+
 Making the corresponding correction in the
 model (\path{dyntickRCU-base-sl.spin})
 results in a correct verification with 661 states that passes without
@@ -1474,6 +1584,7 @@ the liveness-verification code failed to detect this problem!
 We have now successfully verified both safety and liveness
 conditions, but only for processes running and blocking.
 We also need to handle interrupts, a task taken up in the next section.
+\fi
 
 \subsubsection{Interrupts}
 \label{sec:formal:Interrupts}
