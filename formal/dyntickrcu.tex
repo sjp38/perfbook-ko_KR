@@ -1685,8 +1685,13 @@ is active, as required.
 \subsubsection{Validating Interrupt Handlers}
 \label{sec:formal:Validating Interrupt Handlers}
 
+첫번째 단계는 \co{dyntick_nohz()} 를 다음과 같이 \co{EXECUTE_MAINLINE()} 의
+형태로 바꾸는 겁니다:
+\iffalse
+
 The first step is to convert \co{dyntick_nohz()} to
 \co{EXECUTE_MAINLINE()} form, as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1719,28 +1724,56 @@ The first step is to convert \co{dyntick_nohz()} to
 \end{verbatim}
 }
 
+여러 statement 들의 그룹이 \co{EXECUTE_MAINLINE()} 으로 전달될 때에는
+line~12-15 와 같이 해당 그룹 내의 모든 statement 들이 어토믹하게 수행됨을
+알아둘 필요가 있습니다.
+\iffalse
+
 It is important to note that when a group of statements is passed
 to \co{EXECUTE_MAINLINE()}, as in lines~12-15, all
 statements in that group execute atomically.
+\fi
 
 \QuickQuiz{}
+	하지만 \co{EXECUTE_MAINLINE()} 내의 statement 들이 어토믹 하지않게
+	수행되어야 하는 경우라면 어떻게 하겠습니까?
+	\iffalse
+
 	But what would you do if you needed the statements in a single
 	\co{EXECUTE_MAINLINE()} group to execute non-atomically?
+	\fi
 \QuickQuizAnswer{
+	그렇기 위한 가장 쉬운 방법은 각각의 statement 를 각자의
+	\co{EXECUTE_MAINLINE()} 안에 넣는 것입니다.
+	\iffalse
+
 	The easiest thing to do would be to put
 	each such statement in its own \co{EXECUTE_MAINLINE()}
 	statement.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 \co{dynticks_nohz()} 프로세스가 ``if'' 나 ``do'' 문을 가지고
+	있는데 그 안의 조건절들이 그 분기 본체들은 어토믹하지 않게 수행되는
+	형태라면 어떻게 되죠?
+	\iffalse
+
 	But what if the \co{dynticks_nohz()} process had
 	``if'' or ``do'' statements with conditions,
 	where the statement bodies of these constructs
 	needed to execute non-atomically?
+	\fi
 \QuickQuizAnswer{
+	뒤의 섹션에서 보게 되겠지만, 한가지 방법은 명시적인 라벨과 ``goto''
+	문을 사용하는 겁니다.
+	예를 들면, 아래와 같은 것은:
+	\iffalse
+
 	One approach, as we will see in a later section,
 	is to use explicit labels and ``goto'' statements.
 	For example, the construct:
+	\fi
 
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
@@ -1754,7 +1787,11 @@ statements in that group execute atomically.
 	\end{minipage}
 	\vspace{5pt}
 
+	다음과 같은 식으로 모델링 될 수 있습니다:
+	\iffalse
+
 	could be modeled as something like:
+	\fi
 
 	\vspace{5pt}
 	\begin{minipage}[t]{\columnwidth}
@@ -1774,13 +1811,24 @@ statements in that group execute atomically.
 	\end{minipage}
 	\vspace{5pt}
 
+	하지만, 이 매크로가 ``if'' 문의 경우에 있어서도 도움이 될지는 명확하지
+	않은데, 따라서 이런 종류의 상황들에 대해서는 뒤의 섹션들에서
+	정리하겠습니다.
+	\iffalse
+
 	However, it is not clear that the macro is helping much in the case
 	of the ``if'' statement, so these sorts of situations will
 	be open-coded in the following sections.
+	\fi
 } \QuickQuizEnd
+
+다음 단계는 인터럽트 핸들러를 모델링 하기 위해 \co{dyntick_irq()} 프로세스를
+작성하는 것입니다:
+\iffalse
 
 The next step is to write a \co{dyntick_irq()} process
 to model an interrupt handler:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1837,7 +1885,16 @@ to model an interrupt handler:
 \end{verbatim}
 }
 
-The loop from line~7-48 models up to \co{MAX_DYNTICK_LOOP_IRQ}
+Line~7-48 의 루프는 \co{MAX_DYNTICK_LOOP_IRQ} 까지의 인터럽트들을 모델링하는데,
+line~8 과 9 는 루프 조건을 구성하고 line~46 은 제어 변수를 증가시킵니다.
+Line~10 은 \co{dyntick_nohz()} 에게 인터럽트 핸들러가 돌아가는 중이라고
+이야기하고, line~45 는 \co{dyntick_nohz()} 에게 이 핸들러가 완료되었다고
+이야기합니다.
+Line~49 는 \co{dyntick_nohz()} 의 관련된 라인과 같이 liveness 검증을 위해
+사용됩니다.
+\iffalse
+
+The loop from lines~7-48 models up to \co{MAX_DYNTICK_LOOP_IRQ}
 interrupts, with lines~8 and~9 forming the loop condition and line~46
 incrementing the control variable.
 Line~10 tells \co{dyntick_nohz()} that an interrupt handler
@@ -1845,17 +1902,38 @@ is running, and line~45 tells \co{dyntick_nohz()} that this
 handler has completed.
 Line~49 is used for liveness verification, just like the corresponding
 line of \co{dyntick_nohz()}.
+\fi
 
 \QuickQuiz{}
+	Line~45 와 46 (\co{in_dyntick_irq = 0;} 와 \co{i++;}) 은 왜 어토믹하게
+	수행되는 건가요?
+	\iffalse
+
 	Why are lines~45 and~46 (the \co{in_dyntick_irq = 0;}
 	and the \co{i++;}) executed atomically?
+	\fi
 \QuickQuizAnswer{
+	이 코드 라인들은 모델을 제어하는 부분에 속하지 모델링되는 코드에 속하지
+	않으므로, 이것들을 어토믹하지 않게 수행시킬 이유가 없습니다.
+	이것들을 굳이 어토믹하게 모델링 하게 되는 동기는 상태 공간의 크기를
+	줄이려는 것입니다.
+	\iffalse
+
 	These lines of code pertain to controlling the
 	model, not to the code being modeled, so there is no reason to
 	model them non-atomically.
 	The motivation for modeling them atomically is to reduce the size
 	of the state space.
+	\fi
 } \QuickQuizEnd
+
+Line~11-25 는 \co{rcu_irq_enter()} 를 모델링하고, line~26 과 27 dms
+\co{__irq_enter()} 의 관련된 부분을 모델링 합니다.
+Line~28 과 29 는 \co{dynticks_nohz()} 의 관련된 부분과 거의 같은 방법으로
+안전성을 검증합니다.
+Line~30 과 31 은 \co{__irq_exit()} 의 관련 부분을 모델링 하고, line~32-43 에서
+\co{rcu_irq_exit()} 을 모델링 합니다.
+\iffalse
 
 Lines~11-25 model \co{rcu_irq_enter()}, and
 lines~26 and~27 model the relevant snippet of \co{__irq_enter()}.
@@ -1863,14 +1941,27 @@ Lines~28 and~29 verifies safety in much the same manner as do the
 corresponding lines of \co{dynticks_nohz()}.
 Lines~30 and~31 model the relevant snippet of \co{__irq_exit()},
 and finally lines~32-43 model \co{rcu_irq_exit()}.
+\fi
 
 \QuickQuiz{}
+	이 \co{dynticks_irq()} 프로세스가 모델링할 수 없는 인터럽트들의 특성은
+	무엇이 있을까요?
+	\iffalse
+
 	What property of interrupts is this \co{dynticks_irq()}
 	process unable to model?
+	\fi
 \QuickQuizAnswer{
+	그런 특성 가운데 하나는 뒤의 섹션에서 다루게 될, 중첩된
+	인터럽트들입니다.
+	\iffalse
+
 	One such property is nested interrupts,
 	which are handled in the following section.
+	\fi
 } \QuickQuizEnd
+
+이제 \co{grace_period()} 프로세스는 다음과 같이 됩니다:
 
 The \co{grace_period()} process then becomes as follows:
 
@@ -1928,6 +2019,17 @@ The \co{grace_period()} process then becomes as follows:
 \end{verbatim}
 }
 
+\co{grace_period()} 의 구현은 앞의 것과 매우 유사합니다.
+변경점은 새로운 인터럽트 카운트 인자를 추가하기 위한 line~10 의 추가와 liveness
+체크를 위한 새로운 \co{dyntick_irq_done} 변수를 추가하는 line~19 와 39의 변경,
+그리고 line~22 와 42 에서의 최적화 뿐입니다.
+
+이 모델 (\path{dyntickRCU-irqnn-ssl.spin})
+은 대략 50만개의 상태들을 에러 없이 성공적으로 검증합니다.
+하지만, 이 버전의 모델링은 중첩된 인터럽트들을 처리하지 않습니다.
+이 주제는 다음 섹션에서 다루겠습니다.
+\iffalse
+
 The implementation of \co{grace_period()} is very similar
 to the earlier one.
 The only changes are the addition of line~10 to add the new
@@ -1941,6 +2043,7 @@ states, passing without errors.
 However, this version of the model does not handle nested
 interrupts.
 This topic is taken up in the next section.
+\fi
 
 \subsubsection{Validating Nested Interrupt Handlers}
 \label{sec:formal:Validating Nested Interrupt Handlers}
