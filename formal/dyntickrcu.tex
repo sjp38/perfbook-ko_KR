@@ -1589,13 +1589,35 @@ We also need to handle interrupts, a task taken up in the next section.
 \subsubsection{Interrupts}
 \label{sec:formal:Interrupts}
 
+Promela 에서 인터럽트를 모델링하는 두가지 방법이 있습니다:
+\iffalse
+
 There are a couple of ways to model interrupts in Promela:
+\fi
 \begin{enumerate}
+\item	C 전처리기 트릭을 사용해서 모든 \co{dynticks_nohz()} 프로세스의
+	statement 사이에 인터럽트 핸들러를 넣거나
+\item	인터럽트 핸들러를 별도의 프로세스로 모델링 하는 겁니다.
+\iffalse
+
 \item	using C-preprocessor tricks to insert the interrupt handler
 	between each and every statement of the \co{dynticks_nohz()}
 	process, or
 \item	modeling the interrupt handler with a separate process.
+\fi
 \end{enumerate}
+
+두번째 방법이 더 작은 상태 공간을 갖게 해줄거라 생각할 수 있습니다만, 이는
+인터럽트 핸들러가 어떻게든 \co{dynticks_nohz()} 와는 어토믹하게 동작해야 하지만
+\co{grace_period()} 와는 어토믹하지 않게 동작해야 할 것을 필요로 합니다.
+
+다행히도, Promela 는 어토믹 statement 들을 분기를 가를 수 있게 해줍니다.
+이 트릭은 우리가 인터럽트 핸들러에서 플래그를 설정하고, \co{dynticks_nohz()} 가
+어토믹하게 이 플래그를 체크한 후 그 플래그가 설정되지 않았을 때에만 실행되도록
+코드를 수정할 수 있게 합니다.
+이는 다음과 같이 라벨과 Promela statement 들을 사용하는 C 전처리기 매크로를
+사용해 이뤄질 수 있습니다:
+\iffalse
 
 A bit of thought indicated that the second approach would have a
 smaller state space, though it requires that the interrupt handler
@@ -1610,6 +1632,7 @@ recode \co{dynticks_nohz()} to atomically check this flag
 and execute only when the flag is not set.
 This can be accomplished with a C-preprocessor macro that takes
 a label and a Promela statement as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -1624,7 +1647,11 @@ a label and a Promela statement as follows:
 \end{verbatim}
 }
 
+이 매크로를 다음과 같이 사용할 수 있을 겁니다:
+\iffalse
+
 One might use this macro as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1636,6 +1663,15 @@ EXECUTE_MAINLINE(stmt1,
 \end{minipage}
 \vspace{5pt}
 
+매그로의 line~2 는 특정 statement 라벨을 만듭니다.
+Line~3-8 은 \co{in_dyntick_irq} 변수를 테스트 하는 어토믹 블락으로, 이 변수가
+값이 설정되어 있다면 (인터럽트 핸들러가 활성 상태임을 의미), 어토믹 블락의
+수행을 라벨로 되돌립니다.
+그렇지 않다면, line~6 에서 요청된 statement 를 수행합니다.
+전체 효과는 요청된대로 인터럽트가 활성화 될 때마다 메인 수행이 공회전을 하게
+되는 것입니다.
+\iffalse
+
 Line~2 of the macro creates the specified statement label.
 Lines~3-8 are an atomic block that tests the \co{in_dyntick_irq}
 variable, and if this variable is set (indicating that the interrupt
@@ -1644,6 +1680,7 @@ label.
 Otherwise, line~6 executes the specified statement.
 The overall effect is that mainline execution stalls any time an interrupt
 is active, as required.
+\fi
 
 \subsubsection{Validating Interrupt Handlers}
 \label{sec:formal:Validating Interrupt Handlers}
