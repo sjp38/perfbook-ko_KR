@@ -2048,8 +2048,13 @@ This topic is taken up in the next section.
 \subsubsection{Validating Nested Interrupt Handlers}
 \label{sec:formal:Validating Nested Interrupt Handlers}
 
+중첩된 인터럽트 핸들러들은 \co{dyntick_irq()} 의 루프의 몸체를 다음과 같이
+분리시키는 것으로 모델링 될 수 있을 겁니다:
+\iffalse
+
 Nested interrupt handlers may be modeled by splitting the body of
 the loop in \co{dyntick_irq()} as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -2127,6 +2132,22 @@ the loop in \co{dyntick_irq()} as follows:
 \end{verbatim}
 }
 
+이는 \co{dynticks_irq()} 프로세스와 유사합니다.
+여기선 line~5 에서 두번째 카운터 변수 \co{j} 를 추가해서 \co{i} 는 인터럽트
+핸들러들로의 진입을 셈하고 \co{j} 는 인터럽트 핸들러로부터 빠져나가는 횟수를
+세게 합니다.
+Line~7 에서의 \co{outermost} 변수는 안전성 검사를 위해 언제 \co{gp_state}
+변수가 샘플링 되어야 하는지를 결정합니다.
+Line~10 과 11 에서의 루프 종료 체크는 명시된 수의 인터럽트 핸들러들이 진입된
+만큼 빠져나와지기도 했음을 요청하기 위해 업데이트 되었고, \co{i} 의 값 증가는
+인터럽트 진입 모델의 마지막인 line~41 로 옮겨졌습니다.
+Line~13-16 은 이게 중첩된 인터럽트들의 집합의 가낭 바깥인지 여부를 알리기 위해
+\co{outermost} 변수를 설정하고 \co{dyntick_nohz()} 프로세스에 의해 사용되는
+\co{in_dyntick_irq} 변수를 설정합니다.
+Line~34-40 에서는 \co{gp_state} 변수의 상태를 읽어오는데, 가장 바깥의 인터럽트
+핸들러 내일 때에만 그렇습니다.
+\iffalse
+
 This is similar to the earlier \co{dynticks_irq()} process.
 It adds a second counter variable \co{j} on line~5, so that
 \co{i} counts entries to interrupt handlers and \co{j}
@@ -2144,6 +2165,22 @@ set the \co{in_dyntick_irq} variable that is used by the
 \co{dyntick_nohz()} process.
 Lines~34-40 capture the state of the \co{gp_state}
 variable, but only when in the outermost interrupt handler.
+\fi
+
+Line~42 는 인터럽트 종료 모델링을 위한 do 루프 조건절을 갖습니다:
+우리가 진입한 것에 비해 적은 수의 인터럽트들만이 종료된 동안은, 다른 인터럽트를
+빠져나가는게 합법적입니다.
+Line~43-50 은 안전성 기준을 체크합니다만, 가장 바깥의 인터럽트 단계에서
+빠져나갈 때에만 그렇습니다.
+마지막으로, line~65-68 은 인터럽트 종료 카운트 \co{j} 의 값을 증가시키고, 이게
+가장 바깥의 인터럽트 단계라면, \co{in_dyntick_irq} 의 값을 지웁니다.
+
+이 모델 (\path{dyntickRCU-irq-ssl.spin})
+은 약 50만개를 조금 넘는 수의 상태들에 대한 정확성 검사를 만들어내며, 모두 에러
+없이 통과합니다.
+하지만, 이 버전의 모델은 NMI 를 처리하지 않는데, 이에 대해선 다음 섹션에서
+다루겠습니다.
+\iffalse
 
 Line~42 has the do-loop conditional for interrupt-exit modeling:
 as long as we have exited fewer interrupts than we have entered, it is
@@ -2159,6 +2196,7 @@ results in a correct verification with a bit more than half a million
 states, passing without errors.
 However, this version of the model does not handle NMIs,
 which are taken up in the next section.
+\fi
 
 \subsubsection{Validating NMI Handlers}
 \label{sec:formal:Validating NMI Handlers}
