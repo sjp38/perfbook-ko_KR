@@ -2203,9 +2203,15 @@ which are taken up in the next section.
 \subsubsection{Validating NMI Handlers}
 \label{sec:formal:Validating NMI Handlers}
 
+우리는 NMI 는 중첩되지 않는다는 점을 생각하면서 NMI 를 위해 인터럽트에 했던
+것과 동일한 일반적 방법을 사용합니다.
+이는 다음과 같은 \co{dyntick_nmi()} 프로세스를 만들어 내게 됩니다:
+\iffalse
+
 We take the same general approach for NMIs as we do for interrupts,
 keeping in mind that NMIs do not nest.
 This results in a \co{dyntick_nmi()} process as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -2262,12 +2268,19 @@ This results in a \co{dyntick_nmi()} process as follows:
 \end{verbatim}
 }
 
+물론, 우리가 NMI 를 갖는다는 사실은 다른 컴포넌트들에도 조정을 필요로 합니다.
+예를 들어, \co{EXECUTE_MAINLINE()} 매크로는 이제 다음과 같이
+\co{dyntick_nmi_done} 변수의 체크를 통해 NMI 핸들러 (\co{in_dyntick_nmi}) 는
+물론 인터럽트 핸들러 (\co{in_dyntick_irq}) 에도 주의를 기울여야 합니다:
+\iffalse
+
 Of course, the fact that we have NMIs requires adjustments in
 the other components.
 For example, the \co{EXECUTE_MAINLINE()} macro now needs to
 pay attention to the NMI handler (\co{in_dyntick_nmi}) as well
 as the interrupt handler (\co{in_dyntick_irq}) by checking
 the \co{dyntick_nmi_done} variable as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -2283,9 +2296,14 @@ the \co{dyntick_nmi_done} variable as follows:
 \end{verbatim}
 }
 
+우리는 또한, \co{dyntick_irq()} 가 \co{dyntick_nmi()} 를 배척하도록 하기 위해
+\co{in_dyntick_nmi} 를 체크하는 \co{EXECUTE_IRQ()} 매크로를 만들어야 합니다:
+\iffalse
+
 We will also need to introduce an \co{EXECUTE_IRQ()}
 macro that checks \co{in_dyntick_nmi} in order to allow
 \co{dyntick_irq()} to exclude \co{dyntick_nmi()}:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -2300,8 +2318,13 @@ macro that checks \co{in_dyntick_nmi} in order to allow
 \end{verbatim}
 }
 
+더 나아가서 \co{dyntick_irq()} 를 다음과 같이 \co{EXECUTE_IRQ()} 로 변환시켜야
+합니다:
+\iffalse
+
 It is further necessary to convert \co{dyntick_irq()}
 to \co{EXECUTE_IRQ()} as follows:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -2415,12 +2438,21 @@ to \co{EXECUTE_IRQ()} as follows:
 \end{verbatim}
 }
 
+우리가 ``if'' 문을 open-code 했음을 알아 두시기 바랍니다 (예를 들면,
+line~17-29).
+또한, (line~58 과 같은) 엄격한 로컬 상태를 처리하는 문장들은 \co{dyntick_nmi()}
+를 배제시킬 필요가 없음을 알아두시기 바랍니다.
+
+마지막으로, \co{grace_period()} 는 몇가지 변경만 있으면 됩니다:
+\iffalse
+
 Note that we have open-coded the ``if'' statements
 (for example, lines~17-29).
 In addition, statements that process strictly local state
 (such as line~58) need not exclude \co{dyntick_nmi()}.
 
 Finally, \co{grace_period()} requires only a few changes:
+\fi
 
 { \scriptsize
 \begin{verbatim}
@@ -2481,6 +2513,15 @@ Finally, \co{grace_period()} requires only a few changes:
 \end{verbatim}
 }
 
+우리는 line~11 에 \co{MAX_DYNTICK_LOOP_NMI} 패러미터를 위한 새로운
+\co{printf()} 를 추가했고 \co{dyntick_nmi_done} 을 line~22 와 44 의
+\co{shouldexit} 할당에 추가했습니다.
+
+이 모델 (\path{dyntickRCU-irq-nmi-ssl.spin})
+은 수억개의 상태들과 함께 동작하는 정확한 검증을 만들어내며, 에러 없이
+통과합니다.
+\iffalse
+
 We have added the \co{printf()} for the new
 \co{MAX_DYNTICK_LOOP_NMI} parameter on line~11 and
 added \co{dyntick_nmi_done} to the \co{shouldexit}
@@ -2489,11 +2530,31 @@ assignments on lines~22 and~44.
 The model (\path{dyntickRCU-irq-nmi-ssl.spin})
 results in a correct verification with several hundred million
 states, passing without errors.
+\fi
 
 \QuickQuiz{}
+	Paul 은 \emph{항상} 그의 코드를 이렇게 고통스럽도록 점진적인 방법으로
+	작성하나요?
+	\iffalse
+
 	Does Paul \emph{always} write his code in this painfully incremental
 	manner?
+	\fi
 \QuickQuizAnswer{
+	항상 그렇지는 않지만, 훨씬 더 자주 그럽니다.
+	이 경우, Paul 은 인터럽트 핸들러를 포함한 가장 작은 코드 조각으로
+	시작했는데, 인터럽트들을 Promel 에서 어떻게 모델링 하는게 최선일지에
+	대한 확신이 없었기 때문입니다.
+	일단 동작하게 하고 나서는, 그는 다른 기능들을 추가해 갔습니다.
+	(하지만 그가 이걸 다시 하게 된다면, 그는 ``장난감'' 핸들러를 가지고
+	시작할 겁니다.
+	예를 들어, 한 변수의 값을 두번 증가시키는 핸들러를 가지고 그 값이 항상
+	짝수임을 검증하는 메인 코드를 만들 겁니다.)
+
+	왜 점진적 방법을 사용하는가?
+	Brian W. Kerninghan 에 의한 다음의 것들을 고려해 보세요:
+	\iffalse
+
 	Not always, but more and more frequently.
 	In this case, Paul started with the smallest slice of code that
 	included an interrupt handler, because he was not sure how best
@@ -2505,12 +2566,30 @@ states, passing without errors.
 
 	Why the incremental approach?
 	Consider the following, attributed to Brian W. Kernighan:
+	\fi
 
 	\begin{quote}
+		디버깅은 코드를 처음 작성하는 것보다 두배만큼 어렵습니다.
+		따라서, 당신이 코드를 할 수 있는한 한 현명하게 작성한다면, 그
+		정의에 따라, 당신은 그걸 디버깅 하기에 충분히 똑똑하지
+		않습니다.
+		\iffalse
+
 		Debugging is twice as hard as writing the code in the first
 		place. Therefore, if you write the code as cleverly as possible,
 		you are, by definition, not smart enough to debug it.
+		\fi
 	\end{quote}
+
+	이는 코드의 제품을 최적화하려는 노력은 그것의 최소한 66\% 의 중점은
+	디버깅 과정을 최적화 하는데에 쏟아져야 하는데, 설령 코딩 자체에 쏟는
+	시간과 노력을 증가시키더라도 그렇습니다.
+	점진적 코딩과 테스트는 코딩 자체에 드는 노력을 증가시키는 대신에 디버깅
+	과정을 최적화하는 한가지 방법입니다.
+	Paul 은 코딩과 디버깅을 하는데에 (매주는 말할 것도 없고) 모든 날들을
+	전념할 호사를 부릴 수 있는 기회는 거의 없기 때문에 이 방법을
+	사용합니다.
+	\iffalse
 
 	This means that any attempt to optimize the production of code should
 	place at least 66\% of its emphasis on optimizing the debugging process,
@@ -2519,6 +2598,7 @@ states, passing without errors.
 	process, at the expense of some increase in coding effort.
 	Paul uses this approach because he rarely has the luxury of
 	devoting full days (let alone weeks) to coding and debugging.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Lessons (Re)Learned}
