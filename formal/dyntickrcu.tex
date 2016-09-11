@@ -2641,9 +2641,27 @@ states, passing without errors.
 \label{fig:formal:Variable-Name-Typo Fix Patch}
 \end{figure}
 
+여기서는 몇가지 (다시) 배운 교훈들을 제공합니다:
+\iffalse
+
 This effort provided some lessons (re)learned:
+\fi
 
 \begin{enumerate}
+\item	{\bf Promela 와 spin 은 인터럽트/NMI-핸들러 와의 상호작용들을 검증할 수
+	있습니다}.
+\item	{\bf 코드를 문서화 하는 것은 버그를 찾는데 도움을 줄 수 있습니다}.
+	이 경우, 문서화는
+	Figure~\ref{fig:formal:Memory-Barrier Fix Patch} 의 패치에 보여진
+	것처럼 \co{rcu_enter_nohz()} 와 \co{rcu_exit_nohz()} 에 있던 잘못
+	배치된 메모리 배리어들을 찾아냈습니다.
+\item	{\bf 코드를 빨리, 자주, 그리고 없어지기 전까지 검증하십시오.}
+	이런 노력은
+	Figure~\ref{fig:formal:Variable-Name-Typo Fix Patch} 의 패치에서 보여진
+	것과 같이, \co{rcu_try_flip_waitack_needed()} 안의 테스트하거나
+	디버깅 하기에 상당히 어려울 수 있는 qjrmfmf ckwdksoTtmqslek.
+\iffalse
+
 \item	{\bf Promela and spin can verify interrupt/NMI-handler
 	interactions}.
 \item	{\bf Documenting code can help locate bugs}.
@@ -2659,6 +2677,26 @@ This effort provided some lessons (re)learned:
 	that would have been quite difficult to test or debug, as
 	shown by the patch in
 	Figure~\ref{fig:formal:Variable-Name-Typo Fix Patch}.
+\fi
+\item	{\bf 항상 검증 코드를 검증하십시오.}
+	이를 위한 일반적인 방법은 고의적인 버그를 집어넣고 검증 코드가 이를
+	잡아내는지 확인하는 것입니다.
+	물론, 그 검증 코드가 그 버그를 잡아내는데에 실패한다면, 그 버그 자체에
+	대해서도 검증을 할 필요가 있을 것이고, 그렇게 무한한 반복을 해야 할수도
+	있습니다.
+	하지만, 당신 자신이 그런 무한한 반복에 빠져 있는 걸 깨닫게 된다면,
+	숙면을 취하는 것이 효과적인 디버깅 테크닉이 될 수 있습니다.
+	그렇게 되면 분명한 검증을 검증하는 테크닉은 고의적으로 검증되는 코드에
+	버그를 집어넣는 것이란 것을 알게 될겁니다.
+	만약 겸증 코드가 그것들을 찾는데 실패한다면, 그 검증은 분명히 버그로
+	가득차 있는 것입니다.
+\item	{\bf 어토믹 인스트럭션들의 사용이 검증을 단순화 시킬 수 있습니다.}
+	안타깝게도, \co{cmpxchg} 어토믹 명령어의 사용은 중요한 irq 빠른 수행
+	경로를 느리게 수행되도록 만들어서 이 경우에 적절치 못할 수도 있습니다.
+\item	{\bf 복잡한 정식 검증의 필요는 당신의 설계를 다시 한번 생각해 봐야 할
+	필요성을 의미합니다.}
+\iffalse
+
 \item	{\bf Always verify your verification code.}
 	The usual way to do this is to insert a deliberate bug
 	and verify that the verification code catches it.  Of course,
@@ -2678,10 +2716,16 @@ This effort provided some lessons (re)learned:
 	are not appropriate in this case.
 \item	{\bf The need for complex formal verification often indicates
 	a need to re-think your design.}
+\fi
 \end{enumerate}
+
+이 마지막 핵심에 이르러서, 다음 섹션에서 보여지게 될, dynticks 문제에 대한 훨씬
+간단한 해결책이 있음이 드러났습니다.
+\iffalse
 
 To this last point, it turn out that there is a much simpler solution to
 the dynticks problem, which is presented in the next section.
+\fi
 
 \subsubsection{Simplicity Avoids Formal Verification}
 \label{sec:formal:Simplicity Avoids Formal Verification}
