@@ -2938,6 +2938,25 @@ passed through a quiescent state during that interval.
 \end{figure}
 
 Figure~\ref{fig:formal:Entering and Exiting Dynticks-Idle Mode}
+는 ``nohz'' 모드라고도 알려진 dynticks-idle 모드를 들어가고 빠져나오는
+\co{rcu_enter_nohz()} 와 \co{rcu_exit_nohz()} 를 보이고 있습니다.
+이 두 함수들은 프로세스 컨텍스트에서 호출됩니다.
+
+Line~6 는 모든 앞의 (RCU read-side 크리티컬 섹션들로부터의 액세스들을 포함할 수
+있는) 메모리 액세스들이 dynticks-idle 모드로의 진입을 표시하는 CPU 들보다
+앞서서 다른 CPU 들에 보여질 것을 보장합니다.
+Line~7 과 12 는 irq 를 각각 비활성화시키고 재활성화 시킵니다.
+Line~8 은 현재 CPU 의 \co{rcu_dynticks} 구조체로의 포인터를 얻어오고, line~9 는
+현재 CPU 의 \co{dynticks} 카운터의 값을 증가시키는데, 우린 프로세스
+컨텍스트에서 dynticks-idle 모드에 진입하고 있으므로 짝수가 되어야 할 겁니다.
+마지막으로, line~10 은 이제 0이 되어야 하는 \co{dynticks_nesting} 의 값을
+감소시킵니다.
+
+\co{rcu_exit_nohz()} 함수는 이와 상당히 유사합니다만, \co{dynticks_nesting} 을
+감소시키는게 아니라 증가시키며 \co{dynticks} 의 반대 특성을 체크합니다.
+\iffalse
+
+Figure~\ref{fig:formal:Entering and Exiting Dynticks-Idle Mode}
 shows the \co{rcu_enter_nohz()} and \co{rcu_exit_nohz()},
 which enter and exit dynticks-idle mode, also known as ``nohz'' mode.
 These two functions are invoked from process context.
@@ -2956,6 +2975,7 @@ Finally, line~10 decrements \co{dynticks_nesting}, which should now be zero.
 The \co{rcu_exit_nohz()} function is quite similar, but increments
 \co{dynticks_nesting} rather than decrementing it and checks for
 the opposite \co{dynticks} polarity.
+\fi
 
 \subsubsection{NMIs From Dynticks-Idle Mode}
 \label{sec:formal:NMIs From Dynticks-Idle Mode}
