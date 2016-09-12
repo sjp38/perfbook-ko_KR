@@ -2775,6 +2775,20 @@ Manfred Spraul~\cite{ManfredSpraul2008StateMachineRCU}.
 \end{figure}
 
 Figure~\ref{fig:formal:Variables for Simple Dynticks Interface}
+는 새로운 per-CPU 상태 변수들을 보입니다.
+이 변수들은 복수의 개별적인 RCU 구현들 (ex: \co{rcu} 와 \co{rcu_bh}) 이 편하고
+효과적으로 dynticks 상태를 공유할 수 있도록 하기 위해 구조체로
+그룹지어졌습니다.
+이어서 언급할 것들은 개별적인 per-CPU 변수들로 생각될 수도 있습니다.
+
+\co{dynticks_nesting}, \co{dynticks}, 그리고 \co{dynticks_snap} 변수들은 irq
+코드 수행 경로들을 위한 것이고, \co{dynticks_nmi} 와 \co{dynticks_nmi_snap}
+변수들은 NMI 코드 수행 경로들을 위한 것입니다만, NMI 코드 수행 경로는
+\co{dynticks_nesting} 변수 역시 레퍼런스할 (하지만 수정하지는 않을) 겁니다.
+이 변수들은 다음과 같이 사용됩니다:
+\iffalse
+
+Figure~\ref{fig:formal:Variables for Simple Dynticks Interface}
 shows the new per-CPU state variables.
 These variables are grouped into structs to allow multiple independent
 RCU implementations (e.g., \co{rcu} and \co{rcu_bh}) to conveniently
@@ -2787,8 +2801,22 @@ are for the irq code paths, and the \co{dynticks_nmi} and
 the NMI code path will also reference (but not modify) the
 \co{dynticks_nesting} variable.
 These variables are used as follows:
+\fi
 
 \begin{itemize}
+\item	\co{dynticks_nesting}:
+	이 변수는 연관된 CPU 가 RCU read-side 크리티컬 섹션들을 위해 모니터링
+	되어야 하는 이유들의 수를 카운트 합니다.
+	만약 CPU 가 dynticks-idle 모드에 있다면, 이 변수는 irq 중첩 단계를
+	카운트하게 되고, 그렇지 않다면 irq 중첩 단계보다 1 큰 값을 갖게 됩니다.
+\item	\co{dynticks}:
+	이 카운터의 값은 연관된 CPU 가 dynticks-idle 모드에 있고 현재 해당 CPU
+	에서 수행중인 irq 핸들러가 없다면 짝수를, 그렇지 않다면 홀수의 값을
+	갖게 됩니다.
+	달리 말하자면, 이 카운터의 값이 홀수라면, 연관된 CPU 는 RCU read-side
+	크리티컬 섹션 안에 있을 수 있습니다.
+\iffalse
+
 \item	\co{dynticks_nesting}:
 	This counts the number of reasons that the corresponding
 	CPU should be monitored for RCU read-side critical sections.
@@ -2801,6 +2829,20 @@ These variables are used as follows:
 	running on that CPU, otherwise the counter's value is odd.
 	In other words, if this counter's value is odd, then the
 	corresponding CPU might be in an RCU read-side critical section.
+\fi
+\item	\co{dynticks_nmi}:
+	이 카운터의 값은 연관된 CPU 가 NMI 핸들러 안에 있다면 홀수가 되는데,
+	해당 NMI 가 이 CPU 가 현재 수행중인 irq 핸들러 없이 dyntick-idle 모드에
+	빠져 있을 때에만 그렇습니다.
+	그렇지 않다면, 해당 카운터의 값은 짝수가 됩니다.
+\item	\co{dynticks_snap}:
+	이것은 \co{dynticks} 카운터의 스냅샷이 됩니다만, 현재 RCU grace period
+	가 너무 긴 기간 동안 연장되었을 때에만 그렇습니다.
+\item	\co{dynticks_nmi_snap}:
+	이것은 \co{dynticks_nmi} 카운터의 스냅샷이 됩니다만, 역시 현재 RCU
+	grace period 가 너무 오랜 기간 동안 연장되었을 때에만 그렇습니다.
+\iffalse
+
 \item	\co{dynticks_nmi}:
 	This counter's value is odd if the corresponding CPU is
 	in an NMI handler, but only if the NMI arrived while this
@@ -2814,17 +2856,36 @@ These variables are used as follows:
 	This will be a snapshot of the \co{dynticks_nmi} counter, but
 	again only if the current RCU grace period has extended for too
 	long a duration.
+\fi
 \end{itemize}
+
+주어진 기간 동안 \co{dynticks} 와 \co{dynticks_nmi} 가 모두 짝수를 가지고
+있었다면, 연관된 CPU 는 해당 기간 동안 quiescent 상태를 지나온 것입니다.
+\iffalse
 
 If both \co{dynticks} and \co{dynticks_nmi} have taken on an even
 value during a given time interval, then the corresponding CPU has
 passed through a quiescent state during that interval.
+\fi
 
 \QuickQuiz{}
+	하지만, 만약 NMI 핸들러가 irq 핸들러가 완료되기 전에 동작하기 시작하면,
+	그리고 그 NMI 핸들러가 두번째 irq 핸들러가 시작될 때까지 돌아가면 어떤
+	일이 발생할까요?
+	\iffalse
+
 	But what happens if an NMI handler starts running before
 	an irq handler completes, and if that NMI handler continues
 	running until a second irq handler starts?
+	\fi
 \QuickQuizAnswer{
+	이는 하나의 CPU 에 몰아넣은 상황에선 일어날 수 없는 일입니다.
+	첫번째 irq 핸들러는 NMI 핸들러가 리턴하기 전까지는 완료될 수 없습니다.
+	따라서, \co{dynticks} 와 \co{dynticks_nmi} 변수들 각각이 주어진 시간
+	기간동안 짝수를 가졌다면, 연관된 CPU 는 그 기간 중의 어느 시점에는
+	quiescent 상태에 정말로 있었을 겁니다.
+	\iffalse
+
 	This cannot happen within the confines of a single CPU.
 	The first irq handler cannot complete until the NMI handler
 	returns.
@@ -2832,6 +2893,7 @@ passed through a quiescent state during that interval.
 	variables have taken on an even value during a given time
 	interval, the corresponding CPU really was in a quiescent
 	state at some time during that interval.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Entering and Leaving Dynticks-Idle Mode}
