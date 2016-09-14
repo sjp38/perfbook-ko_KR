@@ -3169,6 +3169,22 @@ a reschedule API if so.
 \end{figure}
 
 Figure~\ref{fig:formal:Saving Dyntick Progress Counters}
+는 명시된 CPU 의 \co{dynticks} 와 \co{dyntiks_nmi} 카운터들의 스냅샷을 가져오는
+\co{dyntick_save_progress_counter()} 를 보입니다.
+Line~8 과 9 는 이 두개의 변수들을 로컬로 스냅샷을 떠오고, line~10 은
+Figure~\ref{fig:formal:Entering and Exiting Dynticks-Idle Mode},
+\ref{fig:formal:NMIs From Dynticks-Idle Mode}, 그리고
+\ref{fig:formal:Interrupts From Dynticks-Idle Mode} 의 함수들의 메모리
+배리어들과 짝을 맞추기 위해 메모리 배리어를 실행합니다.
+Line~11 과 12 는 나중의 \co{rcu_implicit_dynticks_qs} 호출을 위한 스냅샷들을
+기록해 두고, line~13 과 14 는 dynticks-idle 모드의 이 CPU 가 irq 도 NMI 도
+진행중이 아니어서 (달리 말하자면, 두 스냅샷 모두 짝수를 가지고 있어서) 연장된
+quiescent state 안에 있는 것인지 체크를 합니다.
+만약 그렇다면, line~15 와 16 은 이 이벤트를 세고, 이 CPU 가 quiescent state
+line~17 에서 true 를 리턴합니다.
+\iffalse
+
+Figure~\ref{fig:formal:Saving Dyntick Progress Counters}
 shows \co{dyntick_save_progress_counter()}, which takes a snapshot
 of the specified CPU's \co{dynticks} and \co{dynticks_nmi}
 counters.
@@ -3185,6 +3201,7 @@ neither irqs nor NMIs in progress (in other words, both snapshots
 have even values), hence in an extended quiescent state.
 If so, lines~15 and~16 count this event, and line~17 returns
 true if the CPU was in a quiescent state.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -3219,6 +3236,29 @@ true if the CPU was in a quiescent state.
 \end{figure}
 
 Figure~\ref{fig:formal:Checking Dyntick Progress Counters}
+는 CPU 가 \co{dynticks_save_progress_counter()} 호출에 이어서 dyntick-idle
+모드에 들어갔는지 여부를 체크하는 \co{rcu_implicit_dynticks_qs()} 함수를
+보입니다.
+Line~9 와 11 은 연관된 CPU 의 \co{dynticks} 와 \co{dynticks_nmi} 변수들의
+새로운 스냅샷을 가져오고, line~10 과 12 는 기존에
+\co{dynticks_save_progress_counter()} 에 ㅡ이해 저장된 스냅샷을 가져옵니다.
+Line~13 은 이어서
+Figure~\ref{fig:formal:Entering and Exiting Dynticks-Idle Mode},
+\ref{fig:formal:NMIs From Dynticks-Idle Mode}, 그리고
+\ref{fig:formal:Interrupts From Dynticks-Idle Mode} 의 함수들의 메모리
+배리어들과 짝을 맞추기 위해 메모리 배리어를 실행합니다.
+Line~14-16 은 이어서 해당 CPU 가 지금 (\co{curr} 와 \co{curr_nmi} 가 짝수를
+가져서) quiescent state 에 있거나 (\co{dynticks} 와 \co{dynticks_nmi} 의 값들이
+이미 변해서) 마지막의 \co{dynticks_save_progress_counter()} 호출 후에 quiescent
+state 를 지나왔는지를 체크합니다.
+만약 이 체크가 이 CPU 는 dyntick-idle quiescent state 를 지나왔다고 확인한다면,
+line~17 은 그 사실의 횟수를 세고 line~18 에서 이에 대한 사실을 알리는 값을
+리턴합니다.
+어떻게 되었든, line~20 에서는 오프라인인 CPU 를 기다리고 있는 RCU 를 초래할 수
+있는 경주 상황을 체크합니다.
+\iffalse
+
+Figure~\ref{fig:formal:Checking Dyntick Progress Counters}
 shows \co{rcu_implicit_dynticks_qs()}, which is called to check
 whether a CPU has entered dyntick-idle mode subsequent to a call
 to \co{dynticks_save_progress_counter()}.
@@ -3242,14 +3282,30 @@ quiescent state, then line~17 counts that fact and line~18 returns
 an indication of this fact.
 Either way, line~20 checks for race conditions that can result in RCU
 waiting for a CPU that is offline.
+\fi
 
 \QuickQuiz{}
+	이건 여전히 상당히 복잡하네요.
+	왜 그냥 dyntick-idle 모드에 있는 각 CPU 들에 대해 bit 의 값이 설정되어
+	있는 \co{cpumask_t} 를 갖고 irq 나 NMI 핸들러에 들어갈 때에는 그 비트의
+	값을 지우고, 빠져나올 때에는 그 값을 설정하는 식으로 하지 않는거죠?
+	\iffalse
+
 	This is still pretty complicated.
 	Why not just have a \co{cpumask_t} that has a bit set for
 	each CPU that is in dyntick-idle mode, clearing the bit
 	when entering an irq or NMI handler, and setting it upon
 	exit?
+	\fi
 \QuickQuizAnswer{
+	이 방법이 기능적으로는 올바르겠지만, 이는 커다란 머신에서는 지나치게
+	커다란 irq 들어가고 빠져나올 때의 오버헤드를 초래할 겁니다.
+	반면에, 이 섹션에서 이야기한 방법은 각각의 CPU 가 irq 와 NMI 에
+	들어가고 나올 때에 per-CPU 데이터만을 만지게 하므로 훨씬 적은 irq
+	들어가고 빠져나올 때의 오버헤드를 초래할 것이고, 특히 커다란 기계에선
+	더욱 그러할 겁니다.
+	\iffalse
+
 	Although this approach would be functionally correct, it
 	would result in excessive irq entry/exit overhead on
 	large machines.
@@ -3257,6 +3313,7 @@ waiting for a CPU that is offline.
 	each CPU to touch only per-CPU data on irq and NMI entry/exit,
 	resulting in much lower irq entry/exit overhead, especially
 	on large machines.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Discussion}
