@@ -3319,6 +3319,23 @@ waiting for a CPU that is offline.
 \subsubsection{Discussion}
 \label{sec:formal:Discussion}
 
+약간의 시점 변경이 RCU 를 위한 dynticks 이넡페이스의 상당한 단순화를
+가져왔습니다.
+이 단순화를 이끈 핵심 변경은 irq 와 NMI 컨텍스트 사이에 공유되는 것들의
+최소화였습니다.
+이 단순화된 인터페이스에서의 유일한 공유는 NMI 컨텍스트에서 irq 변수들로의
+레퍼런스들 (\co{dynticks} 변수) 뿐입니다.
+NMI 함수들은 이 변수를 절대 업데이트 하지 않아서 그 값은 NMI 핸들러의 수명 동안
+상수를 유지하므로 이런 종류의 공유는 친절한 편입니다.
+이런 공유의 한계는
+Section~\ref{sec:formal:Promela Parable: dynticks and Preemptible RCU} 에
+그려진, NMI 가 irq 함수들의 수행 도중의 어느 시점에든 공유된 상태를 바꿀 수
+있는 상황과는 반대로, 다행히도
+개별적인 함수들이 한번에 하나씩 이해되는걸 가능하게 합니다.
+
+검증은 좋은 일이 될 수 있지만, 단순화는 그보다도 좋습니다.
+\iffalse
+
 A slight shift in viewpoint resulted in a substantial simplification
 of the dynticks interface for RCU.
 The key change leading to this simplification was minimizing of
@@ -3336,3 +3353,4 @@ where an NMI might change shared state at any point during execution of
 the irq functions.
 
 Verification can be a good thing, but simplicity is even better.
+\fi
