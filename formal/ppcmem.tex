@@ -3,6 +3,22 @@
 \section{Special-Purpose State-Space Search}
 \label{sec:formal:Special-Purpose State-Space Search}
 
+Promela 와 spin 이 어떤 (작은) 알고리즘이든 굉장히 많은 부분을 검증할 수 있게
+해주긴 하지만, 그것들의 커다란 범용성은 어떨때에는 문제가 될수도 있습니다.
+예를 들어, Promela 는 메모리 모델들이나 재배치 의미들을 이해하지 못합니다.
+따라서 이 섹션은 제품화된 시스템들에서 사용되느 메모리 모델을 이해해서 완화된
+순서 규칙의 코드의 검증을 단순화 시켜주는 상태 공간 탐색 도구들을 설명합니다.
+
+예를 들어,
+Section~\ref{sec:formal:Promela Example: QRCU}
+는 완화된 메모리 순서 규칙을 처리하기 위해 Promela 를 어떻게 납득시켜야
+하는지를 보았습니다.
+이런 방법도 잘 동작할수 있지만, 이는 개발자가 해당 시스템의 메모리 모델을
+이해하고 있을 것을 필요로 합니다.
+안타깝게도, (존재한다 쳐도) 일부 개발자들만이 현대 CPU 들의 복잡한 메모리
+모델을 완전하게 이해하고 있습니다.
+\iffalse
+
 Although Promela and spin allow you to verify pretty much any (smallish)
 algorithm, their very generality can sometimes be a curse.
 For example, Promela does not understand memory models or any sort
@@ -18,6 +34,18 @@ Although this approach can work well, it requires that the developer
 fully understand the system's memory model.
 Unfortunately, few (if any) developers fully understand the complex
 memory models of modern CPUs.
+\fi
+
+따라서, 또다른 방법은
+Cambridge 대학의 Peter Sewell 과 Susmit Sarkar, INRIA 의 Luc Maranget,
+Francesco Zappa Nardelli, 그리고 Pankaj Pawan, 그리고 Oxford 대학의 Jade
+Alglave 가 IBM 의 Derek Williams 와 협력해서 만든
+PPCMEM~\cite{JadeAlglave2011ppcmem} 과 같은, 이미 이 메모리 순서 규칙을
+이해하고 있는 도구들을 활용하는 것입니다.
+이 그룹은 Power, ARM, x86 뿐만 아니라 C/C++11 표준~\cite{PeteBecker2011N3242}
+의 메모리 모델을 형식화 시키고 Power 와 ARM 형식에 기초하여 PPCMEM 도구를
+만들었습니다.
+\iffalse
 
 Therefore, another approach is to use a tool that already understands
 this memory ordering, such as the PPCMEM tool produced by
@@ -28,18 +56,42 @@ IBM~\cite{JadeAlglave2011ppcmem}.
 This group formalized the memory models of Power, ARM, x86, as well
 as that of the C/C++11 standard~\cite{PeteBecker2011N3242}, and
 produced the PPCMEM tool based on the Power and ARM formalizations.
+\fi
 
 \QuickQuiz{}
+	하지만 x86 은 강한 메모리 순서 규칙을 가지고 있어요!
+	왜 이 메모리 모델을 형식화 시켜야 하는거죠?
+	\iffalse
+
 	But x86 has strong memory ordering!  Why would you need to
 	formalize its memory model?
+	\fi
 \QuickQuizAnswer{
+	사실, 학계에서는 x86 메모리 모델을 완화된 것으로 여기는데, 앞의 store
+	가 뒤의 load 와 재배치될 수 있기 때문입니다.
+	학계의 시점에서 볼때, 강한 메모리 모델은 어떠한 재배치도 절대적으로
+	허용하지 않아서 모든 쓰레드들이 그들에게 보일 수 있는 모든
+	오퍼레이션들의 순서에 대해 동의할 수 있는 것입니다.
+	\iffalse
+
 	Actually, academics consider the x86 memory model to be weak
 	because it can allow prior stores to be reordered with
 	subsequent loads.
 	From an academic viewpoint, a strong memory model is one
 	that allows absolutely no reordering, so that all threads
 	agree on the order of all operations visible to them.
+	\fi
 } \QuickQuizEnd
+
+PPCMEM 도구는 입력으로 \emph{리트머스 테스트} 를 받습니다.
+예제 리트머스 테스트가
+Section~\ref{sec:formal:Anatomy of a Litmus Test} 에 있습니다.
+Section~\ref{sec:formal:What Does This Litmus Test Mean?} 은 이 리트머스
+테스트를 동일한 C-언어 프로그램으로 관계지어 보고,
+Section~\ref{sec:formal:Running a Litmus Test} 는 PPCMEM 을 이 리트머스
+테스트에 어떻게 적용하는지를 설명하며,
+Section~\ref{sec:formal:PPCMEM Discussion} 이로부터의 의미를 이야기해 봅니다.
+\iffalse
 
 The PPCMEM tool takes \emph{litmus tests} as input.
 A sample litmus test is presented in
@@ -50,6 +102,7 @@ Section~\ref{sec:formal:Running a Litmus Test} describes how to
 apply PPCMEM to this litmus test, and
 Section~\ref{sec:formal:PPCMEM Discussion}
 discusses the implications.
+\fi
 
 \subsection{Anatomy of a Litmus Test}
 \label{sec:formal:Anatomy of a Litmus Test}
