@@ -293,6 +293,22 @@ your Power or ARM memory-ordering question.
 \subsection{What Does This Litmus Test Mean?}
 \label{sec:formal:What Does This Litmus Test Mean?}
 
+P0 의 line~8 과 9 는 C 언어의 \co{x=1} 과 같은데, line~4 에서 P0 의 레지스터
+\co{r2} 가 \co{x} 의 주소를 갖도록 정의했기 때문입니다.
+P0 의 line~12 와 13 은 각각 load-linked (ARM 용어로는 ``load register
+exclusive'' 이고 Power 용어로는 ``load reserve'') 와 store-conditional (ARM
+용어로는 ``store register exclusive'') 입니다.
+이것들이 함께 사용되면, x86 에서는 \co{lock;cmpxchg} 인스트럭션으로 표현되는
+compare-and-swap 시퀀스와 유사한 어토믹 인스트럭션을 형성하게 됩니다.
+더 높은 차원의 추상화 단계로 이야기 하면, line~10-15 의 시퀀스는 리눅스 커널의
+\co{atomic_add_return(&z, o)} 와 같습니다.
+마지막으로, line~16 은 C 언어의 \co{r3=y} 와 같습니다.
+
+P1 의 line~8 과 9 는 C 언어의 \co{y=1} 과 같으며, line~10 은 리눅스 커널의
+\co{smp_mb()} 와 동일한 메모리 배리어이며, line~11 은 C 언어의 \co{r3=x} 와
+같습니다.
+\iffalse
+
 P0's lines~8 and~9 are equivalent to the C statement \co{x=1} because
 line~4 defines P0's register \co{r2} to be the address of \co{x}. P0's
 lines~12 and~13 are the mnemonics for load-linked (``load register
@@ -308,12 +324,31 @@ roughly equivalent to the C statement \co{r3=y}.
 P1's lines~8 and~9 are equivalent to the C statement \co{y=1}, line~10
 is a memory barrier, equivalent to the Linux kernel statement \co{smp_mb()},
 and line~11 is equivalent to the C statement \co{r3=x}.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:sec:formal:PPCMEM Litmus Test} 의 line~17 의 \co{Fail:}
+	라벨에서는 무슨 일이 벌어지게 되는거죠?
+	\iffalse
+
 	But whatever happened to line~17 of
 	Figure~\ref{fig:sec:formal:PPCMEM Litmus Test},
 	the one that is the \co{Fail:} label?
+	\fi
 \QuickQuizAnswer{
+	\co{atomic_add_return()} 의 Powerpc 버전 구현은 \co{stwcx} 인스트럭션이
+	condition-code 레지스터에 있는 0이 아닌 상태값을 설정함으로써 통신을
+	하며 \co{bne} 인스트럭션을 통해 테스트 하게 되는 성공 여부가 실패로
+	드러나면 루프를 돌게 됩니다.
+	실제 루프를 모델링하게 되는 것은 상태 공간의 폭증을 유발하게 되므로,
+	그대신에 우리는 Fail: 라벨로의 브랜치를 하고, P0 의 \co{r3}
+	레지스터의 값이 초기값 2인 형태로 모델링을 종료하여서, exists 단정문의
+	실패를 유발하지 않게 합니다.
+
+	이 트릭이 일반적으로 적용 가능한 것인지에 대해서는 일부 논쟁이
+	있습니다만, 전 아직 이게 실패하는 예제를 본적이 없습니다.
+	\iffalse
+
 	The implementation of powerpc version of \co{atomic_add_return()}
 	loops when the \co{stwcx} instruction fails, which it communicates
 	by setting non-zero status in the condition-code register,
@@ -325,6 +360,7 @@ and line~11 is equivalent to the C statement \co{r3=x}.
 
 	There is some debate about whether this trick is universally
 	applicable, but I have not seen an example where it fails.
+	\fi
 } \QuickQuizEnd
 
 { \scriptsize
@@ -355,6 +391,17 @@ and line~11 is equivalent to the C statement \co{r3=x}.
 \label{fig:sec:formal:Meaning of PPCMEM Litmus Test}
 \end{figure}
 
+이 모든 것들을 한자리에 모아서 만든, 전체 리트머스 테스트와 동이한 C-언어
+코드가
+Figure~\ref{fig:sec:formal:Meaning of PPCMEM Litmus Test}
+에 보여져 있습니다.
+핵심은, \co{atomic_add_return()} 이 (리눅스 커널의 요구사항이 그렇듯) 전체
+메모리 배리어처럼 동작한다면, 실행이 완료된 후에 \co{P0()} 의, 그리고 \co{P1()}
+의 \co{r3} 가 모두 0일 수는 없다는 것입니다.
+
+다음 섹션은 이 리트머스 테스트를 어떻게 수행할 수 있는지 설명합니다.
+\iffalse
+
 Putting all this together, the C-language equivalent to the entire litmus
 test is as shown in
 Figure~\ref{fig:sec:formal:Meaning of PPCMEM Litmus Test}.
@@ -364,6 +411,7 @@ then it should be impossible for \co{P0()}'s and \co{P1()}'s \co{r3}
 variables to both be zero after execution completes.
 
 The next section describes how to run this litmus test.
+\fi
 
 \subsection{Running a Litmus Test}
 \label{sec:formal:Running a Litmus Test}
