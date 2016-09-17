@@ -138,6 +138,23 @@ discusses the implications.
 \label{fig:sec:formal:PPCMEM Litmus Test}
 \end{figure}
 
+PPCMEM 을 위한 예제 PowerPC 리트머스 테스트가
+Figure~\ref{fig:sec:formal:PPCMEM Litmus Test}
+에 보여져 있습니다.
+ARM 인터페이스도 정확히 같은 방식으로 동작합니다만, 그러기 위해선 첫줄의
+``PPC'' 가 ``ARM'' 으로 바뀌어야 하고 Power 인스트럭션(instruction) 이 ARM
+인스트럭션으로 대체되어야 합니다.
+뒤에서 이야기될 웹페이지의 ``Change to ARM model'' 을 클릭하는 것으로 ARM
+인터페이스를 선택할 수 있습니다.
+
+예제에서, line~1 은 시스템의 종류 (``ARM'' 또는 ``PPC'') 를 밝히고 모델의
+이름을 포함합니다.
+Line~2 는 테스트의 대안적 이름을 위한 공간을 제공하는데, 일반적으로는 앞의
+예제에서 보인 것처럼 빈줄로 남겨두게 될 겁니다.
+주석은 line~2 와 3 사이에 Ocaml (또는 Pascal) 문법의 \nbco{(* *)} 를 이용해
+들어갈 수 있습니다.
+\iffalse
+
 An example PowerPC litmus test for PPCMEM is shown in
 Figure~\ref{fig:sec:formal:PPCMEM Litmus Test}.
 The ARM interface works exactly the same way, but with ARM instructions
@@ -150,6 +167,26 @@ and contains the title for the model. Line~2 provides a place for an
 alternative name for the test, which you will usually want to leave
 blank as shown in the above example. Comments can be inserted between
 lines~2 and~3 using the OCaml (or Pascal) syntax of \nbco{(* *)}.
+\fi
+
+Line~3-6 는 모든 레지스터들의 초기 값들을 제공합니다; 각각은 \co{P:R=V} 의
+형태로, \co{P} 는 프로세스 식별자이고, \co{R} 은 레지스터 식별자이며, \co{V} 는
+값입니다.
+예를 들어, 프로세스 0의 레지스터 r3 는 초기에 2라는 값을 담고 있습니다.
+만약 값이 변수 (예제의 \co{x}, \co{y}, 또는 \co{z}) 라면 레지스터는 해당 변수의
+주소로 초기화 됩니다.
+변수의 값을 초기화 시키는 것도 가능한데, 예를 들어 \co{x=1} 은 \co{x} 의 값을
+1로 초기화 시킵니다.
+초기화 되지않은 변수들은 기본값으로 0을 갖게 되어서, 이 예제에서는 \co{x},
+\co{y}, 그리고 \co{z} 는 모두 초기에 0의 값을 갖습니다.
+
+Line~7 은 두 프로세스를 위한 식별자를 제공하므로, line~4 의 \co{0:r3=2} 는
+\co{P0:r3=2} 로 대신 쓰여질 수 있습니다.
+Line~7 은 있어야만 하며, 식별자들은 \co{Pn} 의 형태여야만 하며, \co{n} 은 열
+수로, 가장 왼쪽의 열을 0으로 세는 것부터 시작합니다.
+이는 불필요하게 엄정한 것으로 보여질 수도 있겠습니다만, 이는 실제 사용에 있어
+많은 혼란을 방지해 줍니다.
+\iffalse
 
 Lines~3-6 give initial values for all registers; each is of the form
 \co{P:R=V}, where \co{P} is the process identifier, \co{R} is the register
@@ -167,13 +204,30 @@ required, and the identifiers must be of the form \co{Pn}, where \co{n}
 is the column number, starting from zero for the left-most column. This
 may seem unnecessarily strict, but it does prevent considerable confusion
 in actual use.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:sec:formal:PPCMEM Litmus Test}
+	의 line~8 은 왜 레지스터들을 초기화 시키죠?
+	왜 그것들을 line~4 와 5 에서 대신 초기화 시키지 않나요?
+	\iffalse
+
 	Why does line~8
 	of Figure~\ref{fig:sec:formal:PPCMEM Litmus Test}
 	initialize the registers?
 	Why not instead initialize them on lines~4 and~5?
+	\fi
 \QuickQuizAnswer{
+	두 방식 모두 잘 동작합니다.
+	하지만, 일반적으로는, 명시적 인스트럭션 사용보다는 초기화를 사용하는게
+	낫습니다.
+	이 예제에서의 명시적 인스트럭션들은 그 사용법을 보이기 위해
+	사용되었습니다.
+	또한, 이 도구의 웹사이트 (\url{http://www.cl.cam.ac.uk/~pes20/ppcmem/})
+	에서 사용 가능한 리트머스 테스트들 가운데 많은 것들은 명시적 초기화
+	인스트럭션들을 사용하도록 자동으로 생성되었습니다.
+	\iffalse
+
 	Either way works.
 	However, in general, it is better to use initialization than
 	explicit instructions.
@@ -183,7 +237,23 @@ in actual use.
 	web site (\url{http://www.cl.cam.ac.uk/~pes20/ppcmem/}) were
 	automatically generated, which generates explicit
 	initialization instructions.
+	\fi
 } \QuickQuizEnd
+
+Line~8-17 은 각각의 프로세스를 위한 코드들입니다.
+프로세스는 P0 의 line~11 과 P1 의 line~12-17 처럼 빈 줄을 가질 수도 있습니다.
+라벨과 브랜치들 역시 사용 가능한데, line~14 의 브랜치와 line~17 의 라벨로
+사용이 보여져 있습니다.
+그렇다곤 하나, 너무 자유로운 브랜치 사용은 상태 공간의 크기를 폭증시킬 수
+있습니다.
+루프의 사용은 특히나 상태 공간의 크기를 폭증시키기 위한 좋은 방법입니다.
+
+Line~19-20 은 단정문을 보이는데, 이 경우에는 두 쓰레드가 모두 실행을 완료한
+후에 P0 의, 그리고 P1 의 r3 레지스터들이 모두 0을 가지고 있을 수 있는지에
+우리가 관심을 갖고 있음을 보입니다.
+먄약 P0 와 P1 이 모두 각각의 r3 레지스터에서 0을 보게 된다면 안타깝게도 실패할
+수 있는 수많은 경우들이 존재할 수 있기에 이 단정문은 중요합니다.
+\iffalse
 
 Lines~8-17 are the lines of code for each process. A given process
 can have empty lines, as is the case for P0's line~11 and P1's
@@ -198,6 +268,17 @@ are interested in whether P0's and P1's r3 registers can both contain
 zero after both threads complete execution. This assertion is important
 because there are a number of use cases that would fail miserably if
 both P0 and P1 saw zero in their respective r3 registers.
+\fi
+
+이것만으로도 간단한 리트머스 테스트들을 구성하는데 충분한 정보가 될 겁니다.
+몇가지 추가적인 문서화가 가능합니다만, 이런 추가적인 문서화들은 대부분 테스트를
+실제 하드웨어 위에서 수행하기 위한 다른 연구용 도구를 위한 것입니다.
+어쩌면 더 중요한 것은, 많은 수의 이미 존재하는 리트머스 테스트들은 온라인
+도구를 통해서도 (``Select ARM Test'' 와 ``Select POWER Test'' 벝느들을 통해서)
+사용 가능하다는 것입니다.
+이런 미리 존재하는 리트머스 테스트들 가운데 하나가 당신의 Power 나 ARM 메모리
+순서 규칙에 대한 질문에 대한 답이 될수도 있을 겁니다.
+\iffalse
 
 This should give you enough information to construct simple litmus
 tests. Some additional documentation is available, though much of this
@@ -207,6 +288,7 @@ pre-existing litmus tests are available with the online tool (available
 via the ``Select ARM Test'' and ``Select POWER Test'' buttons). It is
 quite likely that one of these pre-existing litmus tests will answer
 your Power or ARM memory-ordering question.
+\fi
 
 \subsection{What Does This Litmus Test Mean?}
 \label{sec:formal:What Does This Litmus Test Mean?}
