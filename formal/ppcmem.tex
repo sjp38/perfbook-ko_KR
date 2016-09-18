@@ -416,6 +416,15 @@ The next section describes how to run this litmus test.
 \subsection{Running a Litmus Test}
 \label{sec:formal:Running a Litmus Test}
 
+리트머스 테스트들은
+\url{http://www.cl.cam.ac.uk/~pes20/ppcmem/} 를 통해서 대화형으로 수행되어
+메모리 모델에 대한 이해를 도울 수 있습니다.
+하지만, 이 방법은 사용자가 직접 전체 상태 공간 탐색을 해야 할 것을 필요로
+합니다.
+모든 가능한 이벤트들의 시퀀스를 체크했다고 자신하긴 어려우므로, 이런 목적을
+위한 별개의 도구가 제공됩니다~\cite{PaulEMcKenney2011ppcmem}.
+\iffalse
+
 Although litmus tests may be run interactively via
 \url{http://www.cl.cam.ac.uk/~pes20/ppcmem/}, which can help build an
 understanding of the memory model.
@@ -424,6 +433,7 @@ full state-space search.
 Because it is very difficult to be sure that you have checked every
 possible sequence of events, a separate tool is provided for this
 purpose~\cite{PaulEMcKenney2011ppcmem}.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -450,6 +460,17 @@ Observation SB+lwsync-RMW-lwsync+isync Sometimes 1
 \label{fig:sec:formal:PPCMEM Detects an Error}
 \end{figure}
 
+Figure~\ref{fig:sec:formal:PPCMEM Litmus Test}
+에 보인 리트머스 테스트는 read-modify-write 인스트럭션들을 포함하고 있기
+때문에, 커맨드 라인에 \co{-model} 인자를 추가해야만 합니다.
+해당 리트머스 테스트가 \co{filename.litmus} 에 저장되어 있다면, 이는
+Figure~\ref{fig:sec:formal:PPCMEM Detects an Error} 에 보여진 것과 같은 결과를
+보일 것인데, 여기서 \co{...} 은 많은 양의 빌드 진행상의 출력을 대체하고
+있습니다.
+마지막 줄의 ``Sometimes'' 는 이를 증명합니다: 해당 단정문의 조건은 항상 그런건
+아니지만 일부 수행에서는 일어날 수 있습니다.
+\iffalse
+
 Because the litmus test shown in
 Figure~\ref{fig:sec:formal:PPCMEM Litmus Test}
 contains read-modify-write instructions, we must add \co{-model}
@@ -463,6 +484,7 @@ that the old PowerPC implementation of \co{atomic_add_return()} does
 not act as a full barrier.
 The ``Sometimes'' on the last line confirms this: the assertion triggers
 for some executions, but not all of the time.
+\fi
 
 { \scriptsize
 \begin{verbbox}
@@ -488,6 +510,15 @@ Observation SB+lwsync-RMW-lwsync+sync Never 0 5
 \label{fig:sec:formal:PPCMEM on Repaired Litmus Test}
 \end{figure}
 
+이 리눅스 커널 버그를 고치는 방법은 P0 의 \co{isync} 를 \co{sync} 로 교체하는
+것으로, 이렇게 수정된 테스트는
+Figure~\ref{fig:sec:formal:PPCMEM on Repaired Litmus Test} 에 보인 것과 같은
+결과를 나오게 합니다.
+볼 수 있듯, \co{0:r3=0; 1:r3=0;} 는 상태들의 리스트에 나타나 있지 않고, 마지막
+줄은 ``Never'' 라고 이야기 합니다.
+따라서, 해당 모델은 문제가 되는 실행 시퀀스는 일어날 수 없음을 예측합니다.
+\iffalse
+
 The fix to this Linux-kernel bug is to replace P0's \co{isync} with
 \co{sync}, which results in the output shown in
 Figure~\ref{fig:sec:formal:PPCMEM on Repaired Litmus Test}.
@@ -495,16 +526,31 @@ As you can see, \co{0:r3=0; 1:r3=0;} does not appear in the list of states,
 and the last line calls out ``Never''.
 Therefore, the model predicts that the offending execution sequence
 cannot happen.
+\fi
 
 \QuickQuiz{}
+	ARM 리눅스 커널도 비슷한 버그를 가지고 있나요?
+	\iffalse
+
 	Does the ARM Linux kernel have a similar bug?
+	\fi
 \QuickQuizAnswer{
+	ARM 에서 리눅스는 \co{atomic_add_return()} 함수의 어셈블리어 구현의
+	앞과 뒤에 \co{smp_mb()} 를 넣어두기 때문에 이 특정한 버그는 ARM 에는
+	존재하지 않습니다.
+	PowerPC 는 더이상 이 버그를 가지고 있지 않습니다; 이 버그는 오래전에
+	고쳐졌습니다.
+	리눅스 커널이 가지고 있을수도 있는 또다른 버그들을 찾는 것은 독자
+	여러분의 몫으로 남겨두겠습니다.
+	\iffalse
+
 	ARM does not have this particular bug because that it places
 	\co{smp_mb()} before and after the \co{atomic_add_return()}
 	function's assembly-language implementation.
 	PowerPC no longer has this bug; it has long since been fixed.
 	Finding any other bugs that the Linux kernel might have is left
 	as an exercise for the reader.
+	\fi
 } \QuickQuizEnd
 
 \subsection{PPCMEM Discussion}
