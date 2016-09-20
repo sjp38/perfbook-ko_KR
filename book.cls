@@ -8,7 +8,12 @@
 %% 
 %% This is a generated file.
 %% 
-%% Copyright 1993 1994 1995 1996 1997 1998 1999 2000 2001 2002 2003 2004 2005 2006 2007 2008 2009
+%% The source is maintained by the LaTeX Project team and bug
+%% reports for it can be opened at http://latex-project.org/bugs.html
+%% (but please observe conditions on bug reports sent to that address!)
+%%
+%%
+%% Copyright 1993-2016
 %% The LaTeX3 Project and any individual authors listed elsewhere
 %% in this file.
 %% 
@@ -27,6 +32,10 @@
 %% by the LaTeX Project.  These modifications allow specifying "hardcover"
 %% in order to generate 10.75x8.25in pages for hardcover books.
 %% 
+%% It has also been modified by Akira Yokosawa. The modification fixes
+%% indentation behavior of first paragraph in a chapter when twocolumn
+%% option is specified.
+%%
 %% This file may only be distributed together with a copy of the LaTeX
 %% base system. You may however distribute the LaTeX base system without
 %% such generated files.
@@ -55,7 +64,7 @@
 %%   Right brace   \}     Tilde         \~}
 \NeedsTeXFormat{LaTeX2e}[1995/12/01]
 \ProvidesClass{book}
-              [2007/10/19 v1.4h-pem
+              [2014/09/29 v1.4h-pem-ay
  Standard LaTeX document class]
 \newcommand\@ptsize{}
 \newif\if@restonecol
@@ -386,8 +395,8 @@
                       \@topnewpage[\@makechapterhead{#2}]%
                     \else
                       \@makechapterhead{#2}%
-                      \@afterheading
-                    \fi}
+                    \fi
+                    \@afterheading}
 \def\@makechapterhead#1{%
   \vspace*{50\p@}%
   {\parindent \z@ \raggedright \normalfont
@@ -406,8 +415,8 @@
                    \@topnewpage[\@makeschapterhead{#1}]%
                  \else
                    \@makeschapterhead{#1}%
-                   \@afterheading
-                 \fi}
+                 \fi
+                 \@afterheading}
 \def\@makeschapterhead#1{%
   \vspace*{50\p@}%
   {\parindent \z@ \raggedright
