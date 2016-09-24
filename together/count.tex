@@ -43,6 +43,23 @@ protection of that element's lock!
 \subsection{Counting Lookups}
 \label{sec:together:Counting Lookups}
 
+Schr\"odinger 가 각 동물에의 검색의 횟수 역시 세고 싶어하며, 검색은 RCU 를 통해
+보호되고 있다고 생각해 봅시다.
+이런 카운팅은 어떻게 하는게 최선일까요?
+
+한가지 방법은
+Section~\ref{sec:together:Counting Updates}
+에서 이야기한 원소별 락을 사용해서 검색 카운터를 보호하는 것일 겁니다.
+불행히도, 이는 모든 검색이 락을 잡을 것을 필요로 해서, 커다란 시스템에서는
+상당한 병목지점이 될겁니다.
+
+또다른 방법은 카운팅이 ``안된다고 하기'' 로, \co{noatime} 마운트 옵션의 예를
+따릅니다.
+이 방법이 사용 가능한 경우라면, 이게 최고의 방법임이 분명합니다: 무엇보다,
+아무것도 하지 않는것보다 빠른 것은 없습니다.
+검색 카운트가 면제될 수 없다면, 마저 읽어주세요!
+\iffalse
+
 Suppose that Schr\"odinger also wants to count the number of lookups for
 each animal, where lookups are protected by RCU.
 How can this counting best be done?
@@ -58,6 +75,29 @@ of the \co{noatime} mount option.
 If this approach is feasible, it is clearly the best:  After all, nothing
 is faster than doing nothing.
 If the lookup count cannot be dispensed with, read on!
+\fi
+
+Chapter~\ref{chp:Counting} 에 나온 모든 카운터들이 사용될 수 있는데,
+Section~\ref{sec:count:Statistical Counters}
+에서 설명한 통계적 카운터가 아마도 가장 흔한 선택이 될겁니다.
+하지만, 이는 커다란 메모리 사용량을 초래합니다: 요구되는 카운터들의 갯수는
+데이터 원소들의 갯수에 쓰레드의 갯수를 곱한 값이 됩니다.
+
+이런 메모리 오버헤드가 지나치다면, CPU 별 카운터 대신 소켓별 카운터를 유지하고
+Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, 60 CPUs}.
+에 보여진 것처럼 해시 테이블 성능 결과를 주목하는 방법이 있습니다.
+이는 카운터 증가는 어토믹 오퍼레이션이 될 것을 필요로 할 것인데, 특히 특정
+쓰레드가 언제든 다른 CPU 로 옮겨갈 수 있는 사용자 모드 수행에서는 특히
+그렇습니다.
+
+만약 일부 원소들이 매우 자주 검색된다면, 쓰레드별 로그를 유지하며 특정 원소를
+위한 여러 로그 항목들이 병합될 수 있는 식으로 업데이트들을 몰아서 처리하는
+방법들이 있습니다.
+특정 로그 항목이 충분히 많은 횟수 증가되었거나 충분히 많은 시간이 지났다면,
+해당 로그 항목은 연관된 데이터 항목에 적용될 수 있을 겁니다.
+Silas Boyd-Wickizer 는 이런 노선을 정형화
+시켰습니다~\cite{SilasBoydWickizerPhD}.
+\iffalse
 
 Any of the counters from
 Chapter~\ref{chp:Counting}
@@ -84,3 +124,4 @@ sufficient time has passed, the log entries may be applied to the
 corresponding data elements.
 Silas Boyd-Wickizer has done some work formalizing this
 notion~\cite{SilasBoydWickizerPhD}.
+\fi
