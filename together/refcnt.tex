@@ -317,6 +317,18 @@ open-coded instead.
 \subsubsection{Atomic Counting}
 \label{sec:together:Atomic Counting}
 
+간단한 어토믹 카운팅은 레퍼런스를 획득하는 모든 CPU 는 레퍼런스를 이미 잡고
+있어야 하는 경우에 사용될 수 있습니다.
+이 스타일은 하나의 CPU 가 자신의 사용을 위해 오브젝트를 생성하지만 나중에
+태어난 다른 CPU, 태스크, 타이머 핸들러, 또는 I/O 완료 핸들러들이 그 오브젝트에
+접근할 수 있도록 해야만 할 때 사용됩니다.
+이 오브젝트를 넘겨주는 CPU 는 받게되는 오브젝트를 위해 새로운 레퍼런스를 먼저
+획득해야만 합니다.
+리눅스 커널에서는, \co{kref} 기능이 이런 스타일의 레퍼런스 카운팅을 구현하기
+위해 사용되는데,
+Figure~\ref{fig:together:Linux Kernel kref API} 에 보여져 있습니다.
+\iffalse
+
 Simple atomic counting may be used in cases where any CPU acquiring
 a reference must already hold a reference.
 This style is used when a single CPU creates an object for its
@@ -327,6 +339,20 @@ on behalf of the recipient object.
 In the Linux kernel, the \co{kref} primitives are used to implement
 this style of reference counting, as shown in
 Figure~\ref{fig:together:Linux Kernel kref API}.
+\fi
+
+모든 레퍼런스 카운팅 오퍼레이션들이 락킹으로 보호되지는 않는데, 이는 두개의
+다른 CPU 들이 동시에 레퍼런스 카운트를 조정할 수 있음을 의미하기 때문에 어토믹
+카운팅이 필요해집니다.
+평범한 값 증가와 감소 오퍼레이션이 사용된다면, 한쌍의 CPU 들이 둘 다 레퍼런스
+카운트를 동시에 가져와서, ``3'' 이라는 값을 읽을 수 있을 겁니다.
+둘 다 그 값을 증가시키려 한다면, 이들은 모두 ``4'' 를 얻게 될테고, 둘 다 이
+값을 카운터에 다시 써넣을 겁니다.
+카운터의 새로운 값은 ``5'' 가 되었어야 하므로, 두개의 값 증가 오퍼레이션 중
+하나는 없어진 셈입니다.
+따라서, 카운터의 값 증가에도 값 감소에도 어토믹 오퍼레이션이 사용되어야만
+합니다.
+\iffalse
 
 Atomic counting is required
 because locking is not used to protect all reference-count operations,
@@ -341,6 +367,20 @@ Since the new value of the counter should instead be ``5'', one
 of the two increments has been lost.
 Therefore, atomic operations must be used both for counter increments
 and for counter decrements.
+\fi
+
+레퍼런스 릴리즈가 락킹이나 RCU 로 보호된다면, 메모리 배리어는 필요하지
+\emph{않을테지만}, 다른 이유로 인해서입니다.
+락킹의 경우, 락은 모든 필요한 메모리 배리어들을 제공하고 (그리고 컴파일러
+최적화를 불능화 시킵니다),락들은 또한 두개의 레퍼런스 릴리즈가 동시에 수행되는
+것을 막습니다.
+RCU 의 경우, 현재 수행중인 RCU read-side 크리티컬 섹션들이 모두 완료되기
+전까지는 정리 작업이 유예되어야만 하고, 모든 필요한 메모리 배리어들이나
+컴파일러 최적화의 불능화가 RCU 기능으로 제공될 겁니다.
+따라서, 두개의 CPU 들이 두개의 레퍼런스를 동시에 릴리즈 시킨다면, 실제
+정리작업은 두개의 CPU 들이 모두 RCU read-side 크리티컬 섹션들을 빠져나갈 때까지
+유예될 겁니다.
+\iffalse
 
 If releases are guarded by locking or RCU,
 memory barriers are \emph{not} required, but for different reasons.
@@ -354,12 +394,27 @@ will be provided by the RCU infrastructure.
 Therefore, if two CPUs release the final two references concurrently,
 the actual cleanup will be deferred until both CPUs exit their
 RCU read-side critical sections.
+\fi
 
 \QuickQuiz{}
+	한 CPU 가 마지막 레퍼런스를 해제한 직후에 다른 CPU 가 레퍼런스를
+	획득하는 경우에 대해서도 보호를 해줘야 하지 않나요?
+	\iffalse
+
 	Why isn't it necessary to guard against cases where one CPU
 	acquires a reference just after another CPU releases the last
 	reference?
+	\fi
 \QuickQuizAnswer{
+	CPU 는 합법적으로 다른 레퍼런스를 얻기 위해서는 이미 레퍼런스를 가지고
+	있어야 하기 때문입니다.
+	따라서, 한 CPU 가 마지막 레퍼런스를 해제했다면, 새로운 레퍼런스를
+	획득할 수 있는 CPU 는 존재할 수가 없습니다.
+	이와 같은 사실이
+	Figure~\ref{fig:together:Linux Kernel kref API} 의 line~22 의
+	어토믹하지 않은 검사를 가능하게 합니다.
+	\iffalse
+
 	Because a CPU must already hold a reference in order
 	to legally acquire another reference.
 	Therefore, if one CPU releases the last reference,
@@ -367,6 +422,7 @@ RCU read-side critical sections.
 	to acquire a new reference.
 	This same fact allows the non-atomic check in line~22
 	of Figure~\ref{fig:together:Linux Kernel kref API}.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -408,6 +464,15 @@ RCU read-side critical sections.
 \label{fig:together:Linux Kernel kref API}
 \end{figure}
 
+\co{kref} 구조체 자체는 하나의 어토믹 데이터 아이템으로 구성되며,
+Figure~\ref{fig:together:Linux Kernel kref API} 의 line~1-3 에 보여져 있습니다.
+Line~5-8 의 \co{kref_init()} 함수는 이 카운터를 값 ``1'' 로 초기화 시킵니다.
+\co{atomic_set()} 기능은 단순한 값 할당으로, 그 이름은 \co{atomic_t} 의 데이터
+타입에서 왔지, 그 동작에서 온것이 아님을 알아두시기 바랍니다.
+\co{kref_init()} 함수는 오브젝트 생성 때에, 해당 오브젝트가 어떤 다른 CPU 들에
+의해 접근될 수 있게 되기 전에 실행되어야만 합니다.
+\iffalse
+
 The \co{kref} structure itself, consisting of a single atomic
 data item, is shown in lines~1-3 of
 Figure~\ref{fig:together:Linux Kernel kref API}.
@@ -418,6 +483,20 @@ assignment, the name stems from the data type of \co{atomic_t}
 rather than from the operation.
 The \co{kref_init()} function must be invoked during object creation,
 before the object has been made available to any other CPU.
+\fi
+
+Line~10-14 의 \co{kref_get()} 함수는 무조건적으로 카운터를 어토믹하게
+증가시킵니다.
+\co{atomic_inc()} 기능은 모든 플랫폼에서 컴파일러 최적화를 명시적으로 불능화
+시켜야만 하지는 않습니다만, \co{kref} 이 별개의 모듈에 존재하고 리눅스 커널
+빌드 프로세스는 모듈간 최적화를 하지 않는다는 사실이 똑같은 효과를 냅니다.
+
+Line~16-28 의 \co{kref_sub()} 함수는 어토믹하게 카운터를 감소시키고, 만약 그
+결과가 0이라면, line~24 에서 명시된 \co{release()} 함수를 호출하고 line~25 에서
+호출자에게 \co{release()} 가 호출되었음을 알리면서 리턴합니다.
+그렇지 않다면, \co{kref_sub()} 은 0을 리턴해서 호출자에게 \co{release()} 가
+호출되지 않았음을 알립니다.
+\iffalse
 
 The \co{kref_get()} function on lines~10-14 unconditionally atomically
 increments the counter.
@@ -433,43 +512,83 @@ counter, and if the result is zero, line~24 invokes the specified
 that \co{release()} was invoked.
 Otherwise, \co{kref_sub()} returns zero, informing the caller that
 \co{release()} was not called.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:together:Linux Kernel kref API} 의 line~22 에서
+	\co{atomic_sub_and_test()} 가 호출된 직후에, 어떤 다른 CPU 가
+	\co{kref_get()} 을 호출했다고 생각해 봅시다.
+	이는 이 다른 CPU 가 이제 비합법적으로 해제된 오브젝트로의 레퍼런스를
+	갖게 된 거 아닌가요?
+	\iffalse
+
 	Suppose that just after the \co{atomic_sub_and_test()}
 	on line~22 of
 	Figure~\ref{fig:together:Linux Kernel kref API} is invoked,
 	that some other CPU invokes \co{kref_get()}.
 	Doesn't this result in that other CPU now having an illegal
 	reference to a released object?
+	\fi
 \QuickQuizAnswer{
+	그런 일은 이 함수가 올바르게 사용된다면 일어날 수 없는 일입니다.
+	이미 레퍼런스를 가지고 있지 않다면 \co{kref_get()} 을 호출하는 것은
+	비합법적인 일이어서 \co{kref_sub()} 는 카운터의 값을 0으로 감소시킬 수
+	없었을 겁니다.
+	\iffalse
+
 	This cannot happen if these functions are used correctly.
 	It is illegal to invoke \co{kref_get()} unless you already
 	hold a reference, in which case the \co{kref_sub()} could
 	not possibly have decremented the counter to zero.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	\co{kref_sub()} 가 0을 리턴해서 \co{release()} 함수가 호출되지 않았음을
+	알렸다고 생각해 봅시다.
+	어떤 조건에서 호출자는 이 오브젝트의 존재의 지속에 의존할 수 있을까요?
+	\iffalse
+
 	Suppose that \co{kref_sub()} returns zero, indicating that
 	the \co{release()} function was not invoked.
 	Under what conditions can the caller rely on the continued
 	existence of the enclosing object?
+	\fi
 \QuickQuizAnswer{
+	호출자는 최소 하나의 레퍼런스가 계속해서 존재할 것임을 알지 못한다면
+	오브젝트의 존재 지속에 의존할 수 없습니다.
+	일반적으로, 호출자는 이를 알 방법이 없을 것이고, 따라서 \co{kref_sub()}
+	후에 오브젝트를 참조하는 것을 주의깊게 피해야만 합니다.
+	\iffalse
+
 	The caller cannot rely on the continued existence of the
 	object unless it knows that at least one reference will
 	continue to exist.
 	Normally, the caller will have no way of knowing this, and
 	must therefore carefullly avoid referencing the object after
 	the call to \co{kref_sub()}.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	왜 그냥 해제 함수로 \co{kfree()} 를 넘기지 않는거죠?
+	\iffalse
+
 	Why not just pass \co{kfree()} as the release function?
+	\fi
 \QuickQuizAnswer{
+	일반적으로 \co{kref} 구조체는 더 커다란 구조체에 포함되어 있게 되므로,
+	\co{kref} 필드만이 아니라 전체 구조체를 해제시킬 필요가 있습니다.
+	이는 일반적으로 \co{container_of()} 와 \co{kfree()} 를 호출하는 wrapper
+	함수를 정의하는 것으로 이뤄질 수 있습니다.
+	\iffalse
+
 	Because the \co{kref} structure normally is embedded in
 	a larger structure, and it is necessary to free the entire
 	structure, not just the \co{kref} field.
 	This is normally accomplished by defining a wrapper function
 	that does a \co{container_of()} and then a \co{kfree()}.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Atomic Counting With Release Memory Barrier}
