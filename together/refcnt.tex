@@ -685,6 +685,20 @@ of the rules for using these two primitives.
 \subsubsection{Atomic Counting With Check and Release Memory Barrier}
 \label{sec:together:Atomic Counting With Check and Release Memory Barrier}
 
+호출자가 현재는 레퍼런스를 가지고 있지 않은 오브젝트로의 레퍼런스를 획득해야만
+하는 경우를 생각해 봅시다.
+최초의 레퍼런스 카운트 획득은 레퍼런스 카운트 해제와 동시에 이뤄질 수 있다는
+사실이 복잡도를 더욱 증가시킵니다.
+레퍼런스 카운트 해제가 레퍼런스 카운트의 해제 후 값이 0이 되게 됨을 발견했고 그
+레퍼런스에 연관된 오브젝트가 해제되어도 안전하다는 신호를 날렸다고 생각해
+봅시다.
+그런 해제작업이 개시된 후에 레퍼런스 카운트 획득을 허가할 수 없는 것은
+분명하므로, 레퍼런스 획득은 레퍼런스 카운트가 0인지에 대한 검사를 포함해야만
+합니다.
+이런 검사는 다음에 보인 것과 같이 어토믹한 값 증가 오퍼레이션이 한 부분이
+되어야만 합니다.
+\iffalse
+
 Consider a situation where the caller must be able to acquire a new
 reference to an object to which it does not already hold a reference.
 The fact that initial reference-count acquisition can now run concurrently
@@ -697,12 +711,26 @@ start after such clean-up has commenced, so the acquisition
 must include a check for a zero reference count.
 This check must be part of the atomic increment operation,
 as shown below.
+\fi
 
 \QuickQuiz{}
+	레퍼런스 카운트의 값이 0인지에 대한 검사는 왜 간단히 어토믹 값 증가
+	오퍼레이션을 갖는 ``if'' 문의 ``then'' 절에 들어갈 수 없는거죠?
+	\iffalse
+
 	Why can't the check for a zero reference count be
 	made in a simple ``if'' statement with an atomic
 	increment in its ``then'' clause?
+	\fi
 \QuickQuizAnswer{
+	``if'' 조건이 완료되었고 레퍼런스 카운터의 값이 1이라는 걸 알게
+	되었다고 해봅시다.
+	이어서 레퍼런스 해제 오퍼레이션이 실행되어서 이 레퍼런스 카운터의 값을
+	0으로 바꾸었고 오브젝트 해제 오퍼레이션을 시작시킵니다.
+	하지만 이제 ``then'' 절은 이 카운터의 값을 다시 1로 증가시킬 수가
+	있어서 오브젝트가 해제된 후에 사용되는 상황을 가능하게 해버리고 맙니다.
+	\iffalse
+
 	Suppose that the ``if'' condition completed, finding
 	the reference counter value equal to one.
 	Suppose that a release operation executes, decrementing
@@ -711,12 +739,20 @@ as shown below.
 	But now the ``then'' clause can increment the counter
 	back to a value of one, allowing the object to be
 	used after it has been cleaned up.
+	\fi
 } \QuickQuizEnd
+
+리눅스 커널의 \co{fget()} 과 \co{fput()} 기능들이 이런 스타일의 레퍼런스
+카운팅을 사용합니다.
+이 함수들의 간료화된 버전이
+Figure~\ref{fig:together:Linux Kernel fget/fput API} 에 보여져 있습니다.
+\iffalse
 
 The Linux kernel's \co{fget()} and \co{fput()} primitives
 use this style of reference counting.
 Simplified versions of these functions are shown in
 Figure~\ref{fig:together:Linux Kernel fget/fput API}.
+\fi
 
 \begin{figure}[tbp]
 { \fontsize{6.5pt}{7.5pt}\selectfont
@@ -770,6 +806,22 @@ Figure~\ref{fig:together:Linux Kernel fget/fput API}.
 \label{fig:together:Linux Kernel fget/fput API}
 \end{figure}
 
+\co{fget()} 의 Line~4 는, 다른 프로세스들과 공유될 수도 있는 현재 프로세스의
+file-descriptor 테이블을 가져옵니다.
+Line~6 는 RCU read-side 크리티컬 섹션을 들어가는 \co{rcu_read_lock()} 을
+호출합니다.
+뒤따르는 \co{call_rcu()} 에 전달되는 콜백 함수의 수행은 매칭되는
+\co{rcu_read_unlock()} 이 호출될 때까지 (이 경우 line~10 또는 14) 연기됩니다.
+Line~7 은 \co{fd} 인자에 명시된 파일 디스크립터에 연관되는 file 구조체를
+탐색하는데, 이에 대해서는 뒤에서 설명하겠습니다.
+명시된 파일 디스크립터에 연관된 열린 파일이 존재한다면 line~9 에서는 어토믹하게
+레퍼런스 카운트를 획득하려 시도합니다.
+만약 그렇게 하는데 실패한다면, line~10-11 은 RCU read-side 크리티컬 섹션을
+빠져나오고 실패했음을 알립니다.
+그렇지 않고 시도가 성공했다면, line~14-15 는 이 read-side 크리티컬 섹션을
+빠져나오고 해당 file 구조체로의 포인터를 리턴합니다.
+\iffalse
+
 Line~4 of \co{fget()} fetches the pointer to the current
 process's file-descriptor table, which might well be shared
 with other processes.
@@ -787,6 +839,20 @@ If it fails to do so, lines~10-11 exit the RCU read-side critical
 section and report failure.
 Otherwise, if the attempt is successful, lines~14-15 exit the read-side
 critical section and return a pointer to the file structure.
+\fi
+
+\co{fcheck_files()} 기능은 \co{fget()} 을 위한 도움을 주는 함수입니다.
+해당 함수는 나중의 디레퍼런싱을 위해 (이는 데이터 종속성이 메모리 순서 규칙을
+강제하지 않는 DEC Alpha 와 같은 CPU 들에서는 메모리 배리어를 실행합니다)
+안전하게 RCU 로 보호되는 포인터를 가져오기 위해 사용됩니다.
+Line~22 는 이 태스크의 현재 file-descriptor 테이블로의 포인터를 가져오기 위해
+\co{rcu_dereference()} 를 사용하고, line~24 는 명시된 파일 디스크립터가 범위
+안에 있는지 체크합니다.
+만약 그렇다면 line~25 는 해당 file 구조체로의 포인터를 가져오는데, 여기서도
+\co{rcu_dereference()} 기능이 사용됩니다.
+그러고나서 Line~26 은 성공했다면 해당 file 구조체로의 포인터를 리턴하고,
+실패했다면 \co{NULL} 을 리턴하게 됩니다.
+\iffalse
 
 The \co{fcheck_files()} primitive is a helper function for
 \co{fget()}.
@@ -801,6 +867,23 @@ If so, line~25 fetches the pointer to the file structure, again using
 the \co{rcu_dereference()} primitive.
 Line~26 then returns a pointer to the file structure or \co{NULL}
 in case of failure.
+\fi
+
+\co{fput()} 기능은 file 구조체로의 레퍼런스를 해제합니다.
+Line~31 은 어토믹하게 레퍼런스 카운트를 감소시키고, 만약 그 감소 결과가 0이라면
+line~32 에서 해당 file 구조체를 모든 현재 수행중인 RCU read-side 크리티컬
+섹션들이 완료된 후에 (\co{call_rcu()} 의 두번째 인자로 전달되는
+\co{file_free_rcu()} 를 통해) 해제하기 위해 \co{call_rcu()} 기능을
+실행시킵니다.
+모든 현재 수행중인 RCU read-side 크리티컬 섹션들이 완료되기까지 필요한 시간은
+``grace period'' 라고 불립니다.
+\co{atomic_dec_and_test()} 기능은 메모리 배리어를 포함하고 있음을 알아두시기
+바랍니다.
+이 메모리 배리어는 이 예제에서는 필요치 않은데, 이 구조체는 RCU read-side
+크리티컬 섹션이 완료되기 전까지는 해제될 수 없기 때문입니다만 리눅스에서는 그
+결과를 리턴하는 모든 어토믹 오퍼레이션들은 정의에 의해 메모리 배리어를
+포함해야만 합니다.
+\iffalse
 
 The \co{fput()} primitive releases a reference to a file structure.
 Line~31 atomically decrements the reference count, and, if the result
@@ -817,6 +900,15 @@ This memory barrier is not necessary in this example, since the structure
 cannot be destroyed until the RCU read-side critical section completes,
 but in Linux, all atomic operations that return a result must
 by definition contain memory barriers.
+\fi
+
+일단 grace period 가 완료되면, \co{file_free_rcu()} 함수가 line~39 에서 file
+구조체로의 포인터를 가져오고 line~40 에서 해제시킵니다.
+
+이런 방법은 리눅스의 가상 메모리 시스템에서도 사용되는데, 페이지 구조체를
+위해선 \co{get_page_unless_zero()} 와 \co{put_page_testzero()} 를, 메모리 맵
+구조체를 위해서는 \co{try_to_unuse()} 와 \co{mmput()} 을 참고하시기 바랍니다.
+\iffalse
 
 Once the grace period completes, the \co{file_free_rcu()} function
 obtains a pointer to the file structure on line~39, and frees it
@@ -826,6 +918,7 @@ This approach is also used by Linux's virtual-memory system,
 see \co{get_page_unless_zero()} and \co{put_page_testzero()} for
 page structures as well as \co{try_to_unuse()} and \co{mmput()}
 for memory-map structures.
+\fi
 
 \subsection{Linux Primitives Supporting Reference Counting}
 \label{sec:together:Linux Primitives Supporting Reference Counting}
