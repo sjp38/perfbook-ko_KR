@@ -68,6 +68,18 @@ Page~\pageref{fig:count:Per-Thread Statistical Counters}.
 
 \subsubsection{Design}
 
+원하는건 \co{inc_count()} 만이 아니라 \co{read_count()} 에서도 훌륭한 성능과
+확장성을 얻기 위해 \co{read_count()} 의 쓰레드 횡단을 보호하는 데에
+\co{final_mutex} 대신에 RCU 를 사용하는 것입니다.
+하지만, 계산된 합계의 정확성을 포기하지도 않고 싶습니다.
+자세히 말하자면, 특정 스레드가 종료될 때에, 우린 종료되는 쓰레드의 카운트를
+잃어버릴 수도, 그걸 두번씩 세서도 안됩니다.
+그런 에러는 결과의 전체 정확성과 동일한 정도의 비정확성을 초래할 수 있는데,
+달리 말하자면 그런 에러는 결과값이 완전히 쓸모없게 만들 수 있습니다.
+그리고 사실, \co{final_mutex} 의 목적들 중 하나는 쓰레드들이 \co{read_count()}
+의 실행 사이에 들어왔다 나갔다 하지 않음을 분명히 하는 것입니다.
+\iffalse
+
 The hope is to use RCU rather than \co{final_mutex} to protect the
 thread traversal in \co{read_count()} in order to obtain excellent
 performance and scalability from \co{read_count()}, rather than just
@@ -81,10 +93,26 @@ make the result completely useless.
 And in fact, one of the purposes of \co{final_mutex} is to
 ensure that threads do not come and go in the middle of \co{read_count()}
 execution.
+\fi
 
 \QuickQuiz{}
+	어쨌든, \co{read_count()} 의 정확성을 대체 뭔가요?
+	\iffalse
+
 	Just what is the accuracy of \co{read_count()}, anyway?
+	\fi
 \QuickQuizAnswer{
+	Page~\pageref{fig:count:Per-Thread Statistical Counters} 의
+	Figure~\ref{fig:count:Per-Thread Statistical Counters} 를 참고하세요.
+	동시적인 \co{inc_count()} 의 실행이 존재하지 않는다면,
+	\co{read_count()} 는 분명한 결과를 내놓을 것은 분명합니다.
+	하지만, \co{inc_count()} 의 동시적인 실행이 \emph{존재한다면}, 그
+	합계값은 \co{read_count()} 가 그 합산을 진행함에 따라 실제로 달라질
+	것입니다.
+	그렇다곤 하나, 쓰레드의 생성과 종료는 \co{final_mutex} 에 의해
+	배제되므로, \co{counterp} 안의 포인터들은 상수로 유지될 것입니다.
+	\iffalse
+
 	Refer to
 	Figure~\ref{fig:count:Per-Thread Statistical Counters} on
 	Page~\pageref{fig:count:Per-Thread Statistical Counters}.
@@ -95,6 +123,24 @@ execution.
 	\co{read_count()} performs its summation.
 	That said, because thread creation and exit are excluded by
 	\co{final_mutex}, the pointers in \co{counterp} remain constant.
+	\fi
+
+	메모리의 즉석 스냅샷을 얻어올 수 있는 가상의 기계를 상상해 봅시다.
+	이 기계가 \co{read_count()} 의 실행 시작지점의 스냅샷과
+	\co{read_count()} 의 실행 종료 시점의 스냅샷을 만들어낸다고 생각해
+	봅시다.
+	그렇다면 \co{read_count()} 는 이 두 스냡샷들 사이의 어떤 시점에서의 각
+	쓰레드의 카운터에 접근을 할 것이고, 따라서 이 두개의 스냡샷들에 의해
+	값이 포괄적으로 한정지어지는 결과를 얻어오게 될 것입니다.
+	따라서, 전체 합계는 이 두개의 스냡샷으로부터 각각 얻어와질 수 있는
+	합계들의 쌍에 의해 그 값이 한정지어질 것입니다 (다시 말하지만,
+	포괄적으로).
+
+	따라서 예상되는 에러는 이 두개의 스냅샷으로부터 얻어올 수 있는 두개의
+	합계의 쌍들 사이의 차이의 절반일 것이고, 이는 \co{read_count()} 의 실행
+	시간에 단위 시간당 \co{inc_count()} 의 예상되는 호출 횟수를 곱한 값의
+	절반입니다.
+	\iffalse
 
 	Let's imagine a mythical machine that is able to take an
 	instantaneous snapshot of its memory.
@@ -114,6 +160,19 @@ execution.
 	two snapshots, that is to say, half of the execution time of
 	\co{read_count()} multiplied by the number of expected calls to
 	\co{inc_count()} per unit time.
+	\fi
+
+	또는, 수식을 선호하는 분들을 위해 표시하면:
+	\begin{equation}
+	\epsilon = \frac{T_r R_i}{2}
+	\end{equation}
+	로, $\epsilon$ 는 \co{read_count()} 의 리턴 값에 예측되는 에러이고,
+	$T_r$ 은 \co{read_count()} 가 실행되는데 걸리는 시간이고, $R_i$ 는 단위
+	시간당 \co{inc_count()} 호출 횟수의 비율입니다.
+	(그리고 당연하지만, $T_r$ 과 $R_i$ 는 같은 단위 시간을 사용해야 합니다:
+	마이크로세컨드와 마이크로세컨드당 호출 횟수, 초와 초당 호출 횟수, 뭐가
+	됐든, 같은 단위를 사용하기만 한다면.)
+	\iffalse
 
 	Or, for those who prefer equations:
 	\begin{equation}
@@ -126,7 +185,16 @@ execution.
 	(And of course, $T_r$ and $R_i$ should use the same units of
 	time: microseconds and calls per microsecond, seconds and calls
 	per second, or whatever, as long as they are the same units.)
+	\fi
 } \QuickQuizEnd
+
+따라서, 우리가 \co{final_mutex} 를 없애려 한다면, 우리는 일관성을 보장하기 위한
+어떤 다른 방법을 사용해야 합니다.
+한가지 방법은 앞서 종료된 쓰레드들 전체를 위한 전체 카운트와 쓰레드별
+카운터로의 포인터들의 배열을 하나의 구조체에 넣는 것입니다.
+\co{read_count()} 에 의해 접근될 수 있는 그런 구조체는 상수가 되므로,
+\co{read_count()} 가 일관적인 데이터를 보게 될 것을 보장합니다.
+\iffalse
 
 Therefore, if we are to dispense with \co{final_mutex}, we will need
 to come up with some other method for ensuring consistency.
@@ -135,6 +203,7 @@ threads and the array of pointers to the per-thread counters into a single
 structure.
 Such a structure, once made available to \co{read_count()}, is
 held constant, ensuring that \co{read_count()} sees consistent data.
+\fi
 
 \subsubsection{Implementation}
 
