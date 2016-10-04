@@ -288,6 +288,23 @@ held constant, ensuring that \co{read_count()} sees consistent data.
 \label{fig:together:RCU and Per-Thread Statistical Counters}
 \end{figure}
 
+Figure~\ref{fig:together:RCU and Per-Thread Statistical Counters}
+의 line~1-4 는 \co{countarray} 구조체를 보이고 있는데, 이 구조체는 앞서 종료된
+쓰레드들의 카운트를 위한 \co{->total} 필드와 현재 돌아가고 있는 각각의 쓰레드를
+위한 per-thread \co{counter} 로의 포인터들의 배열인 \co{counterp[]} 를
+갖습니다.
+이 구조체는 \co{read_count()} 의 한 수행이 수행중인 쓰레드의 알려진 집합과
+일관적인 전체값을 볼 수 있도록 합니다.
+
+Line~6-8 은 per-thread \co{counter} 변수, 현재의 \co{countarray} 구조체를
+가리키는 \co{countarrayp} 글로벌 포인터, 그리고 \co{final_mutex} 스핀락의
+정의를 담고 있습니다.
+
+Line~10-13 은
+Figure~\ref{fig:count:Per-Thread Statistical Counters}
+로부터 달라지지 않은 \co{inc_count()} 를 보입니다.
+\iffalse
+
 Lines~1-4 of
 Figure~\ref{fig:together:RCU and Per-Thread Statistical Counters}
 show the \co{countarray} structure, which contains a
@@ -305,6 +322,20 @@ the \co{final_mutex} spinlock.
 
 Lines~10-13 show \co{inc_count()}, which is unchanged from
 Figure~\ref{fig:count:Per-Thread Statistical Counters}.
+\fi
+
+Line~15-29 는 상당히 많이 바뀐 \co{read_count()} 를 보입니다.
+Line~21 과 27 은 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 으로
+\co{final_mutex} 의 획득과 해제를 대신합니다.
+Line~22 는 현재의 \co{countarray} 구조체를 로컬 변수 \co{cap} 으로 스냅샷을
+뜨기 위해 \co{rcu_dereference()} 를 사용합니다.
+RCU 가 올바르게 사용된다면 이 \co{countarray} 구조체가 적어도 line~27 에서의
+현재 RCU read-side 크리티컬 섹션의 종료까지는 유지될 것이 보장될 겁니다.
+Line~23 은 \co{sum} 을 \co{cap->total} 로 초기화 시키는데, 이는 앞서 종료된
+쓰레드들의 카운트의 합입니다.
+Line~24-26 은 현재 수행중인 쓰레드들과 연관되어 있는 per-thread 카운터들을
+합하고, 마지막으로 line~28 은 그 합을 리턴합니다.
+\iffalse
 
 Lines~15-29 show \co{read_count()}, which has changed significantly.
 Lines~21 and~27 substitute \co{rcu_read_lock()} and
@@ -318,6 +349,20 @@ Line~23 initializes \co{sum} to \co{cap->total}, which is the
 sum of the counts of threads that have previously exited.
 Lines~24-26 add up the per-thread counters corresponding to currently
 running threads, and, finally, line~28 returns the sum.
+\fi
+
+\co{countarrayp} 의 초기값은 line~31-39 의 \co{count_init()} 에 의해
+주어집니다.
+이 함수는 첫번째 쓰레드가 생성되기 전에 수행되는데, 이 함수의 일은 초기의
+구조체를 할당하고 그 값을 0으로 세팅한 후에 \co{countarrayp} 를 할당하는
+것입니다.
+
+Line~41-48 은 \co{count_register_thread()} 함수를 보이는데, 이 함수는 각
+쓰레드가 새로이 생성될 때마다 호출됩니다.
+Line~43 은 현재 쓰레드의 인덱스를 가져오고, line~45 는 \co{final_mutex} 를
+획득하며, line~46 은 이 쓰레드의 \co{counter} 로의 포인터를 설치하며, line~47
+에서 \co{final_mutex} 를 놓습니다.
+\iffalse
 
 The initial value for \co{countarrayp} is
 provided by \co{count_init()} on lines~31-39.
@@ -330,15 +375,40 @@ is invoked by each newly created thread.
 Line~43 picks up the current thread's index, line~45 acquires
 \co{final_mutex}, line~46 installs a pointer to this thread's
 \co{counter}, and line~47 releases \co{final_mutex}.
+\fi
 
 \QuickQuiz{}
+	이봐요!!!
+	Figure~\ref{fig:together:RCU and Per-Thread Statistical Counters}
+	의 line~46 은 앞서 존재한 \co{countarray} 구조체의 값을 수정하잖아요!
+	이 구조체는 일단 한번 \co{read_count()} 에 접근 가능하게 되면 상수로
+	남게 된다고 하지 않았어요???
+	\iffalse
+
 	Hey!!!
 	Line~46 of
 	Figure~\ref{fig:together:RCU and Per-Thread Statistical Counters}
 	modifies a value in a pre-existing \co{countarray} structure!
 	Didn't you say that this structure, once made available to
 	\co{read_count()}, remained constant???
+	\fi
 \QuickQuizAnswer{
+	실제로 전 그렇게 말했습니다.
+	그리고 \co{count_unregister_thread()} 가 현재 그렇듯이
+	\co{count_register_thread()} 가 새로운 구조체를 할당하도록 하는 것이
+	가능할 겁니다.
+
+	하지만 그건 불필요한 일입니다.
+	에러가 메모리의 스냅샷에 기반을 둔 \co{read_count()} 에 의해 최대값이
+	제한된다는 유도를 다시 생각해 보세요.
+	새로운 쓰레드들은 그 값이 0인 \co{counter} 값과 함께 시작되므로, 이
+	유도는 우리가 \co{read_count()} 의 실행 중간에 새로운 쓰레드를
+	추가한다고 해도 지켜집니다.
+	따라서, 흥미롭게도, 새로운 쓰레드를 추가할 때에, 이 구현은 새로운
+	구조체를 할당하는 효과를 실제로는 할당을 하지 않으면서도 얻을 수 있게
+	됩니다.
+	\iffalse
+
 	Indeed I did say that.
 	And it would be possible to make \co{count_register_thread()}
 	allocate a new structure, much as \co{count_unregister_thread()}
@@ -353,7 +423,24 @@ Line~43 picks up the current thread's index, line~45 acquires
 	So, interestingly enough, when adding a new thread, this
 	implementation gets the effect of allocating a new structure,
 	but without actually having to do the allocation.
+	\fi
 } \QuickQuizEnd
+
+Line~50-70 은 각 쓰레드가 종료하기 직전에 실행되는
+\co{count_unregister_thread()} 를 보입니다.
+Line~56-60 은 새로운 \co{countarray} 구조체를 할당하고, line~61 에서
+\co{final_mutex} 를 획득하며 line~67 에서 이를 해제합니다.
+Line~62 는 현재 \co{countarray} 의 내용을 새로 할당된 버전에 복사하고, line~63
+은 종료되는 쓰레드의 \co{counter} 를 새로운 구조체의 \co{->total} 에 더하고,
+line~66 은 \co{countarray} 구조체의 새로운 버전을 설치하는데에
+\co{rcu_assign_pointer()} 를 사용합니다.
+Line~68 은 동시적으로 \co{read_count()} 를 수행하고 있을 수 있는, 따라서 기존의
+\co{countarray} 구조체로의 레퍼런스를 가지고 있을 수 있는 모든 쓰레드가 이들의
+RCU read-side 크리티컬 섹션을 종료해서 그런 레퍼런스를 모두 버려버리도록 grace
+period 가 하나 지나가길 기다립니다.
+그러고 나서 line~69 는 이제 기존의 \co{countarray} 구조체를 안전하게 해제시킬
+수 있습니다.
+\iffalse
 
 Lines~50-70 shows \co{count_unregister_thread()}, which is invoked
 by each thread just before it exits.
@@ -372,6 +459,7 @@ have references to the old \co{countarray} structure, will be allowed
 to exit their RCU read-side critical sections, thus dropping any such
 references.
 Line~69 can then safely free the old \co{countarray} structure.
+\fi
 
 \subsubsection{Discussion}
 
