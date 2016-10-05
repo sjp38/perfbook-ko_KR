@@ -464,12 +464,39 @@ Line~69 can then safely free the old \co{countarray} structure.
 \subsubsection{Discussion}
 
 \QuickQuiz{}
+	우와!
+	Figure~\ref{fig:count:Per-Thread Statistical Counters} 는 라인수가 42
+	밖에 되지 않는데 반해 Figure~\ref{fig:together:RCU and Per-Thread
+	Statistical Counters} 는 69 라인이나 되는군요.
+	이 추가적인 복잡도가 정말로 가치가 있는 건가요?
+	\iffalse
+
 	Wow!
 	Figure~\ref{fig:together:RCU and Per-Thread Statistical Counters}
 	contains 69 lines of code, compared to only 42 in
 	Figure~\ref{fig:count:Per-Thread Statistical Counters}.
 	Is this extra complexity really worth it?
+	\fi
 \QuickQuizAnswer{
+	이는 당연하게도 경우에 따라 다르게 결정되어야 합니다.
+	선형적으로 확장되는 \co{read_count()} 구현이 필요하다면,
+	Figure~\ref{fig:count:Per-Thread Statistical Counters}
+	에 보인 락 기반의 구현은 당신을 위한 동작을 하지 않을 겁니다.
+	반면에, 만약 \co{count_read()} 의 호출이 충분히 드물다면, 락 기반
+	버전이 더 간단하고 따라서 더 나을 수도 있습니다, 대부분의 크기 차이는
+	구조체 정의, 메모리 할당, 그리고 \co{NULL} 리턴 체크로 인한 것이니
+	하지만 말입니다.
+
+	물론, 더 나은 질문은 ``왜 이 언어는 \co{__thread} 변수들로의 쓰레드를
+	넘어서는 접근을 구현하지 않는거죠?'' 가 될겁니다.
+	무엇보다, 그런 구현은 락킹과 RCU 의 사용을 불필요하게 만들 겁니다.
+	이는 결국
+	Figure~\ref{fig:together:RCU and Per-Thread Statistical Counters} 에
+	보여진 구현의 확장성과 성능상의 이득에 더해서
+	Figure~\ref{fig:count:Per-Thread Statistical Counters} 에 보여진
+	것보다도 더 간단한 구현이 가능하게 할 겁니다!
+	\iffalse
+
 	This of course needs to be decided on a case-by-case basis.
 	If you need an implementation of \co{read_count()} that
 	scales linearly, then the lock-based implementation shown in
@@ -491,7 +518,19 @@ Line~69 can then safely free the old \co{countarray} structure.
 	with all the scalability and performance benefits of the
 	implementation shown in
 	Figure~\ref{fig:together:RCU and Per-Thread Statistical Counters}!
+	\fi
 } \QuickQuizEnd
+
+RCU 의 사용은 종료되는 쓰레드가 다른 쓰레드들이 이 종료되는 쓰레드들의
+\co{__thread} 변수들을 사용하는 것을 마칠 때까지 기다릴 수 있도록 해줍니다.
+이는 \co{read_count()} 함수가 락킹을 필요없게 해서 \co{inc_count()} 와
+\co{read_count()} 함수 둘 다에 훌륭한 성능과 확장성을 제공합니다.
+하지만, 이 성능과 확장성은 약간의 코드 복잡도의 증가를 비용으로 지불합니다.
+컴파일러와 라이브러리를 작성하는 사람들이 안전한 쓰레드간 \co{__thread}
+변수들로의 접근을 제공하기 위해 유저 레벨 RCU~\cite{MathieuDesnoyers2009URCU}
+를 제공해서 \co{__thread} 변수들의 사용자간에 보여지게 되는 복잡도를 줄일 수
+있게 된다면 좋을 겁니다.
+\iffalse
 
 Use of RCU enables exiting threads to wait until other threads are
 guaranteed to be done using the exiting threads' \co{__thread} variables.
@@ -505,6 +544,7 @@ It is hoped that compiler and library writers employ user-level
 RCU~\cite{MathieuDesnoyers2009URCU} to provide safe cross-thread
 access to \co{__thread} variables, greatly reducing the
 complexity seen by users of \co{__thread} variables.
+\fi
 
 \subsection{RCU and Counters for Removable I/O Devices}
 \label{sec:together:RCU and Counters for Removable I/O Devices}
