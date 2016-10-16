@@ -472,6 +472,18 @@ handled in software.
 \subsubsection{Workload Constraints}
 \label{sec:rt:Workload Constraints}
 
+사람에게와 마찬가지로, real-time 시스템에 부담을 지나치게 주는 방법으로
+데드라인을 지키지 못하게 하는 것이 가능한 경우가 종종 있습니다.
+예를 들어, 만약 시스템이 너무 자주 인터럽트 당한다면, 이 시스템은 real-time
+어플리케이션을 다루기에 충분한 CPU 대역폭을 갖지 못할 수 있습니다.
+이 문제에 대한 하드웨어를 통한 해결책은 시스템에 인터럽트가 전달되는 정도를
+제한하는 것일 겁니다.
+가능한 소프트웨어를 통한 해결책은 인터럽트가 너무 자주 들어온다면 일정 시간동안
+인터럽트를 불능화 시키는 것, 너무 자주 인터럽트를 생성하는 디바이스를
+리셋하는것, 또는 심지어 인터럽트를 아예 금지시키고 폴링 방식을 사용하는것 등이
+있을 수 있습니다.
+\iffalse
+
 Just as with people, it is often possible to prevent a real-time system
 from meeting its deadlines by overloading it.
 For example, if the system is being interrupted too frequently, it might
@@ -482,6 +494,18 @@ Possible software solutions include disabling interrupts for some time if
 they are being received too frequently,
 resetting the device generating too-frequent interrupts,
 or even avoiding interrupts altogether in favor of polling.
+\fi
+
+지나치게 부담을 주는 행위는 queueuing effect 로 인해 응답시간을 나쁘게 만들 수
+있어서, real-time 시스템들에 있어서 CPU 대역폭을 실제보다 많이 사용할 수 있도록
+하는것은 흔치 않은 일이며, 그로 인해 수행 중인 시스템은 (말해보자면) 80\%
+정도의 idle 시간을 갖습니다.
+이 방법은 저장장치와 네트워킹 디바이스에도 역시 적용됩니다.
+어떤 경우에 있어서는 real-time 어플리케이션의 높은 우선순위의 부분들만을 위한
+별개의 저장장치와 네트워킹 하드웨어를 전용으로 갖춰 두기도 합니다.
+real-time 시스템에서는 처리량보다 응담시간이 더 중요하기 때문에, 이런
+하드웨어가 대부분의 시간을 idle 상태로 유지하는 것은 물론 드문 일이 아닙니다.
+\iffalse
 
 Overloading can also degrade response times due to queueing effects,
 so it is not unusual for real-time systems to overprovision CPU bandwidth,
@@ -492,14 +516,32 @@ for the sole use of high-priority portions of the real-time application.
 It is of course not unusual for this hardware to be mostly idle, given
 that response time is more important than throughput in
 real-time systems.
+\fi
 
 \QuickQuiz{}
+	하지만 queueing theory 에서의 결과를 놓고 생각해 보면, 낮은 리소스
+	활용률은 평균 응답 시간만을 개선할 뿐이지 최악의 경우의 응답시간은
+	개선하지 못하지 않을까요?
+	그리고 최악의 경우에서의 응답시간이야말로 대부분의 real-time 시스템들이
+	정말로 신경쓰는 것이 아니던가요?
+	\iffalse
+
 	But given the results from queueing theory, won't low utilization
 	merely improve the average response time rather than improving
 	the worst-case response time?
 	And isn't worst-case response time all that most
 	real-time systems really care about?
+	\fi
 \QuickQuizAnswer{
+	맞습니다, 하지만 \ldots
+
+	그런 queueing-theory 의 결론들은 리눅스 커널이라면 무한한 수의 task
+	들로 연관될 수 있는, 무한한 ``호출하는 인구'' 를 가정하고 있습니다.
+	2016 년 중반의 시점에서, 어떤 실제 시스템도 무한한 수의 task 들을
+	지원하지 않으며, 따라서 무한한 호출하는 인구를 가정한 결과는 무한보다는
+	적은 응용성을 갖게 될 것이라 기대될 겁니다.
+	\iffalse
+
 	Yes, but \ldots
 
 	Those queueing-theory results assume infinite ``calling populations'',
@@ -508,6 +550,21 @@ real-time systems.
 	As of mid-2016, no real system supports an infinite number of tasks,
 	so results assuming infinite calling populations should be
 	expected to have less-than-infinite applicability.
+	\fi
+
+	또다른 queueing-theory 의 결론은 \emph{유한한} 호출 인구수를 갖는데, 이
+	경우는 깔끔하게 그 한계가 제한되어 있는 응답 시간을
+	갖습니다~\cite{Hillier86}.
+	이런 결론들은 실제 시스템을 더 잘 모델링 하고, 이런 모델링들은 리소스
+	활용율의 감소에 따른 평균 응담시간과 최악의 경우 으답시간의 감소를 모두
+	예측합니다.
+	이런 결론들은 락킹과 같은 동기화 메커니즘을 사용하는 동시성 시스템을
+	모델링하는데에도 확장될 수 있습니다~\cite{BjoernBrandenburgPhD}.
+
+	짧게 요약해서, 정확하게 실제 세계의 real-time 시스템을 묘사하는
+	queueing-theory 의 결론들은 줄어드는 리소스 활용율에 따라 최악의 경우의
+	응답시간도 줄어듬을 보입니다.
+	\iffalse
 
 	Other queueing-theory results have \emph{finite}
 	calling populations, which feature sharply bounded response
@@ -522,11 +579,18 @@ real-time systems.
 	In short, queueing-theory results that accurately describe
 	real-world real-time systems show that worst-case response
 	time decreases with decreasing utilization.
+	\fi
 } \QuickQuizEnd
+
+물론, 충분히 낮은 리소스 활용율을 유지하는 것은 설계와 구현 단계에서의 많은
+연습을 필요로 합니다.
+데드라인을 어기게 만들 수 있는 작은 기능적 잘못 같은 것은 없어야 합니다.
+\iffalse
 
 Of course, maintaining sufficiently low utilization requires great
 discipline throughout the design and implementation.
 There is nothing quite like a little feature creep to destroy deadlines.
+\fi
 
 \subsubsection{Application Constraints}
 \label{sec:rt:Application Constraints}
