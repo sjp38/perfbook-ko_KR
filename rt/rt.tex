@@ -650,6 +650,17 @@ to degrade the throughput of the non-real-time portion?
 \subsubsection{Real-World Real-Time Specifications}
 \label{sec:rt:Real-World Real-Time Specifications}
 
+앞의 섹션들에서 보았듯이, 실제 세상에서의 real-time 명세는 환경, 워크로드
+그리고 어플리케이션 자체에 있어서의 제약을 포함해야 합니다.
+또한, 어플리케이션의 real-time 부분이 사용될 수 있는 경우를 위해선, 그런
+오퍼레이션들을 구현하는 하드웨어와 소프트웨어에 제약이 존재해야만 합니다.
+
+그런 오퍼레이션들에 있어서, 이런 제약들은 최대 응답시간 (그리고 최소 응답시간을
+포함할수도 있습니다) 과 그 응답시간을 지킬 수 있는 확률을 포함할 수 있습니다.
+100\% 확률은 연관된 오퍼레이션이 hard real-time 서비스를 제공해야 함을
+의미합니다.
+\iffalse
+
 As can be seen from the preceding sections, a real-world real-time
 specification needs to include constraints on the environment,
 on the workload, and on the application itself.
@@ -662,6 +673,24 @@ response time (and possibly also a minimum response time) and a
 probability of meeting that response time.
 A probability of 100\% indicates that the corresponding operation
 must provide hard real-time service.
+\fi
+
+어떤 경우들에 있어서는, 응답시간과 그것이 지켜질 확률에 대한 요구사항이 문제시
+되는 오퍼레이션의 인자에 따라 다양하게 달라질 수도 있습니다.
+예를 들어, 로컬 LAN 을 통한 네트워크 오퍼레이션은 (대략) 100-마이크로세컨드
+내에 완료될 확률이 대륙간 WAN 을 통한 네트워크 오퍼에이션이 100-마이크로세컨드
+내에 완료될 확률보다는 훨씬 클 것입니다.
+더 나아가서, 구리선이나 광섬유로 구성된 LAN 에서의 네트워크 오퍼레이션은 시간을
+소모하는 재전송 없이 완료될 확률이 매우 높은 반면, 취약한 WIFI 네트워크를 통한
+네트워킹 오퍼레이션은 데드라인을 놓칠 확률이 매우 클 것입니다.
+유사하게, 밀접하게 엮인 solid-state disk (SSD) 에서의 읽기 오퍼레이션은 구식의
+USB 로 연결된 녹슬은 disk drive 에서의 같은 읽기에 비해 훨씬 빠를 것으로 예상할
+수 있습니다.\footnote{
+	중요한 보안 팁: USB 디바이스에서의 최악의 경우의 응답시간은 극단적일
+	정도로 길 수 있습니다.
+	따라서 Real-time 시스템들은 critical path 에서 USB 디바이스를 떨어뜨려
+	놓도록 신경써야 합니다.}
+\iffalse
 
 In some cases, both the response times and the required probabilities of
 meeting them might vary depending on the parameters to the operation in
@@ -681,6 +710,26 @@ USB-connected rotating-rust disk drive.\footnote{
 	can be extremely long.
 	Real-time systems should therefore take care to place any USB
 	devices well away from critical paths.}
+\fi
+
+어떤 real-time 어플리케이션들은 다른 오퍼레이션 단계를 통해 수행될 수 있습니다.
+예를 들어, 돌아가는 통나무로부터 (``베니어'' 라고 불리는) 얇은 나무판을
+벗겨내는 합판 선반을 제어하는 real-time 시스템은 반드시:
+(1)~통나무를 선반에 가져오고,
+(2)~통나무에 있는 가장 큰 원기둥이 칼날에 노출되도록 통나무를 선반의 고정시키는
+목재 위에 위치시키고,
+(3)~통나무를 돌리기 시작한 후,
+(4)~통나무로부터 베니어판을 벗겨낼 수 있도록 칼날의 위치를 지속적으로 조절하고,
+(5)~벗겨내기엔 너무 작게 된 통나무의 중심 부분을 제거하고,
+(6)~다음 통나무를 기다립니다.
+이 여섯 단계의 오퍼레이션 각각은 역시 그 자체의 데드라인과 환경적 제약을 가질
+수 있는데, 예를 들어 단계~4 의 데드라인은 단계~6 의 그것보다 훨씬 가혹해서
+초단위가 아니라 밀리세컨드 단위일 것을 예상할 수 있을 겁니다.
+따라서 낮은 우선순위의 작업은 단계~4 에서 보다는 단계~6 에서 수행될 것으로
+예상할 수 있을 겁니다.
+그렇다곤 하나, 단계~4 의 더 가혹한 요구사항을 지켜주기 위해선 세심한 하드웨어,
+드라이버의 선택과 소프트웨어 구성이 더 필요할 겁니다.
+\iffalse
 
 Some real-time applications pass through different phases of operation.
 For example, a real-time system controlling a plywood lathe that peels
@@ -700,6 +749,23 @@ One might therefore expect that low-priority work would be performed in
 phase~6 rather than in phase~4.
 That said, careful choices of hardware, drivers, and software configuration
 would be required to support phase~4's more severe requirements.
+\fi
+
+이런 단계에 따른 단계 방법의 장점은 응답시간 예산이 나누어질 수 있어서,
+어플리케이션의 다양한 컴포넌트들이 각각 자신의 응답시간 예산을 가진채로
+독립적으로 개발될 수 있다는 점입니다.
+물론, 모든 다른 종류의 예산과 마찬가지로, 어떤 컴포넌트가 전체 예산 중 얼만큼의
+부분을 차지하게 될 것인지에 대해서는 가끔 충돌이 있을 수 있고, 다른 종류의
+예산과 마찬가지로 강한 리더쉽과 공유된 목표에 대한 감이 이런 충돌을 빠르게
+해결하는데에 도움이 될 수 있습니다.
+그리고, 또다시 다른 종류의 기술적 예산과 마찬가지로, 응답시간에 대한 적절한
+포커스를 보장하고 응답시간 문제에 대한 경고를 빨리 내기 위해서는 강력한 검증
+노력이 필요합니다.
+성공적인 검증 시도는 거의 항상, 이론가를 만족시킬수는 없을수도 있지만 실제 일이
+수행되는데에 도움을 주는 덕목을 가진 훌륭한 테스트 모음을 포함할 것입니다.
+실제로, 2015년 초에 있어서, 대부분의 실세계의 real-time 시스템은 형식적
+검증보다는 적합성 테스트를 사용합니다.
+\iffalse
 
 A key advantage of this phase-by-phase approach is that the latency
 budgets can be broken down, so that the application's various components
@@ -717,6 +783,16 @@ suite, which might be unsatisfying to the theorists, but has the virtue
 of helping to get the job done.
 As a point of fact, as of early 2015, most real-world real-time system
 use an acceptance test rather than formal proofs.
+\fi
+
+그렇다고는 하나, real-time 시스템을 검증하기 위한 테스트 집합의 넓은 사용은
+매우 현실적인 단점을 갖는데, real-time 소프트웨어는 특정 하드웨어와 소프트웨어
+구성 위에서만 검증된다는 점입니다.
+또다른 하드웨어와 환경구성을 추가하는 것은 추가적인 비용과 시간 소모를 요하는
+테스트를 필요로 합니다.
+형식적 검증이 이 상황을 바꿀 수 있기에 충분할 만큼 진보될 수도 있겠습니다만,
+2015년 초에 있어서는, 더 많은 진보가 필요한 상황입니다.
+\iffalse
 
 That said, the widespread use of test suites to validate real-time systems
 does have a very real disadvantage, namely that real-time software is
@@ -727,19 +803,49 @@ time-consuming testing.
 Perhaps the field of formal verification will advance sufficiently to
 change this situation, but as of early 2015, rather
 large advances are required.
+\fi
 
 \QuickQuiz{}
+	형식적 검증은 수십년간 집중된 연구로 인해 이미 상당히 실용 가능한
+	수준입니다.
+	추가적인 진보가 \emph{정말로} 필요한 건가요, 아니면 이건 그저 실무자의
+	게으르기를 계속하고 형식적 검증의 대단한 위력을 무시하려는 변명일
+	뿐인가요?
+	\iffalse
+
 	Formal verification is already quite capable, benefiting from
 	decades of intensive study.
 	Are additional advances \emph{really} required, or is this
 	just a practitioner's excuse to continue to be lazy and ignore
 	the awesome power of formal verification?
+	\fi
 \QuickQuizAnswer{
+	아마도 이 상황은 이론가들의 실제 소프트웨어의 복잡한 세계로 뛰어들지
+	않기 위한 변명일 수도 있겠는데요?
+	더 자세히 말해보자면, 다음과 같은 진보가 필요합니다:
+	\iffalse
+
 	Perhaps this situation is just a theoretician's excuse to avoid
 	diving into the messy world of real software?
 	Perhaps more constructively, the following advances are required:
+	\fi
 
 	\begin{enumerate}
+	\item	형식적 검증은 더 커다란 소프트웨어 작품들을 처리할 수 있어야만
+		합니다.
+		행해진 가장 큰 검증은은 약 10,000 라인의 코드를 갖는 시스템에
+		대한 검증 뿐이었고, 그것들은 real-time 응답시간들보다는 훨씬
+		간단한 속성들에 대한 검증이었습니다.
+	\item	하드웨어 제조사들은 정형적인 시간 보장사항에 대한내용을
+		제공해야 하게 될겁니다.
+		이는 하드웨어가 훨씬 더 간단했던 시절에는 일반적인
+		일이었습니다만, 오늘날의 복잡한 하드웨어는 최악의 경우의 성능에
+		대해서는 과하게 복잡한 표현을 초래하게 되었습니다.
+		안타깝게도, 에너지 효율성에 대한 관심은 제조사들을 이보다도 더
+		복잡한 세계로 떠밀고 있습니다.
+	\item	타이밍 분석은 개발 방법론과 IDE 들에 합쳐질 필요가 있습니다.
+	\iffalse
+
 	\item	Formal verification needs to handle larger software
 		artifacts.
 		The largest verification efforts have been for systems
@@ -754,12 +860,36 @@ large advances are required.
 		vendors in the direction of even more complexity.
 	\item	Timing analysis needs to be integrated into development
 		methodologies and IDEs.
+	\fi
 	\end{enumerate}
+
+	그렇게 말했긴 하지만, 최근의 실제 컴퓨터 시스템의 메모리 모델에 대한
+	정형화
+	작업~\cite{JadeAlglave2011ppcmem,Alglave:2013:SVW:2450268.2450306} 을
+	놓고 보면 희망이 있습니다.
+	\iffalse
 
 	All that said, there is hope, given recent work formalizing
 	the memory models of real computer
 	systems~\cite{JadeAlglave2011ppcmem,Alglave:2013:SVW:2450268.2450306}.
+	\fi
 } \QuickQuizEnd
+
+어플리케이션의 real-time 부분에서의 응답시간 요구사항에 더해서, 어플리케이션의
+real-time 이 아닌 부분을 위한 성능과 확장성 요구사항도 있을 수 있습니다.
+이런 추가적 요구사항들은 궁극의 real-time 응답시간들은 평균 성능과 확장성을
+떨어뜨림으로써 얻어질 수 있다는 사실을 반영합니다.
+
+소프트웨어 엔지니어링 요구사항 또한 중요할 수 있는데, 커다란 팀에 의해 개발되고
+유지되어야 하는 커다란 어플리케이션에서는 특히나 그렇습니다.
+이런 요구사항들은 모듈성의 증가와 실패의 격리화를 선호하게 되는 경우가
+많습니다.
+
+이건 제품 단계의 real-time 시스템을 위한 데드라인과 환경적 제약들을 명세하기
+위해 필요한 작업들의 간략한 개요에 지나지 않습니다.
+이런 개요가 real-time 컴퓨팅에 대한 말로 듣기 좋은 이야기 기반의 접근법의
+부적합성을 잘 보여주기를 바랍니다.
+\iffalse
 
 In addition to latency requirements for the real-time portions of the
 application, there will likely be performance and scalability requirements
@@ -775,6 +905,7 @@ This is a mere outline of the work that would be required to specify
 deadlines and environmental constraints for a production real-time system.
 It is hoped that this outline clearly demonstrates the inadequacy of
 the sound-bite-based approach to real-time computing.
+\fi
 
 \section{Who Needs Real-Time Computing?}
 \label{sec:rt:Who Needs Real-Time Computing?}
