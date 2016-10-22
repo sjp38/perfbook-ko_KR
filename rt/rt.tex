@@ -1146,6 +1146,22 @@ Ways of meeting this challenge are outlined in the following section.
 \section{Implementing Parallel Real-Time Systems}
 \label{sec:rt:Implementing Parallel Real-Time Systems}
 
+우리는 event-driven 과 polling 이라는 real-time 시스템의 두가지 주요 스타일들을
+알아보겠습니다.
+Event-driven real-time 시스템은 대부분의 시간을 idle 로 유지하고, 운영체제를
+통해 어플리케이션으로 전달되어진 이벤트에 실시간으로 응답합니다.
+대안적으로, 시스템은 idle 상태를 유지하는 대신 real-time 이 아닌 워크로드를
+백그라운드로 수행시킬 수 있습니다.
+Polling real-time 시스템은 CPU 에 성능이 결정되는 real-time 쓰레드를 갖고서, 이
+쓰레드로 딱맞는 루프 내에서 입력이 있는지 알아보고 있을 경우 출력을
+업데이트합니다.
+이 딱맞는 입력 조사 루프는 사용자 모드 어플리케이션의 주소 공간에 매핑된
+하드웨어 레지스터로부터 읽고 그 레지스터로 쓰기를 하는 방식으로 완전히 사용자
+모드에서 수행되는 경우가 많습니다.
+대안적으로, 일부 어플리케이션들은 입력 조사 루프를 커널에 넣어두는데, 예를 들면
+로딩할 수 있는 커널 모듈을 사용하는 방식입니다.
+\iffalse
+
 We will look at two major styles of real-time systems, event-driven and
 polling.
 An event-driven real-time system remains idle much of the time, responding
@@ -1161,6 +1177,7 @@ and writing to hardware registers that have been mapped into the user-mode
 application's address space.
 Alternatively, some applications place the polling loop into the kernel,
 for example, via use of loadable kernel modules.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1168,6 +1185,31 @@ for example, via use of loadable kernel modules.
 \caption{Real-Time Response Regimes}
 \label{fig:rt:Real-Time Response Regimes}
 \end{figure}
+
+어떤 스타일을 선택하는가와 상관 없이, real-time 시스템을 구현하는데에 사용되는
+방법은 예를 들면
+Figure~\ref{fig:rt:Real-Time Response Regimes} 에 보인 것과 같이 데드라인에
+종속적일 겁니다.
+이 그림의 위에서부터 시작해 보자면, 여러분이 1초가 넘는 반응 시간을 가져도
+괜찮다면, 여러분의 real-time 어플리케이션을 구현하는데에 스크립트 언어를 사용할
+수도 있을 겁니다---그리고 스크립트 언어는 실제로 놀라울만큼 자주 사용되는데,
+제가 이 방법을 추천해야 할 정도는 아닙니다.
+요구되는 응답시간이 수십 밀리세컨드를 넘는다면, 오래된 2.4 버전의 리눅스 커널이
+사용될 수도 있을 텐데, 이 역시 제가 추천해야 할 정도는 아닙니다.
+특수한 real-time Java 구현은 가비지 콜렉터의 사용에도 불구하고 수 밀리세컨드의
+실시간 응답시간을 제공합니다.
+리눅스 2.6.x 와 3.x 커널은 주의깊게 구성되고 튜닝되어서 real-time 에 친화적인
+하드웨어서 수행된다면 수백 마이크로세컨드의 실시간 응답시간을 제공합니다.
+특수한 real-time Java 구현은 가비지 콜렉터의 사용이 주의깊게 막아진다면 100
+마이크로세컨드 아래의 실시간 응답시간을 제공할 수 있습니다.
+(하지만 가비지 콜렉터를 막는 행위는 Java 의 많은 표준 라이브러리의 사용을 막게
+되어서 Java 의 생산성에서의 장점을 없애버린다는 점을 알아두시기 바랍니다.)
+-rt 패치셋을 포함한 리눅스 커널은 20 마이크로세컨드 아래의 응답시간을 제공하고,
+메모리 변환 없이 동작하는 특수한 real-time 운영체제 (RTOSes) 들은 10
+마이크로세컨드 아래의 응답시간을 제공합니다.
+마이크로세컨드 아래의 응답시간을 달성하는 것은 손으로 짜여진 어셈블리 코드나
+심지어 특수 목적의 하드웨어를 사용할 것을 필요로 합니다.
+\iffalse
 
 Regardless of the style chosen, the approach used to implement a real-time
 system will depend on the deadlines, for example, as shown in
@@ -1197,6 +1239,27 @@ running without memory translation can provide sub-ten-microsecond
 latencies.
 Achieving sub-microsecond latencies typically requires hand-coded assembly
 or even special-purpose hardware.
+\fi
+
+물론, 이 스택의 전체에 걸쳐 주의깊은 구성과 튜닝이 필요합니다.
+상세히 말하자면, 하드웨어나 펌웨어가 real-time 응답을 제공하는데에 실패한다면,
+소프트웨어가 그 잃어버린 시간을 만회하기 위해 할 수 있는 일은 없습니다.
+그리고 고성능 하드웨어는 가끔 더 나은 처리량을 얻기 위해 최악의 경우의 동작을
+희생합니다.
+실제로, 인터럽트가 불능화된 상태에서 돌아가는 짧은 루프에서의 타이밍은 고성능
+무작위수 생성기의 기본을 제공할 수
+있습니다~\cite{PeterOkech2009InherentRandomness}.
+더 나아가서, 일부 펌웨어는 다양한 필수 태스크들을 이끌어가기 위해
+cycle-stealing 을 하고, 일부 경우에는 희생자 CPU 의 하드웨어 클락을
+재프로그래밍 함으로써 그 궤도를 덮으려 시도합니다.
+물론, cycle stealing 은 가상 환경에서는 예상된 행동입니다만, 사람은 가상
+환경에서 real-time 응답을 위해 일하지
+않습니다~\cite{ThomasGleixner2012KVMrealtime,JanKiszka2014virtRT}.
+따라서 여러분의 하드웨어의, 그리고 펌웨어의 real-time 기능을 평가하는게 상당히
+중요합니다.
+그런 평가를 진행해 주는 기관들이 존재하는데, Open Source Automation Development
+Lab (OSADL) 도 그 중 하나입니다.
+\iffalse
 
 Of course, careful configuration and tuning are required all the way down
 the stack.
@@ -1219,10 +1282,16 @@ It is therefore critically important to evaluate your hardware's and
 firmware's real-time capabilities.
 There are organizations who carry out such evaluations, including
 the Open Source Automation Development Lab (OSADL).
+\fi
+
+하지만 주어진 유능한 real-time 하드웨어와 펌웨어를 두고서, 이 스택의 다음 위쪽
+계층은 다음 섹션에서 다루어질 운영체제입니다.
+\iffalse
 
 But given competent real-time hardware and firmware, the next
 layer up the stack is the operating system, which is covered in
 the next section.
+\fi
 
 \subsection{Implementing Parallel Real-Time Operating Systems}
 \label{sec:rt:Implementing Parallel Real-Time Operating Systems}
@@ -1234,6 +1303,15 @@ the next section.
 \label{fig:rt:Linux Ported to RTOS}
 \end{figure}
 
+Real-time 시스템을 구현하는데에 사용될 수 있는 여러가지 전략들이 있습니다.
+한가지 방법은
+Figure~\ref{fig:rt:Linux Ported to RTOS} 에 보인 것처럼 특수 목적 real-time
+운영 체제 (RTOS) 위에 범용 real-time 이 아닌 OS 를 포팅하는 것입니다.
+초록색의 ``Linux Process'' 상자들은 리눅스 커널에서 돌아가는 real-time 이 아닌
+프로세스들을 의미하며, 노란색의 ``RTOS Process'' 상자들은 RTOS 위에서 돌아가는
+real-time 프로세스들을 의미합니다.
+\iffalse
+
 There are a number of strategies that may be used to implement a
 real-time system.
 One approach is to port a general-purpose non-real-time OS on top
@@ -1242,6 +1320,17 @@ Figure~\ref{fig:rt:Linux Ported to RTOS}.
 The green ``Linux Process'' boxes represent non-real-time processes
 running on the Linux kernel, while the yellow ``RTOS Process''
 boxes represent real-time processes running on the RTOS.
+\fi
+
+이 방법은 리눅스 커널이 real-time 기능을 얻게 되기 전까지 매우 널리 사용되던
+방법이고, 오늘날에도 여전히 사용되고
+있습니다~\cite{Xenomai2014,VictorYodaiken2004a}.
+하지만, 이 방법은 어플리케이션이 RTOS 에서 수행되는 부분과 리눅스에서 수행되는
+또다른 부분으로 나뉘어질 것을 필요로 합니다.
+예를 들어 RTOS 로부터의 POSIX 시스템 콜을 리눅스에서 수행되는 유틸리티 쓰레드로
+포워딩 시키거나 하는 식으로 이 두개의 환경이 비슷해 보이게 만드는게 가능하긴
+하지만, 언제나 그러기 어려운 부분들이 존재합니다.
+\iffalse
 
 This was a very popular approach before the Linux kernel gained
 real-time capabilities, and is still in use
@@ -1251,6 +1340,18 @@ one portion that runs on the RTOS and another that runs on Linux.
 Although it is possible to make the two environments look similar,
 for example, by forwarding POSIX system calls from the RTOS to a
 utility thread running on Linux, there are invariably rough edges.
+\fi
+
+또한, 이 RTOS 는 하드웨어와 리눅스 커널 둘 다와 연결되어야만 하고, 따라서
+하드웨어와 커널 둘 다에서 발생되는 변경에 대해서 상당한 관리를 필요로 합니다.
+더 나아가서, 이런 RTOS 는 각각 그 스스로의 시스템 콜 인터페이스와 시스템
+라이브러리 집합을 갖추고 있는 경우가 많아서 에코시스템과 개발자들을 분할해 놓을
+수 있습니다.
+실제로, 이런 문제들이 RTOS 들과 리눅스의 조합을 이끌게 된 것으로 보이는데, 이
+방법은 RTOS 의 전체 real-time 기능으로의 접근을 허락하는 동시에 리눅스의
+풍부하고 다양한 오픈 소스 생태계로의 어플리케이션의 real-time 이 아닌 완전한
+접근을 가능하게 하기 때문입니다.
+\iffalse
 
 In addition, the RTOS must interface to both the hardware and to
 the Linux kernel, thus requiring significant maintenance with
@@ -1262,6 +1363,7 @@ In fact, these problems seem to be what drove the combination of
 RTOSes with Linux, as this approach allowed access to the full real-time
 capabilities of the RTOS, while allowing the application's non-real-time
 code full access to Linux's rich and vibrant open-source ecosystem.
+\fi
 
 \begin{figure*}[p]
 \centering
@@ -1269,6 +1371,23 @@ code full access to Linux's rich and vibrant open-source ecosystem.
 \caption{Linux-Kernel Real-Time Implementations}
 \label{fig:rt:Linux-Kernel Real-Time Implementations}
 \end{figure*}
+
+RTOS 들을 리눅스 커널과 짝짓는 것은 리눅스 커널이 최소한의 real-time 기능들만을
+가지고 있던 때에는 현명하고 유용한 단기적 방법이었긴 합니다만, 이는 또한 리눅스
+커널에 real-time 기능을 추가하는 동기가 되었습니다.
+이 목표를 향한 진행이
+Figure~\ref{fig:rt:Linux-Kernel Real-Time Implementations} 에 보여져 있습니다.
+위쪽의 행은 preemption 이 불능화 되어져서 핵심적으로는 real-time 기능을 가지고
+있지 않은 상태의 리눅스 커널을 다이어그램으로 그리고 있습니다.
+중간의 행은 preemption 이 활성화 된 채로 메인라인 리눇 크너러의 real-time
+기능들이 늘어나는 것을 보이는 다이어그램들을 보이고 있습니다.
+마지막으로, 가장 아래의 행은 -rt 패치셋이 적용되어서 real-time 기능을 최대화
+시킨 리눅스 커널의 다이어그램을 보이고 있습니다.
+-rt 패치셋으로부터의 기능들이 메인라인에 추가됨으로써, 메인라인 리눅스 커널의
+기능들이 시간에 따라 증가되었습니다.
+더도 아니고 덜도 아니고, 가장 큰 노력을 요하는 real-time 어플리케이션들은 -rt
+패치셋을 사용하길 유지하고 있습니다.
+\iffalse
 
 Although pairing RTOSes with the Linux kernel was a clever and useful
 short-term response during the time that the Linux kernel had minimal
@@ -1286,6 +1405,18 @@ Functionality from the -rt patchset is added to mainline,
 hence the increasing capabilities of the mainline Linux kernel over time.
 Neverthless, the most demanding real-time applications continue to use
 the -rt patchset.
+\fi
+
+Figure~\ref{fig:rt:Linux-Kernel Real-Time Implementations} 의 꼭대기에 보여진
+non-preemptible 커널은 \co{CONFIG_PREEMPT=n} 과 함께 빌드되어져서, 이 리눅스
+커널에서의 수행은 preemption 당할 수 없습니다.
+이는 곧 이 커널의 real-time 응답 시간의 최대 시간은 리눅스 커널의 가장 킨 코드
+수행 경로에 따라 정해진다는 것을 의미하는데, 이 시간은 실제로 깁니다.
+하지만, 사용자 모드 수행은 preemption 당할 수 있고, 따라서 우상단에 보여진
+real-time 리눅스 프로세스들 가운데 하나는 non-real-time 리눅스 프로세스들
+가운데 어느 하나든 사용자 모드에서 수행 중일 때 해당 non-real-time 리눅스
+프로세스를 preemption 할 수 있습니다.
+\iffalse
 
 The non-preemptible kernel shown at the top of
 Figure~\ref{fig:rt:Linux-Kernel Real-Time Implementations}
@@ -1297,6 +1428,25 @@ However, user-mode execution is preemptible, so that one of the
 real-time Linux processes shown in the upper right may preempt any of the
 non-real-time Linux processes shown in the upper left anytime the
 non-real-time process is executing in user mode.
+\fi
+
+Figure~\ref{fig:rt:Linux-Kernel Real-Time Implementations}
+의 가운데 행에 보여진 preemption 가능한 커널들은 \co{CONFIG_PREEMPT=y} 설정과
+함께 빌드되어지며, 따라서 해당 리눅스 커널 내의 프로세스 수준 코드는 대부분
+preemption 될 수 있습니다.
+물론 이는 real-time 응답 시간을 상당히 개선시킵니다만, 이 그림의 가운대 행의
+가장 왼쪽 다이어그램 안의 빨간색 박스로 보여지듯이 RCU read-side 크리티컬 섹션,
+스핀락 크리티컬 섹션, 인터럽트 핸들러, 인터럽트가 불능화된 코드 영역, 그리고
+preemption 불능화된 코드 영역에서는 여전히 preemption 이 불능화 되어 있습니다.
+Preemption 가능한 RCU 의 진화는 가운데 다이어그램에서 보여지듯이 RCU read-side
+크리티컬 섹션이 preemption 될 수 있게 했고, 쓰레드화 된 인터럽트 핸들러들은
+가장 오른쪽 다이어그램에 보여지듯이 디바이스 인터럽트 핸들러들이 플리엠션될 수
+있게 만들었습니다.
+물론, 이 시간 동안에 다른 real-time 기능들을 처리하는 기능들이
+추가되었습니다만, 이는 이 다이어그램에 쉽게 표시될 수 없었습니다.
+그에 대해서는 대신
+Section~\ref{sec:rt:Event-Driven Real-Time Support} 에서 이야기 하겠습니다.
+\iffalse
 
 The preemptible kernels shown in the middle row of
 Figure~\ref{fig:rt:Linux-Kernel Real-Time Implementations}
@@ -1319,6 +1469,7 @@ during this time, however, it cannot be as easily represented on this
 diagram.
 It will instead be discussed in
 Section~\ref{sec:rt:Event-Driven Real-Time Support}.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1326,6 +1477,30 @@ Section~\ref{sec:rt:Event-Driven Real-Time Support}.
 \caption{CPU Isolation}
 \label{fig:rt:CPU Isolation}
 \end{figure}
+
+마지막 방법은
+Figure~\ref{fig:rt:CPU Isolation} 에 보인 것처럼, real-time 프로세스로부터 모든
+것을 치우는 것으로, 이 프로세스가 필요로 하는 모든 CPU 로부터 모든 다른
+프로세스 처리를 없애버리는 것입니다.
+이는 3.10 리눅스 커널에서 \co{CONFIG_NO_HZ_FULL} Kconfig 인자로
+구현되었습니다~\cite{FredericWeisbecker2013nohz}.
+이 방법은 예를 들면 수행중인 커널 daemon 들과 같은 백그라운드 처리를 위해서
+최소 하나의 \emph{최소 작업을 수행할 CPU} 를 필요로 한다는 점을 알아둘 필요가
+있습니다.
+하지만, 최소 작업을 수행할 CPU 가 아닌 CPU 에 하나의 수행 가능한 task 만이
+존재할 때에는 해당 CPU 에서 scheduling-clock 인터럽트가 꺼져서 간섭과 \emph{OS
+jitter} 의 중요 원인을 하나 없애버립니다.\footnote{
+	1초에 한번 발생하는 잔여의 scheduling-clock 인터럽트는 프로세스 통계
+	등을 위해 남습니다.
+	나중에 할 일 목표에는 이런 것들을 처리하고 이 잔여의 인터럽트를 없애는
+	것을 포함합니다.}
+몇가지 예외와 함께, 이 커널은 해당의 최소 작업을 수행할 CPU 로부터 다른 처리를
+없애버리도록 강제하지는 않습니다만, 그대신 해당 CPU 에 하나의 수행가능한 task
+만이 존재할 때 더 나은 성능을 제공합니다.
+제대로 구성된다면, 간단하지 않은 일을 하는 \co{CONFIG_NO_HZ_FULL} 은 real-time
+쓰레드들에게 거의 bare-metal 시스템의 그것에 필적하는것에 가까운 수준의 성능을
+제공합니다.
+\iffalse
 
 A final approach is simply to get everything out of the way of the
 real-time process, clearing all other processing off of any CPUs that
@@ -1349,6 +1524,18 @@ when only one runnable task is present on a given CPU.
 If configured properly, a non-trivial undertaking, \co{CONFIG_NO_HZ_FULL}
 offers real-time threads levels of performance nearly rivaling that of
 bare-metal systems.
+\fi
+
+이런 방법들 가운데 무엇이 real-time 시스템을 위해 최선인가에 대해서는 물론
+상당한 언쟁이 있어왔습니다고, 이 언쟁은 상당한 시간동안 진행되어오고
+있습니다~\cite{JonCorbet2004RealTimeLinuxPart1,JonCorbet2004RealTimeLinuxPart2}.
+대부분의 경우와 같이, 그에 대한 답은 다음 섹션들에서 이야기되듯이 ``다른것에
+종속적이다'' 일 것으로 보입니다.
+Section~\ref{sec:rt:Event-Driven Real-Time Support} 는 event-drive real-time
+시스템들을 알아보고,
+Section~\ref{sec:rt:Polling-Loop Real-Time Support} 는 CPU 에 성능이 국한되는
+polling 루프를 사용하는 real-time 시스템을 알아봅니다.
+\iffalse
 
 There has of course been much debate over which of these approaches
 is best for real-time systems, and this debate has been going on for
@@ -1360,6 +1547,7 @@ Section~\ref{sec:rt:Event-Driven Real-Time Support}
 considers event-driven real-time systems, and
 Section~\ref{sec:rt:Polling-Loop Real-Time Support}
 considers real-time systems that use a CPU-bound polling loop.
+\fi
 
 \subsubsection{Event-Driven Real-Time Support}
 \label{sec:rt:Event-Driven Real-Time Support}
