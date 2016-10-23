@@ -1569,6 +1569,22 @@ and
 preemptible spinlocks.
 \fi
 
+\paragraph{Timers} 는 real-time 운영을 위해 상당히 중요한 게 분명합니다.
+무엇보다도, 무언가가 특정 시간 동안 되었음을 말할 수가 없다면, 어떻게 그 시간
+내로 응답을 해줄 수 있겠습니까?
+Real-time 이 아닌 시스템에서조차도, 많은 수의 타이머들이 생성되고, 따라서
+그것들은 상당히 효율적으로 다루어져야만 합니다.
+사용 예로는 (거의 항상 그것들이 울릴 기회가 오기 전에 취소되어 버리는) TCP
+연결을 위한 재전송 타이머,\footnote{
+	합리적으로 낮은 패킷 로스 발생률을 가정한다면요!}
+(드물게 취소되는 \co{sleep(1)} 과 같이) 시간이 지정된 딜레이, 그리고 (울릴
+기회가 오기 전에 취소되는 경우가 자주 있는) \co{poll()} 시스템 콜을 위한
+타임아웃 등이 있을 겁니다.
+따라서 그런 타이머를 위한 좋은 데이터 구조는 추가 기능과 삭제 기능이 빠르고
+예약이 걸린 타이머의 갯수에 대해 $O(1)$ 의 시간 비용을 갖는 우선순위 대기열이
+될 겁니다.
+\iffalse
+
 \paragraph{Timers} are clearly critically important for real-time
 operations.
 After all, if you cannot specify that something be done at a specific
@@ -1584,6 +1600,17 @@ cancelled before they have a chance to fire).
 A good data structure for such timers would therefore be a priority queue
 whose addition and deletion primitives were fast and $O(1)$ in the number
 of timers posted.
+\fi
+
+이런 목적의 고전적인 데이터 구조는 리눅스 커널에서 \co{timer wheel} 이라 불리는
+\emph{calendar queue} 입니다.
+이 오래된 데이터 구조는 discrete-event 시뮬레이션에서 많이 사용되기도 합니다.
+여기서의 아이디어는 시간이 양자화 된다는 것으로, 예를 들어 리눅스 커널에서는
+시간 분량의 길이는 scheduling-clock 인터럽트의 기간입니다.
+특정 시간은 정수로 표현될 수 있고, 어떤 양자화 기준으로 완전치 않은 시점에서
+하나의 타이머를 등록하려는 모든 시도는 양자화된 완전한 시간 분량에 가깝도록
+조정될 겁니다.
+\iffalse
 
 The classic data structure for this purpose is the \emph{calendar queue},
 which in the Linux kernel is called the \co{timer wheel}.
@@ -1595,6 +1622,20 @@ interrupt.
 A given time can be represented by an integer, and any attempt to post
 a timer at some non-integral time will be rounded to a convenient nearby
 integral time quantum.
+\fi
+
+한가지 간단한 구현은 시간의 아래쪽 비트로 인덱스 되는 하나의 배열을 할당하는
+것이 될 겁니다.
+이는 이론적으로는 동작하지만, 실제 시스템에서는 거의 항상 취소되어버리는 긴
+시간의 타임아웃 (timeout)을 굉장히 많이 발생시킵니다 (예를 들어, TCP 세션들에서
+45분짜리의 keepalive 타임아웃).
+이런 긴 시간을 필요로 하는 타임아웃은 대부분의 시간이 아직 만료되지 않은
+타임아웃을 넘기는데에 소모되기 때문에 작은 크기의 배열에서는 문제를 일으킵니다.
+한편으로는, 임의의 많은 수의 긴 시간의 타임아웃들을 수용할 수 있을만큼 충분히
+큰 배열은 너무 많은 양의 메모리를 소비하게 될 수 있는데, 특히 성능과 확장성을
+고려하는 곳에서는 모든 CPU 각각에 대해 그런 배열을 필요로 한다는 점에서 특히
+그렇습니다.
+\iffalse
 
 One straightforward implementation would be to allocate a single array,
 indexed by the low-order bits of the time.
@@ -1608,6 +1649,7 @@ On the other hand, an array that is large enough to gracefully accommodate
 a large number of long-duration timeouts would consume too much memory,
 especially given that performance and scalability concerns require one
 such array for each and every CPU.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1615,6 +1657,29 @@ such array for each and every CPU.
 \caption{Timer Wheel}
 \label{fig:rt:Timer Wheel}
 \end{figure}
+
+이런 충돌을 해결하는 한가지 일반적인 방법은 계층을 사용해서 여러개의 배열들을
+제공하는 것입니다.
+이 계층의 가장 낮은 단계에서는 각각의 배열 원소가 시간의 한 단위를 나탄냅니다.
+두번째 단계에서, 각각의 배열 원소는 시간 단위 $N$ 개를 나타내는데, $N$ 은 각
+배열의 원소의 갯수입니다.
+세번째 단계에서, 각각의 배열 원소는 시간 단위 $N^2$ 개를 나타내고, 그런식으로
+계층의 윗단계로 진행됩니다.
+이 방법은
+Figure~\ref{fig:rt:Timer Wheel}
+에 그려진 것처럼 비현실적일정도로 작은 8-비트 클락에 대해 개별적인 배열들이
+서로 다른 비트로 인덱스 될 수 있도록 합니다.
+여기서, 각각의 배열은 16개의 원소를 가져서 시간의 아래쪽 네개의 비트 (현재
+\co{0xf}) 는 아래 단계의 (가장 오른쪽의) 배열을 인덱스 하고, 다음의 네개의 비트
+(현재 \co{0x1}) 는 그 다음 위 단계를 인덱스 하게 됩니다.
+따라서, 각각 16 개의 원소를 가져서 총 32개의 원소를 갖는 두개의 배열을 가지게
+되는데 이는 단일 배열을 사용한다면 256 개의 원소를 갖는 배열을 사용했어야 하는
+것에 비하면 굉장히 작은 것입니다.
+
+이 방법은 처리량 기반의 시스템에서는 상당히 잘 동작합니다.
+각각의 타이머의 동작은 작은 수의 상수로 $O(1)$ 의 비용을 갖고, 각각의 타이머
+원소는 최대 $m+1$ 회 접근되는데, 여기서 $m$ 는 단계의 수입니다.
+\iffalse
 
 A common approach for resolving this conflict is to provide multiple
 arrays in a hierarchy.
@@ -1639,6 +1704,7 @@ This approach works extremely well for throughput-based systems.
 Each timer operation is $O(1)$ with small constant, and each timer
 element is touched at most $m+1$ times, where $m$ is the number of
 levels.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1653,6 +1719,24 @@ levels.
 \caption{Timer Wheel at 100kHz}
 \ContributedBy{Figure}{fig:rt:Timer Wheel at 100kHz}{Melissa Broussard}
 \end{figure}
+
+안타깝게도, time wheel 은 real-time 시스템에서는 두가지 이유로 인해 잘 동작하지
+못합니다.
+첫번째 이유는 타이머의 정확성과 타이머의 오버헤드 사이에 존재하는 가혹한 트레이드오프로,
+Figures~\ref{fig:rt:Timer Wheel at 1kHz}
+와~\ref{fig:rt:Timer Wheel at 100kHz}
+에 그려져 있습니다.
+Figure~\ref{fig:rt:Timer Wheel at 1kHz} 에서, 타이머 처리는 1 밀리세컨드당
+1회만 일어나는데, 이는 많은 (하지만 모든 것은 아닌!) 워크로드들에 대해 충분히
+받아들여질 수 있을 만큼 낮은 오버헤드를 유지하게 됩니다만, 이는 또한 타임아웃이
+1 밀리세컨드 단위보다 작은 단위로 설정될 수는 없음을 의미합니다.
+다른 한편으로,
+Figure~\ref{fig:rt:Timer Wheel at 100kHz}
+는 타이머 처리가 10 마이크로세컨드마다 발생하게 됨을 보이는데, 여기서는
+대부분의 (하지만 모든 것은 아닌!) 워크로드에 대해 받아들여지기 충분할 만큼
+세밀한 시간 단위를 제공하지만, 또한 시스템이 타이머를 처리하는 것 이외에는 다른
+일을 할수가 없을만큼 자주 타이머 처리가 이루어짐을 의미합니다.
+\iffalse
 
 Unfortunately, timer wheels do not work well for real-time systems, and for
 two reasons.
@@ -1671,6 +1755,27 @@ shows timer processing taking place every ten microseconds, which
 provides acceptably fine timer granularity for most (but not all!)
 workloads, but which processes timers so frequently that the system
 might well not have time to do anything else.
+\fi
+
+두번째 이유는 타이머를 위쪽 단계부터 아래쪽 단계까지 봐야한다는 필요성입니다.
+Figure~\ref{fig:rt:Timer Wheel} 로 다시 돌아가서, 윗단계의 (왼쪽의) 배열의
+\co{1x} 원소에 넣어진 모든 타이머는 아래 단계의 (오른쪽의) 배열로 이동되어서
+그것들의 시간이 도착했을 때에 호출될 수도 있게 해야 합니다.
+안타깝게도, 여기에는 아래 단계로 이동하기 위해 기다리고 있는 많은 수의
+타임아웃들이 존재할 수 있는데, 특히 많은 수의 단계를 갖는 타이머에서는 더욱
+그럴 것입니다.
+통계의 힘은 이 단계 이동이 처리량 기반의 시스템에 있어서는 문제가 되지 않도록
+합니다만, 단계 이동이 real-time 시스템에서는 응답시간의 저하라는 문제를 초래할
+수 있습니다.
+
+물론, real-time 시스템은 그냥 다른 데이터 구조를 선택할 수도 있는데, 예를 들면
+추가와 삭제 오퍼레이션의 최대 성능 한계 $O(1)$ 이라는 조건을 포기하고 데이터
+구조 관리 오퍼레이션에 대해서 $O(\log n)$ 한계를 얻을 수 있는 heap 이나 tree 의
+형태가 될 수 있을 겁니다.
+이는 특정 목적의 RTOS 들에 대해서는 좋은 선택이 될 수 있습니다만, 주로 굉장히
+많은 수의 타이머들을 지원해야 하는 리눅스와 같은 범용 목적의 시스템들에서는
+비효율적입니다.
+\iffalse
 
 The second reason is the need to cascade timers from higher levels to
 lower levels.
@@ -1693,6 +1798,23 @@ limits on data-structure-maintenance operations.
 This can be a good choice for special-purpose RTOSes, but is inefficient
 for general-purpose systems such as Linux, which routinely support
 extremely large numbers of timers.
+\fi
+
+리눅스 커널의 -rt 패치셋에서 선택된 해결책은 나중의 동작을 스케쥴하는 타이머와
+TCP 패킷 로스와 같이 발생 확률이 낮은 에러의 에러 처리를 스케쥴하는데에
+사용되는 타이머를 서로 다르게 하는 것입니다.
+여기서의 핵심적인 발견은 에러 처리는 일반적으로 특별히 시간이 중요하지 않고,
+따라서 time wheel 의 밀리세컨드 단위 관리도 충분하고 좋다는 것입니다.
+또다른 하나의 핵심 발견은 에러 처리용 타임아웃들은 일반적으로 매우 빨리
+취소되는데, 그 빠른 정도는 아래 단계로의 전파 전인 경우도 잦다는 것입니다.
+마지막 발견은 시스템은 발생시키는 타이머 이벤트 보다도 훨씬 더 많은 에러 처리
+타임아웃들을 가지고 있고, 따라서 $O(\log n)$ 데이터 구조는 타이머 이벤트에
+받아들여질만한 성능을 제공해야 한다는 것입니다.
+
+짧게 정리해서, 리눅스 커널의 -rt 패치셋은 에러 처리 타임아웃에 대해서는 timer
+wheel 을 사용하고 타이머 이벤트에는 tree 를 사용해서 각 카테고리에 필요시 되는
+품질의 서비스를 제공합니다.
+\iffalse
 
 The solution chosen for the Linux kernel's -rt patchset is to differentiate
 between timers that schedule later activity and timeouts that schedule
@@ -1709,6 +1831,7 @@ data structure should provide acceptable performance for timer events.
 In short, the Linux kernel's -rt patchset uses timer wheels for
 error-handling timeouts and a tree for timer events, providing each
 category the required quality of service.
+\fi
 
 \begin{figure}[tb]
 \centering
