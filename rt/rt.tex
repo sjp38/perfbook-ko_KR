@@ -1840,6 +1840,19 @@ category the required quality of service.
 \label{fig:rt:Non-Threaded Interrupt Handler}
 \end{figure}
 
+\paragraph{Thread interrupts}
+는
+Figure~\ref{fig:rt:Non-Threaded Interrupt Handler} 에 보여진 것과 같이
+느려진 real-time 응답시간의 중요한 원인이 되는, 오래 수행되는 인터럽트 핸들러를
+해결하기 위해 사용됩니다.
+이런 응답시간들은 하나의 인터럽트에 많은 수의 이벤트를 전달할 수 있는
+기기들에서 특히나 문제가 될 수 있는데, 이 인터럽트 핸들러는 이 이벤트들 전체를
+처리하는 연장된 시간 기간동안 동작하게 될 것임을 의미합니다.
+더 나쁜건 여전히 수행 중인 인터럽트 핸들러에 새로운 이벤트를 전달할 수 있는
+기기들로, 그런 인터럽트 핸들러는 정해지지 않은 시간동안 수행될 수도 있고, 그로
+인해 무한정 real-time 응답시간을 느리게 만들 수 있습니다.
+\iffalse
+
 \paragraph{Threaded interrupts}
 are used to address a significant source of degraded real-time latencies,
 namely long-running interrupt handlers,
@@ -1852,6 +1865,7 @@ processing all of these events.
 Worse yet are devices that can deliver new events to a still-running
 interrupt handler, as such an interrupt handler might well run
 indefinitely, thus indefinitely degrading real-time latencies.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1859,6 +1873,19 @@ indefinitely, thus indefinitely degrading real-time latencies.
 \caption{Threaded Interrupt Handler}
 \label{fig:rt:Threaded Interrupt Handler}
 \end{figure}
+
+이 문제를 해결하는 한가지 방법은
+Figure~\ref{fig:rt:Threaded Interrupt Handler} 에 보여진 쓰레드화 된 인터럽트의
+사용입니다.
+인터럽트 핸들러는 설정될 수 있는 우선순위로 수행되는, preemption 될 수 있는 IRQ
+쓰레드의 컨텍스트에서 수행됩니다.
+이렇게 되면 이 기기의 인터럽트 핸들러는 IRQ 쓰레드가 이 새로운 이벤트를 알아챌
+수 있을때까지의 짧은 시간동안만 수행됩니다.
+그림에서 보였듯이, 쓰레드화된 인터럽트는 real-time 응답시간을 굉장히 개선할 수
+있는데, IRQ 쓰레드의 컨텍스트에서 수행되는 인터럽트 핸들러는 더 높은 우선순위의
+real-time 쓰레드에 의해 preemption 당할 수 있기 때문인 게 한 부분적인
+이유입니다.
+\iffalse
 
 One way of addressing this problem is the use of threaded interrupts shown in
 Figure~\ref{fig:rt:Threaded Interrupt Handler}.
@@ -1870,6 +1897,23 @@ As shown in the figure, threaded interrupts can greatly improve
 real-time latencies, in part because interrupt handlers running in
 the context of the IRQ thread may be preempted by high-priority real-time
 threads.
+\fi
+
+하지만, 공짜 점심같은 건 없고, 쓰레드화된 인터럽트에도 단점이 존재합니다.
+한가지 단점은 길어진 인터럽트 응답시간입니다.
+곧바로 인터럽트 핸들러를 수행하는 대신에, 핸들러의 수행은 IRQ 쓰레드가 수행될
+수 있도록 되기까지 지연됩니다.
+물론, 이는 인터럽트를 발생시키는 기기가 real-time 어플리케이션의 중요한
+수행경로에 있지 않다면 문제가 되지 않습니다.
+
+또다른 단점은 잘못 작성된 높은 웃너순위의 real-time 코드가 인터럽트 핸들러를
+starvation 상태에 빠뜨릴 수 있다는 것으로, 예를 들어 네트워킹 코드가 수행되지
+못하게 만들어 버려서 이 문제를 디버깅 하기 매우 어렵게 만들 수 있습니다.
+따라서 개발자들은 높은 우선순위의 real-time 코드를 작성할 때에는 많은 주의를
+기울여야 합니다.
+이는 \emph{스파이더맨 철학} 을 떠올리게 합니다: With great power comes great
+responsibility.
+\iffalse
 
 However, there is no such thing as a free lunch, and there are downsides
 to threaded interrupts.
@@ -1886,6 +1930,7 @@ Developers must therefore take great care when writing high-priority
 real-time code.
 This has been dubbed the \emph{Spiderman principle}: With great power
 comes great responsibility.
+\fi
 
 \paragraph{Priority inheritance} is used to handle priority inversion,
 which can be caused by, among other things, locks acquired by
