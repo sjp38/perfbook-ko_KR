@@ -1932,6 +1932,23 @@ This has been dubbed the \emph{Spiderman principle}: With great power
 comes great responsibility.
 \fi
 
+\paragraph{Priority inheritance} 는 다른 것들보다도 preemption 당할 수 있는
+인터럽트 핸들러에 의해 락이 획득된다면 발생할 수 있는 우선순위 역전 문제를
+해결하는데에 사용됩니다~\cite{LuiSha1990PriorityInheritance}.
+낮은 우선순위의 쓰레드가 락을 잡았지만, 최소 CPU 당 하나씩의 갯수를 갖는 중간
+우선순위의 쓰레드들에게 preemption 당한다고 생각해 보세요.
+만약 인터럽트가 발생한다면, 높은 우선순위의 IRQ 쓰레드는 중간 우선순위 쓰레드들
+가운데 하나를 preemption 시킬 겁니다만, 낮은 우선순위의 쓰레드가 잡은 락을
+잡기로 한 동안만 그렇습니다.
+불행히도, 이 낮은 우선순위의 쓰레드는 수행이 시작되기 전까지는 락을 놓을 수가
+없는데, 중간 우선순위 쓰레드들이 낮은 우선순위 쓰레드의 수행이 불가능하게 하고
+있습니다.
+따라서 높은 우선순위의 IRQ 쓰레드는 중간 우선순위 쓰레드들 가운데 하나가 자신의
+CPU 를 놓기 전까지는 그 락을 잡을 수가 없습니다.
+짧게 말해서, 이 중간 웃너순위 쓰레드가 간접적으로 높은 우선순위의 IRQ 쓰레드의
+수행을 막고 있는 셈인데, 이는 고전적인 우선순위 역전의 한 예입니다.
+\iffalse
+
 \paragraph{Priority inheritance} is used to handle priority inversion,
 which can be caused by, among other things, locks acquired by
 preemptible interrupt handlers~\cite{LuiSha1990PriorityInheritance}.
@@ -1947,6 +1964,18 @@ So the high-priority IRQ thread cannot acquire the lock until after one
 of the medium-priority threads releases its CPU.
 In short, the medium-priority threads are indirectly blocking the
 high-priority IRQ threads, a classic case of priority inversion.
+\fi
+
+쓰레드화된 인터럽트가 아닌 경우에는 낮은 우선순위의 쓰레드는 락을 잡고 있는
+동안 인터럽트를 불능화 시켜야만 해서 중간 우선순위 쓰레드가 낮은 우선순위
+쓰레드를 preemption 하는 일을 방지하므로, 이 우선순위 역전 현상은 발생하지
+않음을 알아두세요.
+
+이에 대한 우선순위 상속이라는 해결책에서, 락을 잡으려 하는 높은 우선순위
+쓰레드는 자신의 우선순위를 락을 잡고 있는 낮은 우선순위의 쓰레드에게 그 락이
+해제될 때까지 넘겨주게 되고, 그런 식으로 긴 시간동안의 우선순위 역전을
+방지합니다.
+\iffalse
 
 Note that this priority inversion could not happen with non-threaded
 interrupts because the low-priority thread would have to disable interrupts
@@ -1957,6 +1986,7 @@ In the priority-inheritance solution, the high-priority thread attempting
 to acquire the lock donate its priority to the low-priority thread holding
 the lock until such time as the lock is released, thus preventing long-term
 priority inversion.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1964,6 +1994,17 @@ priority inversion.
 \caption{Priority Inversion and User Input}
 \ContributedBy{Figure}{fig:rt:Priority Inversion and User Input}{Melissa Broussard}
 \end{figure}
+
+물론, 우선순위 상속은 나름대로의 한계를 가지고 있습니다.
+예를 들어, 여러분이 여러분의 어플리케이션이 우선순위 역전 문제를 완전히 막을 수
+있도록 설계할 수 있다면, 여러분은 어떤 더 나은 응답시간을 얻을
+것입니다~\cite{VictorYodaiken2004a}.
+우선순위 상속이 최악의 경우의 응답시간에 두번의 컨텍스트 스위치를 추가한다는
+점을 놓고 보면 이는 놀라운 일은 아닙니다.
+그렇다곤 하나, 우선순위 상속은 정해지지 않은 시간동안의 수행 연기를 제한된
+응답시간의 증가와 교환할 수 있게 하고, 우선순위 상속의 소프트웨어 엔지니어링적
+이득은 많은 어플리케이션에서 그 응답시간 비용보다 높을 겁니다.
+\iffalse
 
 Of course, priority inheritance does have its limitations.
 For example, if you can design your application to avoid priority
@@ -1975,6 +2016,17 @@ That said, priority inheritance can convert indefinite postponement
 into a limited increase in latency, and the software-engineering
 benefits of priority inheritance may outweigh its latency costs in
 many applications.
+\fi
+
+또다른 한계점은 특정 운영 체제의 컨텍스트 내에서, 락 기반의 우선순위 역전
+문제만을 해결한다는 점입니다.
+이런 이유로 해결할 수 없는 우선순위 역전 문제의 한 예는 높은 우선순위 쓰레드가
+낮은 우선순위의 프로세스에 의해 만들어질 메세지를 소켓에서 받으려 기다리고
+있는데, 이 낮은 우선순위 프로세스들은 중간 우선순위의 CPU 를 많이 사용하는
+프로세스들에게 preemption 당한  경우입니다.
+또한, 사용자 입력에 우선순위 상속을 적용할 때의 또다른 잠재적 단점이
+Figure~\ref{fig:rt:Priority Inversion and User Input} 에 그려져 있습니다.
+\iffalse
 
 Another limitation is that it addresses only lock-based priority
 inversions within the context of a given operating system.
@@ -1985,6 +2037,23 @@ medium-priority processes.
 In addition, a potential disadvantage of applying priority inheritance
 to user input is fancifully depicted in
 Figure~\ref{fig:rt:Priority Inversion and User Input}.
+\fi
+
+마지막 한계는 reader-writer 락킹과 관계되어 있습니다.
+우리가 매우 많은 수의, 예를 들어 수천개의 낮은 우선순위 쓰레드들을 가지고
+있으며, 각각의 쓰레드는 특정 reader-writer 락을 읽기 권한으로 잡고 있다고
+생각해 봅시다.
+이 쓰레드들이 모두 최소 CPU 당 하나의 중간 우선순위 쓰레드가 존재하며, 이 중간
+우선순위 쓰레드들로 인해 preemption 당했다고 생각해 봅시다.
+마지막으로, 높은 우선순위 쓰레드가 깨어나고 이 reader-writer 락을 쓰기 권한을
+좝으려 한다고 생각해 봅시다.
+우리가 읽기 권한으로 이 락을 잡고 있는 쓰레드들의 우선순위를 얼마나 필사적으로
+올려주는가에 관계 없이, 이 높은 우선순위 쓰레드가 쓰기 권한을 얻게 되기까지는
+긴 시간이 될 겁니다.
+
+이 reader-writer 락 우선순위 역전 문제에 대해서는 몇가지 가능한 해결책들이
+존재합니다:
+\iffalse
 
 A final limitation involves reader-writer locking.
 Suppose that we have a very large number of low-priority threads, perhaps
@@ -2000,8 +2069,26 @@ thread can complete its write-acquisition.
 
 There are a number of possible solutions to this reader-writer lock
 priority-inversion conundrum:
+\fi
 
 \begin{enumerate}
+\item	해당 reader-writer 락에 대해 한번에 하나의 읽기 권한의 락 획득만을
+	가능하게 합니다.  (이는 리눅스 커널의 -rt 패치셋에서 전통적으로 택해진
+	방법입니다.)
+\item	해당 reader-writer 락에 대해서 한번에 $N$ 개의 읽기 권한 락 획득만을
+	가능하게 하는데, 이때 $N$ 은 CPU 의 갯수입니다.
+\item	해당 reader-writer 락에 대해서 한번에 $N$ 개의 읽기 권한 락 획득만을
+	가능하게 하는데, 이 때 $N$ 은 어떤 방식으로든 개발자에 의해 선택된
+	숫자입니다.
+	리눅스 커널의 -rt 패치셋에서도 언젠가는 이 방법을 취하게 될 좋은 기회가
+	존재할 겁니다.
+\item	높은 우선순위 쓰레드가 보다 낮은 우선순위로 수행되고 있는 쓰레드에 의해
+	읽기 권한으로 잡힌 reader-writer 락에 대해서 쓰기 권한을 획득하려는
+	것을 방지합니다.
+	(이는 \emph{priority ceiling} 프로토콜의 한
+	변종입니다~\cite{LuiSha1990PriorityInheritance}.)
+\iffalse
+
 \item	Only allow one read-acquisition of a given reader-writer lock
 	at a time.  (This is the approach traditionally taken by
 	the Linux kernel's -rt patchset.)
@@ -2018,17 +2105,41 @@ priority-inversion conundrum:
 	priorities.
 	(This is a variant of the \emph{priority ceiling}
 	protocol~\cite{LuiSha1990PriorityInheritance}.)
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	하지만 reader-writer 락에 대해서 한번에 하나의 read 권한 획득만을
+	허용한다면, 그건 배타적 락과 똑같은 거 아닌가요???
+	\iffalse
+
 	But if you only allow one reader at a time to read-acquire
 	a reader-writer lock, isn't that the same as an exclusive
 	lock???
+	\fi
 \QuickQuizAnswer{
+	실제로 그렇습니다, API 만 제외하고는 말이지요.
+	그리고 그 API 가 중요한데, 그게 리눅스 커널이 -rt 패치셋이 웃기도록
+	커다란 크기로 커지지 않고도 real-time 기능들을 제공하도록 해주기 때문에
+	중요합니다.
+	\iffalse
+
 	Indeed it is, other than the API.
 	And the API is important because it allows the Linux kernel
 	to offer real-time capabilities without having the -rt patchset
 	grow to ridiculous sizes.
+	\fi
+
+	하지만, 이 방법은 read-side 의 확장성을 분명하고 상당히 제한합니다.
+	리눅스 커널의 -rt 패치셋은 몇가지 이유들로 인해 이 한계점들을 가지기로
+	했습니다: (1)~Real-time 시스템은 전통적으로 상대적으로 작은 크기였고,
+	(2)~Real-time 시스템은 일반적으로 프로세스 제어에 중점을 두었으므로,
+	I/O 서브시스템에서의 확장성 제한에 영향을 받지 않을 것이며, (3)~많은
+	리눅스 커널의 reader-writer 락은 RCU 로 변경되었습니다.
+
+	그렇다고는 하나, 리눅스 커널이 언젠가는 우선순위 증폭을 위해
+	reader-writer 락의 read-side 병렬성에 제한을 주는 상황은 가능합니다.
+	\iffalse
 
 	However, this approach clearly and severely limits read-side
 	scalability.
@@ -2043,11 +2154,18 @@ priority-inversion conundrum:
 	All that aside, it is quite possible that the Linux kernel
 	will some day permit limited read-side parallelism for
 	reader-writer locks subject to priority boosting.
+	\fi
 } \QuickQuizEnd
+
+어떤 경우들에 있어, reader-writer 락 우선순위 역전 문제는 reader-writer 락을
+RCU 로 변환하는 것으로 방지하는 게 가능한데, 이는 다음 섹션에서 짧게 이야기
+합니다.
+\iffalse
 
 In some cases, reader-writer lock priority inversion can be avoided by
 converting the reader-writer lock to RCU, as briefly discussed in the
 next section.
+\fi
 
 \paragraph{Preemptible RCU}
 can sometimes be used as a replacement for reader-writer
