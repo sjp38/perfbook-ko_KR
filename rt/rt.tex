@@ -2168,6 +2168,21 @@ next section.
 \fi
 
 \paragraph{Preemptible RCU}
+는
+Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 이야기 된 것처럼,
+reader-writer 락킹의 대체로 사용될 수 있습니다~\cite{PaulEMcKenney2007WhatIsRCUFundamentally,PaulMcKenney2012RCUUsage,PaulEMcKenney2014RCUAPI}.
+Preemptible RCU 가 사용될 수 있는 곳에서, preemptible RCU 는 읽기 쓰레드들과
+업데이트 쓰레드들이 동시적으로 수행될 수 있도록 해줌으로써, 낮은 웃너순위의
+읽기 쓰레드들이 높은 우선순위의 업데으트 쓰레드들 위에 어떤 종류의 우선순위
+역전 시나리오를 가하는 것을 막아줍니다.
+하지만, 이게 유용하게 사용되려면, 오랫동안 이어지는 RCU read-side 크리티컬
+섹션을 preempt 하는게 가능하도록 할 필요가
+있습니다~\cite{DinakarGuniguntala2008IBMSysJ}.
+그러지 않는다면, 길게 이어지는 RCU read-side 크리티컬 섹션들은 지나치게 긴
+real-time 응답시간을 초래할 것입니다.
+\iffalse
+
+\paragraph{Preemptible RCU}
 can sometimes be used as a replacement for reader-writer
 locking~\cite{PaulEMcKenney2007WhatIsRCUFundamentally,PaulMcKenney2012RCUUsage,PaulEMcKenney2014RCUAPI},
 as was discussed in Section~\ref{sec:defer:Read-Copy Update (RCU)}.
@@ -2179,6 +2194,7 @@ long-running RCU read-side critical
 sections~\cite{DinakarGuniguntala2008IBMSysJ}.
 Otherwise, long RCU read-side critical sections would result in
 excessive real-time latencies.
+\fi
 
 \begin{figure}[tb]
 { \scriptsize
@@ -2213,6 +2229,21 @@ excessive real-time latencies.
 \label{fig:rt:Preemptible Linux-Kernel RCU}
 \end{figure}
 
+그래서 Preemptible RCU 구현 하나가 리눅스 커널에 추가되었습니다.
+이 구현은 현재 RCU read-side 크리티컬 섹션 내에서 preemption 당한 태스크들의
+리스트를 유지하면서 커널 내의 모든 각각의 task 의 상태를 개별적으로 추적해야
+하는 필요성을 막습니다.
+하나의 grace period 는 다음과 같이 종료될 수 있습니다: (1)~일단 모든 CPU 들이
+현재의 grace period 시작 전부터 효과를 발휘하고 있던 모든 RCU read-side
+크리티컬 섹션들을 완료했을때, 그리고 (2)~모든 그런 이전부터 존재했던 크리티컬
+섹션의 중간에 preemption 당했던 모든 task 들이 그들의 리스트로부터 그 자신을
+제거했을 때.
+이 구현의 간단화된 버전이
+Figure~\ref{fig:rt:Preemptible Linux-Kernel RCU} 에 보여져 있습니다.
+\co{__rcu_read_lock()} 함수는 line~1-5 에, 그리고 \co{__rcu_read_unlock()}
+함수가 line~7-22 에 있습니다.
+\iffalse
+
 A preemptible RCU implementation was therefore added to the Linux kernel.
 This implementation avoids the need to individually track the state of
 each and every task in the kernel by keeping lists of tasks that have
@@ -2227,6 +2258,21 @@ A simplified version of this implementation is shown in
 Figure~\ref{fig:rt:Preemptible Linux-Kernel RCU}.
 The \co{__rcu_read_lock()} function spans lines~1-5 and
 the \co{__rcu_read_unlock()} function spans lines~7-22.
+\fi
+
+\co{__rcu_read_lock()} 의 line~3 은 \co{rcu_read_lock()} 함수의 중첩된 호출
+횟수의 task 별 카운트를 증가시키며, line~4 는 컴파일러가 RCU read-side 크리티컬
+섹션의 뒤따르는 코드가 앞의 \co{rcu_read_lock()} 보다 앞으로 컴파일러가 재배치
+하는 것을 막습니다.
+
+\co{__rcu_read_unlock()} 의 line~11 에서는 중첩 수준 카운트가 1인지
+확인해보는데, 달리 말하자면, 이 함수 호출이 \co{rcu_read_unlock()} 호출의
+중첩된 단계 중 가장 바깥의 단계인지를 확인합니다.
+그렇지 않다면, line~12 에서는 이 카운트를 감소시키고, 제어는 호출자에게로
+되돌아갑니다.
+그렇지 않다면, 이게 \co{rcu_read_unlock()} 의 가장 바깥으로, line~14-20 을 통해
+제어되는 크리티컬 섹션의 마무리를 필요로 합니다.
+\iffalse
 
 Line~3 of \co{__rcu_read_lock()} increments a per-task count of the
 number of nested \co{rcu_read_lock()} calls, and
@@ -2239,6 +2285,17 @@ is one, in other words, if this corresponds to the outermost
 If not, line~12 decrements this count, and control returns to the caller.
 Otherwise, this is the outermost \co{rcu_read_unlock()}, which requires
 the end-of-critical-section handling carried out by lines~14-20.
+\fi
+
+Line~14 는 컴파일러가 크리티컬 섹션 내의 코드가 \co{rcu_read_unlock()} 를
+구성하는 코드와 재배치하는 것을 막습니다.
+Line~15 는 중첩 카운트를 인터럽트 핸들러 내에 포함된 RCU read-side 크리티컬
+섹션들과의 경주 상태를 막기 위해 충분히 작은 음수로
+설정하고~\cite{PaulEMcKenney2011RCU3.0trainwreck}, line~16 은 컴파일러가 이
+할당문을 line~17 의 특수 경우 체크와 재배치 시키는 것을 막습니다.
+Line~17 이 특수 처리가 필요하다고 판단하면, line~18 은 이 특수 처리를 하기 위해
+\co{rcu_read_unlock_special()} 를 수행시킵니다.
+\iffalse
 
 Line~14 prevents the compiler from reordering the code in the critical
 section with the code comprising the \co{rcu_read_unlock()}.
@@ -2249,6 +2306,23 @@ and line~16 prevents the compiler from reordering this assignment with
 line~17's check for special handling.
 If line~17 determines that special handling is required, line~18
 invokes \co{rcu_read_unlock_special()} to carry out that special handling.
+\fi
+
+필요한 특수 처리에는 여러 종류가 있습니다만, 우리는 RCU read-side 크리티컬
+섹션이 preemption 되었을 때에 필요한 것들에만 집중하도록 하겠스빈다.
+이 경우, 해당 task 는 자신의 RCU read-side 크리티컬 섹션 중에 처음 preemption
+되었을 때에 자신이 추가되었던 리스트로부터 자신을 제거해야만 합니다.
+하지만, 이런 리스트들은 lock 으로 보호된다는 점을 알 필요가 있는데, 이는
+\co{rcu_read_unlock()} 이 더이상 lockless 하지 않음을 의미합니다.
+하지만, 가장 높은 우선순위의 쓰레드는 preemption 당하지 않을 것이고, 따라서,
+그런 가장 높은 우선순위의 쓰레드들의 \co{rcu_read_unlock()} 은 어떤 락도 잡지
+않을 겁니다.
+또한, 만약 조심스럽게 구현되었다면, 락킹은 real-time 소프트웨어의 동기화를 위해
+사용될 수 있습니다~\cite{BjoernBrandenburgPhD}.
+
+특수 처리가 필요하든 그렇지 않든, line~19 는 컴파일러가 line~17 에서의 체크와
+중첩 카운트를 0으로 만드는 line~20 을 재배치 하는 것을 막습니다.
+\iffalse
 
 There are several types of special handling that can be required, but
 we will focus on that required when the RCU read-side critical section
@@ -2267,8 +2341,18 @@ real-time software~\cite{BjoernBrandenburgPhD}.
 Whether or not special handling is required, line~19 prevents the compiler
 from reordering the check on line~17 with the zeroing of the nesting
 count on line~20.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:rt:Preemptible Linux-Kernel RCU}
+	의 line~17 에서의 \co{t->rcu_read_unlock.special.s} 의 로드 직후에
+	preemption 이 발생했다고 생각해 봅시다.
+	그렇게 되면 해당 task 가 \co{rcu_read_unlock_special()} 를 수행시키지
+	못하게 되어서, 자기 자신을 현재 grace period 를 막고 있는 task 들의
+	리스트로부터 삭제하는 것을 막아서, 그 grace period 가 무한정 길어질 수
+	있도록 할 수 있지 않을까요?
+	\iffalse
+
 	Suppose that preemption occurs just after the load from
 	\co{t->rcu_read_unlock_special.s} on line~17 of
 	Figure~\ref{fig:rt:Preemptible Linux-Kernel RCU}.
@@ -2276,17 +2360,31 @@ count on line~20.
 	\co{rcu_read_unlock_special()}, thus failing to remove itself
 	from the list of tasks blocking the current grace period,
 	in turn causing that grace period to extend indefinitely?
+	\fi
 \QuickQuizAnswer{
+	그건 실제로 문제이고, RCU 의 스케쥴러 쪽 후킹을 통해 해결되어졌습니다.
+	만약 그 후킹된 scheduler 코드가 \co{t->rcu_read_lock_nesting} 의 값이
+	음수임을 보게 된다면, 그 코드는 컨텍스트 스위치가 완료되도록 하기 전에
+	필요하다면 \co{rcu_read_unlock_special()} 을 호출합니다.
+	\iffalse
+
 	That is a real problem, and it is solved in RCU's scheduler hook.
 	If that scheduler hook sees that the value of
 	\co{t->rcu_read_lock_nesting} is negative, it invokes
 	\co{rcu_read_unlock_special()} if needed before allowing
 	the context switch to complete.
+	\fi
 } \QuickQuizEnd
+
+이 preemptible RCU 구현은 읽기가 대부분인 데이터 구조에게 많은 수의 읽기
+쓰레드들의 우선순위 증가에 피할 수 없는 지연 없이 real-time 응답시간을 가능하게
+합니다.
+\iffalse
 
 This preemptible RCU implementation enables real-time response for
 read-mostly data structures without the delays inherent to priority
 boosting of large numbers of readers.
+\fi
 
 \paragraph{Preemptible spinlocks}
 are an important part of the -rt patchset due to the long-duration
