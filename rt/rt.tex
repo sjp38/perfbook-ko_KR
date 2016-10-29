@@ -2434,6 +2434,15 @@ of the Linux kernel augmented by the -rt patchset.
 \subsubsection{Polling-Loop Real-Time Support}
 \label{sec:rt:Polling-Loop Real-Time Support}
 
+첫인상으로 보면, polling loop 의 사용은 모든 존재 가능한 운영 체제 간섭
+문제들을 없앨 것처럼 보일 수 있습니다.
+무엇보다도, 만약 주어진 CPU 가 커널에 들어가질 않는다면, 해당 커널은 완전히 그
+그림 바깥에 있는 것이죠.
+그리고 커널을 간섭하지 못하도록 두는 전통적인 방법은 단순히 커널을 갖지 않는
+것이고, 많은 real-time 어플리케이션들이 실제로 bare metal (순수한 기계 그 자체)
+에서 수행되는데, 자세히 말해보자면 8-bit 마이크로컨트롤러 위에서 수행됩니다.
+\iffalse
+
 At first glance, use of a polling loop might seem to avoid all possible
 operating-system interference problems.
 After all, if a given CPU never enters the kernel, the kernel is
@@ -2442,6 +2451,23 @@ And the traditional approach to keeping the kernel out of the way is
 simply not to have a kernel, and many real-time applications do
 indeed run on bare metal, particularly those running on eight-bit
 microcontrollers.
+\fi
+
+어떤 분은 하나의 CPU 에 성능이 종속적인 사용자 모드 쓰레드를 특정 CPU 위에서
+수행하고 모든 간섭의 원인을 회피함으로써 현대의 운영체제 커널에서 bare-metal
+성능을 얻기를 희망할 수 있을 겁니다.
+비록 현실은 그보다 더 북잡하긴 하지만, Frederic Weisbecker 에 의해 진행되었고
+3.10 버전의 리눅스 커널에 받아들여진 \co{NO_HZ_FULL}
+구현~\cite{JonCorbet2013NO-HZ-FULL} 덕에 정말 그렇게 하는게 가능해지고
+있습니다.
+더도 아니고 덜도 아니고, 그런 환경을 올바르게 구성하기 위해서는 여러 OS jitter
+의 가능한 원인들을 제어할 필요가 있으므로 상당한 주의가 필요합니다.
+아래의 토론은 디바이스 인터럽트, 커널 쓰레드와 daemon들, 스케쥴러 real-time
+throttling (이건 기능이지, 버그가 아닙니다!), 타이머, non-real-time 디바이스
+드라이버, 커널 내의 global 동기화, scheduling-clock 인터럽트, 페이지 폴트,
+그리고 non-real-time 하드웨어와 펌웨어 등을 포함하는 OS jitter 의 몇가지
+원인들의 제어를 다룹니다. 
+\iffalse
 
 One might hope to get bare-metal performance on a modern operating-system
 kernel simply by running a single CPU-bound user-mode thread on a
@@ -2460,6 +2486,18 @@ scheduler real-time throttling (this is a feature, not a bug!),
 timers, non-real-time device drivers, in-kernel global synchronization,
 scheduling-clock interrupts, page faults, and finally, non-real-time
 hardware and firmware.
+\fi
+
+인터럽트는 OS jitter 의 많은 양의 대단한 원인입니다.
+안타깝게도, 대부분의 경우에 인터럽트는 시스템이 바깥의 세계와 통신할 수 있도록
+하기 위해 반드시 필요합니다.
+이 OS jitter 와 바깥 세계와의 연락을 유지하는 사이에서의 충돌을 해결하는 한가지
+방법은 작은 수의 최소한의 일을 처리할 CPU 를 예약해 두고, 모든 인터럽트를 그
+CPU 들에서 처리하도록 강제하는 것입니다.
+리눅스 소스 트리의 \path{Documentation/IRQ-affinity.txt} 파일은 어떻게 디바이스
+인터럽트를 특정 CPU 로 향하도록 할 수 있는지 설명하는데, 현재 2015년 초에
+있어서는 다음과 같이 됩니다:
+\iffalse
 
 Interrupts are an excellent source of large amounts of OS jitter.
 Unfortunately, in most cases interrupts are absolutely required in order
@@ -2470,11 +2508,23 @@ housekeeping CPUs, and to force all interrupts to these CPUs.
 The \path{Documentation/IRQ-affinity.txt} file in the Linux source tree
 describes how to direct device interrupts to specified CPU,
 which as of early 2015 involves something like the following:
+\fi
 
 \begin{quote}
 	\scriptsize
 	\co{echo 0f > /proc/irq/44/smp_affinity}
 \end{quote}
+
+이 커맨드는 인터럽트 \#44 를 CPU~0-3 으로 몰아넣을 겁니다.
+Scheduling-clock 인터럽트는 특수한 처리를 필요로 하며, 이 섹션의 뒤쪽에서 그에
+대해 설명할 것임을 알아두시기 바랍니다.
+
+OS jitter 의 두번째 원인은 커널 쓰레드와 daemon 들입니다.
+RCU 의 grace-period kthread (\co{rcu_bh}, \co{rcu_preempt}, 그리고
+\co{rcu_sched}) 와 같은 개별적인 커널 쓰레드는 \co{taskset} 커맨드,
+\co{sched_setaffinity()} 시스템콜, 또는 \co{cgroups} 를 사용해 어떤 CPU 로든
+원하는대로 수행되는 CPU 를 지정당할 수 있습니다.
+\iffalse
 
 This command would confine interrupt \#44 to CPUs~0-3.
 Note that scheduling-clock interrupts require special handling, and are
@@ -2485,6 +2535,18 @@ Individual kernel threads, such as RCU's grace-period kthreads
 (\co{rcu_bh}, \co{rcu_preempt}, and \co{rcu_sched}), may be forced
 onto any desired CPUs using the \co{taskset} command, the
 \co{sched_setaffinity()} system call, or \co{cgroups}.
+\fi
+
+Per-CPU kthread 들은 종종 더 어려운 과제가 되는데, 어떨 때에는 하드웨어 구성과
+워크로드 구성을 강제합니다.
+이런 kthread 들로부터의 OS jitter 를 방지하는 것은 특정한 타입의 하드웨어가
+real-time 시스템으로 포함되지 않도록 해서 모든 인터럽트와 I/O 초기화가 최소한의
+일만을 하는 CPU 에서 처리되도록 하거나, 일거리들을 일을 하는 CPU 로부터 다른
+곳으로 넘겨지도록 하기 위해 특수한 커널 Kconfig 나 boot 패러미터가 선택되도록
+하거나, 일하는 CPU 들이 커널에 들어가지 않도록 할 것을 필요로 합니다.
+구체적인 per-kthread 에 대한 조언을 리눅스 커널 소스의 \path{Documentation}
+디렉토리 내의 \path{kernel-per-CPU-kthreads.txt} 에서 찾을 수 있을 겁니다.
+\iffalse
 
 Per-CPU kthreads are often more challenging, sometimes constraining
 hardware configuration and workload layout.
@@ -2496,6 +2558,17 @@ Kconfig or boot parameters be selected in order to direct work away from
 the worker CPUs, or that worker CPUs never enter the kernel.
 Specific per-kthread advice may be found in the Linux kernel source
 \path{Documentation} directory at \path{kernel-per-CPU-kthreads.txt}.
+\fi
+
+리눅스 커널에서 real-time 우선순위로 돌아가는 CPU 에 성능이 종속적인 쓰레드에
+대한 OS jitter 의 세번째 원인은 스케쥴러 자신입니다.
+이것은 설령 여러분의 real-time 어플리케이션에 무한루프 버그가 존재한다고
+할지라도 중요한 non-realtime 일이 매 초마다 최소한 50 밀리세컨드는 할당받을 수
+있도록 보장할 수 있도록 설계된, 의도적인 디버깅 기능입니다.
+하지만, 여러분이 polling-loop-style real-time 어플리케이션을 수행할 때에는, 이
+디버깅 기능을 꺼버릴 필요가 있을 겁니다.
+이는 다음과 같이 행해질 수 있습니다:
+\iffalse
 
 A third source of OS jitter in the Linux kernel for CPU-bound threads
 running at real-time priority is the scheduler itself.
@@ -2506,11 +2579,25 @@ your real-time application.
 However, when you are running a polling-loop-style real-time application,
 you will need to disable this debugging feature.
 This can be done as follows:
+\fi
 
 {
 	\scriptsize
 	\co{echo -1 > /proc/sys/kernel/sched_rt_runtime_us}
 }
+
+이 커맨드를 수행시키기 위해서는 여러분은 물론 root 로 수행시켜야 하고,
+Spiderman 철학을 충분히 고려해야 할 필요가 있습니다.
+위험을 최소화 시키기 위한 한가지 방법은 이 단락의 앞부분에서와 마찬가지로
+인터럽트와 kernel thread/daemon 들을 수행중인, CPU 에 성능이 종속적인 eal-time
+쓰레드들이 수행중인 CPU 로부터 다른 곳으로 옮기는 것입니다.
+또한, 여러분은 \path{Documentation/scheduler} 디렉토리 안의 것들을 충분히
+읽어야 합니다.
+구체적으로는 \path{sched-rt-group.txt} 파일 안의 것이 중요한데, 여러분이
+\co{CONFIG_RT_GROUP_SCHED} Kconfig 패러미터로 활성화된 \co{cgroups} real-time
+기능을 사용하고 있다면 특히 그런데, 그 경우에는 \path{Documentation/cgroups}
+디렉토리 안의 것들도 역시 읽어야 합니다.
+\iffalse
 
 You will of course need to be running as root to execute this command,
 and you will also need to carefully consider the Spiderman principle.
@@ -2524,6 +2611,20 @@ important, especially if you are using the \co{cgroups} real-time features
 enabled by the \co{CONFIG_RT_GROUP_SCHED} Kconfig parameter, in which
 case you should also read the material in the
 \path{Documentation/cgroups} directory.
+\fi
+
+OS jitter 의 네번째 원인은 타이머들입니다.
+대부분의 경우, 특정 CPU 를 커널 바깥에 있도록 유지시키는 것은 타이머가 해당 CPU
+위에 스케쥴 되는 것을 막습니다.
+한가지 중요한 예외는 순환하는 타이머로, 특정 타이머 처리 부분이 같은 다이머의
+다음 발생을 일으키는 경우입니다.
+그런 타이머가 어떤 이유로든 특정 CPU 에서 시작되게 된다면, 그 타이머는 그 CPU
+에서 주기적으로 수행되기를 계속할 것이어서 무기한적으로 OS jitter 를 일으킬 수
+있습니다.
+순환하는 타이머를 연기시키는 조잡하지만 효율적인 방법은 CPU hotplug 를 사용해서
+CPU 에 성능이 종속적인 real-time 어플리케이션 쓰레드들이 수행되는 CPU 들을 모두
+껐다가 다시 켜고 여러분의 real-time 어플리케이션을 시작하는 것입니다.
+\iffalse
 
 A fourth source of OS jitter comes from timers.
 In most cases, keeping a given CPU out of the kernel will prevent
@@ -2537,6 +2638,26 @@ One crude but effective way to offload recurring timers is to
 use CPU hotplug to offline all worker CPUs that are to run CPU-bound
 real-time application threads, online these same CPUs, then start
 your real-time application.
+\fi
+
+OS jitter 의 다섯번째 원인은 real-time 으로 사용될 것으로 의도되지 않은
+디바이스 드라이버들로부터 제공됩니다.
+오래된 규범적인 예제를 들어보자면, 2005년에 VGA 드라이버는 인터럽트를 불능화
+시킨 채 프레임 버퍼를 0으로 가득채움으로써 화면을 빈 화면으로 만들 수 있었는데,
+이는 수십 밀리세컨드의 OS jitter 를 초래했습니다.
+디바이스 드라이버가 포함시킨 OS jitter 를 막는 한가지 방법은 real-time
+시스템에서 많이 사용되는, 그리고 따라서 그것의 real-time 버그들이 고쳐진
+디바이스를 조심스럽게 고르는 것입니다.
+또다른 방법은 그런 디바이스들의 인터럽트와 그 디바이스를 사용하는 모든 코드를
+특정한 최소한의 일만 하는 CPU 들에게 국한시키는 것입니다.
+세번째 방법은 그 디바이스의 real-time 워크로드를 지원할 수 있는 능력을
+테스트하고 모든 real-time 버그들을 고치는 것입니다.\footnote{
+	여러분께서 이 방법을 취한다면, 다른 사람들도 혜택을 얻을 수 있도록 그
+	수정사항을 업스트림으로 보내주시기 바랍니다.
+	여러분의 어플리케이션을 나중 버전의 리눅스 커널에 포팅해야 하게 된다면,
+	\emph{여러분} 이 그런 ``다른 사람들'' 의 한명이 될 것이란 점을 명심해
+	주십시오.}
+\iffalse
 
 A fifth source of OS jitter is provided by device drivers that were
 not intended for real-time use.
@@ -2555,6 +2676,28 @@ workloads and fix any real-time bugs.\footnote{
 	Keep in mind that when you need to port your application to
 	a later version of the Linux kernel, \emph{you} will be one of those
 	``others''.}
+\fi
+
+OS jitter 의 여섯번째 원인은 커널 내부의 전체 시스템 동기화 알고리즘에 의해
+제공되는데, 가장 명백한 건 글로벌 TBL-flush 알고리즘일 겁니다.
+이는 memory-unmapping 오퍼레이션을 막고, 명시적으로 커널 내에서의 unmapping
+오퍼레이션들을 막는 것으로 막아질 수 있습니다.
+2015년 초인 오늘날, 커널 내의 unmapping 오퍼레이션들을 막는 방법은 커널 모듈의
+unloading 을 막는 것입니다.
+
+OS jitter 의 일곱번째 원인은 scheduling-clock 인터럽트와 RCU 콜백 수행에서부터
+제공되어집니다.
+이것들은 여러분의 커널을 \co{NO_HZ_FULL} Kconfig 패러미터를 활성화 시킨채로
+빌드하고, \co{nohz_full=} 패러미터가 real-time 쓰레드들을 수행하게 될 CPU 들의
+리스트를 명시하도록 한 채로 부팅함으로써 막아질 수 있습니다.
+예를 들어, \co{nohz_full=2-7} 은 CPU~2, 3, 4, 5, 6, 그리고~7 을 일하는 CPU 들로
+만들어서, CPU~0 과~1 을 최소한의 일만 하는 CPU 로 남겨둘 겁니다.
+일하는 CPU 들은 한개가 넘는 runnable task 가 각각의 CPU 위에 존재하지 않는한은
+scheduling-clock 인터럽트를 발생시키지 않을 것이고, 각각의 일하는 CPU 의 RCU
+콜백들은 최소한의 일만 하는 CPU 들 가운데 하나에서 수행될 겁니다.
+CPU 에 하나의 runnable task 만이 존재한다는 이유로 scheduling-clock 인터럽트를
+금지시킨 CPU 는 \emph{adaptive ticks mode} 에 있다고 불리웁니다.
+\iffalse
 
 A sixth source of OS jitter is provided by some in-kernel
 full-system synchronization algorithms, perhaps most notably
@@ -2579,6 +2722,24 @@ housekeeping CPUs.
 A CPU that has suppressed scheduling-clock interrupts due to there
 only being one runnable task on that CPU is said to be in
 \emph{adaptive ticks mode}.
+\fi
+
+\co{nohz_full=} 부팅 패러미터에 대한 대안으로, 여러분은 여러분의 커널을
+\co{NO_HZ_FULL_ALL} 로 빌드할 수 있는데, 이는 CPU~0 를 최소한의 일만 하는 CPU
+로 두고 모든 다른 CPU 들을 일을 하는 CPU 로 만들게 될겁니다.
+어떤 방식이던, 시스템의 나머지 부분드리 만들어내는 필수적인 최소한의 일들이
+처리되기에 충분한 최소한의 일만 하는 CPU 들이 할당되었을 수 있을 것을 보장할
+필요가 있는데, 이는 충분한 벤치마크와 튜닝을 필요로 합니다.
+
+물론, 공짜 점심은 없고, \co{NO_HZ_FULL} 역시 예외는 아닙니다.
+앞서 언급되었듯이, \co{NO_HZ_FULL} 은 kernel/user 전환의 비용을 더 비싸게
+하는데, 다른 프로세스 처리의 필요성과 (RCU 와 같은) 커널 서브시스템 에게 전환을
+알려야 하는 필요성 때문입니다.
+이 방법은 또한 POSIX CPU 타이버가 활성화 된 채 수행되고 있는 프로세슫르을
+수행하는 CPU 들이 adaptive-ticks 모드로 빠지는 것을 방지합니다.
+추가적인 한계점, 트레이드오프, 그리고 설정에 대한 조언은
+\path{Documentation/timers/NO_HZ.txt} 에서 볼 수 있습니다.
+\iffalse
 
 As an alternative to the \co{nohz_full=} boot parameter, you can build
 your kernel with \co{NO_HZ_FULL_ALL}, which will designate CPU~0 as
@@ -2596,6 +2757,21 @@ It also prevents CPUs running processes with POSIX CPU timers enabled
 from entering adaptive-ticks mode.
 Additional limitations, tradeoffs, and configuration advice may be
 found in \path{Documentation/timers/NO_HZ.txt}.
+\fi
+
+OS jitter 의 여덟번째 원인은 page fault 입니다.
+대부분의 리눅스 구현은 메모리 보호에 MMU 를 사용하기 때문에, 이런 시스템 위에서
+수행되는 real-time 어플리케이션들은 page fault 를 일으킬 수 있습니다.
+여러분의 어플리케이션의 페이지를 메모리에 묶어두기 위해서는 \co{mlock()} 과
+\co{mlockall()} 시스템 콜을 사용해서 major page fault 를 막으세요.
+물론, 너무 많은 메모리를 묶어두는 것은 시스템이 다른 일을 할 수 있도록 하는
+것을 막을 수도 있기 때문에 Spiderman 철학이 여기에도 적용됩니다.
+
+OS jitter 의 아홉번째 원인은 불행하게도 하드웨어와 펌웨어입니다.
+따라서 real-time 에서의 사용을 위해 설계된 시스템을 사용하는게 중요합니다.
+OSADL 은 시스템의 장시간 테스트를 수행하므로, 그들의 웹사이트
+(\url{http://osadl.org/} 를 참고하는게 도움이 될겁니다.
+\iffalse
 
 An eighth source of OS jitter is page faults.
 Because most Linux implementations use an MMU for memory protection,
@@ -2611,6 +2787,7 @@ It is therefore important to use systems that have been designed for
 real-time use.
 OSADL runs long-term tests of systems, so referring to their
 website (\url{http://osadl.org/}) can be helpful.
+\fi
 
 \begin{figure}[tb]
 { \scriptsize
@@ -2627,6 +2804,27 @@ website (\url{http://osadl.org/}) can be helpful.
 \caption{Locating Sources of OS Jitter}
 \label{fig:rt:Locating Sources of OS Jitter}
 \end{figure}
+
+안타깝게도, 이 OS jitter 원인 리스트는 완벽할 수가 없는데, 이 리스트는 새로운
+버전의 커널에 따라서 바뀔 것이기 때문입니다.
+CPU $N$ 이 CPU 에 성능 종속적인 사용자 모드 쓰레드를 수행한다고 할 때,
+Figure~\ref{fig:rt:Locating Sources of OS Jitter}
+에 보인 커맨드들이 이 CPU 가 커널에 들어간 모든 시간의 리스트를 생성할 겁니다.
+물론, line~5 의 \co{N} 은 정보를 얻고자 하는 CPU 의 숫자로 대체되어야 하고,
+line~2 의 \co{1} 은 커널 내의 추가적인 함수 호출 수준을 보기 위해선 증가되어야
+합니다.
+결과로 나오는 기록은 OS jitter 의 원인을 쫓아가는데에 도움이 될 수 있을 겁니다.
+
+볼 수 있듯이, CPU 에 성능 종속적인 real-time 쓰레드를 리눅스와 같은 범용 목적의
+OS 위에서 수행하면서 bare-metal 성능을 얻는 것은 자세한 부분에 고통스렁루
+정도로 신경쓸 것을 필요로 합니다.
+물론 자동화가 도움이 될 수 있고, 일부 자동화가 적용되었습니다만, 상대적으로
+적은 수의 사용자를 놓고 보면, 자동화는 상대적으로 느리게 나타날 것으로 예상될
+수 있습니다.
+더도 아니고 덜도 아니고, 범용 목적의 운영체제를 돌리면서 bare-metal 에 가까운
+성능을 얻는 능력은 real-time 시스템의 일부 타입의 구성을 더 쉽게 할 것을
+약속합니다.
+\iffalse
 
 Unfortunately, this list of OS-jitter sources can never be complete,
 as it will change with each new version of the kernel.
@@ -2650,6 +2848,7 @@ expected to appear relatively slowly.
 Nevertheless, the ability to gain near-bare-metal performance while
 running a general-purpose operating system promises to ease construction
 of some types of real-time systems.
+\fi
 
 \subsection{Implementing Parallel Real-Time Applications}
 \label{sec:rt:Implementing Parallel Real-Time Applications}
