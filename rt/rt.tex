@@ -2882,6 +2882,22 @@ briefly covers event-based applications.
 \subsubsection{Real-Time Components}
 \label{sec:rt:Real-Time Components}
 
+모든 엔지니어링의 영역들에서 그러하듯이, 생산성과 신뢰성에는 튼튼한
+컴포넌트들이 필수적입니다.
+이 섹션은 real-time 소프트웨어 컴포넌트들에 대한 전체 카탈로그는 아니고---그런
+카탈로그는 한권의 책을 꽉 채울 겁니다---사용할 수 있는 컴포넌트들의 타입들에
+대한 간략한 개관입니다.
+
+Real-time 소프트웨어 컴포넌트들을 보기 위한 자연스런 장소는 wait-free
+동기화~\cite{Herlihy91} 를 제공하는 알고리즘들일 것이고, 실제로 lockless
+알고리즘들은 real-time 컴퓨팅에 있어 매우 중요합니다.
+하지만, wait-free 동기화는 한정된 시간 안에서의 진행을 보장할 뿐이고, real-time
+컴퓨팅은 제한된 시간 내에서의 진행에 대한 훨씬 더 엄중한 보장을 제공하는
+알고리즘을 필요로 합니다.
+무엇보다도, 백년도 한정된 시간입니다만 여러분의 데드라인이 밀리세컨드 단위로
+측정된다면 별 도움이 되지 않을 겁니다.
+\iffalse
+
 As in all areas of engineering, a robust set of components is essential
 to productivity and reliability.
 This section is not a full catalog of real-time software components---such
@@ -2897,6 +2913,23 @@ finite time, and real-time computing requires algorithms that meet the
 far more stringent guarantee of forward progress in bounded time.
 After all, a century is finite, but unhelpful when your deadlines are
 measured in milliseconds.
+\fi
+
+더도 아니고 덜도 아니고, atomic test and set, atomic excange, atomic
+fetch-and-add, 순환형 배열에 기반한 single-producer/single-consumer FIFO
+queues, 그리고 다양한 쓰레드별 분할 알고리즘 등을 포함하는, 제한된 응답 시간을
+제공하는 중요한 wait-free 알고리즘들이 일부 존재합니다.
+또한, 최근의 연구는 lock-free 보장을 포함하는 알고리즘은\footnote{
+	Wait-free 알고리즘은 제한된 시간 안에 모든 쓰레드가 진행을 이룰 것을
+	보장하는 반면, lock-free 알고리즘은 제한된 시간 안에 최소한 하나의
+	쓰레드는 진행을 이룰 것을 보장합니다.}
+확률적인 fair scheduler 와 fail-stop 버그로부터 자유로울 것을 가정하는 실제
+사례에서는 wait-free 와 동일한 응답시간을 제공한다는 발견을
+확인했습니다~\cite{DanAlitarh2013PracticalProgress}.\footnote{
+	이 논문은 또한 real-time 실전을 향한 이론적 한단계 진보인 \emph{제한된
+	최소한의 진행} 의 개념을 소개합니다.}
+이는 곧 lock-free 스택과 큐들은 real-time 영역에의 사용이 적합함을 의미합니다.
+\iffalse
 
 Nevertheless, there are some important wait-free algorithms that do
 provide bounded response time, including atomic test and set,
@@ -2917,11 +2950,30 @@ bugs~\cite{DanAlitarh2013PracticalProgress}.\footnote{
 	towards real-time practice.}
 This means that lock-free stacks and queues are appropriate
 for real-time use.
+\fi
 
 \QuickQuiz{}
+	하지만 fail-stop 버그에도 불구하고 올바르게 동작하는게 가치있는
+	fault-tolerance 속성 가운데 하나 아닌가요?
+	\iffalse
+
 	But isn't correct operation despite fail-stop bugs
 	a valuable fault-tolerance property?
+	\fi
 \QuickQuizAnswer{
+	그렇고 아닙니다.
+
+	Non-blocking 알고리즘들이 fail-stop 버그들의 존재 하에서도 fault
+	tolerance 를 제공할 수 있다는 점에서 그러합니다만, 이는 실질적인 fault
+	tolerance 에는 심하게 충분치 못하다는 점에서 그렇지 않습니다.
+	예를 들어, 여러분이 wait-free 대기열을 가지고 있고, 방금 하나의 원소를
+	거기서 꺼낸 쓰레드가 하나 있다고 생각해 보세요.
+	만약 그 쓰레드가 fail-stop 버그로 죽는다면, 이 쓰레드가 막 꺼낸 원소는
+	실질적으로는 잃어버리게 된겁니다.
+	진정한 fault tolerance 는 단순한 non-blocking 속성보다 더한 것을 필요로
+	하고, 그것은 이 책의 범위 밖의 것입니다.
+	\iffalse
+
 	Yes and no.
 
 	Yes in that non-blocking algorithms can provide fault tolerance
@@ -2933,15 +2985,52 @@ for real-time use.
 	it has just dequeued is effectively lost.
 	True fault tolerance requires way more than mere non-blocking
 	properties, and is beyond the scope of this book.
+	\fi
 } \QuickQuizEnd
+
+이론적으로는 그러함에도, 실전에서는 real-time 프로그램에 락킹이 자주 사용되곤
+합니다.
+하지만, 더 엄격한 제약 하에서는 락 기반의 알고리즘들 역시 제한된 응답시간을
+제공할 수 있습니다~\cite{BjoernBrandenburgPhD}.
+이런 제약들은 다음과 같은 것들을 포함합니다:
+\iffalse
 
 In practice, locking is often used in real-time programs, theoretical
 concerns notwithstanding.
 However, under more severe constraints, lock-based
 algorithms can also provide bounded latencies~\cite{BjoernBrandenburgPhD}.
 These constraints include:
+\fi
 
 \begin{enumerate}
+\item	Fair scheduler.
+	고정된 우선순위 scheduler 의 일반적인 경우에, 제한된 길이의 응답시간은
+	가장 높은 우선순위 쓰레드들에게만 제공됩니다.
+\item	워크로드를 지원하기에 충분한 대역폭.
+	이 제약을 뒷받침하는 하나의 구현 상의 규칙 하나는 ``평범한 운영 중에는
+	모든 CPU 의 idle 시간이 최소한 50\% 는 된다,'' 또는, 더 형식적으로
+	말하자면, ``제시된 부하는 워크로드가 언제든 schedule 될 수 있기에
+	충분할 만큼 낮아야 한다'' 일 것입니다.
+\item	Fail-stop 버그의 부재.
+\item	제한된 획득, 이관, 해제 응답시간을 갖는 FIFO 락킹 기능들.
+	다시 말하지만, 같은 우선순위 내에서는 FIFO 로 동작하는 일반적인 락킹
+	기능들에 있어서, 제한된 크기의 응답시간은 가장 높은 우선순위의
+	쓰레드에게만 제공됩니다.
+\item	무제한적인 우선순위 역전 현상을 막을 수 있는 어떤 방법.
+	이 섹션의 앞에서 언급된 priority-ceiling 과 priority-inheritance
+	방법으로도 충분할 겁니다.
+\item	락 획득의 제한된 중첩 정도.
+	우린 무제한적인 수의 락을 가질 수 있습니다만, 하나의 쓰레드가 한번에 그
+	중 몇개의 것 (이상적으로는 딱 하나) 이상을 잡으려 하지는 않을 때에만
+	그렇습니다.
+\item	제한된 수의 쓰레드.
+	앞의 제약들과의 조합으로, 이 제약은 어떤 락을 잡기 위해 기다리고 있는
+	쓰레드의 수는 제한되어질 것임을 의미합니다.
+\item	모든 크리티컬 섹션이든 제한된 시간을 가질것.
+	어떤 락에든 제한된 수의 쓰레드만이 기다리고 있고 제한된 크리티컬 섹션
+	길이만이 존재한다고 하면, 대기 시간의 최대 길이는 제한될 겁니다.
+\iffalse
+
 \item	Fair scheduler.
 	In the common case of a fixed-priority scheduler, the bounded
 	latencies are provided only to the highest-priority threads.
@@ -2971,12 +3060,26 @@ These constraints include:
 \item	Bounded time spent in any given critical section.
 	Given a bounded number of threads waiting on any given lock and
 	a bounded critical-section duration, the wait time will be bounded.
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	전 잘 모르겠지만 이 리스트 앞에 ``포함한다'' 는 단어를 봤어요.
+	다른 제약도 존재하는 건가요?
+	\iffalse
+
 	I couldn't help but spot the word ``includes'' before this list.
 	Are there other constraints?
+	\fi
 \QuickQuizAnswer{
+	실제로 존재하구요, 많은 것들이 존재합니다.
+	하지만, 그것들은 그것들은 특정 상황에 종속적인 경향을 갖고, 그중 많은
+	것들은 앞서 언급된 제약들의 세련된 형태로 생각될 수 있습니다.
+	예를 들어, 데이터 구조의 선택에 있어서의 많은 제약들은 ``모든 크리티컬
+	섹션은 제한된 길이의 시간만을 소모해야함'' 제약을 지키는데 도움이
+	될겁니다.
+	\iffalse
+
 	Indeed there are, and lots of them.
 	However, they tend to be specific to a given situation,
 	and many of them can be thought of as refinements of some of
@@ -2984,7 +3087,18 @@ These constraints include:
 	For example, the many constraints on choices of data structure
 	will help meeting the ``Bounded time spent in any given critical
 	section'' constraint.
+	\fi
 } \QuickQuizEnd
+
+이 결론은 real-time 소프트웨어에 사용되기 위한 상당히 많은 알고리즘과 데이터
+구조들의 보고를 엽니다---그리고 오랫동안의 real-time 관습을 검증합니다.
+
+물론, 세심하고 간단한 어플리케이션 설계 역시 굉장히 중요합니다.
+세계 최고의 real-time 컴포넌트도 형편없이 만들어진 설계를 좋게 만들지는
+못합니다.
+병렬 real-time 어플리케이션을 위해서, 동기화 오버헤드는 설계의 핵심 컴포넌트가
+되어야만 하는게 분명합니다.
+\iffalse
 
 This result opens a vast cornucopia of algorithms and data structures
 for use in real-time software---and validates long-standing real-time practice.
@@ -2995,6 +3109,7 @@ The best real-time components in the world cannot make up for a
 poorly thought-out design.
 For parallel real-time applications, synchronization overheads clearly
 must be a key component of the design.
+\fi
 
 \subsubsection{Polling-Loop Applications}
 \label{sec:rt:Polling-Loop Applications}
