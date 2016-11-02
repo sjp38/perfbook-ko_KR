@@ -3163,6 +3163,26 @@ This support first became available in version 3.10 of the Linux kernel.
 \subsubsection{Streaming Applications}
 \label{sec:rt:Streaming Applications}
 
+빅데이터 real-time 어플리케이션의 대중적인 것들은 다양한 출처로부터 입력을
+받아들이고, 그것을 내부적으로 처리하고, 알림과 요약된 결과를 출력합니다.
+이런 \emph{streaming application} 은 많은 경우 상당히 병렬적으로, 다른
+출처로부터의 정보들을 동시적으로 처리합니다.
+
+Streaming application 을 구현하는 한가지 방법은 다른 처리 단계들을 연결하는데에
+고밀도의 배열로 이루어진 순환형 FIFO 를 사용하는
+것입니다~\cite{AdrianSutton2013LCA:Disruptor}.
+그런 각각의 FIO 는 그리로 집어넣을 원소를 생성하는 하나의 생성자 쓰레드와
+그로부터 원소를 꺼내서 소비하는 (아마도 다른) 하나의 소비자 쓰레드만을
+갖습니다.
+합쳐지는 곳 (fan-in) 과 분산되는 곳 (fan-out) 은 자료구조보다는 쓰레드를
+사용하며, 따라서 일부 FIFO 들의 출력이 합쳐져야 한다면, 다른 쓰레드 하나가
+그것들로부터 입력을 받아서 이 별개의 쓰레드가 단하나의 생산자가 되는 또다른
+FIFO 에 출력을 내보내게 됩니다.
+유사하게, 만약 특정 FIFO 의 출력이 나뉘어져야 한다면, 별개의 하나의 쓰레드가 이
+FIFO 로부터 입력을 받아와서 여러개의 FIFO 에 필요한 대로 출력을 내보내게
+됩니다.
+\iffalse
+
 A popular sort of big-data real-time application takes input from numerous
 sources, processes it internally, and outputs alerts and summaries.
 These \emph{streaming applications} are often highly parallel, processing
@@ -3179,6 +3199,20 @@ thread would input from them and output to another FIFO for which
 this separate thread was the sole producer.
 Similarly, if the output of a given FIFO needed to be split, a separate
 thread would input from this FIFO and output to several FIFOs as needed.
+\fi
+
+이 방법은 제한적으로 보일 수도 있습니다만, 이 방법은 최소한의 동기화 오버헤드를
+가지고 쓰레드간의 통신이 가능하게 하며, 빡빡한 응답시간 제약을 지켜야 할 때에
+최소한의 동기화 오버헤드는 중요합니다.
+이는 각각의 단계에서 처리해야 하는 일의 양이 작아서 동기화 오버헤드가 처리
+오버헤드보다 중요할 때에 특히나 그러합니다.
+
+각각의 개별적인 쓰레드는 CPU 에 성능이 제한되어 있을 수 있는데, 이 경우
+Section~\ref{sec:rt:Polling-Loop Applications}
+에서의 조언이 적용될 수 있을 겁니다.
+반면에, 만약 각각의 개별적인 쓰레드가 각자의 입력 FIFO 로부터의 데이터를
+기다리면서 멈춰서 있다면, 다음 섹션의 조언이 적용될 수 있을 겁니다.
+\iffalse
 
 This discipline might seem restrictive, but it allows communication
 among threads with minimal synchronization overhead, and minimal
@@ -3192,6 +3226,7 @@ The individual threads might be CPU-bound, in which case the advice in
 Section~\ref{sec:rt:Polling-Loop Applications} applies.
 On the other hand, if the individual threads block waiting for
 data from their input FIFOs, the advice of the next section applies.
+\fi
 
 \subsubsection{Event-Driven Applications}
 \label{sec:rt:Event-Driven Applications}
