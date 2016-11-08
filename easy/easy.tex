@@ -83,6 +83,16 @@ things are covered in the next section.
 
 % Rusty is OK with this: July 19, 2006.
 
+이 섹션은 Rusty Russell 의 2003 Ottawa Linux Symposium 키노트~\cite[Slides
+39-57]{RustyRussell2003OLSkeynote} 에서 가져와졌습니다.
+Rusty 의 주장의 핵심은 목표는 API 를 단순히 사용하기 편하게 만드는 게 아니라,
+API 가 잘못 사용되기 어렵게 해야 한다는 것입니다.
+그런 결론 하에서, Rusty 는 잘못사용하기 어렵게 하는 속성을 중요한 순서로
+내림차순으로 정리한 ``Rusty Scale'' 을 제안했습니다.
+
+다음의 리스트는 Rusty Scale 을 리눅스 커널에 일반화 시킵니다:
+\iffalse
+
 This section is adapted from portions of Rusty Russell's 2003 Ottawa Linux
 Symposium keynote address~\cite[Slides 39-57]{RustyRussell2003OLSkeynote}.
 Rusty's key point is that the goal should not be merely to make an API
@@ -92,8 +102,28 @@ of this important hard-to-misuse property.
 
 The following list attempts to generalize the Rusty Scale beyond the
 Linux kernel:
+\fi
 
 \begin{enumerate}
+\item	잘못 사용되는 것은 불가능합니다.
+	이건 모든 API 디자이너들이 노력해야 할 표준이긴 합니다만, 가상의 \co{dwim()}\footnote{
+	\co{dwim()} 함수는 ``do what I mean (내가 의미하는걸 하라)'' 의
+	약자입니다.}
+	커맨드가 이를 안지킨, 잘못된 예에 가깝습니다.
+\item	컴파일러나 링커는 여러분을 잘못되게 두지 않습니다.
+\item	컴파일러나 링커는 여러분이 잘못한 경우에는 경고를 합니다.
+\item	가장 간단한 사용법이 올바른 사용법입니다.
+\item	이름은 여러분이 그걸 어떻게 사용해야 하는지 알려줘야 합니다.
+\item	올바르게 사용하지 않는다면 그것은 수행시간에 항상 깨져야 합니다.
+\item	일반적인 관례를 따라야 하며, 그렇게 하면 여러분은 올바른 동작을 얻게
+	될겁니다.
+	메모리 할당을 잘못하기는 쉽지만, 수많은 프로젝트들이 적어도 대부분의
+	경우에는 메모리 할당을 올바르게 관리합니다.
+	\co{malloc()} 을 Valgrind~\cite{ValgrindHomePage} 와 함께 사용하는
+	행위는 \co{malloc()} 을 거의 ``올바르게 사용해야 하며, 그러지 않는다면
+	수행시간에 항상 깨지는'' 지점까지 옮겨 놓을 겁니다.
+\iffalse
+
 \item	It is impossible to get wrong.
 	Although this is the standard to which all API designers should
 	strive, only the mythical \co{dwim()}\footnote{
@@ -114,6 +144,27 @@ Linux kernel:
 	Valgrind~\cite{ValgrindHomePage} moves \co{malloc()}
 	almost up to the ``do it right or it will always break at runtime''
 	point on the scale.
+\fi
+\item	문서를 읽으면 여러분은 올바른 동작을 얻을 것입니다.
+\item	구현을 들여다보면 여러분은 올바른 동작을 얻을 것입니다.
+\item	올바른 메일링 리스트 기록을 읽으면 여러분은 올바른 동작을 얻을 것입니다.
+\item	올바른 메일링 리스트 기록을 읽으면 여러분은 잘못된 동작을 얻을 것입니다.
+\item	구현을 들여다보면 여러분은 잘못된 동작을 얻을 것입니다.
+	\co{rcu_read_lock()} 의 \co{CONFIG_PREEMPT} 없을 때의 원래
+	구현~\cite{PaulEMcKenney2007PreemptibleRCU} 은 이 요점의 유명하지 않은,
+	하나의 예입니다.
+\item	문서를 읽으면 여러분은 잘못된 동작을 얻을 것입니다.
+	예를 들어, DEC Alpha \co{wmb} 인스트럭션의 문서~\cite{ALPHA95} 는 이
+	인스트럭션이 실제로 하는 것에 비해 더 많이 엄격한 메모리 순서 의미를
+	갖는다고 개발자들이 생각하게끔 만들었습니다.
+	나중의 문서는 이 점에 대해서 설명해서~\cite{Compaq01}, \co{wmb}
+	인스트럭션을 ``문서를 읽으면 여러분은 올바른 동작을 얻을 것입니다''
+	지점으로 옮겼습니다.
+\item	일반적인 관계를 따르면 여러분은 잘못된 동작을 얻을 것입니다.
+	\co{printf()} 명령은 이런 요점의 한 예인데, 개발자들은 거의 항상
+	\co{printf()} 의 에러 리턴을 체크하지 않기 때문입니다.
+\iffalse
+
 \item	Read the documentation and you will get it right.
 \item	Read the implementation and you will get it right.
 \item	Read the right mailing-list archive and you will get it right.
@@ -135,6 +186,24 @@ Linux kernel:
 	The \co{printf()} statement is an example of this point on the
 	scale because
 	developers almost always fail to check \co{printf()}'s error return.
+\fi
+\item	올바르게 수행한다면 그것은 항상 수행시점에서 깨질 겁니다.
+\item	이름은 여러분이 그것을 어떻게 사용해선 안되는지 설명해 줘야 합니다.
+\item	분명한 사용은 잘못된 것입니다.
+	리눅스 커널의 \co{smp_mb()} 함수는 이 요점의 한 예입니다.
+	많은 개발자들이 이 함수는 실제로 그것이 가지고 있는 것에 비해 강한 순서
+	규칙을 가지고 있을 것이라 가정합니다.
+	Section~\ref{sec:advsync:Memory Barriers} 는 이런 실수를 막기 위해
+	필요한 정보를 담고 있으며, 리눅스 커널 소스 트리의 \co{Documentation}
+	디렉토리 역시 그런 정보를 담고 있습니다.
+\item	컴파일러나 링커는 여러분이 올바른 일을 한다면 경고를 해줄 겁니다.
+\item	컴파일러나 링커는 여러분이 올바른 일을 하도록 놔두지 않을 겁니다.
+\item	올바른 일을 하는 것은 중요합니다.
+	\co{gets()} 함수는 이 요점의 하나의 유명한 예입니다.
+	실제로, \co{gets()} 는 무조건적인 버퍼 오버플로우 보안 구멍으로 설명될
+	수 있을 겁니다.
+\iffalse
+
 \item	Do it right and it will break at runtime.
 \item	The name tells you how not to use it.
 \item	The obvious use is wrong.
@@ -152,6 +221,7 @@ Linux kernel:
 	the scale.
 	In fact, \co{gets()} can perhaps best be described as
 	an unconditional buffer-overflow security hole.
+\fi
 \end{enumerate}
 
 \section{Shaving the Mandelbrot Set}
