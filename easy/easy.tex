@@ -227,6 +227,18 @@ Linux kernel:
 \section{Shaving the Mandelbrot Set}
 \label{sec:easy:Shaving the Mandelbrot Set}
 
+유용한 프로그램들은
+(Figure~\ref{fig:easy:Mandelbrot Set} 에 보인) Mandelbrot 집합과 깔끔하게
+떨어지는 부드러운 외곽을 갖지 않는다는 점에서 닮았습니다---만약 그런 외곽을
+갖는다면, halting problem 이 풀릴 수 있을 겁니다.
+하지만 우린 진짜 사람이 사용할 수 있는 API 가 필요하지, 각각의 모든 잠재적
+사용에 Ph.D. 학위 논문이 필요한 것들을 원하는게 아닙니다.
+따라서, 우리는 ``Mandelbrot 집합을 깎아내서'',\footnote{
+	Josh Triplett 덕에.}
+API 의 사용을 잠재적 사용의 전체 집합 중 쉽게 설명될 수 있는 부분집합으로
+제한시켜야 합니다.
+\iffalse
+
 The set of useful programs resembles the Mandelbrot set
 (shown in Figure~\ref{fig:easy:Mandelbrot Set})
 in that it does
@@ -238,6 +250,7 @@ So, we ``shave the Mandelbrot set'',\footnote{
 	Due to Josh Triplett.}
 restricting the use of the
 API to an easily described subset of the full set of potential uses.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -245,6 +258,28 @@ API to an easily described subset of the full set of potential uses.
 \caption{Mandelbrot Set (Courtesy of Wikipedia)}
 \label{fig:easy:Mandelbrot Set}
 \end{figure}
+
+그런 깎아냄은 비생산적으로 보일 수도 있습니다.
+무엇보다, 한 알고리즘이 동작한다면, 왜 그걸 사용하지 말아야 할까요?
+
+최소한 일부의 깎아내기는 분명히 필요한 이유를 보기 위해서, 데드락을 예방하는,
+하지만 가능한 가장 나쁜 방법을 사용하는 락킹 설계를 생각해 봅시다.
+이 설계는 순환식 이중 링크드 리스트를 사용하는데, 이 리스트는 시스템 상의
+각각의 쓰레드를 위해 하나의 헤더 원소와 함께 하나의 원소를 유지합니다.
+새로운 쓰레드가 시작되면, 그 부모 쓰레드는 이 리스트에 새로운 원소를
+집어넣어야만 하는데, 이는 어떠한 종류의 동기화를 필요로 합니다.
+
+이 리스트를 보호하는 한가지 방법은 글로벌 락을 사용하는 것입니다.
+하지만, 이는 쓰레드들이 빈번하게 생성되고 소멸된다면 병목지점이 될 수도
+있습니다.\footnote{
+	운영체제에 대한 많은 배경지식을 가지고 있는 여러분이라면, 이 말을
+	불신하는 걸 잠시 멈춰주세요.
+	이 말에 대한 불신을 잠시 멈추는게 불가능하다면, 우리에게 이보다 더 나은
+	예를 보내주세요.}
+또다른 방법은 해시 테이블을 사용하고 개별적인 hash bucket 들을 락으로 관리하는
+것입니다만, 이는 리스트를 원소 순서대로 스캔할 때에는 나쁜 성능으로 동작할
+겁니다.
+\iffalse
 
 Such shaving may seem counterproductive.
 After all, if an algorithm works, why shouldn't it be used?
@@ -264,6 +299,23 @@ deleted frequently.\footnote{
 	If you are unable to suspend disbelief, send us a better example.}
 Another approach would be to use a hash table and to lock the individual
 hash buckets, but this can perform poorly when scanning the list in order.
+\fi
+
+세번째 방법은 개별의 리스트 원소들을 락으로 보호하고, 원소의 삽입 시에 해당
+원소의 앞쪽 원소와 뒤쪽 원소 둘 다의 락을 잡는 겁니다.
+두 락이 모두 잡혀야 하므로, 그것들을 어떤 순서로 잡을 것인지를 우리는 결정해야
+합니다.
+그런 두개의 일반적인 방법은 락들을 주소순서로 잡거나 그것들이 리스트에 보여지는
+순서대로 잡아서, 락으로 잠겨지는 두개의 원소 중 하나가 잠겨질 때 그 헤더가 항상
+먼저 얻어지도록 하는 것입니다.
+하지만, 이 방법들 모두 특별한 경우 검사와 분기를 필요로 합니다.
+
+여기서 깎아내져야 하는 해결책은 락들을 무조건적으로 리스트 순서로 잡는
+것입니다.
+하지만 데드락은 어떡하죠?
+
+데드락은 일어날 수 없습니다.
+\iffalse
 
 A third approach is to lock the individual list elements, and to require
 the locks for both the predecessor and successor to be held during the
@@ -281,6 +333,29 @@ list order.
 But what about deadlock?
 
 Deadlock cannot occur.
+\fi
+
+이를 알아보기 위해, 리스트의 원소를 헤더를 0으로, (순환형 리스트이므로, 헤더의
+앞쪽 원소인) 리스트의 마지막 원소를 $N$ 으로 하는식으로 번호를 매깁시다.
+비슷하게, 쓰레드들을 0부터 $N-1$ 까지로 번호매깁시다.
+만약 각각의 쓰레드가 원소들 가운데 연속적인 두개의 원소들의 락을 잡으려 한다면,
+최소한 하나의 쓰레드는 두 락들을 모두 잡을 수 있도록 보장될 겁니다.
+
+왜죠?
+
+리스트의 모든 것들에 닿을 만큼 쓰레드들의 수가 충분히 많지 않기 때문입니다.
+쓰레드~0 가 원소~0 의 락을 잡는다고 생각해 봅시다.
+이 쓰레드가 블락되기 위해서는, 어떤 다른 쓰레드가 이미 원소~1 의 락을 잡았어야
+하는데, 쓰레드~1이 그러고 있다고 가정해 봅시다.
+비슷하게, 쓰레드~1 이 블락되기 위해서는 어떤 다른 쓰레드가 원소~2 의 락을 잡고
+있어야 하는데, 이런식으로 쓰레드~$N-1$ 까지 연속되는데, 이 쓰레드는 원소~$N-1$
+의 락을 획득합니다.
+쓰레드~$N-1$ 이 블락되기 위해서는 어떤 다른 쓰레드가 원소~$N$ 의 락을 잡고
+있어야 합니다.
+하지만 더이상 쓰레드가 존재하지 않고, 따라서 쓰레드~$N-1$ 은 블락될 수가
+없습니다.
+따라서, 데드락은 일어나지 않습니다.
+\iffalse
 
 To see this, number the elements in the list starting with zero for the
 header up to $N$ for the last element in the list (the one preceding the
@@ -303,6 +378,18 @@ For thread~$N-1$ to be blocked, some other thread must have acquired
 element~$N$'s lock.
 But there are no more threads, and so thread~$N-1$ cannot be blocked.
 Therefore, deadlock cannot occur.
+\fi
+
+그러니 우리가 왜 이 마음에 드는 작은 알고리즘의 사용을 막아야 합니까?
+
+여러분이 \emph{정말로} 그걸 사용하고자 한다면, 우리는 여러분을 막을 수 없는게
+사실입니다.
+하지만, 우리는 우리가 신경쓰는 어떤 프로젝트에도 그런 코드가 들어오지 못하도록
+추천할 수 \emph{있습니다}.
+
+하지만, 여러분이 이 알고리즘을 사용하기 전에, 다음의 Quick Quiz 를 한번 생각해
+주시기 바랍니다.
+\iffalse
 
 So why should we prohibit use of this delightful little algorithm?
 
@@ -312,16 +399,43 @@ in any project that we care about.
 
 But, before you use this algorithm, please think through the following
 Quick Quiz.
+\fi
 
 \QuickQuiz{}
+	원소를 지울 때에도 비슷한 알고리즘을 사용할 수 있습니까?
+	\iffalse
+
 	Can a similar algorithm be used when deleting elements?
+	\fi
 \QuickQuizAnswer{
+	네.
+	하지만, 각각의 쓰레드는 가운데 하나를 삭제하기 위해 연속된 세개의
+	원소의 락을 잡아야 하므로, $N$ 개의 쓰레드가 존재한다면, 데드락이
+	없도록 하기 위해서는 리스트에 ($N+1$ 개가 아니라) $2N+1$ 개의 원소가
+	존재해야만 합니다.
+	\iffalse
+
 	Yes.
 	However, since each thread must hold the locks of three
 	consecutive elements to delete the middle one, if there
 	are $N$ threads, there must be $2N+1$ elements (rather than
 	just $N+1$) in order to avoid deadlock.
+	\fi
 } \QuickQuizEnd
+
+이 알고리즘은 극도로 특수화 되어 있으며 (이 알고리즘은 특수한 크기의 리스트에
+대해서만 동작합니다), 또한 상당히 취약한 게 사실입니다.
+리스트에 노드를 하나 추가하는데 의도치 않게 실패하게 하는 어떤 버그든 데드락을
+초래할 수 있습니다.
+사실, 노드를 약간이라도 너무 늦게 추가하는 것만으로도 데드락을 초래할 수
+있습니다.
+
+또한, 앞에서 설명한 다른 알고리즘들이 ``좋고 충분합니다''.
+예를 들어, 단순히 락들을 주소 순서대로 잡는 것은 상당히 간단하고 빠르면서도
+어떤 크기의 리스트든 사용할 수 있게 합니다.
+다만 비어있는 리스트와 하나의 원소만을 포함하고 있는 리스트의 특수한 경우들에
+대해서만 조심하세요!
+\iffalse
 
 The fact is that this algorithm is extremely specialized (it only works
 on certain sized lists), and also quite fragile.
@@ -334,12 +448,36 @@ For example, simply acquiring the locks in address order is fairly simple
 and quick, while allowing the use of lists of any size.
 Just be careful of the special cases presented by empty lists and lists
 containing only one element!
+\fi
 
 \QuickQuiz{}
+	그러쿤요!
+	이처럼 깎여져나갈 가치가 있는 알고리즘을 가지고 나타난 누군가를 포용해
+	본 적 있나요???
+	\iffalse
+
 	Yetch!
 	What ever possessed someone to come up with an algorithm
 	that deserves to be shaved as much as this one does???
+	\fi
 \QuickQuizAnswer{
+	그건 Paul 일 수 있을 겁니다.
+
+	그는 다섯명의 철학자들이 참가하는 비위생적인 스파게티 저녁식사에
+	관련된, \emph{Dining Philosopher's Problem} 을 생각하고 있었습니다.
+	다섯개의 접시가 있지만 다섯개의 포크만이 테이블에 있다는 점을 가지고,
+	그리고 각각의 철학자는 식사를 위해 한번에 두개의 포크가 필요하다는 점을
+	가지고, 누군가는 데드락을 예방하는 포크 할당 알고리즘을 생각해 낼 수
+	있을 겁니다.
+	Paul 의 응답은 ``조용!  그냥 다섯개 더 포크를 가져와!'' 였습니다.
+
+	이건 그 자체로는 괜찮습니다만, Paul 은 이내 이와 똑같은 해결책을 순환형
+	링크드 리스트에 적용했습니다.
+
+	이것 역시 그렇게 나쁘진 않았을 겁니다만, 그는 누군가에게 그에 대해
+	이야기를 해야만 했습니다!
+	\iffalse
+
 	That would be Paul.
 
 	He was considering the \emph{Dining Philosopher's Problem}, which
@@ -356,7 +494,15 @@ containing only one element!
 
 	This would not have been so bad either, but he had to go and tell
 	someone about it!
+	\fi
 } \QuickQuizEnd
+
+정리하자면, 우린 그저 동작한다는 이유만으로 알고리즘을 사용하지는 않습니다.
+그대신에 우리는 배울 가치가 충분한 알고리즘들만 사용하도록 우리 자신을
+제한합니다.
+더 어렵고 더 복잡한 알고리즘일수록, 그걸 배우고 그 버그를 고치는데 드는 고통이
+가치가 있을 수 있도록 더 일반적으로 유용해야만 합니다.
+\iffalse
 
 In summary, we do not use algorithms simply because they happen to work.
 We instead restrict ourselves to algorithms that are useful enough to
@@ -364,10 +510,26 @@ make it worthwhile learning about them.
 The more difficult and complex the algorithm, the more generally useful
 it must be in order for the pain of learning it and fixing its bugs to
 be worthwhile.
+\fi
 
 \QuickQuiz{}
+	이 규칙에 대한 예외를 대 보세요.
+	\iffalse
+
 	Give an exception to this rule.
+	\fi
 \QuickQuizAnswer{
+	한가지 예외는 주어진 상황 하에서는 유일하게 동작하는 어렵고 복잡한
+	알고리즘이 될 수 있을 겁니다.
+	또다른 예외는 주어진 상황에서 동작하는 것으로 알려진 것 중에서는 가장
+	간단한, 어렵고 복잡한 알고리즘이 될 수 있을 겁니다.
+	하지만, 이런 경우들에 있어서조차도, 더 간단한 알고리즘을 내놓기 위해
+	조금 시간을 써보는게 좋을 겁니다!
+	무엇보다도, 여러분이 어떤 작업을 하는 첫번째 알고리즘을 만들어내게
+	된다면, 더 간단한 것을 하나 만드는 것은 그렇게까지 어렵지는 않을
+	겁니다.
+	\iffalse
+
 	One exception would be a difficult and complex algorithm that
 	was the only one known to work in a given situation.
 	Another exception would be a difficult and complex algorithm
@@ -378,11 +540,19 @@ be worthwhile.
 	After all, if you managed to invent the first algorithm
 	to do some task, it shouldn't be that hard to go on to
 	invent a simpler one.
+	\fi
 } \QuickQuizEnd
+
+예외는 차치하고, 우리는 우리의 프로그램들이
+Figure~\ref{fig:easy:Shaving the Mandelbrot Set}
+에 보여진 것처럼 유지가능한 상태를 유지할 수 있도록 소프트웨어를 깎아내기를
+계속해야만 합니다.
+\iffalse
 
 Exceptions aside, we must continue to shave the software ``Mandelbrot
 set'' so that our programs remain maintainable, as shown in
 Figure~\ref{fig:easy:Shaving the Mandelbrot Set}.
+\fi
 
 \begin{figure}[htb]
 \centering
