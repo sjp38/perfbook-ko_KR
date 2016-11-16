@@ -3,6 +3,22 @@
 \section{Transactional Memory}
 \label{sec:future:Transactional Memory}
 
+데이터베이스 바깥의 영역에서 트랜잭션을 사용하자는 아이디어는 수십년 전으로
+거슬러 오르는데~\cite{DBLomet1977SIGSOFT}, 이 아이디어는 데이터베이스에서와
+데이터베이스 외에서의 트랜잭션에 대해 데이터베이스 외에서의 트랜잭션은
+데이터베이스 트랜잭션을 정의하는 성질인 ``ACID'' 에서 ``D'' 를 빼냅니다.
+하드웨어에서 메모리 기반의 트랜잭션, 또는 ``트랜잭셔널 메모리'' (TM) 을
+지원하려는 아이디어는 최근의 것입니다만~\cite{Herlihy93a}, 안타깝게도 실제 많이
+사용되는 하드웨어에서의 그런 트랜잭션의 지원은 그와 비슷한 것들에 대한 제안은
+계속 있어왔지만~\cite{JMStone93}, 곧바로 이루어지지는 않았습니다.
+그로부터 그렇게 오래지 않아, Shavit 과 Touitou 는 일반적으로 사용되는
+하드웨어에서 동작할 수 있는, 메모리 접근 순서를 조정해서 소프트웨어만으로
+이루어진 트랜잭셔널 메모리 구현 (STM) 을 제안했습니다.
+이 제안은 여러 해동안 질질 끌려졌는데, 어쩌면 연구자 커뮤니티들의 관심은
+non-blocking 동기화 (Section~\ref{sec:advsync:Non-Blocking Synchronization} 을
+참고하세요) 에 열중되었기 때문일 수도 있습니다.
+\iffalse
+
 The idea of using transactions outside of databases goes back many
 decades~\cite{DBLomet1977SIGSOFT}, with the key difference between
 database and non-database transactions being that non-database transactions
@@ -18,6 +34,14 @@ hardware, give or take memory-ordering issues.
 This proposal languished for many years, perhaps due to the fact that
 the research community's attention was absorbed by non-blocking
 synchronization (see Section~\ref{sec:advsync:Non-Blocking Synchronization}).
+\fi
+
+하지만 세기가 변하면서, TM 은 일부 주의의 목소리를 받기
+시작했고~\cite{Blundell2005DebunkTM,McKenney2007PLOSTM}, 2000년부터 2009년
+사이의 중반 쯤에는 몇가지 경고의 목소리에도
+불구하고~\cite{MauriceHerlihy2005-TM-manifesto.pldi,DanGrossman2007TMGCAnalogy},
+그 관심의 수준이 ``열광적'' 이라 할 수 있게 되었습니다.
+\iffalse
 
 But by the turn of the century, TM started receiving
 more attention~\cite{Martinez01a,Rajwar01a}, and by the middle of the
@@ -25,6 +49,19 @@ decade, the level of interest can only be termed
 ``incandescent''~\cite{MauriceHerlihy2005-TM-manifesto.pldi,
 DanGrossman2007TMGCAnalogy}, despite a few voices of
 caution~\cite{Blundell2005DebunkTM,McKenney2007PLOSTM}.
+\fi
+
+TM 에 대한 기본 아이디어는 한 섹션의 코드를 어토믹하게 수행해서 다른 쓰레드가
+그 중간의 상태를 볼 수 없게 하자는 것입니다.
+그렇게, TM 의 의미는 간단히 각각의 트랜잭션을 반복적으로 획득할 수 있는 글로벌
+락의 획득과 해제로 감싸는 것으로, 성능과 확장성이 처참해지긴 하겠지만, 구현될
+수 있습니다.
+하드웨어에서든 소프트웨어에서든 TM 구현에서는 피할 수 없는 복잡성은 동시적인
+트랜잭션들이 안전하게 병렬적으로 수행될 수 있는지에 대한 파악입니다.
+이 파악은 동적으로 이루어지기 때문에, 충돌하는 트랜잭션들은 취소되거나
+``롤백''될 수 있고, 일부 구현에서는, 이 실패한 모드가 프로그래머에게 보여질 수
+있습니다.
+\iffalse
 
 The basic idea behind TM is to execute a section of
 code atomically, so that other threads see no intermediate state.
@@ -38,6 +75,24 @@ run in parallel.
 Because this detection is done dynamically, conflicting transactions
 can be aborted or ``rolled back'', and in some implementations, this
 failure mode is visible to the programmer.
+\fi
+
+트랜잭션 롤백은 트랜잭션 크기가 줄어듦에 따라 발생률이 줄어들 것이기 때문에, TM
+은 스택, 큐, 해시 테이블, 탐색 트리들과 같은 데에 사용되는 링크드 리스트 제어와
+같이 작은 크기의 메모리 기반 오퍼레이션들에 매력적일 수 있습니다.
+하지만, I/O 와 프로세스 생성과 같은 메모리 기반이 아닌 오퍼레이션들을 포함하는
+것들과 같은, 커다란 트랜잭션들에 TM 을 적용하기는 어렵습니다.
+다음 섹션들은 ``Transactional Memory
+Everywhere''~\cite{PaulEMcKenney2009TMeverywhere} 의 커다란 비전을 위해
+존재하는 현재의 극복해야할 사항들을 알아봅니다.
+Section~\ref{sec:future:Outside World} 은 바깥의 것들과 상호동작하는 데에
+나타나는 문제점들을 알아보고,
+Section~\ref{sec:future:Process Modification} 는 프로세스 수정 기능들과의
+상호동작을 보며,
+Section~\ref{sec:future:Synchronization} 는 다른 동기화 기능들과의 상호
+동작들을 살펴보며, 마지막으로
+Section~\ref{sec:future:Discussion} 에서 일부 토의와 함께 마무리 합니다.
+\iffalse
 
 Because transaction roll-back is increasingly unlikely as transaction
 size decreases, TM might become quite attractive for small memory-based
@@ -56,6 +111,7 @@ with process modification primitives,
 Section~\ref{sec:future:Synchronization} explores interactions with
 other synchronization primitives, and finally
 Section~\ref{sec:future:Discussion} closes with some discussion.
+\fi
 
 \subsection{Outside World}
 \label{sec:future:Outside World}
