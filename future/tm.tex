@@ -153,10 +153,29 @@ storage.
 \subsubsection{I/O Operations}
 \label{sec:future:I/O Operations}
 
+누군가는 I/O 오퍼레이션을 락 기반의 크리티컬 섹션 안에서 할수도, 적어도
+원칙적으로는, RCU read-side 크리티컬 섹션 안에서 할수도 있습니다.
+트랜잭션 안에서 I/O 오퍼레이션을 수행하려 하면 어떻게 될까요?
+\iffalse
+
 One can execute I/O operations within a lock-based critical section,
 and, at least in principle, from within an RCU read-side critical section.
 What happens when you attempt to execute an I/O operation from within
 a transaction?
+\fi
+
+여기 내포된 문제는 트랜잭션은 롤백될 수 있는데, 예를 들어 conflict 이 나거나
+하는 경우입니다.
+대략적으로 말해서, 이는 특정 트랜잭션 내에서 일어날 수 있는 모든 오퍼레이션들이
+복구될 수 있어서 해당 오퍼레이션을 두번 행하는 것은 한번만 행한 것과 똑같은
+효과를 내야 할 것을 필요로 합니다.
+안타깝게도, I/O 는 일반적으로는 근본적으로 돌이킬 수 없는 오퍼레이션이어서,
+일반적인 I/O 오퍼레이션을 트랜잭션 내에 넣기는 어렵게 합니다.
+사실, 일반적인 I/O 는 돌이킬 수 없습니다:
+일단 여러분이 핵탄두를 발사시키는 버튼을 눌렀다면, 되돌릴 수는 없습니다.
+
+여기 트랜잭션 안에서 I/O 를 다루기 위한 몇가지 선택사항들이 있습니다:
+\iffalse
 
 The underlying problem is that transactions may be rolled back, for
 example, due to conflicts.
@@ -171,8 +190,23 @@ Once you have pushed the button launching the nuclear warheads, there
 is no turning back.
 
 Here are some options for handling of I/O within transactions:
+\fi
 
 \begin{enumerate}
+\item	트랜잭션 내에서의 I/O 를 메모리 상의 버퍼에 버퍼링 되는 I/O 로
+	제약시킵니다.
+	이렇게 되면 이 버퍼들은 다른 메모리 위치들이 포함될 수 있는 것과 같은
+	방식으로 트랜잭션 내에 포함되어질 수 있을 겁니다.
+	이는 선택될 수 있는 메커니즘으로 보이며, 이는 실제로 stream I/O 나
+	대용량 I/O 와 같은, 많은 흔한 상황들에서 잘 동작합니다.
+	하지만, 복수의 레코드에 기반한 출력 스트림들이 복수의 프로세스들로부터
+	하나의 파일에 합쳐지는, 예컨대 ``a+'' 옵션과 함께 사용된 \co{fopen()}
+	이나 \co{O_APPEND} 플래그와 함게 사용된 \co{open()} 과 같은 경우에는
+	특수한 처리가 필요합니다.
+	또한, 다음 섹션에서 보게 되겠지만, 일반적인 네트워킹 오퍼레이션들은
+	버퍼링을 통해 처리될 수 없습니다.
+\iffalse
+
 \item	Restrict I/O within transactions to buffered I/O with in-memory
 	buffers.
 	These buffers may then be included in the transaction in the
@@ -186,6 +220,17 @@ Here are some options for handling of I/O within transactions:
 	option to \co{fopen()} or the \co{O_APPEND}  flag to \co{open()}.
 	In addition, as will be seen in the next section, common
 	networking operations cannot be handled via buffering.
+\fi
+\item	트랜잭션 안에서의 I/O 를 금지시켜서 I/O 오퍼레이션을 행하려는 모든
+	시도는 그를 둘러싼 트랜잭션을 abort 시키게 만듭니다 (그리고 복수의
+	중첩된 트랜잭션들까지도요).
+	이 방법은 버퍼링 되지 않은 I/O 를 위한 관습적인 TM 전략처럼 보이지만,
+	TM 이 I/O 를 허용할 수 있는 다른 동기화 기능들을 포함할 것을 필요로
+	합니다.
+\item	트랜잭션 안에서의 I/O 를 금지시키지만, 이 금지를 강제시키는데에
+	컴파일러의 협조를 받습니다.
+\iffalse
+
 \item	Prohibit I/O within transactions, so that any attempt to execute
 	an I/O operation aborts the enclosing transaction (and perhaps
 	multiple nested transactions).
@@ -194,6 +239,26 @@ Here are some options for handling of I/O within transactions:
 	synchronization primitives that do tolerate I/O.
 \item	Prohibit I/O within transactions, but enlist the compiler's aid
 	in enforcing this prohibition.
+\fi
+\item	한번에 단 하나의 \emph{되돌려질 수 있는}
+	트랜잭션~\cite{SpearMichaelScott2008InevitableSTM} 만이 수행될 수 있게
+	허가해서, 되돌려질 수 있는 트랜잭션들은 I/O 오퍼레이션을 포함할 수
+	있도록 허가합니다.\footnote{
+		이전의 문헌에서, 되돌려질 수 있는 트랜잭션들은
+		\emph{inevitable} 트랜잭션이라 칭해졌습니다.}
+	이는 일반적으로 동작합니다만, I/O 오퍼레이션들의 성능과 확장성을 상당히
+	제한합니다.
+	확장성과 성능이 병렬화의 첫번째 목표라는 점을 놓고 보면, 이 방법의
+	일반성은 약간 스스로를 제한시키는 것으로 보입니다.
+	더 나쁜 것은, 되돌릴 수 있는 성질을 I/O 오퍼레이션을 막는데에 사용하는
+	것은 직접적인 트랜잭션 abort 오퍼레이션의 사용을 금지하는 것으로
+	보입니다.\footnote{
+		이 문제는 Michael Factor 에 의해 지적되었습니다.}
+	마지막으로, 특정 데이터 아이템을 조정하는 도돌려질 수 있는 트랜잭션이
+	존재한다면, 똑같은 데이터 아이템을 조정하는 다른 모든 트랜잭션들은
+	non-blocking semantic 을 가질 수가 없습니다.
+\iffalse
+
 \item	Permit only one special
 	\emph{irrevocable} transaction~\cite{SpearMichaelScott2008InevitableSTM}
 	to proceed
@@ -211,12 +276,28 @@ Here are some options for handling of I/O within transactions:
 	Finally, if there is an irrevocable transaction manipulating
 	a given data item, any other transaction manipulating that
 	same data item cannot have non-blocking semantics.
+\fi
+\item	I/O 오퍼레이션들이 트랜잭션의 하층에 들어가질 수 있는 새로운 하드웨어와
+	프로토콜을 만듭니다.
+	인풋 오퍼레이션의 경우, 하드웨어는 그 오퍼레이션의 결과를 올바르게
+	예측할 수 있어야 할 것이고, 그 예측이 틀렸을 경우에는 그 트랜잭션을
+	abort 시킬 수 있어야 할 겁니다.
+\iffalse
+
 \item	Create new hardware and protocols such that I/O operations can
 	be pulled into the transactional substrate.
 	In the case of input operations, the hardware would need to
 	correctly predict the result of the operation, and to abort the
 	transaction if the prediction failed.
+\fi
 \end{enumerate}
+
+I/O 오퍼레이션은 TM 의 잘 알려진 약한 부분들이고, 트랜잭션에서 I/O 를 지원하기
+위한 이 문제가 합리적이고 일반적인 해결책을 가지고 있는지는 확실치 않은데,
+적어도 ``합리적'' 이란 말이 사용 가능한 성능과 확장성을 포함한다면 그렇습니다.
+더도 아니고 덜도 아니고, 이 문제에 대한 계속된 시간과 관심이 이 문제에 대한
+추가적인 진보를 만들어낼 겁니다.
+\iffalse
 
 I/O operations are a well-known weakness of TM, and it is not clear
 that the problem of supporting I/O in transactions has a reasonable
@@ -224,6 +305,7 @@ general solution, at least if ``reasonable'' is to include usable
 performance and scalability.
 Nevertheless, continued time and attention to this problem will likely
 produce additional progress.
+\fi
 
 \subsubsection{RPC Operations}
 \label{sec:future:RPC Operations}
