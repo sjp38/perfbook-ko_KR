@@ -482,6 +482,18 @@ is simply an especially problematic case of I/O.
 \subsubsection{Time Delays}
 \label{sec:future:Time Delays}
 
+트랜잭션 틱한 접근과의 상호작용에 관련된 중요한 특수 케이스 하나는 트랜잭션
+내에서의 명시적인 시간 딜레이와 관련됩니다.
+물론, 트랜잭션 내에서의 시간 딜레이라는 이 생각은 TM 의 원자성에 위배됩니다만,
+어떤 사람들은 이런 종류의 일은 완화된 원자성이 모두 그러한 것이라고 주장할 수
+있습니다.
+나아가서, memory-mapped I/O 와의 올바른 상호작용은 가끔 주의깊게 제어되는
+타이밍을 필요로 하며, 어플리케이션들은 다양한 목적을 위해 시간 딜레이를 자주
+사용합니다.
+
+그러니, TM 은 트랜잭션 내에서의 시간 딜레이에 대해 뭘 해야 할까요?
+\iffalse
+
 An important special case of interaction with extra-transactional accesses
 involves explicit time delays within a transaction.
 Of course, the idea of a time delay within a transaction flies in the
@@ -492,8 +504,27 @@ carefully controlled timing, and applications often use time delays
 for varied purposes.
 
 So, what can TM do about time delays within transactions?
+\fi
 
 \begin{enumerate}
+\item	트랜잭션 내에서의 시간 딜레이를 무시합니다.
+	이 방법은 우아한 모습으로 보이지만, 다른 너무 많은 ``우아한''
+	해결책들처럼, 기존 코드에 사용되는순간 실패하게 됩니다.
+	크리티컬 섹션 내에서 중요한 시간 딜레이를 가지고 있을 수도 있는 그런
+	코드는 트랜잭션화 되는 과정에서 실패할 겁니다.
+\item	시간 딜레이 오퍼레이션을 마주하는 순간 트랜잭션을 abort 시킵니다.
+	이 방법은 매력적이지만, 안타깝게도 시간 딜레이 오퍼레이션을 자동적으로
+	탐지하는게 항상 가능하지는 않습니다.
+	어떤 짧은 루프는 정말 중요한 무언가를 계산하는 루프일가요, 아니면 그저
+	시간이 지나가길 기다리는 걸까요?
+\item	트랜잭션 내에서의 시간 딜레이를 금지시키기 위해 컴파일러의 도움을
+	받습니다.
+\item	시간 딜레이가 평범하게 수행되도록 합니다.
+	안타깝게도, 일부 TM 구현은 커밋 시점에서야 수정사항을 외부에
+	노출시켜서, 많은 경우에는 시간 딜레이의 목적을 달성 불가능하게
+	할겁니다.
+\iffalse
+
 \item	Ignore time delays within transactions.
 	This has an appearance of elegance, but like too many other
 	``elegant'' solutions, fails to survive first contact with
@@ -510,7 +541,18 @@ So, what can TM do about time delays within transactions?
 	Unfortunately, some TM implementations publish modifications only
 	at commit time, which would in many cases defeat the purpose of
 	the time delay.
+\fi
 \end{enumerate}
+
+단 하나의 올바른 답이 있는지 여부는 분명치 않습니다.
+완화된 원자성을 갖춰서 변경 사항을 트랜잭션 내에서 곧바로 외부에 노출시키는
+(abort 시에는 이 변경들을 되돌리는) TM 구현은 마지막 대안에 의해 잘 처리될 수
+있을 겁니다.
+이런 경우라 하더라도, 트랜잭션의 다른 끝의 (또는, 심지어 하드웨어의) 코드는
+abort 된 트랜잭션을 처리하기 위해 상당한 재설계가 필요할 겁니다.
+이런 재설계의 필요성은 트랜잭셔널 메모리를 기존 코드에 적용하기를 더 어렵게
+할겁니다.
+\iffalse
 
 It is not clear that there is a single correct answer.
 TM implementations featuring weak atomicity that publish changes
@@ -521,6 +563,7 @@ end of the transaction may require a substantial redesign to tolerate
 aborted transactions.
 This need for redesign would make it more difficult to apply transactional
 memory to legacy code.
+\fi
 
 \subsubsection{Persistence}
 \label{sec:future:Persistence}
