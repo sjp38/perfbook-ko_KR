@@ -568,6 +568,21 @@ memory to legacy code.
 \subsubsection{Persistence}
 \label{sec:future:Persistence}
 
+락킹 기능들에는 많은 다른 타입들이 존재합니다.
+한가지 흥미로운 차이는 지속성으로, 달리 말하자면, 락이 그 락을 사용하는
+프로세스의 주소 공간에 대한 의존성 없이 존재할 수 있는가 여부입니다.
+
+지속성 없는 락은 \co{pthread_mutex_lock()}, \co{pthread_rwlock_rdlock()},
+그리고 대부분의 커널 레벨 락킹 기능들을 포함합니다.
+만약 지속성 없는 락의 데이터 구조를 담고 있는 메모리 위치가 사라지면, 락 역시
+그렇게 됩니다.
+\co{pthread_mutex_lock()} 의 일반적인 사용에 있어, 이는 프로세스가 종료될 때,
+그것의 모든 락들이 사라짐을 의미합니다.
+이 속성은 프로그램 종료 시점에 락 정리를 대수롭지 않게 하기 위해 사용될 수도
+있습니다만, 관계없는 어플리케이션들 사이에서 락을 공유하기는, 그런 공유를
+위해선 어플리케이션 사이에 메모리를 공유할 것을 필요로 하기에, 어렵게 합니다.
+\iffalse
+
 There are many different types of locking primitives.
 One interesting distinction is persistence, in other words, whether the
 lock can exist independently of the address space of the process using
@@ -583,6 +598,26 @@ This property can be exploited in order to trivialize lock cleanup
 at program shutdown time, but makes it more difficult for unrelated
 applications to share locks, as such sharing requires the applications
 to share memory.
+\fi
+
+지속성 있는 락들은 관련없는 어플리케이션들 사이에 메모리를 공유해야할 필요를
+없앱니다.
+지속성 있는 락킹 API 들은 flock 계열인 \co{lockf()}, System V 세마포어,
+\co{open()} 에 사용되는 \co{O_CREAT} 플래그 등을 포함합니다.
+이 지속성 있는 API 들은 다양한 어플리케이션들을 구축하는 커다란 규모의
+오퍼레이션들을 보호하는데에 사용될 수 있고, \co{O_CREAT} 의 경우에는 심지어
+운영체제 리부팅 뒤에도 살아남습니다.
+필요하다면, 락들은 분산된 락 매니저와 분산 파일 시스템들을 통해서 여러 컴퓨터
+시스템들에까지 미칠 수 있습니다---그리고 이 컴퓨터 시스템들의 어떤 모든 것들의
+리부팅 전후에도 지속됩니다.
+
+지속성 있는 락들은 어떤 어플리케이션을 통해서도 사용될 수 있는데, 복수의 언어와
+소프트웨어 환경을 사용해 작성된 어플리케이션도 포함됩니다.
+사실, 하나의 지속성 있는 락이 C 언어로 쓰여진 어플리케이션에 의해 획득되고는
+Python 으로 쓰여진 어플리케이션에 의해 해제될 수도 있는 것입니다.
+
+TM 에는 이와 비슷한 지속성 있는 기능들이 어떻게 주어질 수 있을까요?
+\iffalse
 
 Persistent locks help avoid the need to share memory among unrelated
 applications.
@@ -601,8 +636,20 @@ In fact, a persistent lock might well be acquired by an application written
 in C and released by an application written in Python.
 
 How could a similar persistent functionality be provided for TM?
+\fi
 
 \begin{enumerate}
+\item	지속성 있는 트랜잭션들을 그것들을 지원하기 위해 설계된, SQL 과 같은
+	특수 목적 환경으로 제한시킵니다.
+	이는 데이터베이스 시스템의 수십년의 역사로 보건대 분명히 잘
+	동작합니다만, 지속성 있는 락들에 의해 제공되는 것만큼의 유연성을
+	제공하지는 않습니다.
+\item	일부 저장 장치나 파일시스템들에서 제공되는 스냅샷 기능들을 사용합니다.
+	안타깝게도, 이는 네트워크 통신을 처리하지도, 스냅샷 기능을 제공하지
+	않는, 예를 들어 메모리 스틱과 같은 장치로의 I/O 는 처리하지도 못합니다.
+\item	타임머신을 만듭니다.
+\iffalse
+
 \item	Restrict persistent transactions to special-purpose environments
 	designed to support them, for example, SQL.
 	This clearly works, given the decades-long history of database
@@ -614,13 +661,21 @@ How could a similar persistent functionality be provided for TM?
 	nor does it handle I/O to devices that do not provide snapshot
 	capabilities, for example, memory sticks.
 \item	Build a time machine.
+\fi
 \end{enumerate}
+
+물론, 이것이 트랜잭셔널 \emph{메모리} 라 불린다는 사실이 한숨을 돌리게 할텐데,
+이 이름 자체가 지속성 있는 트랜잭션의 컨셉과 들어맞지 않기 때문입니다.
+이는 이 가능성을 트랜잭셔널 메모리의 피할 수 없는 한계점을 보이는 중요한 테스트
+케이스로 고려할 만큼, 딱 그만큼의 가치만 있습니다.
+\iffalse
 
 Of course, the fact that it is called transactional \emph{memory}
 should give us pause, as the name itself conflicts with the concept of
 a persistent transaction.
 It is nevertheless worthwhile to consider this possibility as an important
 test case probing the inherent limitations of transactional memory.
+\fi
 
 \subsection{Process Modification}
 \label{sec:future:Process Modification}
