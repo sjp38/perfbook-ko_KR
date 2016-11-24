@@ -697,11 +697,18 @@ ever-changing execution environment.
 \subsubsection{Multithreaded Transactions}
 \label{sec:future:Multithreaded Transactions}
 
+락을 쥔채, 또는, 필요하다면 RCU read-side 크리티컬 섹션 내에서 프로세스나
+쓰레드를 생성하는 것은 완전히 합법적인 일입니다.
+이건 합법적일 뿐만 아니라, 다음 코드 조각에서 볼 수 있듯이 상당히 간단하기도
+합니다.
+\iffalse
+
 It is perfectly legal to create processes and threads while holding
 a lock or, for that matter, from within an RCU read-side critical
 section.
 Not only is it legal, but it is quite simple, as can be seen from the
 following code fragment:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -717,6 +724,17 @@ following code fragment:
 \end{minipage}
 \vspace{5pt}
 
+이 슈도코드는 CPU 당 하나의 쓰레드를 생성하기 위해 \co{pthread_create()} 를
+사용하고, 각각의 쓰레드가 완료되기를 기다리기 위해 \co{pthread_join()} 을
+사용하는데, 모두 \co{pthread_mutex_lock()} 의 보호 아래에서 행해집니다.
+원하는 결과는 락 기반의 크리티컬 섹션을 병렬적으로 수행하는 것이고, \co{fork()}
+와 \co{wait()} 를 사용해서도 비슷한 효과를 얻을 수 있을 겁니다.
+물론, 이 크리티컬 섹션은 쓰레드 생성 오버헤드를 정당화 하기 충분할 만큼 커야 할
+것입니다만, 제품 소프트웨어에서 커다란 크리티컬 섹션들의 예는 많이 존재합니다.
+
+TM 은 트랜잭션 내에서의 쓰레드 생성에 대해서 무엇을 해줄까요?
+\iffalse
+
 This pseudo-code fragment uses \co{pthread_create()} to spawn one thread
 per CPU, then uses \co{pthread_join()} to wait for each to complete,
 all under the protection of \co{pthread_mutex_lock()}.
@@ -727,8 +745,22 @@ the thread-spawning overhead, but there are many examples of large
 critical sections in production software.
 
 What might TM do about thread spawning within a transaction?
+\fi
 
 \begin{enumerate}
+\item	트랜잭션 내에서의 \co{pthread_create()} 를 불법적인 것으로 규정해서,
+	\co{pthread_create()} 사용의 경우 트랜잭션이 abort 되거나 (이게
+	선호됩니다) 정해지지 않은 동작을 하도록 만듭니다.
+	대안적으로는, 컴파일러가 \co{pthread_create()} 가 없는 트랜잭션만을
+	강제하도록 도움을 받습니다.
+\item	트랜잭션 내에서 \co{pthread_create()} 가 수행될 수 있도록 하되, 그 부모
+	쓰레드만이 트랜잭션의 일부로 여겨지도록 합니다.
+	이 방법은 이미 존재하는 TM 구현들과 합리적으로 호환될 수 있을 것처럼
+	보입니다만, 부주의한 사람에게는 함정이 될 것으로 보입니다.
+	이 방법은 몇가지 더 질문을 떠오르게 하는데, 자식 쓰레드로의 접근의
+	충돌을 어떻게 처리할 것인가와 같은 것들입니다.
+\iffalse
+
 \item	Declare \co{pthread_create()} to be illegal within transactions,
 	resulting in transaction abort (preferred) or undefined
 	behavior. Alternatively, enlist the compiler to enforce
@@ -740,6 +772,19 @@ What might TM do about thread spawning within a transaction?
 	posited TM implementations, but seems to be a trap for the unwary.
 	This approach raises further questions, such as how to handle
 	conflicting child-thread accesses.
+\fi
+\item	\co{pthread_create()} 를 함수 호출로 변환시킵니다.
+	이 방법 역시 매력적인 골칫거리가 되는데, 자식 쓰레드들이 서로 통신하는
+	드물지 않은 경우들을 처리하지 않기 때문입니다.
+	이 방법은 또한 부모 쓰레드가 트랜잭션을 커밋하기 전에 자식 쓰레드들을
+	기다리지 않는다면 어떤 일이 일어나게 될것인지와 같은 흥미로운 질문 역시
+	물러일으킵니다.
+	더 흥미롭게도, 부모가 트랜잭션 내에 포함되어 있는 변수의 값에 기초해서
+	조건적으로 \co{pthread_join()} 을 수행한다면 무슨 일이 일어날까요?
+	이 질문들에 대한 답은 락킹의 경우에는 꽤 간단합니다.
+	TM 에서의 이 질문들에 대한 답은 독자 여러분의 몫으로 남겨두겠습니다.
+\iffalse
+
 \item	Convert the \co{pthread_create()}s to function calls.
 	This approach is also an attractive nuisance, as it does not
 	handle the not-uncommon cases where the child threads communicate
@@ -760,7 +805,17 @@ What might TM do about thread spawning within a transaction?
 	The answers to these questions are reasonably straightforward
 	in the case of locking.
 	The answers for TM are left as an exercise for the reader.
+\fi
 \end{enumerate}
+
+데이터베이스 쪽에서 트랜잭션들의 병렬적 수행은 일반적이기 때문에, 현재의 TM
+제안들은 그것들을 위해 제공된게 아니란 점은 놀라울 수도 있습니다.
+한편으로는, 앞의 예제들은 간단한 교재에서의 예제에서는 일반적으로 찾을 수 없는,
+락킹의 복잡한 사용 예여서, 그것들의 부작위함이 예상될 수도 있습니다.
+그렇다곤 하나, 일부 TM 연구자들이 트랜잭션 내에서의 fork/join 병렬성을 위해
+노력하고 있다는 소문이 돌리고 있으므로, 이 주제는 조만간 더 완벽하게 다루어질
+수도 있습니다.
+\iffalse
 
 Given that parallel execution of transactions is commonplace in the
 database world, it is perhaps surprising that current TM proposals do
@@ -771,6 +826,7 @@ so perhaps its omission is to be expected.
 That said, there are rumors that some TM researchers are investigating
 fork/join parallelism within transactions, so perhaps this topic will
 soon be addressed more thoroughly.
+\fi
 
 \subsubsection{The exec() System Call}
 \label{sec:future:The exec System Call}
