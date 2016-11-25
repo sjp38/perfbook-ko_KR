@@ -831,6 +831,23 @@ soon be addressed more thoroughly.
 \subsubsection{The exec() System Call}
 \label{sec:future:The exec System Call}
 
+락을 잡은채로, 또는 RCU read-side 크리티컬 섹션 내에서도 \co{exec()} 시스템
+콜을 호출할 수 있습니다.
+그 호출의 정확한 의미는 기능의 타입에 따라 정해집니다.
+
+지속성 없는 기능들 (\co{pthread_mutex_lock()}, \co{pthread_rwlock_rdlock()},
+그리고 RCU 등) 의 경우에는, \co{exec()} 가 성공한다면, 모든 잡혀 있던 락들을
+포함해서 전체 주소 공간이 사라집니다.
+물론, \co{exec()} 가 실패한다면, 이 주소 공간은 여전히 살아있게 되어서, 모든
+연관된 락들 역시 여전히 살아 있게 됩니다.
+약간 이상할 수 있겠지만, 합리적으로 잘 정의된 의미입니다.
+
+다른 한편, 지속성이 있는 기능들 (flock 부류들, \co{lockf()}, System V 세마포어,
+\co{O_CREAT} 플래그와 함께 수행되는 \co{open()} 등) 은 \co{exec()} 의 성공이나
+실패 여부와 관계 없이 살아남아서, \co{exec()} 된 프로그램은 그것들을 놓아줘야
+할 겁니다.
+\iffalse
+
 One can execute an \co{exec()} system call while holding a lock, and
 also from within an RCU read-side critical section.
 The exact semantics depends on the type of primitive.
@@ -848,25 +865,60 @@ On the other hand, persistent primitives (including the flock family,
 \co{open()}) would survive regardless of whether the \co{exec()}
 succeeded or failed, so that the \co{exec()}ed program might well
 release them.
+\fi
 
 \QuickQuiz{}
+	메모리의 \co{mmap()} 리전 내의 데이터 구조체로 표현되는 지속성 없는
+	기능들은 어떨까요?
+	그런 기능들로 만들어진 크리팈러 섹션 내에서의 \co{exec()} 가 존재한다면
+	어떤 일이 벌어질까요?
+	\iffalse
+
 	What about non-persistent primitives represented by data
 	structures in \co{mmap()} regions of memory?
 	What happens when there is an \co{exec()} within a critical
 	section of such a primitive?
+	\fi
 \QuickQuizAnswer{
+	\co{exec()} 된 프로그램이 그 똑같은 메모리 영역을 매핑한다면, 이
+	프로그램은 원칙적으로 그 락을 놓아주어야 합니다.
+	이 방법이 소프트웨어 엔지니어링 관점에서도 말이 되는 소리인지에 대한
+	판단은 독자 여러분의 몫으로 남겨두도록 하겠습니다.
+	\iffalse
+
 	If the \co{exec()}ed program maps those same regions of
 	memory, then this program could in principle simply release
 	the lock.
 	The question as to whether this approach is sound from a
 	software-engineering viewpoint is left as an exercise for
 	the reader.
+	\fi
 } \QuickQuizEnd
+
+트랜잭션 안에서 \co{exec()} 시스템 콜을 수행하려 한다면 어떤 일이 벌어질까요?
+\iffalse
 
 What happens when you attempt to execute an \co{exec()} system call
 from within a transaction?
+\fi
 
 \begin{enumerate}
+\item	트랜잭션 내에서의 \co{exec()} 를 금지시켜서, \co{exec()} 가 호출되면
+	그를 둘렀나 트랜잭션들이 abort 되게 합니다.
+	이는 괜찮은 정의입니다만, TM 외의 동기화 기능들이 \co{exec()} 와의 관계
+	안에서도 잘 동작할 수 있을 것을 필요로 합니다.
+\item	트랜잭션 내에서의 \co{exec()} 를 금지시키며, 컴파일러가 이 금지를
+	강제하도록 합니다.
+	이 방법을 취해서, 함수들이 \co{transaction_safe} 와
+	\co{transaction_unsafe} attribute 로 장식되로고 하는, C++ 에서의 TM 에
+	대한 작성중인 명세가 있습니다.\footnote{
+		이 명세서를 짚어준 Mark Moir 와, 그보다 앞의 버전을 알려준
+		Michael Wong 에게 감사를  드립니다.}
+	이 방법은 실행시간 중에 트랜잭션을 abort 하는 것에 비해 몇가지 장점이
+	있습니다만, 역시 \co{exec()} 와 관련해서 사용되어야 하는 TM 이 아닌
+	동기화 기능들을 필요로 합니다.
+\iffalse
+
 \item	Disallow \co{exec()} within transactions, so that the enclosing
 	transactions abort upon encountering the \co{exec()}.
 	This is well defined, but clearly requires non-TM synchronization
@@ -883,6 +935,20 @@ from within a transaction?
 	This approach has some advantages over aborting the transaction
 	at runtime, but again requires non-TM synchronization primitives
 	for use in conjunction with \co{exec()}.
+\fi
+\item	트랜잭션을 지속성 없는 락킹 기능들과 비슷한 방식을 취급해서,
+	\co{exec()} 가 실패한다면 트랜잭션이 성공하고, \co{exec()} 가 성공하면
+	말없이 트랜잭션을 커밋해 버립니다.
+	일부 변수들이 \co{mmap()} 으로 매핑된 메모리에 존재하는 경우에 대해서는
+	(따라서 성공적인 \co{exec()} 시스템 콜 뒤에는 살아남들 변수들) 독자
+	여러분의 몫으로 남겨두겠습니다.
+\item	\co{exec()} 시스템 콜이 성공할 것 같다면 트랜잭션을 (그리고 \co{exec()}
+	시스템 콜을) abort 시키고, \co{exec()} 시스템 콜이 실패할 것 같다면
+	트랜잭션을 지속시킵니다.
+	이는 어떤 의미에서는 ``올바른'' 방법입니다만, 성이 차지 않는 결과를
+	위해서는 상당한 작업을 필요로 할 겁니다.
+\iffalse
+
 \item	Treat the transaction in a manner similar to non-persistent
 	Locking primitives, so that the transaction survives if \co{exec()}
 	fails, and silently commits if the \co{exec()} succeeds.
@@ -895,7 +961,17 @@ from within a transaction?
 	fail.
 	This is in some sense the ``correct'' approach, but it would
 	require considerable work for a rather unsatisfying result.
+\fi
 \end{enumerate}
+
+아마도 \co{exec()} 시스템콜은 보편적인 TM 적용성에 대한 가장 이상한 반론의 예
+중 하나일 텐데, 어떤 방법이 말이 되는지가 전혀 분명치 않고, 누구가는 이건 그저
+실제 삶에서 중역들과 일하는 위험의 반영일 뿐이라고 주장할 수도 있을 겁니다.
+그렇다곤 하나, 트랜잭션 내에서의 \co{exec()} 를 금지시키는 두가지 방법은 그나마
+가장 논리적일 겁니다.
+
+비슷한 문제들이 \co{exit()} 과 \co{kill()} 시스템 콜에 대해서도 존재합니다.
+\iffalse
 
 The \co{exec()} system call is perhaps the strangest example of an
 obstacle to universal TM applicability, as it is not completely clear
@@ -905,6 +981,7 @@ That said, the two options prohibiting \co{exec()} within transactions
 are perhaps the most logical of the group.
 
 Similar issues surround the \co{exit()} and \co{kill()} system calls.
+\fi
 
 \subsubsection{Dynamic Linking and Loading}
 \label{sec:future:Dynamic Linking and Loading}
