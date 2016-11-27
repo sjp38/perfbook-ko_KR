@@ -1140,6 +1140,23 @@ to a world containing more than just TM.)
 \subsubsection{Memory-Mapping Operations}
 \label{sec:future:Memory-Mapping Operations}
 
+락 기반의 크리티컬 섹션 내에서 (\co{mmap()}, \co{shmat()}, 그리고
+\co{munmap()}~\cite{TheOpenGroup1997SUS} 과 같은) 메모리 매핑 오퍼레이션들을
+사용하는건 완전히 합법적이고, 적어도 원칙적으로는, RCU read-side 크리티컬 섹션
+내에서의 사용도 드렇습니다.
+그런 오퍼레이션을 트랜잭션 내에서 수행하려 시도하면 무슨 일이 벌어질까요?
+더 나아가서, 다시 매핑된 메모리 영역이 현재 쓰레드의 트랜잭션에 사용되는 변수를
+담고 있다면 어떻게 될까요?
+그리고 이 메모리 영역이 다른 스레드의 트랜잭션에 사용되는 변수를 담고 있다면
+어떻게 될까요?
+
+대부분의 락킹 기능들이 락 변수들을 다시 매핑하는 행위의 결과를 정의하지
+않는다는 점을 놓고 보면 TM 시스템의 메타데이터가 다시 매핑되는 케이스의 경우는
+고려하지 않아도 될것입니다.
+
+TM 에서 사용 가능한 메모리 매핑에서의 선택지들이 여기 있습니다:
+\iffalse
+
 It is perfectly legal to execute memory-mapping operations (including
 \co{mmap()}, \co{shmat()}, and \co{munmap()}~\cite{TheOpenGroup1997SUS})
 within a lock-based critical section,
@@ -1156,8 +1173,28 @@ metadata is remapped, given that most locking primitives do not define
 the outcome of remapping their lock variables.
 
 Here are some memory-mapping options available to TM:
+\fi
 
 \begin{enumerate}
+\item	트랜잭션 안에서의 메모리 재 매핑은 불법으로 간주되어서, 모든 메모리 재
+	매핑을 둘러싼 트랜잭션이 abort 됩니다.
+	이는 일을 단순화 시킵니다만, TM 이 크리티컬 섹션 내에서 재 매핑을
+	처리할 수 있는 동기화 기능들과 상호작용할 수 있을 것을 필요로 합니다.
+\item	트랜잭션 안에서의 메모리 재 매핑은 불법으로 간주되고, 컴파일러가 이
+	금지사항을 강제할 수 있도록 돕습니다.
+\item	트랜잭션 내에서의 메모리 매핑은 합법입니다만, 매핑된 영역 안에 변수를
+	가지고 있는 모든 다른 트랜잭션들은 abort 됩니다.
+\item	트랜잭션 내에서의 메모리 매핑은 합법입니다만, 매핑되는 영역이 현재
+	트랜잭션의 메모리 사용영역과 겹친다면 그 매핑 오퍼레이션은 실패합니다.
+\item	트랜잭션 안에서든 밖에서든 행해지는 모든 메모리 매핑 오퍼레이션은
+	시스템의 모든 트랜잭션의 메모리 사용 범위와 겹쳐지는지를 체크합니다.
+	만약 겹친다면, 해당 메모리 매핑 오퍼레이션은 실패합니다.
+\item	시스템의 어떤 트랜잭션의 메모리 사용 영역과 겹치는 메모리 매핑
+	오퍼레이션의 영향은 TM conflict manager 에 의해 결정되는데, 메모리 매핑
+	오퍼레이션을 실패시킬지 모든 충돌하는 트랜잭션들을 abort 시킬지를
+	동적으로 결정합니다.
+\iffalse
+
 \item	Memory remapping is illegal within a transaction, and will result
 	in all enclosing transactions being aborted.
 	This does simplify things somewhat, but also requires that TM
@@ -1179,13 +1216,21 @@ Here are some memory-mapping options available to TM:
 	TM conflict manager, which might dynamically determine whether
 	to fail the memory-mapping operation or abort any conflicting
 	transactions.
+\fi
 \end{enumerate}
+
+\co{munmap()} 은 메모리의 관련된 영역을 매핑되지 않은 채로 놔두어서, 추가적인
+재미있는 영향을 가질 수 있음은 알아둘만 합니다.\footnote{
+	매핑과 매핑 해제 사이의 이 차이점은 Josh Triplett 에 의해 이야기
+	되었습니다.}
+\iffalse
 
 It is interesting to note that \co{munmap()} leaves the relevant region
 of memory unmapped, which could have additional interesting
 implications.\footnote{
 	This difference between mapping and unmapping was noted by
 	Josh Triplett.}
+\fi
 
 \subsubsection{Debugging}
 \label{sec:future:Debugging}
