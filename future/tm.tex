@@ -1235,6 +1235,15 @@ implications.\footnote{
 \subsubsection{Debugging}
 \label{sec:future:Debugging}
 
+브레이크포인트와 같은 일반적인 디버깅 오퍼레이션들은 락 기반의 크리티컬 섹션과
+RCU read-side 크리티컬 섹션 안에서는 평범하게 동작합니다.
+하지만, 초기의 트랜잭셔널 메모리 하드웨어 구현~\cite{DaveDice2009ASPLOSRockHTM}
+에서는 트랜잭션 안에서의 exception 은 그 트랜잭션을 abort 시켰는데, 이는
+브레이크포인트는 그를 둘러싼 트랜잭션들을 abort 시켰음을 의미합니다.
+
+트랜잭션은 어떻게 디버깅 될 수 있을까요?
+\iffalse
+
 The usual debugging operations such as breakpoints work normally within
 lock-based critical sections and from RCU read-side critical sections.
 However, in initial transactional-memory hardware
@@ -1243,8 +1252,20 @@ a transaction will abort that transaction, which in turn means that
 breakpoints abort all enclosing transactions.
 
 So how can transactions be debugged?
+\fi
 
 \begin{enumerate}
+\item	브레이크포인트를 담고 있는 트랜잭션에 대해서 소프트웨어 에뮬레이션
+	테크닉을 사용합니다.
+	물론, 모든 트랜잭션의 범위 내에서 브레이크포인트가 설정될 때마다 모든
+	트랜잭션을 에뮬레이션 해야 할 필요가 있을 겁니다.
+	만약 런타임 시스템이 특정 브레이크포인트가 트랜잭션의 범위 안에 있는지
+	아닌지 여부를 결정할 수가 없다면, 안전한 쪽으로 있기 위해 모든
+	트랜잭션을 에뮬레이션 해야 할 필요가 있을 겁니다.
+	하지만, 이 방법은 상당한 오버헤드를 가져오게 될 것이어서, 쫓고 있는
+	버그를 찾기 어렵게 만들 겁니다.
+\iffalse
+
 \item	Use software emulation techniques within transactions containing
 	breakpoints.
 	Of course, it might be necessary to emulate all transactions
@@ -1255,6 +1276,21 @@ So how can transactions be debugged?
 	the safe side.
 	However, this approach might impose significant overhead, which
 	might in turn obscure the bug being pursued.
+\fi
+\item	브레이크포인트 exception 을 처리할 수 있는 하드웨어 TM 구현만을
+	사용합니다.
+	불행히도, 지금 (2008년 9월) 글을 쓰는 시점에서는, 모든 그런 구현들은
+	연구용 프로토타입들 뿐입니다.
+\item	하드웨어 TM 구현들의 더 간단한 것들보다는 (매우 간략히 말해서) 더
+	exception 을 잘 처리해주는 소프트웨어 TM 구현만을 사용합니다.
+	물론, 소프트웨어 TM 은 하드웨어 TM 보다 높은 오버헤드를 갖는 경향이
+	있으므로, 이 방법이 모든 상황에서 적합하지는 않을 겁니다.
+\item	더 주의깊게 프로그램을 짜서, 트랜잭션 안에서는 버그가 존재하지 않는
+	것을 첫번째 목적으로 합니다.
+	이걸 어떻게 할 수 있는지 알아낸다면, 부디 모두에게 그 비밀을 공유해
+	주세요!
+\iffalse
+
 \item	Use only hardware TM implementations that are capable of
 	handling breakpoint exceptions.
 	Unfortunately, as of this writing (September 2008), all such
@@ -1268,7 +1304,20 @@ So how can transactions be debugged?
 	transactions in the first place.
 	As soon as you figure out how to do this, please do let everyone
 	know the secret!
+\fi
 \end{enumerate}
+
+트랜잭셔널 메모리가 다른 동기화 메커니즘들에 비해서 더 나은 생산성을 가져다 줄
+것임을 믿을 만한 몇가지 이유가 있습니다만, 전통적인 디버깅 테크닉들이
+트랜잭션에 적용될 수가 없다면 이런 개선점들은 사라질 수도 있을 듯 합니다.
+특히나 트랜잭셔널 메모리에 익숙지 않은 사람이 커다란 트랜잭션을 트랜잭셔널
+메모리로 사용하려 한다면 특히나 그렇게 될 가능성이 큽니다.
+대조적으로, 거친 ``탑 클래스의'' 프로그래머들은, 특히나 작은 트랜잭션에
+대해서는 그런 디버깅의 필요 자체가 없게 할 수도 있을 겁니다.
+
+따라서, 트랜잭셔널 메모리가 익숙지 않은 프로그래머들에게도 생산성을 약속해 줄
+수 있으려면, 디버깅 문제는 풀릴 필요가 있습니다.
+\iffalse
 
 There is some reason to believe that transactional memory will deliver
 productivity improvements compared to other synchronization mechanisms,
@@ -1283,6 +1332,7 @@ such debugging aids, especially for small transactions.
 Therefore, if transactional memory is to deliver on its productivity
 promises to novice programmers, the debugging problem does need to
 be solved.
+\fi
 
 \subsection{Synchronization}
 \label{sec:future:Synchronization}
