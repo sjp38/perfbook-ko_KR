@@ -1355,6 +1355,15 @@ The following sections outline the current challenges in this area.
 \subsubsection{Locking}
 \label{sec:future:Locking}
 
+락을 잡은채로 다른 락을 잡는 것은 일반적인 일인데, 최소한, 데드락을 막기 위해
+일반적으로 잘 알려진 소프트웨어 엔지니어링 테크닉이 사용된다면 이는 잘
+동작합니다.
+RCU read-side 크리티컬 섹션 안에서 락을 잡는 것은 흔하지 않은데, RCU read-side
+기능들은 락 기반의 데드락 사이클에 포함될 수가 없기 때문에 이는 데드락에 대한
+고려를 줄여줍니다.
+하지만 트랜잭션 안에서 락을 잡으려 한다면 무슨 일이 일어날까요?
+\iffalse
+
 It is commonplace to acquire locks while holding other locks, which works
 quite well, at least as long as the usual well-known software-engineering
 techniques are employed to avoid deadlock.
@@ -1362,6 +1371,19 @@ It is not unusual to acquire locks from within RCU read-side critical
 sections, which eases deadlock concerns because RCU read-side primitives
 cannot participate in lock-based deadlock cycles.
 But what happens when you attempt to acquire a lock from within a transaction?
+\fi
+
+이론적으로, 그에 대한 답은 간단합니다: 해당 락을 나타내는 데이터 구조를
+트랜잭션의 한 부분으로 잡으면, 모든 것이 잘 동작합니다.
+실제로는, TM 시스템 의 상세한 구현에 따라서 여러개의 명확치 않은 복잡한
+문제~\cite{Volos2008TRANSACT} 가 존재할 수 있습니다.
+이런 복잡한 문제들은 해결될 수 있긴 하지만, 트랜잭션의 바깥에서 잡는 락들에
+대해서는 45\% 의 오버헤드 증가, 트랜잭션 안에서 잡는 락들에 대해서는 300\% 의
+오버헤드 증가를 그 비용으로 갖게 됩니다.
+적은 양의 락킹을 포함하고 있는 트랜잭션을 사용하는 프로그램에서 이런 오버헤드는
+받아들일 만도 하게씾만, 때때로 트랜잭션을 사용하고자 하는 락 기반의 제품 수준
+프로그램에서는 받아들여질 수 없을 겁니다.
+\iffalse
 
 In theory, the answer is trivial: simply manipulate the data structure
 representing the lock as part of the transaction, and everything works
@@ -1375,8 +1397,28 @@ Although these overheads might be acceptable for transactional
 programs containing small amounts of locking, they are often completely
 unacceptable for production-quality lock-based programs wishing to use
 the occasional transaction.
+\fi
 
 \begin{enumerate}
+\item	락킹에 친화적인 TM 구현만을 사용합니다.
+	불행히도, 락킹에 친화적이지 않은 구현들은 성공적인 트랜잭션을 위한 낮은
+	오버헤드와 극단적으로 큰 트랜잭션을 수용할 수 있는 능력과 같은 장점을
+	일부 갖습니다.
+\item	TM 을 락 기반의 프로그램에 사용할 때 ``조금만'' TM 을 사용해서 락킹에
+	친화적인 TM 구현의 한계점들을 받아들입니다.
+\item	락킹 기반의 기존 시스템을 전부 무시해서, 모든 것을 트랜잭션 기준으로
+	다시 구현합니다.
+	이 방법은 지지하는 사람이 부족하지 않습니다만, 이는 이 시리즈에서
+	이야기된 모든 문제들이 해결되기를 필요로 합니다.
+	이 문제들을 해결하는데 걸리는 시간 동안, 경쟁상대인 동기화 메커니즘들
+	역시 개선될 수 있을 겁니다.
+\item	TxLinux~\cite{ChistopherJRossbach2007a} 그룹에 의해서 행해진 것처럼, TM
+	을 락킹 기반의 시스템에서의 최적화로만 사용합니다.
+	이 방법은 잘 동작할 듯 들리지만, (데드락을 막기 위한 필요와 같은) 락킹
+	설계 문제들을 그대로 남겨둡니다.
+\item	락킹 기능들로 추가되는 오버헤드를 줄이려 노력합니다.
+\iffalse
+
 \item	Use only locking-friendly TM implementations.
 	Unfortunately, the locking-unfriendly implementations have some
 	attractive properties, including low overhead for successful
@@ -1397,13 +1439,22 @@ the occasional transaction.
 	This approach seems sound, but leaves the locking design
 	constraints (such as the need to avoid deadlock) firmly in place.
 \item	Strive to reduce the overhead imposed on locking primitives.
+\fi
 \end{enumerate}
+
+많은 사람에게 놀랑루 수 있는 TM 과 락킹 사이를 잇는 문제가 존재할 수 있다는
+사실은 실제 제품 소프트웨어에서 새로운 메커니즘과 기능들을 사용해야 함을
+강조합니다.
+다행히도, 오픈 소스의 진보는 연구자들을 포함해서 모두에게 많은 그런
+소프트웨어가 사용 가능함을 의미합니다.
+\iffalse
 
 The fact that there could possibly be a problem interfacing TM and locking
 came as a surprise to many, which underscores the need to try out new
 mechanisms and primitives in real-world production software.
 Fortunately, the advent of open source means that a huge quantity of
 such software is now freely available to everyone, including researchers.
+\fi
 
 \subsubsection{Reader-Writer Locking}
 \label{sec:future:Reader-Writer Locking}
