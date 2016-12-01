@@ -1584,6 +1584,21 @@ exclusive locking.
 \subsubsection{RCU}
 \label{sec:future:RCU}
 
+Read-copy update (RCU) 는 리눅스 커널에서 주로 사용되기 대문에, RCU 와 TM 을
+조합하려는 학계에서의 시도는 없었을 거라고 생각할 수 있을 겁니다.\footnote{
+	하지만, user-space
+	RCU~\cite{MathieuDesnoyers2009URCU,MathieuDesnoyers2012URCU} 의
+	발전으로 커널 안에서만 사용될 것이라는 변명은 힘을 잃습니다.}
+하지만, 오스틴 텍사스 대학교의 TxLinux 그룹은 다른 선택이
+없었습니다~\cite{ChistopherJRossbach2007a}.
+그들은 RCU 를 사용하는 리눅스 2.6 커널에 TM 을 적용했기 때문에 TM 이 RCU
+업데이트를 위한 락킹의 자리를 대신하는 방식으로 TM 과 RCU 를 조합해야만
+했습니다.
+해당 논문은 RCU 구현의 락들 (예: \co{rcu_ctrlblk.lock}) 이 트랜잭션으로
+변환되었다고 이야기 하긴 했지만, 안타깝게도 RCU 기반의 업데이트데 사용된 락들
+(예: \co{dcache_lock}) 에는 무슨 일이 있었는지는 이야기 되지 않았습니다.
+\iffalse
+
 Because read-copy update (RCU) finds its main use in the Linux kernel,
 one might be forgiven for assuming that there had been no academic work
 on combining RCU and TM.\footnote{
@@ -1598,6 +1613,18 @@ Unfortunately, although the paper does state that the RCU implementation's
 locks (e.g., \co{rcu_ctrlblk.lock}) were converted to transactions,
 it is silent about what happened to locks used in RCU-based updates
 (e.g., \co{dcache_lock}).
+\fi
+
+RCU 는 읽기 쓰레드들과 업데이트 쓰레드들이 동시적으로 수행될 수 있게 하며, 더
+나아가서 RCU 읽기 쓰레드들은 업데이트가 진행되고 있는 데이터에도 접근할 수
+있도록 한다는 점을 알아두는게 중요합니다.
+물론, 성능, 확장성, real-time 응답성 에서의 이득이 될 수 있는, 이런 RCU 의
+속성은 TM 의 원자성 속성을 무시하고 동작합니다.
+
+그러니 TM 기반의 업데이트가 동시의 RCU 읽기 쓰레드들과 상호작용할 때에는 어떻게
+해야 할까요?
+몇가지 가능한 것들은 다음과 같습니다:
+\iffalse
 
 It is important to note that RCU permits readers and updaters to run
 concurrently, further permitting RCU readers to access data that is in
@@ -1608,8 +1635,21 @@ underlying atomicity properties of TM.
 
 So how should TM-based updates interact with concurrent RCU readers?
 Some possibilities are as follows:
+\fi
 
 \begin{enumerate}
+\item	RCU 읽기 쓰레드들이 충돌하는 동시의 TM 업데이트들을 abort 시킵니다.
+	이는 실제로 TxLinux 프로젝트에서 취해진 방법입니다.
+	이 방법은 RCU semantic 을 유지하고, 또한 RCU 의 read-side 성능, 확장성,
+	그리고 real-time 응답 속성을 유지합니다만, 불행히도, 불필요하게
+	충돌되는 업데이트들을 abort 시키는 부작용을 갖게 됩니다.
+	최악의 경우에는 길게 유지되는 RCU 읽기 쓰레드들은 모든 업데이트
+	쓰레드들을 진행하지 못하게 만들 잠재성을 가지고 있어서 이는 이론적으로
+	시스템이 멎게 되는 결과를 초래할 수 있습니다.
+	또한, 모든 TM 구현이 이런 방법에 필요한 강한 원자성을 제공하는 것은
+	아닙니다.
+\iffalse
+
 \item	RCU readers abort concurrent conflicting TM updates.
 	This is in fact the approach taken by the TxLinux project.
 	This approach does preserve RCU semantics, and also preserves
@@ -1621,6 +1661,24 @@ Some possibilities are as follows:
 	in system hangs.
 	In addition, not all TM implementations offer the strong atomicity
 	required to implement this approach.
+\fi
+\item	충돌하는 TM 업데이트들과 동시에 수행되는 RCU 읽기 쓰레드들은 충돌하는
+	어떤 RCU load 로부터든 과거의 (이전 트랜잭션의) 값을 가져오도록 합니다.
+	이는 RCU semantic 과 성능을 유지하며, RCU 업데이트 쪽의 starvation 을
+	방지합니다.
+	하지만, 모든 TM 구현이 수행중인 트랜잭션에 의해 임시적으로 업데이트된
+	변수들의 기존 값들에 대한 빠른 접근을 제공할 수 있는 건 아닙니다.
+	구체적으로, 기존 값들을 로그에 유지하는 (그렇게 함으로써 훌륭한 TM 커밋
+	성능을 제공하는) 로그 기반의 TM 구현은 이런 방법에 대해서는 즐거울 수
+	없을 겁니다.
+	RCU 가 커다란 길이의 트랜잭션 구현 안에서 기존 값을 접근하는 것을
+	가능하게 하기 위해 아마도 \co{rcu_dereference()} 기능이 사용될 수 있을
+	겁니다만, 성능은 여전히 문제가 될 수 있을 겁니다.
+	더도 아니고 덜도 아니고, 이런 방법으로 쉽고 효율적으로 RCU 와 조합될 수
+	있는 유명한 TM 구현들이
+	존재합니다~\cite{DonaldEPorter2007TRANSACT,PhilHoward2011RCUTMRBTree,PhilipWHoward2013RCUrbtree}.
+\iffalse
+
 \item	RCU readers that run concurrently with conflicting TM updates
 	get old (pre-transaction) values from any conflicting RCU loads.
 	This preserves RCU semantics and performance, and also prevents
@@ -1638,6 +1696,19 @@ Some possibilities are as follows:
 	be easily and efficiently integrated with RCU in this
 	manner~\cite{DonaldEPorter2007TRANSACT,PhilHoward2011RCUTMRBTree,
 	PhilipWHoward2013RCUrbtree}.
+\fi
+\item	RCU 읽기 쓰레드가 현재 수행중인 트랜잭션과 충돌하는 액세스를
+	수행한다면, 그 RCU 액세스는 충돌하는 트랜잭션이 커밋하거나 abort 되기
+	전까지 딜레이 되도록 합니다.
+	이 방법은 RCU semantic 을 유지합니다만, RCU 의 성능이나 real-time
+	응답은 유지하지 않으며, 특히나 긴시간 수행되는 트랜잭션의 존재 시에는
+	더욱 그렇습니다.
+	또한, 모든 TM 구현에서 충돌되는 액세스들을 딜레이 시키는게 가능하지는
+	않습니다.
+	그렇다고는 하나, 이 방법은 작은 트랜잭션들만을 지원하는 하드웨어 TM
+	구현들에는 확실히 합리적일 것으로 보입니다.
+\iffalse
+
 \item	If an RCU reader executes an access that conflicts with an
 	in-flight transaction, then that RCU access is delayed until
 	the conflicting transaction either commits or aborts.
@@ -1648,6 +1719,17 @@ Some possibilities are as follows:
 	conflicting accesses.
 	That said, this approach seems eminently reasonable for hardware
 	TM implementations that support only small transactions.
+\fi
+\item	RCU 읽기 쓰레드들을 트랜잭션으로 변환시킵니다.
+	이 방법은 RCU 가 모든 TM 구현과 완전히 호환될 것을 보장합니다만, RCU
+	read-side 크리티컬 섹션에서의 TM 의 롤백이 가능해서 RCU 의 real-time
+	응답 보장을 지켜지지 못하게 하고, 따라서 RCU 의 read-side 성능을
+	떨어뜨립니다.
+	더 나아가서, 이 방법은 RCU read-side 크리티컬 섹션들 가운데 하나라도
+	사용되는 TM 구현이 처리할 수 없는 오퍼레이션들을 포함하고 있는 경우에
+	대해서는 적절치 못합니다.
+\iffalse
+
 \item	RCU readers are converted to transactions.
 	This approach pretty much guarantees that RCU is compatible with
 	any TM implementation, but it also imposes TM's rollbacks on RCU
@@ -1656,6 +1738,22 @@ Some possibilities are as follows:
 	Furthermore, this approach is infeasible in cases where any of
 	the RCU read-side critical sections contains operations that
 	the TM implementation in question is incapable of handling.
+\fi
+\item	RCU 의 많은 update-side 사용들이 새로운 데이터 구조를 공개하기 위해
+	하나의 포인터를 수정합니다.
+	이런 일부 경우들에 있어서, RCU 는 이어서 롤백될 트랜잭션에 의핸 포니터
+	업데이트를 안전하게 볼 수 있는데, 해당 트랜잭션이 메모리 순서 규칙을
+	지켜주는 한, 그리고 이 롤백 프로세스가 연관된 구조체를 메모리에서
+	해제시키는데에 \co{call_rcu()} 를 사용하는 한은 그렇습니다.
+	안타깝게도, 모든 TM 구현들이 트랜잭션 안에서의 메모리 배리어를 따르지는
+	않습니다.
+	명백하게, 이 생각은 트랜잭션들은 원자적일 것으로 여겨지기 때문에,
+	트랜잭션 안에서의 액세스들의 순서는 문제가 되지 않을 것으로 여겨진다는
+	것입니다.
+\item	RCU 업데이트 에서의 TM 의 사용을 금지시킵니다.
+	이는 잘 동작할 것으로 보장됩니다만, 약간 제한적일 것으로 보입니다.
+\iffalse
+
 \item	Many update-side uses of RCU modify a single pointer to publish
 	a new data structure.
 	In some of these cases, RCU can safely be permitted to see a
@@ -1670,12 +1768,20 @@ Some possibilities are as follows:
 	is not supposed to matter.
 \item	Prohibit use of TM in RCU updates.
 	This is guaranteed to work, but seems a bit restrictive.
+\fi
 \end{enumerate}
+
+추가적인 방법들 역시 모습을 드러내게 될 것으로 보이는데, 특히나 user-level RCU
+구현의 발전에 따라서 특히 그렇습니다.\footnote{
+	여러개의 앞의 대안들을 가져와준 TxLinux 그룹, Maged Michael, 그리고
+	Josh Triplett 에게 감사를.}
+\iffalse
 
 It seems likely that additional approaches will be uncovered, especially
 given the advent of user-level RCU implementations.\footnote{
 	Kudos to the TxLinux group, Maged Michael, and Josh Triplett
 	for coming up with a number of the above alternatives.}
+\fi
 
 \subsubsection{Extra-Transactional Accesses}
 \label{sec:future:Extra-Transactional Accesses}
