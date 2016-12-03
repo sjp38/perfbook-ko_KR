@@ -1786,6 +1786,19 @@ given the advent of user-level RCU implementations.\footnote{
 \subsubsection{Extra-Transactional Accesses}
 \label{sec:future:Extra-Transactional Accesses}
 
+락 기반의 크리티컬 섹션 내에서, 동시에 액세스 되는 변수를 조정하는 것은 완전히
+합법적이며, 심지어 그 락의 크리팈러 밖에서 수정되고 있는 변수에 액세스 하는
+것도 합법적인데, 그런 흔한 예 중 하나는 통계적 카운터일 것입니다.
+같은 일이 RCU read-side 크리티컬 섹션 안에서도 비슷하며, 이는 흔한 일입니다.
+
+제품화된 데이터베이스 시스템에서도 흔한 ``dirty reads'' 라 불리는 이런
+메커니즘을 놓고 보면, TM 의 제안자로부터 extra-transactional access 들이 상당한
+관심을 받은 것은 놀랄만한 일이 아닌데, 완화된, 그리고 강화된
+원자성~\cite{Blundell2006TMdeadlock} 이 이런 의미에서의 하나의 케이스입니다.
+
+여기 TM 에 사용 가능한 extra-transactional 선택 사항들이 몇가지 있습니다:
+\iffalse
+
 Within a lock-based critical section, it is perfectly legal to manipulate
 variables that are concurrently accessed or even modified outside that
 lock's critical section, with one common example being statistical
@@ -1800,8 +1813,29 @@ from the proponents of TM, with the concepts of weak and strong
 atomicity~\cite{Blundell2006TMdeadlock} being but one case in point.
 
 Here are some extra-transactional options available to TM:
+\fi
 
 \begin{enumerate}
+\item	Extra-transactional 액세스로 인한 충돌은 항상 트랜잭션을 abort
+	시킵니다.
+	이는 강한 원자성입니다.
+\item	Extra-transactional 액세스로 인한 충돌은 무시되어서, 트랜잭션 끼리의
+	충돌만이 트랜잭션들을 abort 시킵니다.
+	이는 완화된 원자성입니다.
+\item	트랜잭션은 메모리를 할당할 때나 락 기반의 크리티컬 섹션과 상호작용할
+	때와 같이 특수한 경우에 트랜잭션에서 할 수 없는 동작도 할 수 있도록
+	허용됩니다.
+\item	복수개의 트랜잭션에 의해 하나의 변수에 동시에 수행될 수 있는 일부
+	오퍼레이션 (예를 들면, 더하기) 이 가능하게 하는 하드웨어 확장장치를
+	만듭니다.
+\item	트랜잭셔널 메모리에 완화된 semantic 을 가져옵니다.
+	한가지 방법은 Section~\ref{sec:future:RCU} 에서 설명된 RCU 와의
+	조합으로, Gramoli 와 Guerraoui 가 예를 들면 커다란 ``신축성 있는''
+	트랜잭션들을 작은 트랜잭션들로의 제한적 분할로 (맥빠지는 성능과
+	확장성에도 불구하고) 충돌 가능성을 줄이는 식의 많은 수의 완화된
+	트랜잭션 방법을 연구했습니다~\cite{Gramoli:2014:DTP:2541883.2541900}.
+\iffalse
+
 \item	Conflicts due to extra-transactional accesses always abort
 	transactions.
 	This is strong atomicity.
@@ -1826,7 +1860,18 @@ Here are some extra-transactional options available to TM:
 	Perhaps further experience will show that some uses of
 	extra-transactional accesses can be replaced by weak
 	transactions.
+\fi
 \end{enumerate}
+
+트랜잭션들은 어떤 다른 동기화 메커니즘과의 상호작용의 필요 없이 혼자 존재할 수
+있도록 만들어진 것으로 보입니다.
+만약 그렇다면, 트랜잭션들을 트랜잭션으로 인한 것이 아닌 액세스와 조합할 때에
+많은 혼란과 복잡성이 등장하는 것은 놀라운 일이 아닙니다.
+하지만 트랜잭션들이 격리된 데이터 구조로의 적은 업데이트로만 국한되어 있는 것이
+아니라면, 또는 기존에 존재하던 커다란 병렬 코드와 상호작용하지 않는 새로운
+프로그램에만 국한되어 있는 게 아니라면, 트랜잭션은 커다란 수준의 실용적인
+효과를 내기 위해서는 트랜잭션이 아닌 액세스와 조합되어야만 합니다.
+\iffalse
 
 It appears that transactions were conceived as standing alone, with no
 interaction required with any other synchronization mechanism.
@@ -1837,6 +1882,7 @@ data structures, or alternatively to be confined to new programs
 that do not interact with the huge body of existing parallel code,
 then transactions absolutely must be so combined if they are to have
 large-scale practical impact in the near term.
+\fi
 
 % @@@ Huge transactions.  Or perhaps conflict handling.
 
