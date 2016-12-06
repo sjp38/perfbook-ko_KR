@@ -150,6 +150,15 @@ each in one of the following sections.
 \subsubsection{Avoiding Synchronization Cache Misses}
 \label{sec:future:Avoiding Synchronization Cache Misses}
 
+대부분의 동기화 메커니즘들은 어토믹 인스트럭션으로 조정되는 데이터 구조에
+기반합니다.
+일반적으로 이 어토믹 인스트럭션들은 먼저 연관된 캐시 라인이 수행되고 있는 CPU
+에 의해 소유되도록 하기 때문에, 다른 CPU 에서 같은 동기화 기능 인스턴스의
+수행을 뒤따라 하게 되면, 캐시 미스를 초래하게 됩니다.
+이러한 통신으로 인한 캐시 미스 이벤트들은 전통적인 동기화 메커니즘들의 성능과
+확장성을 상당히 ㄸ러어뜨립니다~\cite[Section 4.2.3]{Anderson97}.
+\iffalse
+
 Most synchronization mechanisms are based on data structures that are
 operated on by atomic instructions.
 Because these atomic instructions normally operate by first causing
@@ -160,6 +169,17 @@ CPU will result in a cache miss.
 These communications cache misses severely degrade both the performance and
 scalability of conventional synchronization
 mechanisms~\cite[Section 4.2.3]{Anderson97}.
+\fi
+
+반면에, HTM 은 CPU 의 캐시를 사용해서 동기화를 하므로 동기화 데이터 구조의
+필요와 그로 말미암은 캐시 미스가 없습니다.
+HTM 의 장점은 락 데이터 구조가 별개의 캐시 라인에 위치해 있을 때에 극대화
+되는데, 크리티컬 섹션을 HTM 트랜잭션으로 변환함으로써 전체 캐시 미스로 인한
+크리티컬 섹션의 오버헤드를 줄여주는 경우가 그런 경우입니다.
+이런 이득은 짧은 크리티컬 섹션을 갖는 흔한 경우에 특히 클 수 있으며, 최소한
+생략된 락이 그 락에 의해 보호되는, 자주 쓰여지는 변수와 캐시 라인을 공유하지
+않을 때의 상황에서는 그렇습니다.
+\iffalse
 
 In contrast, HTM synchronizes by using the CPU's cache, avoiding the need
 for a synchronization data structure and resultant cache misses.
@@ -171,17 +191,31 @@ These savings can be quite significant for the common case of short
 critical sections, at least for those situations where the elided lock
 does not share a cache line with an oft-written variable protected by
 that lock.
+\fi
 
 \QuickQuiz{}
+	해당 락 변수와 캐시 라인을 공유하는, 자주 쓰여지는 변수가 왜
+	문제가 될까요?
+	\iffalse
+
 	Why would it matter that oft-written variables shared the cache
 	line with the lock variable?
+	\fi
 \QuickQuizAnswer{
+	락이 그것이 보호하는 변수와 같은 캐시라인에 있다면, 하나의 CPU 에 의한
+	그 변수들로의 쓰기는 모든 다른 CPU 들에 있는 그 캐시 라인을 무효화
+	시킵니다.
+	이런 무효화는 많은 충돌과 재시도를 만들어내고, 심지어 락킹에 비해
+	성능과 확장성을 떨어뜨릴 수도 있을 겁니다.
+	\iffalse
+
 	If the lock is in the same cacheline as some of the variables
 	that it is protecting, then writes to those variables by one CPU
 	will invalidate that cache line for all the other CPUs.
 	These invalidations will
 	generate large numbers of conflicts and retries, perhaps even
 	degrading performance and scalability compared to locking.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Dynamic Partitioning of Data Structures}
