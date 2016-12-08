@@ -221,6 +221,20 @@ that lock.
 \subsubsection{Dynamic Partitioning of Data Structures}
 \label{sec:future:Dynamic Partitioning of Data Structures}
 
+일부 전통적 동기화 메커니즘의 사용에 대한 주요한 방해는 정적으로 데이터 구조를
+분할해야 하는 필요성입니다.
+간단하게 분할될 수 있는 데이터 구조들이 여럿 존재하는데, 유명한 예로 해시
+테이블이 존재하는데, 여기서는 각각의 해시 체인이 하나의 파티션을 구성하게
+됩니다.
+각각의 해시 체인을 위한 락을 할당하는 것으로 해시 테이블을 해당 체인에 국한된
+오퍼레이션들로 병렬화 시키게 됩니다.\footnote{
+	그리고 이 방법을 여러 해시 체인에 접근하는 오퍼레이션들로 그런
+	오퍼레이션들이 연관된 체인들을 위한 락들을 해시 순서대로 모두 잡도록
+	하는 것으로 쉽게 확장할 수 있습니다.}
+배열, radix tree, 그리고 일부 다른 데이터 구조들에 대해서도 파티셔닝은 비슷하게
+간단합니다.
+\iffalse
+
 A major obstacle to the use of some conventional synchronization mechanisms
 is the need to statically partition data structures.
 There are a number of data structures that are trivially
@@ -233,6 +247,18 @@ the hash table for operations confined to a given chain.\footnote{
 	locks for all relevant chains in hash order.}
 Partitioning is similarly trivial for arrays, radix trees, and a few
 other data structures.
+\fi
+
+하지만, 많은 종류의 tree 와 graph 에 있어 파티셔닝은 상당히 어렵고, 그 결과는
+종종 복잡합니다~\cite{Ellis80}.
+일반적인 데이터 구조를 파티셔닝 하는데에 two-phased 락킹과 해시된 락 배열들을
+사용하는 것도 가능하지만, 다른 방법들이 더
+선호되었는데~\cite{DavidSMiller2006HashedLocking}, 이것들은
+Section~\ref{sec:future:HTM Weaknesses WRT to Locking When Augmented}
+에서 논의될 겁니다.
+동기화 캐시 미스의 제거를 놓고 볼 때, HTM 은 최소한 상대적으로 적은 업데이트를
+가정하면 커다란 파티셔닝 불가능한 데이터 구조를 위한 그럴싸한 방법입니다.
+\iffalse
 
 However, partitioning for many types of trees and graphs is quite
 difficult, and the results are often quite complex~\cite{Ellis80}.
@@ -244,14 +270,24 @@ Section~\ref{sec:future:HTM Weaknesses WRT to Locking When Augmented}.
 Given its avoidance of synchronization cache misses,
 HTM is therefore a very real possibility for large non-partitionable
 data structures, at least assuming relatively small updates.
+\fi
 
 \QuickQuiz{}
+	HTM 성능과 확장성에 상대적으로 적은 업데이트가 중요한 이유가 뭐죠?
+	\iffalse
+
 	Why are relatively small updates important to HTM performance
 	and scalability?
+	\fi
 \QuickQuizAnswer{
+	업데이트가 많을수록, 충돌의 가능성이 커지고, 따라서 재시도의 가능성이
+	커져서 성능이 하락됩니다.
+	\iffalse
+
 	The larger the updates, the greater the probability of conflict,
 	and thus the greater probability of retries, which degrade
 	performance.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Practical Value}
