@@ -503,8 +503,13 @@ not implement any of these research ideas, and perhaps for good reason.
 \subsubsection{Conflict Handling}
 \label{sec:future:Conflict Handling}
 
+첫번째 문제는 \emph{conflict} 의 가능성입니다.
+예를 들어, transaction~A 와~B 가 다음과 같이 정의되었다고 생각해 봅시다:
+\iffalse
+
 The first complication is the possibility of \emph{conflicts}.
 For example, suppose that transactions~A and~B are defined as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -516,6 +521,29 @@ y = 3;              x = 4;
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+각각의 트랜잭션이 각자의 프로세서 위에서 동시에 수행된다고 생각해 봅시다.
+만약 transaction~A 가 \co{x} 에 쓰기를 하는 동시에 transaction~B 가 \co{y} 에
+쓰기를 한다면, 두 트랜잭션 모두 진행될 수 없습니다.
+이를 보기 위해, transaction~A 가 \co{y} 로의 쓰기를 수행한다고 생각해 봅시다.
+그럼 transaction~A 는 transaction~B 와 섞여들어가게 되는데, 이는 트랜잭션이
+상대방의 시점에 어토믹하게 수행되어야 한다는 트랜잭션의 요구사항을 위반하는
+것입니다.
+Transaction~B 가 \co{x} 로의 저장을 수행하게 허락한다면, 이는 비슷하게 어토믹
+수행 요구사항을 위반하는 것입니다.
+이 상황은 \emph{conflict} 라 명명되는데, 두개의 동시에 수행되는 트랜잭션들이
+똑같은 변수에 접근하게 되며 그 접근들 가운데 최소한 하나는 쓰기인 경우에
+발생합니다.
+따라서 시스템은 수행이 진행될 수 있도록 하기 위해 이 트랜잭션들 가운데 하나나
+두개 모두를 abort 시킬 의무를 갖습니다.
+정확히 어떤 트랜잭션을 abort 시킬 것인가에 대한 선택은 Ph.D. 학위논문을 만들
+능력이 있을 만큼 흥미로운 주제인데, 그런 예~\cite{EgeAkpinar2011HTM2TLE}도
+있으니, 보시기 바랍니다.\footnote{
+	``Toxic Transactions'' 라는 제목의 Liu 와 Spear 의
+	논문~\cite{YujieLiu2011ToxicTransactions}  은 이런 면에서 특히
+	유명합니다.}
+이 섹션의 목적을 위해서, 우린 시스템이 무작위적 선택을 한다고 가정하겠습니다.
+\iffalse
 
 Suppose that each transaction executes concurrently on its own processor.
 If transaction~A stores to \co{x} at the same time that transaction~B
@@ -540,6 +568,19 @@ example~\cite{EgeAkpinar2011HTM2TLE}.\footnote{
 	particularly instructive in this regard.}
 For the purposes of this section, we can assume that the system makes
 a random choice.
+\fi
+
+또하나의 문제는 conflict 파악으로, 적어도 가장 간단한 경우에 있어서는 비교적
+간단한 편입니다.
+프로세서가 트랜잭션을 수행할 때, 프로세서는 그 트랜잭션에 의해 접근되는 모든
+캐시라인을 표시해 둡니다.
+만약 이 프로세서의 캐시가 현재 트랜잭션에 의해 접근된 것으로 표시된 캐시라인에
+대한 요청을 받게 되면, 잠재적 conflcit 이 일어난 것입니다.
+더 세련된 시스템들은 현재 프로세서의 트랜잭션이 그 요청을 보낸 프로세서의
+트랜잭션을 앞서도록 순서잡을 것이고, 이 프로세스의 최적화는 또한 Ph.D.
+학위논문을 쓰기 위한 능력을 얻을 수 있게 해줄 겁니다.
+하지만 이 섹션은 매우 간단한 conflict 파악 전략을 가정합니다.
+\iffalse
 
 Another complication is conflict detection, which is comparatively
 straightforward, at least in the simplest case.
@@ -553,6 +594,27 @@ transaction to precede that of the processor sending the request,
 and optimization of this process will likely also retain the ability
 to generate Ph.D. dissertations for quite some time.
 However this section assumes a very simple conflict-detection strategy.
+\fi
+
+하지만, HTM 이 효율적으로 동작하려면 conflict 의 가능성이 충분히 낮아야 하는데,
+이는 데이터 구조가 충분히 낮은 conflict 가능성을 유지하도록 구성되어야 할것을
+필요로 합니다.
+예를 들어, 간단한 삽입, 삭제, 그리고 탐색 오퍼레이션을 제공하는 red-black
+트리는 이런 경우에 적합합니다만, 트리의 모든 원소의 정확한 수를 유지해야 하는
+red-black 트리는 그렇지 않습니다.\footnote{
+	이 수를 업데이트 해야할 필요성이 트리로의 삽입과 트리로부터의 삭제가
+	서로 conflict 를 발생시키게 해서 strong non-commutativity 를 초래할
+	겁니다~\cite{HagitAttiya2011LawsOfOrder,Attiya:2011:LOE:1925844.1926442,PaulEMcKenney2011SNC}.}
+또다른 예로, 트리의 모든 원소를 하나의 트랜잭션에서 열거하는 red-black 트리는
+높은 conflict 확률을 가질 것이고, 성능과 확장성을 떨어뜨릴 겁니다.
+결과적으로, 많은 순차적 프로그램들은 HTM 이 효과적으로 동작하도록 하기 위해
+일부 재구성을 필요로 할 겁니다.
+몇몇 경우에 있어서, 실무자들은 그런 추가적 단계를 취하거나 (red-black 트리의
+경우에 있어서, radix 트리나 해시 테이블과 같은 파티셔닝 가능한 데이터 구조로의
+전환 같은) 그냥 락킹을 사용하는 것을 선호할 수 있는데, HTM 이 모든 관련된
+구조에서 사용 가능하기 충분한 시간이 오기 전까지는 특히 그럴 수
+있습니다~\cite{CliffClick2009AzulHTM}.
+\iffalse
 
 However, for HTM to work effectively, the probability of conflict must
 be suitably low, which in turn requires that the data structures
@@ -575,20 +637,38 @@ data structure such as a radix tree or a hash table), and just
 use locking, particularly during the time before HTM is readily available
 on all relevant
 architectures~\cite{CliffClick2009AzulHTM}.
+\fi
 
 \QuickQuiz{}
+	동기화 메커니즘의 선택에 관계 없이 어떻게 red-black 트리가 트리 내의
+	모든 원소의 열거를 효율적으로 할 수 있을까요???
+	\iffalse
+
 	How could a red-black tree possibly efficiently enumerate all
 	elements of the tree regardless of choice of synchronization
 	mechanism???
+	\fi
 \QuickQuizAnswer{
+	많은 경우에, 이 열거는 정확하지 않아도 좋습니다.
+	이런 경우들에 있어서, hazard pointer 나 RCU 가 특정한 삽입이나 삭제와의
+	낮은 conflict 확률을 유지하면서 읽기 쓰레드들을 보호하는데 사용될 수
+	있습니다.
+	\iffalse
+
 	In many cases, the enumeration need not be exact.
 	In these cases, hazard pointers or RCU may be used to protect
 	readers with low probability of conflict with any given insertion
 	or deletion.
+	\fi
 } \QuickQuizEnd
+
+더 나아가서, conflict 이 일어날 수 있다는 사실은 다음 섹션에 이야기되는 것처럼
+failure 처리를 어떻게 할 것인지 그림을 가져올 수 있게 해줍니다.
+\iffalse
 
 Furthermore, the fact that conflicts can occur brings failure handling
 into the picture, as discussed in the next section.
+\fi
 
 \subsubsection{Aborts and Rollbacks}
 \label{sec:future:Aborts and Rollbacks}
