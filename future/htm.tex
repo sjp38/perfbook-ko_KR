@@ -854,6 +854,26 @@ code back to transactional code.
 \subsubsection{Lack of Forward-Progress Guarantees}
 \label{sec:future:Lack of Forward-Progress Guarantees}
 
+트랜잭션 크기, conflict, 그리고 abort/rollback 이 모두 트랜잭션을 abort 되게
+만들 수 있다고는 하지만, 충분히 작고 짧은 기간동안 수행되는 트랜잭션은 결국은
+성공할 것이라 보장된다고 희망할 수 있을 것입니다.
+이는 compare-and-swap (CAS) 와 load-linked/store-conditional (LL/SC)
+오퍼레이션들이 이 인스트럭션들을 어토믹 오퍼레이션을 구현하는데에 사용하는
+코드에서 무조건적으로 재시도 되는 것과 똑같이 트랜잭션이 무조건적으로 재시도
+되도록 허용하도록 할 수 있을 것입니다.
+
+불행히도, 대부분의 현재 사용 가능한 HTM 구현들은 어떤 종류의 진행 보장도
+제공하지 않는데, 이는 HTM 은 시스템의 데드락을 막는데에 사용될 수 없음을
+의미합니다.\footnote{
+	HTM 은 데드락의 가능성을 줄이는데 사용될 수는 있습니다만, fallback
+	코드가 수행될 가능성이 존재하는한, 데드락의 가능성은 존재합니다.}
+미래의 HTM 구현은 어떤 진행 보장을 제공할 수도 있을 겁니다.
+그러기 전까지는, HTM 은 real-time 어플리케이션은 상당한 주의 아래 사용되어야만
+합니다.\footnote{
+	2012년 중반까지는, 트랜잭셔널 메모리의 real-time 특성에 대해서는
+	놀라만큼 적은 작업만이 있었습니다.}
+\iffalse
+
 Even though transaction size, conflicts, and aborts/rollbacks can all
 cause transactions to abort, one might hope that sufficiently small and
 short-duration transactions could be guaranteed to eventually succeed.
@@ -875,6 +895,14 @@ Until that time, HTM must be used with extreme caution in real-time
 applications.\footnote{
 	As of mid-2012, there has been surprisingly little work on
 	transactional memory's real-time characteristics.}
+\fi
+
+2013년에 있어 이 우울한 그림에 대한 한가지 예외는 특수한 \emph{제약된
+트랜잭션}~\cite{ChristianJacobi2012MainframeTM} 을 시작하는데 사용되는 별도의
+인스트럭션을 제공하는 IBM 메인프레임의 차기 버전들입니다.
+이름에서 추측할 수 있듯이, 그런 트랜잭션은 다음과 같은 제약 아래에 살아남을 수
+있어야만 합니다:
+\iffalse
 
 The one exception to this gloomy picture as of 2013 is upcoming versions
 of the IBM mainframe, which provides a separate instruction that may be
@@ -882,8 +910,20 @@ used to start a special
 \emph{constrained transaction}~\cite{ChristianJacobi2012MainframeTM}.
 As you might guess from the name, such transactions must live within
 the following constraints:
+\fi
 
 \begin{enumerate}
+\item	각각의 트랜잭션의 데이터 사용량은 4개의 32-byte 메모리 블락 안에 들어갈
+	수 있어야만 합니다.
+\item	각각의 트랜잭션은 최대 32 개의 어셈블러 인스트럭션을 수행하도록
+	허용됩니다.
+\item	트랜잭션은 뒤로 돌아가는 브랜치 (e.x: 루프를 가질 수 없음) 를 가질 수
+	없습니다.
+\item	각각의 트랜잭션의 코드는 256 바이트의 메모리로 제한됩니다.
+\item	특정 트랜잭션의 데이터 사용량의 한 부분이 4K 페이지 안에 위치한다면, 그
+	4K 페이지는 트랜잭션의 인스트럭션을 담을 수 없습니다.
+\iffalse
+
 \item	Each transaction's data footprint must be contained within
 	four 32-byte blocks of memory.
 \item	Each transaction is permitted to execute at most 32 assembler
@@ -894,7 +934,17 @@ the following constraints:
 \item	If a portion of a given transaction's data footprint resides
 	within a given 4K page, then that 4K page is prohibited from
 	containing any of that transaction's instructions.
+\fi
 \end{enumerate}
+
+이런 제약은 가혹합니다만, 이는 더도 아니고 덜도 아니고 스택, 큐, 해시 테이블,
+등등을 포함해서 다양한 데이터 구조의 업데이트가 구현될 수 있도록 합니다.
+이런 오퍼레이션들은 결국은 완료될 것이 보장되고, 따라서 데드락과 라이브락
+조건으로부터 자유롭습니다.
+
+시간의 흐름에 따라 하드웨어의 진행 보장이 얼마나 지우너될 것인지 보는 것은 꽤
+흥미로울 것입니다.
+\iffalse
 
 These constraints are severe, but they nevertheless permit a wide variety
 of data-structure updates to be implemented, including stacks, queues,
@@ -904,6 +954,7 @@ deadlock and livelock conditions.
 
 It will be interesting to see how hardware support of forward-progress
 guarantees evolves over time.
+\fi
 
 \subsubsection{Irrevocable Operations}
 \label{sec:future:Irrevocable Operations}
