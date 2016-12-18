@@ -1702,6 +1702,20 @@ as discussed in the next section.
 \subsection{Where Does HTM Best Fit In?}
 \label{sec:future:Where Does HTM Best Fit In?}
 
+HTM 의 적용 영역이
+page~\pageref{fig:defer:RCU Areas of Applicability} 의
+Figure~\ref{fig:defer:RCU Areas of Applicability} 에 보여진 RCU 처럼 그려지기
+전인 것 같긴 하지만, 그런 방향으로 움직이기 시작하지 않을 이유는 없습니다.
+
+HTM 은 커다란 멀티프로세서에서 돌아가는 상대적으로 커다란 in-memory 데이터
+구조의 겹치지 않는 영역에 대한 상대적으로 작은 변경에 연관된 업데이트 위주의
+워크로드에 들어맞을 텐데, 이런 워크로드는 현재 HTM 구현의 크기 제약을 맞출 수
+있고 conflict 과 그로인한 abort 와 롤백의 확률을 최소화 시켜줄 것이기
+때문입니다.
+이 시나리오는 현재의 동기화 도구들을 가지고는 처리하기가 상대적으로 어려운
+시나리오이기도 합니다.
+\iffalse
+
 Although it will likely be some time before HTM's area of applicability
 can be as crisply delineated as that shown for RCU in
 Figure~\ref{fig:defer:RCU Areas of Applicability} on
@@ -1716,6 +1730,28 @@ minimizing the probability of conflicts and attendant aborts and
 rollbacks.
 This scenario is also one that is relatively difficult to handle given
 current synchronization primitives.
+\fi
+
+HTM 과 함께 락킹을 사용하는 것은 돌이킬 수 없는 오퍼레이션들에 대한 HTM 의
+어려움을 극복해줄 수 있을 것으로 보이며, RCU 나 해저드 포인터의 사용은 데이터
+구조의 커다란 부분을 횡단하는, read-only 오퍼레이션들에 대해서 HTM 의 트랜잭션
+크기 제한을 해결해 줄 수 있을 것입니다.
+현재의 HTM 구현들은 RCU 나 해저드 포인터 읽기 쓰레드와 conflict 나는 업데이트
+트랜잭션을 무조건적으로 abort 시키고 있지만, 미래의 HTM 구현들은 이런 동기화
+메커니즘들과 더 부드럽게 작용할 것입니다.
+그전까지는, 커다란 RCU 나 해저드 포인터 read-side 크리티컬 섹션과 conflict 나는
+업데이트의 확률은 동일한 read-only 트랜잭션과 conflict 날 확률에 비해 훨씬
+작아야 합니다.\footnote{
+	NoSQL 데이터베이스들이 데이터베이스 어플리케이션의 엄격한 트랜잭션에의
+	의존도를 완화시키고 있는 상황에서 shared-memory 시스템에서는 엄격한
+	트랜잭션 메커니즘이 떠오르는 것은 상당히 아이러닉합니다.}
+더도 아니고 덜도 아니고, RCU 나 해저드 포인터 읽기 쓰레드들의 느린 흐름이
+연관된 conflict 의 느린 흐름으로 인해 업데이트 쓰레드를 starve 시킬 수도
+있습니다.
+이런 취약점은 앞의 트랜잭션의 로드된 메모리 로케이션의 복사본에 대한 트랜잭션
+외적인 읽기 방법을 제공하는 것으로 (상당한 하드웨어 비용과 복잡성을 요하겠지만)
+제거될 수도 있습니다.
+\iffalse
 
 Use of locking in conjunction with HTM seems likely to overcome HTM's
 difficulties with irrevocable operations, while use of RCU or
@@ -1740,6 +1776,18 @@ steady stream of conflicts.
 This vulnerability could be eliminated (perhaps at significant
 hardware cost and complexity) by giving extra-transactional
 reads the pre-transaction copy of the memory location being loaded.
+\fi
+
+HTM 트랜잭션들이 fallback 을 가져야만 한다는 사실로 인해 어떤 경우에는 데이터
+구조들의 정적 분할 가능성을 강제해야만 할수도 있습니다.
+이 제약점은 미래의 HTM 구현들이 진행 보장을 제공한다면 어떤 경우에는 fallback
+코드의 필요성을 제거할 것이므로 없어질 수 있을 것인데, 이는 HTM 이 높은
+conflict 확률 아래의 환경에서도 효과적으로 사용될 수 있을 것입니다.
+
+요약하자면, HTM 이 중요한 사용과 응용 분야를 가질 수 있을 것이지만, 병렬
+프로그래머의 도구상자의 또다른 도구일 뿐이지, 도구상자 전체의 대체제는
+아닙니다.
+\iffalse
 
 The fact that HTM transactions must have fallbacks might in some cases
 force static partitionability of data structures back onto HTM.
@@ -1751,6 +1799,7 @@ be used efficiently in situations with higher conflict probabilities.
 In short, although HTM is likely to have important uses and applications,
 it is another tool in the parallel programmer's toolbox, not a replacement
 for the toolbox in its entirety.
+\fi
 
 \subsection{Potential Game Changers}
 \label{sec:future:Potential Game Changers}
