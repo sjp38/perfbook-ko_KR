@@ -1834,6 +1834,15 @@ These are expanded upon in the following sections.
 \subsubsection{Forward-Progress Guarantees}
 \label{sec:future:Forward-Progress Guarantees}
 
+Section~\ref{sec:future:Lack of Forward-Progress Guarantees} 에서 논의한 것과
+같이, 현재의 HTM 구현들은 진행 보장을 갖지 않아서 HTM 의 실패된 트랜잭션을
+처리하기 위한 fallback 소프트웨어를 필요로 합니다.
+물론, 보장을 추가하는 건 쉽습니다만, 그걸 제공하는건 항상 쉽지는 않습니다.
+HTM 의 경우에, 보장을 제공하는데 걸리는 문제는 캐시 크기와 캐시 associativity,
+TLB 크기와 TLB asociativity, 트랜잭션의 시간적 길이와 인터럽트 빈도, 그리고
+스케쥴러 구현 등이 포함됩니다.
+\iffalse
+
 As was discussed in
 Section~\ref{sec:future:Lack of Forward-Progress Guarantees},
 current HTM implementations lack forward-progress guarantees, which requires
@@ -1843,6 +1852,25 @@ to provide them.
 In the case of HTM, obstacles to guarantees can include cache size and
 associativity, TLB size and associativity, transaction duration and
 interrupt frequency, and scheduler implementation.
+\fi
+
+캐시 크기와 캐시 associativity 는
+Section~\ref{sec:future:Transaction-Size Limitations} 에서 현재의 한계점들을
+우회하기 위한 일부 연구 작업들과 함께 논의된 바 있습니다.
+하지만, HTM 의 진행 보장은 크기에 대하 한계와 함께 제공될 겁니다.
+그런데 현재의 HTM 구현들은, 예를 들자면 캐시의 associativity 의 한계에 맞춰진
+작은 트랜잭션들에 대해서는 진행 보장을 제공하지 않는 걸까요?
+한가지 잠재적인 이유는 하드웨어 failure를 처리해야 하는 필요성일 수 있습니다.
+예를 들어, 문제가 생긴 캐시의 SRAM 셀은 해당 문제가 생긴 셀을 비활성화 시키는
+것으로 처리될 수 있는데, 이는 캐시의 associativity 를 줄이게 되고 따라서 진행
+보장이 제공될 수 있ㄴ느 트랜잭션의 최대 크기 역시 줄이게 됩니다.
+이는 단순히 보장된 트랜잭션 크기를 줄일 뿐이란 점을 생각해 보면, 실제로는 다른
+이유들도 있을 것으로 보입니다.
+제품 수준의 하드웨어에서 진행 보장을 제공하는 것은 아마도 소프트웨어에서 진행
+보장을 제공하는데 걸리는 어려움보다도 더 어려울 수 있습니다.
+따라서 문제를 더 쉽게 풀기 위해, 문제를 소프트웨어에서 하드웨어로 옮기는 게
+필요합니다.
+\iffalse
 
 Cache size and associativity was discussed in
 Section~\ref{sec:future:Transaction-Size Limitations},
@@ -1865,6 +1893,21 @@ explanation given the difficulty of making forward-progress guarantees
 in software.
 Moving a problem from software to hardware does not necessarily make
 it easier to solve.
+\fi
+
+물리적으로 tag 되고 index 되는 캐시에 있어서는 트랜잭션이 캐시 안에 들어간다는
+것만으로는 충분치 않습니다.
+여기서는 주소변환이 TLB 에 들어 맞기도 해야 합니다.
+따라서 모든 진행 보장은 TLB 크기와 TLB associativity 도 신경을 써야 합니다.
+
+현재의 HTM 구현들에서는 인터럽트, trap, 그리고 exception 이 트랜잭션을 abort
+시킨다는 점을 생각해 보면, 특정 트랜잭션의 수행 시간 길이가 인터럽트 간의
+예상되는 시간 간격보다 짧아야 할 필요가 있습니다.
+특정 트랜잭션이 얼마나 적은 데이터만 건드리는가와는 관계 없이, 너무 오랫동안
+수행된다면, 해당 트랜잭션은 abort 될겁니다.
+따라서, 모든 진행 보장은 트랜잭션 크기만이 아니라 트랜잭션 수행시간에 대해서도
+조정되어야만 합니다.
+\iffalse
 
 Given a physically tagged and indexed cache, it is not enough for the
 transaction to fit in the cache.
@@ -1880,6 +1923,24 @@ No matter how little data a given transaction touches, if it runs too
 long, it will be aborted.
 Therefore, any forward-progress guarantees must be conditioned not only
 on transaction size, but also on transaction duration.
+\fi
+
+진행 보장은 conflict 되는 여러개의 트랜잭션들 가운데 어떤 트랜잭션이 aobrt
+되어야 하는지 결정하는 능력에도 특히 의존적입니다.
+각각 앞의 트랜잭션을 aobrt 시키고 자기 자신도 뒤의 트랜잭션에 의해서 aobrt
+되어서 어떤 트랜잭션도 실질적으로 커밋하지 못하는 무한한 트랜잭션의 연속을 쉽게
+생각해 볼 수 있습니다.
+Conflict 처리의 복잡성은 제안된 바 있는 많은 수의 HTM conflict 해결
+정책들~\cite{EgeAkpinar2011HTM2TLE,YujieLiu2011ToxicTransactions} 로 알 수
+있습니다.
+트랜잭션 외적인 액세스들로 인해 추가적인 복잡성들이 나타나는데, Blundell에 의해
+알려졌습니다~\cite{Blundell2006TMdeadlock}.
+이런 모든 문제들에 대해서 트랜잭션 외적인 액세스들을 탓하기는 쉽습니다만, 이런
+생각의 어리석음은 각각의 트랜잭션 외적인 액세슫르을 그 자신만의 하나의 액세스로
+구성된 트랜잭션으로 교체함으로써 쉽게 드러납니다.
+이는 그 자체로 문제인 액세스 패턴이지, 그것들이 트랜잭션 안에서 일어나느냐
+아니냐의 문제가 아닙니다.
+\iffalse
 
 Forward-progress guarantees depend critically on the ability to determine
 which of several conflicting transactions should be aborted.
@@ -1897,6 +1958,27 @@ by placing each of the extra-transactional accesses into its own
 single-access transaction.
 It is the pattern of accesses that is the issue, not whether or not they
 happen to be enclosed in a transaction.
+\fi
+
+마지막으로, 트랜잭션을 위한 모든 진행 보장은 해당 트랜잭션을 수행하는 쓰레드가
+커밋을 성공하기에 충분할 만큼 길게 수행될 수 있도록 해줄 수 있는 스케쥴러에
+의존적입니다.
+
+따라서 진행 보장을 제공하는 HTM 제작사들에게는 상당한 문제가 존재합니다.
+하지만, 그것들을 해결하면 얻을 수 있는 효과는 대단합니다.
+그렇게 되면 HTM 트랜잭션은 소프트웨어 fallback 이 더이상 필요없어지는데, 이는
+HTM 은 마침내 TM 의 deadlock 제거의 약속을 선사하게 됨을 의미합니다.
+
+그리고 2012년 말, IBM Mainframe 은 일반적인 최선의 HTM 구현에 더해서
+\emph{constrained transaction} 을 포함하는 HTM 구현을
+발표했습니다~\cite{ChristianJacobi2012MainframeTM}.
+constrained transaction 은 best-effort 트랜잭션을 시작하는데 사용되는
+\co{tbegin} 명령과 달리 \co{tbeginc} 명령으로 시작됩니다.
+Constrained transaction 은 항상 (결국은) 성공할 것이 보장되어 있으며, 따라서
+만약 어떤 트랜잭션이 abort 된다면, (best-effort 트랜잭션이 그렇듯이) fallback
+path 로 분기되기 보다는 하드웨어가 그 트랜잭션을 \co{tbeginc} 명령으로부터
+재시작 시킵니다.
+\iffalse
 
 Finally, any forward-progress guarantees for transactions also
 depend on the scheduler, which must let the thread executing the
@@ -1920,6 +2002,23 @@ Constrained transactions are guaranteed to always complete (eventually),
 so if a transaction aborts, rather than branching to a fallback path
 (as is done for best-effort transactions), the hardware instead restarts
 the transaction at the \co{tbeginc} instruction.
+\fi
+
+이 Mainframe 구조는 이 진행 보장을 위해서 상당한 측정을 해야 했습니다.
+특정 constrained transaction 이 반복적으로 실패한다면, 이 CPU 는 branch
+prediction 을 비활성화 하고, in-order execution 을 강제하고, 심지어 pipelining
+을 비활성화 시킬 수도 있습니다.
+만약 반복된 failure 가 높은 contention 때문이라면, CPU 는 speculative fetche 를
+비활성화 하고, 무작위적 delay 를 집어넣고, 심지어 충돌하는 CPU 들의 수행을
+직렬화 시킬 수조차 있습니다.
+``흥미로운'' 진행 보장 시나리오는 두개의 CPU 만이 관여될수도, 백개의 CPU 들이
+관여될 수도 있습니다.
+아마도 이런 상당한 측정은 왜 다른 CPU 들이 constrained transaction 을 제공하는
+것을 그렇게도 자제했는지에 대한 이해를 일부 제공합니다.
+
+그 이름이 이야기 하듯이, constrained transaction 은 실제로 상당히 제약되어
+있습니다:
+\iffalse
 
 The Mainframe architects needed to take extreme measures to deliver on
 this forward-progress guarantee.
@@ -1935,8 +2034,18 @@ Perhaps these extreme measures provide some insight as to why other CPUs
 have thus far refrained from offering constrained transactions.
 
 As the name implies, constrained transactions are in fact severely constrained:
+\fi
 
 \begin{enumerate}
+\item	최대 데이터 사용량은 메모리의 4개 블럭으로 제한되는데, 각각의 블럭은 32
+	바이트 이상이 될 수 없습니다.
+\item	최대 코드 크기는 256 바이트 입니다.
+\item	만약 특정 4K 페이지가 constrained transaction 의 코드를 담고 있다면,
+	해당 페이지는 그 트랜잭션의 데이터를 담고 있을 수 없습니다.
+\item	실행될 수 있는 assembly 인스트럭션의 최대 갯수는 32 입니다.
+\item	뒤 방향으로의 분기는 금지됩니다.
+\iffalse
+
 \item	The maximum data footprint is four blocks of memory,
 	where each block can be no larger than 32 bytes.
 \item	The maximum code footprint is 256 bytes.
@@ -1945,12 +2054,20 @@ As the name implies, constrained transactions are in fact severely constrained:
 \item	The maximum number of assembly instructions that may be executed
 	is 32.
 \item	Backwards branches are forbidden.
+\fi
 \end{enumerate}
+
+더도 아니고 덜도 아니고, 이러한 제약들은 링크드 리스트, 스택, 큐, 그리고 배열과
+같은 여러개의 중요한 데이터 구조들을 지원합니다.
+따라서 constrained HTM 은 병렬 프로그래머의 도구상자에서 중요한 도구가 될 수
+있을 것으로 보입니다.
+\iffalse
 
 Nevertheless, these constraints support a number of important data structures,
 including linked lists, stacks, queues, and arrays.
 Constrained HTM therefore seems likely to become an important tool in
 the parallel programmer's toolbox.
+\fi
 
 \subsubsection{Transaction-Size Increases}
 \label{sec:future:Transaction-Size Increases}
