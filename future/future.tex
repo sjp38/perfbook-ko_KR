@@ -50,6 +50,23 @@ But first, a cautionary tale on prognostication taken from the early 2000s.
 \section{Functional Programming for Parallelism}
 \label{sec:future:Functional Programming for Parallelism}
 
+1980 년대 초에 제가 처음으로 함수형 프로그래밍 수업을 들었을 때, 교수님은
+side-effect-free 한 함수형 프로그래밍 스타일은 사소한 병렬화와 분석에 잘
+맞는다고 이야기했습니다.
+30년이 지나서도 이 말은 여전히 남아있습니다만, 프로그램은 상태도 I/O 도 갖지
+않아야만 한다고 이야기한 이 교수님의 또하나의 말과는 달리 병렬 함수형 언어를
+사용하는 주류 업체는 적습니다.
+Erlang 과 같은 함수형 언어들의 틈새 사용예가 존재하고, 일부 다른 함수형
+언어들에 멀티쓰레드 지원이 추가되었습니다만, 주류 업체의 언어 사용은
+(일반적으로 OpenMP, MPI, 또는 Fortran 의 경우, coarrays 와 연동되는) C, C++,
+Java, 그리고 Fortran 과 같은 절차형 언어의 것으로 남아있습니다.
+
+이 상황은 기본적으로 ``분석이 목표라면, 분석을 하기 전에 절차형 언어를 함수형
+언어로 변환하는게 어떨까?'' 하는 질문을 이끌어냅니다.
+이 접근방법에 대해서는 물론 여러가지 반대의견들이 있는데, 여기선 세개만 나열해
+보자면 다음과 같습니다:
+\iffalse
+
 When I took my first-ever functional-programming class in the early 1980s,
 the professor asserted that the side-effect-free functional-programming
 style was well-suited to trivial parallelization and analysis.
@@ -68,8 +85,25 @@ why not transform the procedural language into a functional language before
 doing the analysis?''
 There are of course a number of objections to this approach, of which
 I list but three:
+\fi
 
 \begin{enumerate}
+\item	절차적 언어들은 종종 글로벌 변수들을 많이 사용하곤 하는데, 이 변수들은
+	다른 함수들, 또는, 더 나쁘게도, 여러 쓰레드들에서 접근될 수 있습니다.
+	Haskell 의 \emph{monad} 는 단일 쓰레드의 글로벌 상태를 다루기 위해
+	만들어졌고, 글로벌 상태로의 복수 쓰레드에서의 접근은 함수적
+	모델에 대한 추가적 위반을 필요로 함을 알아두세요.
+\item	멀티쓰레드를 지원하는 절차적 언어들은 종종 락, 어토믹 오퍼레이션,
+	트랜잭션과 같은, 함수형 모델에 대한 위반을 추가하는 동기화 기능들을
+	종종 사용합니다.
+\item	절차적 언어들은, 예를 들면 하나의 함수에의 같은 호출에 두개의 서로 다른
+	인자에 같은 구조체로의 포인터를 넘김으로써 함수 인자들을 \emph{alias}
+	할 수 있습니다.
+	이는 함수가 알지 못한채로 그 구조체를 두개의 서로 다른 (그리고 겹칠 수
+	있는) 코드 흐름을 통해 수정하는 결과를 초래할 수 있는데, 이는 분석을
+	상당히 복잡하게 만듭니다.
+\iffalse
+
 \item	Procedural languages often make heavy use of global variables,
 	which can be updated independently by different
 	functions, or, worse yet, by multiple threads.
@@ -85,7 +119,21 @@ I list but three:
 	This can result in the function unknowingly updating that
 	structure via two different (and possibly overlapping) code
 	sequences, which greatly complicates analysis.
+\fi
 \end{enumerate}
+
+물론, 글로벌 상태, 동기화 기능들, aliasing 의 중요성으로 인해, 영리한 함수형
+프로그래밍 전문가들은 함수형 프로그래밍 모델을 그것들에 조화시키기 위한
+방법들을 여럿 제안했고, monads 는 그런 것들 중 하나에 불과합니다.
+
+또다른 접근방법은 병렬 절차적 프로그램을 함수형 프로그램으로 변환하고, 그 결과
+나온 프로그램을 분석하는데에 함수형 프로그래밍 도구들을 사용하는 것입니다.
+하지만 모든 실제 컴퓨팅은 유한한 시간 간격동안 유한한 입력과 함께 동작하는
+커다란 finite-state machine 이라는 점을 놓고 보면, 이보다 훨씬 잘 할 수 있을 법
+합니다.
+이는, 모든 실제 프로그램은 비록 실용적이지 못할만큼 커다란 것이라 할지라도
+하나의 수식으로 변환될 수 있음을 의미합니다~\cite{VijayDSilva2012-sas}.
+\iffalse
 
 Of course, given the importance of global state, synchronization
 primitives, and aliasing, clever functional-programming experts have
@@ -100,6 +148,28 @@ computation is a large finite-state machine with finite input that
 runs for a finite time interval.
 This means that any real program can be transformed into an expression,
 possibly albeit an impractically large one~\cite{VijayDSilva2012-sas}.
+\fi
+
+하지만, 여러개의 병렬 알고리즘의 낮은 단계의 알맹이들이 현대의 컴퓨터들의
+메모리에 들어가기에 알맞을 만큼 충분히 작은 크기의 수식으로 변환될 수 있습니다.
+만약 그런 수식이 단정문과 결합된다면, 해당 단정문이 들어맞는지 알아보는 것은
+충족 가능성 문제가 됩니다.
+충족 가능성 문제는 NP-complete 하긴 하지만, 이 문제들은 전체 상태 공간을
+만들어내는데 필요한 것보다는 훨씬 적은 시간 안에 풀이될 수 있는 경우가
+많습니다.
+또한, 이 풀이에 걸리는 시간은 그 아래 깔려있는 메모리 모델과는 독립적인 것으로
+나타나서, 완화된 순서 규칙의 시스템에서 수행되는 알고리즘은 순차적으로 일관적인
+시스템에서만큼이나 빠르게 검사될 수 있습니다~\cite{JadeAlglave2013-cav}.
+
+일반적인 접근방법은 프로그램을 single-static-assignment (SSA) 형태로 변환시켜서
+하나의 변수로의 각각의 값 할당이 그 변수의 별개의 버전을 만들도록 하는
+것입니다.
+이는 모든 동작중인 쓰레드로부터의 값 할당에 적용되어서, 그로부터 말미암은
+표현은 검사하고자 하는 코드의 모든 가능한 수행경로를 담고 있게 됩니다.
+단정문의 추가는 입력과 초기 값들의 어떤 조합이든 단정문이 틀리게 되는 경우를
+만들 수 있는지에 대한 질문, 즉 앞에서 이야기한 충족 가능성 여부에 대한 질문을
+수반 합니다.
+\iffalse
 
 However, a number of the low-level kernels of parallel algorithms transform
 into expressions that are small enough to fit easily into the memories
@@ -123,6 +193,14 @@ in question.
 The addition of an assertion entails asking whether any combination of
 inputs and initial values can result in the assertion firing, which,
 as noted above, is exactly the satisfiability problem.
+\fi
+
+여기서 있을법한 반대의견 중 하나는, 임의의 루프 구조에 대해서는 제대로 처리를
+하지 못한다는 점입니다.
+하지만, 많은 경우에 이는 루프를 유한한 횟수만큼 풀어놓는 것으로 처리될 수
+있습니다.
+또한, 아마도 일부 루프는 귀납법으로는 비난을 면치 못하게 될것이 증명될 겁니다.
+\iffalse
 
 One possible objection is that it does not gracefully handle arbitrary
 looping constructs.
@@ -130,6 +208,18 @@ However, in many cases, this can be handled by unrolling the loop a
 finite number of times.
 In addition, perhaps some loops will also prove amenable to collapse
 via inductive methods.
+\fi
+
+또하나의 있을법한 반대의견은 스핀락은 임의의 긴 루프에 관계되고, 유한 횟수
+루프를 풀어놓는 방법은 해당 스핀락의 모든 동작을 담지는 못할 것이라는 점입니다.
+이 반대의견은 쉽게 극복될 수 있음이 드러났습니다.
+전체 스핀락을 모델링하는 대신에, 락을 얻으려 시도하며, 만약 즉시 락을 얻지
+못한다면 abort 하도록 하는 trylock 을 모델링 하는 것입니다.
+이렇게 되면 단정문은 락이 곧바로 얻을 수 없어서 abort 되는 스핀락에 대해서는
+단정문 실패가 되지 않도록 수정되어야 합니다.
+논리 수식은 시간과는 무관하기 때문에, 모든 가능한 동시성 동작들은 이 방법을
+통해 담아질 수 있을 겁니다.
+\iffalse
 
 Another possible objection is that spinlocks involve arbitrarily long
 loops, and any finite unrolling would fail to capture the full behavior
@@ -141,6 +231,22 @@ The assertion must then be crafted so as to avoid firing in cases
 where a spinlock aborted due to the lock not being immediately available.
 Because the logic expression is independent of time, all possible
 concurrency behaviors will be captured via this approach.
+\fi
+
+마지막 반대의견은 이 테크닉은 리눅스 커널을 만드는 수백만 줄의 코드로 이루어진
+것과 같은 실제 전체 크기의 소프트웨어 작품을 다루기에는 적합치 않을 것이라는
+것입니다.
+이건 그럴 수도 있습니다만, 리눅스 커널 내의 그보다 훨씬 작은 병렬 기능들 각각을
+제대로 검증하는 것도 상당히 가치있는 것이라는 사실은 그대로 남아있습니다.
+그리고 실제로 연구자들은 이 방법을 리눅스 커널의 RCU 구현을 포함한 (RCU 의 덜
+심오한 속성들 중 하나를 검증하는 것이기는 하지만) 단순하지 않은 실제 세계의
+코드에 적용해 보려 노력하고 있습니다.
+
+이 테크닉이 얼마나 넓게 적용될 수 있을 것인지를 볼 필요가 있습니다만, 이는
+formal verification 분야의 더 ㅎ으미로운 혁신들 중 하나입니다.
+그리고 이는 모든 프로그램을 함수적 형태로 작성하라는 고전적 방법보다는 훨씬
+받아들일 만 할 것입니다.
+\iffalse
 
 A final objection is that this technique is unlikely to be able to handle
 a full-sized software artifact such as the millions of lines of code making
@@ -158,3 +264,4 @@ it is one of the more interesting innovations in the field of
 formal verification.
 And it might be more well-received than the traditional advice of
 writing all programs in functional form.
+\fi
