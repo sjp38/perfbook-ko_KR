@@ -2977,52 +2977,421 @@ for a larger example.
 \subsubsection{Control Dependencies}
 \label{sec:advsync:Control Dependencies}
 
-컨트롤 의존성은 제대로 동작하게 하기 위해선 데이터 의존성 배리어만으로는
-불충분하고, 읽기 메모리 배리어가 필요합니다.  다음의 코드를 생각해 봅시다:
+컨트롤 의존성은 특히나 까다로운데 현재의 컴파일러들은 이를 이해하고 있지 않기
+때문입니다.
+이 섹션의 규칙과 예제들은 여러분이 여러분의 컴파일러의 무지가 여러분의 코드에
+문제를 만드는 것을 막는 것을 돕고자 합니다.
+
+Load-load 컨트롤 의존성은 단순한 데이터 의존성 배리어가 아니라, 전체 읽기
+메모리 배리어를 필요로 합니다.
+다음의 코드를 생각해 봅시다:
 \iffalse
 
-A control dependency requires a full read memory barrier, not simply a data
-dependency barrier to make it work correctly.  Consider the following bit of
-code:
+Control dependencies are especially tricky because current compilers
+do not understand them.
+The rules and examples in this section are intended to help you
+prevent your compiler's ignorance from breaking your code.
+
+A load-load control dependency requires a full read memory barrier,
+not simply a data dependency barrier.
+Consider the following bit of code:
 \fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-  1 q = &a;
-  2 if (p)
-  3   q = &b;
-  4 <data dependency barrier>
-  5 x = *q;
+  1 q = READ_ONCE(a);
+  2 if (q) {
+  3   <data dependency barrier>
+  4   q = READ_ONCE(b);
+  5 }
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
 
-이 코드는 실제 데이터 의존성이 존재하지 않고, 그저 CPU 가 예측을 함으로써 그
-결과를 앞서 나오도록 할 수 있는 컨트롤 의존성만 존재하기 때문에 원했던 효과를
-얻지 못할 것입니다.
+이는 원했던 효과를 얻지 못할텐데, 여기에는 실제 데이터 의존성은 존재하지 않고,
+CPU 가 결과를 미리 예측하려 해서는 다른 CPU 들이 ``\co{b}'' 로부터의 로드가
+``\co{a}'' 로부터의 로드보다 전에 일어난 것처럼 보이게 할 수 있는 컨트롤
+의존성이 존재하기 때문입니다.
 이런 경우에 정말로 필요한 것은 다음과 같은 코드입니다:
 \iffalse
 
 This will not have the desired effect because there is no actual data
-dependency, but rather a control dependency that the CPU may short-circuit by
-attempting to predict the outcome in advance.  In such a case what's actually
-required is:
+dependency, but rather a control dependency that the CPU may short-circuit
+by attempting to predict the outcome in advance, so that other CPUs see
+the load from ``\co{b}'' as having happened before the load from ``\co{a}''.
+In such a case what's actually required is:
 \fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-  1 q = &a;
-  2 if (p)
-  3   q = &b;
-  4 <read barrier>
-  5 x = *q;
+  1 q = READ_ONCE(a);
+  2 if (q) {
+  3   <read barrier>
+  4   q = READ_ONCE(b);
+  5 }
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+However, stores are not speculated.
+This means that ordering \emph{is} provided for load-store control
+dependencies, as in the following example:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+  1 q = READ_ONCE(a);
+  2 if (q)
+  3   WRITE_ONCE(b, 1);
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+Control dependencies pair normally with other types of barriers.
+That said, please note that neither \co{READ_ONCE()} nor \co{WRITE_ONCE()}
+are optional!
+Without the \co{READ_ONCE()}, the compiler might combine the load
+from ``\co{a}'' with other loads from ``\co{a}''.
+Without the \co{WRITE_ONCE()}, the compiler might combine the store to
+``\co{b}'' with other stores to ``\co{b}''.
+Either can result in highly counterintuitive effects on ordering.
+
+Worse yet, if the compiler is able to prove (say) that the value of
+variable ``\co{a}'' is always non-zero, it would be well within its rights
+to optimize the original example by eliminating the ``\co{if}'' statement
+as follows:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+  1 q = READ_ONCE(a);
+  2 WRITE_ONCE(b, 1); /* BUG: CPU can reorder!!! */
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+It is tempting to try to enforce ordering on identical stores on both
+branches of the ``\co{if}'' statement as follows:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 if (q) {
+ 3   barrier();
+ 4   WRITE_ONCE(b, 1);
+ 5   do_something();
+ 6 } else {
+ 7   barrier();
+ 8   WRITE_ONCE(b, 1);
+ 9   do_something_else();
+10 }
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+Unfortunately, current compilers will transform this as follows at high
+optimization levels:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 barrier();
+ 3 WRITE_ONCE(b, 1);  /* BUG: No ordering!!! */
+ 4 if (q) {
+ 5   do_something();
+ 6 } else {
+ 7   do_something_else();
+ 8 }
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+Now there is no conditional between the load from ``\co{a}'' and the store to
+``\co{b}'', which means that the CPU is within its rights to reorder them:
+The conditional is absolutely required, and must be present in the
+assembly code even after all compiler optimizations have been applied.
+Therefore, if you need ordering in this example, you need explicit
+memory barriers, for example, a release store:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 if (q) {
+ 3   smp_store_release(&b, 1);
+ 4   do_something();
+ 5 } else {
+ 6   smp_store_release(&b, 1);
+ 7   do_something_else();
+ 8 }
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+The initial \co{READ_ONCE()} is still required to prevent the compiler from
+proving the value of ``\co{a}''.
+
+In addition, you need to be careful what you do with the local variable
+``\co{q}'',
+otherwise the compiler might be able to guess the value and again remove
+the needed conditional.
+For example:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 if (q % MAX) {
+ 3   WRITE_ONCE(b, 1);
+ 4   do_something();
+ 5 } else {
+ 6   WRITE_ONCE(b, 2);
+ 7   do_something_else();
+ 8 }
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+If \co{MAX} is defined to be 1, then the compiler knows that \co{(q\%MAX)} is
+equal to zero, in which case the compiler is within its rights to
+transform the above code into the following:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 WRITE_ONCE(b, 1);
+ 3 do_something_else();
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+Given this transformation, the CPU is not required to respect the ordering
+between the load from variable ``\co{a}'' and the store to variable ``\co{b}''.
+It is tempting to add a \co{barrier()} to constrain the compiler,
+but this does not help.
+The conditional is gone, and the barrier won't bring it back.
+Therefore, if you are relying on this ordering, you should make sure
+that \co{MAX} is greater than one, perhaps as follows:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 BUILD_BUG_ON(MAX <= 1);
+ 3 if (q % MAX) {
+ 4   WRITE_ONCE(b, 1);
+ 5   do_something();
+ 6 } else {
+ 7   WRITE_ONCE(b, 2);
+ 8   do_something_else();
+ 9 }
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+Please note once again that the stores to ``\co{b}'' differ.
+If they were identical, as noted earlier, the compiler could pull this
+store outside of the ``\co{if}'' statement.
+
+You must also avoid excessive reliance on boolean short-circuit evaluation.
+Consider this example:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 if (q || 1 > 0)
+ 3   WRITE_ONCE(b, 1);
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+Because the first condition cannot fault and the second condition is
+always true, the compiler can transform this example as following,
+defeating control dependency:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 WRITE_ONCE(b, 1);
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+This example underscores the need to ensure that the compiler cannot
+out-guess your code.
+More generally, although \co{READ_ONCE()} does force
+the compiler to actually emit code for a given load, it does not force
+the compiler to use the results.
+
+In addition, control dependencies apply only to the then-clause and
+else-clause of the if-statement in question.
+In particular, it does
+not necessarily apply to code following the if-statement:
+>>>>>>> paul/master
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 q = READ_ONCE(a);
+ 2 if (q) {
+ 3   WRITE_ONCE(b, 1);
+ 4 } else {
+ 5   WRITE_ONCE(b, 2);
+ 6 }
+ 7 WRITE_ONCE(c, 1);  /* BUG: No ordering. */
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+It is tempting to argue that there in fact is ordering because the
+compiler cannot reorder volatile accesses and also cannot reorder
+the writes to ``\co{b}'' with the condition.
+Unfortunately for this line
+of reasoning, the compiler might compile the two writes to ``\co{b}'' as
+conditional-move instructions, as in this fanciful pseudo-assembly
+language:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\scriptsize
+\begin{verbatim}
+ 1 ld r1,a
+ 2 cmp r1,$0
+ 3 cmov,ne r4,$1
+ 4 cmov,eq r4,$2
+ 5 st r4,b
+ 6 st $1,c
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+A weakly ordered CPU would have no dependency of any sort between the load
+from ``\co{a}'' and the store to ``\co{c}''.
+The control dependencies would extend
+only to the pair of cmov instructions and the store depending on them.
+In short, control dependencies apply only to the stores in the ``\co{then}''
+and ``\co{else}'' of the ``\co{if}'' in question (including functions
+invoked by those two clauses), not to code following that ``\co{if}''.
+
+Finally, control dependencies do \emph{not} provide transitivity.
+This is demonstrated by two related examples, with the initial values of
+``\co{x}'' and ``\co{y}'' both being zero:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\tt
+\scriptsize
+\begin{tabular}{l|p{1.5in}}
+	CPU 0 &		CPU 1 \\
+	\hline
+	\co{r1 = READ_ONCE(x);} &
+		\co{r2 = READ_ONCE(y);} \\
+	\co{if (r1 > 0)} &
+		\co{if (r2 > 0)} \\
+	~~~\co{WRITE_ONCE(y, 1);} &
+		~~~\co{WRITE_ONCE(x, 1);} \\
+	\multicolumn{2}{l}{~} \\
+	\multicolumn{2}{l}{\co{assert(!(r1 == 1 && r2 == 1));}} \\
+\end{tabular}
+\end{minipage}
+\vspace{5pt}
+
+The above two-CPU example will never trigger the \co{assert()}.
+However, if control dependencies guaranteed transitivity (which they do
+not), then adding the following CPU would guarantee a related assertion:
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\tt
+\scriptsize
+\begin{tabular}{l}
+	CPU 2 \\
+	\hline
+	\co{WRITE_ONCE(y, 1);} \\
+	\multicolumn{1}{l}{~} \\
+	\multicolumn{1}{l}{\co{assert(!(r1 == 1 && r2 == 1 && x == 1));}} \\
+\end{tabular}
+\end{minipage}
+\vspace{5pt}
+
+But because control dependencies do \emph{not} provide transitivity, the above
+assertion can fail after the combined three-CPU example completes.
+If you need the three-CPU example to provide ordering, you will need
+\co{smp_mb()} between the loads and stores in the CPU 0 and CPU 1 code
+fragments, that is, just before or just after the ``\co{if}'' statements.
+Furthermore, the original two-CPU example is very fragile and should be avoided.
+
+The two-CPU example is known as LB (load buffering) and the three-CPU
+example as WWC~\cite{Maranget2012TutorialARMPower}.
+
+The following list of rules summarizes the lessons of this section:
+
+\begin{enumerate}
+\item	Compilers do not understand control dependencies, so it is
+	your job to make sure that the compiler cannot break your code.
+
+\item	Control dependencies can order prior loads against later stores.
+	However, they do \emph{not} guarantee any other sort of ordering:
+	Not prior loads against later loads, nor prior stores against
+	later anything.
+	If you need these other forms of ordering, use \co{smp_rmb()},
+	\co{smp_wmb()}, or, in the case of prior stores and later loads,
+	\co{smp_mb()}.
+
+\item	If both legs of the ``\co{if}'' statement begin with identical stores
+	to the same variable, then those stores must be ordered,
+	either by preceding both of them with \co{smp_mb()} or by using
+	\co{smp_store_release()} to carry out the stores.
+	Please note that it is \emph{not} sufficient to use \co{barrier()}
+	at beginning of each leg of the ``\co{if}'' statement because, as shown
+	by the example above, optimizing compilers can destroy the control
+	dependency while respecting the letter of the \co{barrier()} law.
+
+\item	Control dependencies require at least one run-time conditional
+	between the prior load and the subsequent store, and this
+	conditional must involve the prior load.
+	If the compiler is able to optimize the conditional away, it
+	will have also optimized away the ordering.
+	Careful use of \co{READ_ONCE()} and \co{WRITE_ONCE()} can help
+	to preserve the needed conditional.
+
+\item	Control dependencies require that the compiler avoid reordering
+	the dependency into nonexistence.
+	Careful use of \co{READ_ONCE()}, \co{atomic_read()}, or
+	\co{atomic64_read()} can help to preserve your control
+	dependency.
+
+\item	Control dependencies apply only to the ``\co{then}'' and
+	``\co{else}'' of the ``\co{if}'' containing the control
+	dependency, including any functions that these two clauses call.
+	Control dependencies do \emph{not} apply to code following the
+	``\co{if}'' containing the control dependency.
+
+\item	Control dependencies pair normally with other types of barriers.
+
+\item	Control dependencies do \emph{not} provide transitivity.
+	If you need transitivity, use \co{smp_mb()}.
+\end{enumerate}
 
 \subsubsection{SMP Barrier Pairing}
 \label{sec:advsync:SMP Barrier Pairing}

@@ -38,7 +38,7 @@ EPSSOURCES := $(sort $(EPSSOURCES_DUP))
 
 PDFTARGETS_OF_EPS := $(EPSSOURCES:%.eps=%.pdf)
 
-BIBSOURCES = bib/*.bib
+BIBSOURCES := bib/*.bib alphapf.bst
 
 SVGSOURCES := $(wildcard */*.svg)
 
@@ -68,10 +68,10 @@ all: $(targ)
 $(PDFTARGETS): %.pdf: %.tex %.bbl
 	sh utilities/runlatex.sh $(basename $@)
 
-$(PDFTARGETS:.pdf=.bbl): %.bbl: $(BIBSOURCES) %.aux
+$(PDFTARGETS:.pdf=.bbl): %.bbl: %.aux
 	bibtex $(basename $@)
 
-$(PDFTARGETS:.pdf=.aux): $(LATEXSOURCES) $(LATEXGENERATED)
+$(PDFTARGETS:.pdf=.aux): $(LATEXSOURCES) $(LATEXGENERATED) $(BIBSOURCES)
 	sh utilities/runfirstlatex.sh $(basename $@)
 
 perfbook_flat.tex: perfbook.tex $(LATEXSOURCES) $(PDFTARGETS_OF_EPS) $(PDFTARGETS_OF_SVG)
@@ -122,6 +122,7 @@ perfbook-1csf.tex: perfbook-1c.tex
 
 $(EPSSOURCES_FROM_TEX): %.eps: %.tex
 	@echo "$< --> $@"
+	sh utilities/mpostcheck.sh
 	@latex -output-directory=$(shell dirname $<) $< > /dev/null 2>&1
 	@dvips -Pdownload35 -E $(patsubst %.tex,%.dvi,$<) -o $@ > /dev/null 2>&1
 	@sh utilities/fixanepsfonts.sh $@
