@@ -4,17 +4,19 @@
 \section{Read-Copy Update (RCU)}
 \label{sec:defer:Read-Copy Update (RCU)}
 
-% TODO: apply upstream change on translation
-이 섹션은 RCU 를 여러 관점에서 다룹니다.
-Section~\ref{sec:defer:Introduction to RCU} 에서는 RCU 에 대한 고전적인 소개를
-제공하고,
-Section~\ref{sec:defer:RCU Fundamentals} 에서는 기본적인 RCU 컨셉을 다루며,
-Section~\ref{sec:defer:RCU Usage} 에서는 RCU 의 일부 공통적인 사용예를
-소개하고,
-Section~\ref{sec:defer:RCU Linux-Kernel API} 에서는 리눅스 커널 API 를 보이고,
-Section~\ref{sec:defer:``Toy'' RCU Implementations} 에서는 사용자 레벨 RCU 의
-일련의 ``장난감'' 구현들을 다루며, 마지막으로
-Section~\ref{sec:defer:RCU Exercises} 에서 일부 RCU 연습을 제공합니다.
+앞의 섹션들에서 다루어진 모든 메커니즘들은 특정 동작들을 그것이 안전하게 행해질
+수 있을 때까지 유예하는 여러개의 방법들 가운데 하나를 사용했습니다.
+Section~\ref{sec:defer:Reference Counting} 에서 다룬 레퍼런스 카운터는 읽기
+쓰레드들을 방해할 수 있는 행위들을 유예하기 위해 명시적 카운터를 사용하는데,
+이는 읽기 쪽의 혼잡과 그로 말미암은 낮은 확장성을 유발합니다.
+Section~\ref{sec:defer:Hazard Pointers} 에서 다루어진 해저드 포인터는
+per-thread 포인터 리스트 안의 묵시적 카운터를 사용합니다.
+이는 읽기 쪽의 혼잡을 줄입니다만, 읽기 쪽 기능에 전체 메모리 배리어를 필요로
+합니다.
+Section~\ref{sec:defer:Sequence Locks} 에서 보인 시퀀스 락 또한 읽기 쪽의
+혼잡을 막습니다만, 포인터 traversal 을 보호해주지는 않고, 해저드 포인터처럼
+읽기 쪽 기능에 전체 메모리 배리어를 필요로 합니다.
+이런 방법들의 단점들은 더 좋은 방법은 없는지에 질문을 이끌어냅니다.
 \iffalse
 
 All of the mechanisms discussed in the preceding sections
@@ -36,6 +38,22 @@ traversals and, like hazard pointers, requires full memory barriers
 in read-side primitives.
 These schemes' shortcomings raise the question of
 whether it is possible to do better.
+\fi
+
+이 섹션은 딜레이가 공유된 데이터에의 비싼 업데이트보다는 소스코드에 의해
+인식되도록 하는 API 를 제공하는 \emph{read-copy update} (RCU) 를 소개합니다.
+이 섹션의 나머지 부분들에서는 여러개의 다른 관점에서 RCU 를 알아봅니다.
+Section~\ref{sec:defer:Introduction to RCU} 에서는 RCU 에 대한 고전적인 소개를
+제공하고,
+Section~\ref{sec:defer:RCU Fundamentals} 에서는 기본적인 RCU 컨셉을 다루며,
+Section~\ref{sec:defer:RCU Usage} 에서는 RCU 의 일부 공통적인 사용예를
+소개하고,
+Section~\ref{sec:defer:RCU Linux-Kernel API} 에서는 리눅스 커널 API 를 보이고,
+Section~\ref{sec:defer:``Toy'' RCU Implementations} 에서는 사용자 레벨 RCU 의
+일련의 ``장난감'' 구현들을 다루며, 마지막으로
+Section~\ref{sec:defer:RCU Exercises} 에서 일부 RCU 연습을 제공합니다.
+\iffalse
+
 
 This section introduces \emph{read-copy update} (RCU), which provides
 an API that allows delays to be identified in the source code,
