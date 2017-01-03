@@ -7,7 +7,7 @@ LATEXSOURCES = \
 	*/*.tex \
 	*/*/*.tex
 
-LATEXGENERATED = qqz.tex contrib.tex origpub.tex
+LATEXGENERATED = autodate.tex qqz.tex contrib.tex origpub.tex
 
 ABBREVTARGETS := 1c hb mss mstx msr msn msnt 1csf
 
@@ -68,11 +68,14 @@ all: $(targ)
 $(PDFTARGETS): %.pdf: %.tex %.bbl
 	sh utilities/runlatex.sh $(basename $@)
 
-$(PDFTARGETS:.pdf=.bbl): %.bbl: %.aux
+$(PDFTARGETS:.pdf=.bbl): %.bbl: %.aux $(BIBSOURCES)
 	bibtex $(basename $@)
 
-$(PDFTARGETS:.pdf=.aux): $(LATEXSOURCES) $(LATEXGENERATED) $(BIBSOURCES)
+$(PDFTARGETS:.pdf=.aux): $(LATEXGENERATED) $(LATEXSOURCES)
 	sh utilities/runfirstlatex.sh $(basename $@)
+
+autodate.tex: $(LATEXSOURCES) $(BIBSOURCES) $(SVGSOURCES) $(FIGSOURCES) $(DOTSOURCES)
+	sh utilities/autodate.sh >autodate.tex
 
 perfbook_flat.tex: perfbook.tex $(LATEXSOURCES) $(PDFTARGETS_OF_EPS) $(PDFTARGETS_OF_SVG)
 	echo > qqz.tex
