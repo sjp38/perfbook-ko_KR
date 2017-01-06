@@ -3,6 +3,23 @@
 \section{What Does ``After'' Mean?}
 \label{sec:app:questions:What Does ``After'' Mean?}
 
+``After'' 는 직관적이지만 놀라우리만큼 어려운 개념입니다.
+한가지 중요한 반직관적 문제는 코드가 언제든 얼만큼이든 지연되어서 수행될 수
+있다는 점입니다.
+타임스탬프 ``t'' 와 정수 필드 ``a'', ``b'', 그리고 ``c'' 를 포함하는 글로벌
+구조체를 이용해서 통신을 하는 생산자와 소비자 구조를 생각해 봅시다.
+생산자는
+Figure~\ref{fig:app:questions:After Producer Function} 에 보여진 것처럼
+(1970 년으로부터의 현재 시각까지 지난 초를 10진수로 나타내는) 현재 시각을
+기록하고 ``a'', ``b'', 그리고 ``c'' 를 업데이트 하는 루프를 돕니다.
+소비자는
+Figure~\ref{fig:app:questions:After Consumer Function} 에 보여진 것처럼 역시
+현재 시각을 기록하지만 생성자의 타임스탬프와 ``a'', ``b'', 그리고 ``c'' 필드의
+값을 복사해 옵니다.
+프로그램 수행 종료 시점에서, 소비자는 이례적인 기록들을 출력하는데, 예를 들면
+시간이 뒤로 돌아간 것으로 보이는 경우입니다.
+\iffalse
+
 ``After'' is an intuitive, but surprisingly difficult concept.
 An important non-intuitive issue is that code can be delayed at
 any point for any amount of time.
@@ -19,6 +36,7 @@ copying the producer's timestamp along with the fields ``a'',
 Figure~\ref{fig:app:questions:After Consumer Function}.
 At the end of the run, the consumer outputs a list of anomalous recordings,
 e.g., where time has appeared to go backwards.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -114,15 +132,39 @@ e.g., where time has appeared to go backwards.
 \end{figure}
 
 \QuickQuiz{}
+	이 예제에서 어떤 SMP 코딩 에러가 보이나요?
+	전체 코드를 보기 위해선 \path{time.c} 파일을 보세요.
+	\iffalse
+
 	What SMP coding errors can you see in these examples?
 	See \path{time.c} for full code.
+	\fi
 \QuickQuizAnswer{
 	\begin{enumerate}
+	\item	루프에서 barrier() 나 volatile 을 사용하지 않음.
+	\item	업데이트 쪽에서 메모리 배리어를 사용하지 않음.
+	\item	생성자와 소비자 사이의 동기화가 없음.
+	\iffalse
+
 	\item	Missing barrier() or volatile on tight loops.
 	\item	Missing Memory barriers on update side.
 	\item	Lack of synchronization between producer and consumer.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
+
+생성자가 타임스탬프나 값들을 저장하는데에 그렇게 많은 시간이 걸리지 않을
+것이기에 생성자와 소비자 타임스탬프 간의 차이는 상당히 작을 것이라고 예상하는
+사람들이 있겠습니다.
+듀얼코어 1GHz x86 에서의 출력 결과가
+Table~\ref{tab:app:questions:After Program Sample Output} 에 보여져 있습니다.
+여기서, ``seq'' 행은 루프를 수행한 횟수이고, ``time'' 행은 변칙적 행위가 나타난
+시각을 초로 나타낸 것이고, ``delta'' 행은 소비자의 타임스탬프가 생성자의 것보다
+얼마나 뒤의 것이었는지 (즉, 이 값이 음수라면 소비자가 생성자보다 타임스탬프를
+먼저 받았음을 말합니다), 그리고 ``a'', ``b'', 그리고 ``c'' 로 나타내어진 행들은
+이 변수들이 소비자에 의해 수집된 앞의 스냅샷에 비해 얼마나 증가되었는지를
+보입니다.
+\iffalse
 
 One might intuitively expect that the difference between the producer
 and consumer timestamps would be quite small, as it should not take
@@ -136,6 +178,7 @@ of the producer (where a negative value indicates that the consumer
 has collected its timestamp before the producer did), and the
 columns labelled ``a'', ``b'', and ``c'' show the amount that these
 variables increased since the prior snapshot collected by the consumer.
+\fi
 
 \begin{table}[htbp]
 \centering
@@ -155,6 +198,15 @@ seq    & time (seconds) & delta~    &  a &  b &  c \\
 \label{tab:app:questions:After Program Sample Output}
 \end{table}
 
+왜 시간이 거꾸로 가는 걸까요?
+괄호 안의 숫자는 마이크로세컨드 단위의 차이로써, 큰 수는 10 마이크로세컨드를
+넘기고, 한번은 100 마이크로세컨드를 넘기기조차 했습니다!
+이 CPU 는 그동안 100,000 개의 인스트럭션을 수행할 수도 있음을 알아두시기
+바랍니다.
+
+한가지 가능한 이유는 다음과 같은 이벤트 시퀀스로 설명됩니다:
+\iffalse
+
 Why is time going backwards?
 The number in parentheses is the difference in microseconds, with
 a large number exceeding 10 microseconds, and one exceeding even
@@ -163,7 +215,18 @@ Please note that this CPU can potentially execute more than 100,000
 instructions in that time.
 
 One possible reason is given by the following sequence of events:
+\fi
 \begin{enumerate}
+\item	소비자가 타임스탬프를 얻어옵니다
+	(Figure~\ref{fig:app:questions:After Consumer Function}, line~13).
+\item	소비자가 preemption 당합니다.
+\item	임의의 시간이 흐릅니다.
+\item	생성자가 타임스탬프를 얻어옵니다
+	(Figure~\ref{fig:app:questions:After Producer Function}, line~10).
+\item	소비자가 수행을 다시 재개하고, 생성자의 타임스탬프를 읽어옵니다
+	(Figure~\ref{fig:app:questions:After Consumer Function}, line~14).
+\iffalse
+
 \item	Consumer obtains timestamp
 	(Figure~\ref{fig:app:questions:After Consumer Function}, line~13).
 \item	Consumer is preempted.
@@ -173,7 +236,17 @@ One possible reason is given by the following sequence of events:
 \item	Consumer starts running again, and picks up the producer's
 	timestamp
 	(Figure~\ref{fig:app:questions:After Consumer Function}, line~14).
+\fi
 \end{enumerate}
+
+이 시나리오 상에서, 생성자의 타임스탬프는 소비자의 타임스탬프보다 얼만큼이든
+뒤의 것일 수 있습니다.
+
+여러분은 여러분의 SMP 코드가 ``after'' 의 의미로 고민하는 것을 어떻게
+막으시나요?
+
+그냥 SMP 기능들을 설계된 대로 사용하세요.
+\iffalse
 
 In this scenario, the producer's timestamp might be an arbitrary
 amount of time after the consumer's timestamp.
@@ -182,6 +255,31 @@ How do you avoid agonizing over the meaning of ``after'' in your
 SMP code?
 
 Simply use SMP primitives as designed.
+\fi
+
+이 예제에서, 가장 간단한 수정방법은 락킹을 사용하는 것으로, 예를 들어 생성자는
+Figure~\ref{fig:app:questions:After Producer Function} 의 line~10 앞에서 락을
+잡고 소비자는
+Figure~\ref{fig:app:questions:After Consumer Function} 의 line~13 앞에서 락을
+잡도록 합니다.
+또한, 이 락은
+Figure~\ref{fig:app:questions:After Producer Function} 의 line~13 뒤에서
+해제되고
+Figure~\ref{fig:app:questions:After Consumer Function} 의 line~17 뒤에서
+해제되어야만 합니다.
+이 락들은
+Figure~\ref{fig:app:questions:After Producer Function} 의 line~10-13 과
+Figure~\ref{fig:app:questions:After Consumer Function} 의 line~13-17 의 코드
+조각들이 서로를 {\em 배제} 하도록 해주는데, 달리 말하자면 서로에 대해서
+어토믹하게 수행되게 된다는 말입니다.
+이는
+Figure~\ref{fig:app:questions:Effect of Locking on Snapshot Collection} 로
+표현되어 있습니다:
+이 락킹은 모든 상자 안의 코드가 시간상으로 겹쳐지는 것을 방지해 줘서, 소비자의
+타임스탬프는 앞의 생성자의 타임스탬프 뒤에 수집될 수 있도록 해줍니다.
+이 그림에 있는 각각의 상자 안의 코드 조각들은 ``크리티컬 섹션'' 이라
+명명됩니다; 한 시점에는 오로지 하나의 크리티컬 섹션만이 수행됩니다.
+\iffalse
 
 In this example, the easiest fix is to use locking, for example,
 acquire a lock in the producer before line~10 in
@@ -204,6 +302,7 @@ producer's timestamp.
 The segments of code in each box in this figure are termed
 ``critical sections''; only one such critical section may be executing
 at a given time.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -212,11 +311,19 @@ at a given time.
 \label{fig:app:questions:Effect of Locking on Snapshot Collection}
 \end{figure}
 
+이렇게 락킹을 추가하면
+Table~\ref{fig:app:questions:Locked After Program Sample Output} 에 보여진 것과
+같은 출력 결과가 나옵니다.
+여기선 시간이 뒤로 간 경우는 없었고, 그대신 소비자에 의해 읽어진 연속된 읽기로
+읽혀진 값들 사이에는 1,000 카운트 이상의 차이들이 생겼습니다.
+\iffalse
+
 This addition of locking results in output as shown in
 Table~\ref{fig:app:questions:Locked After Program Sample Output}.
 Here there are no instances of time going backwards, instead,
 there are only cases with more than 1,000 counts difference between
 consecutive reads by the consumer.
+\fi
 
 \begin{table}[htbp]
 \centering
@@ -232,11 +339,25 @@ seq    & time (seconds) & delta~    &  a &  b &  c \\
 \end{table}
 
 \QuickQuiz{}
+	소비자의 연속적인 읽기들 사이에 어떻게 그렇게 큰 간격이 존재하게
+	된걸까요?
+	전체 코드를 위해선 \path{timelocked.c} 파일을 보세요.
+	\iffalse
+
 	How could there be such a large gap between successive
 	consumer reads?
 	See \path{timelocked.c} for full code.
+	\fi
 \QuickQuizAnswer{
 	\begin{enumerate}
+	\item	소비자는 긴 시간동안 preemption 당했을 수 있습니다.
+	\item	오랫동안 수행되는 인터럽트가 소비자를 지연시켰을 수 있습니다.
+	\item	생성자는 소비자가 수행되는 CPU 에 비해 더 빠른 CPU 위에서
+		수행되었을 수 있습니다 (예를 들어, CPU 들 가운데 하나는 발열
+		처리나 에너지 소비 제한에 의해 자신의 클락 주파수를 낮췄을 수
+		있습니다).
+	\iffalse
+
 	\item	The consumer might be preempted for long time periods.
 	\item	A long-running interrupt might delay the consumer.
 	\item	The producer might also be running on a faster CPU than is the
@@ -244,8 +365,27 @@ seq    & time (seconds) & delta~    &  a &  b &  c \\
 		decrease its
 		clock frequency due to heat-dissipation or power-consumption
 		constraints).
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
+
+요약하자면, 여러분이 배타적 락을 획득한다면, 여러분은 그 락을 잡은채 하는 모든
+일이 그 락을 앞서 잡고서 행한 모든 것보다 뒤에 행해진 것으로 나타남을 알게
+됩니다.
+어떤 CPU 가 메모리 배리어를 수행했는지 안했는가로 걱정할 필요가 없고, CPU 나
+컴파일러가 오퍼레이션들을 재배치 했는지에 대해 걱정하지 않아도 됩니다---삶은
+간단합니다.
+물론, 이 락킹이 이 두개의 코드 조각을 동시적으로 수행되지 못하도록 막는 것은
+프로그램이 멀티프로세서에서 성능을 높일 가능성을 막는데, 즉 ``안전하지만 느린''
+상황을 초래할 수도 있는 것입니다.
+Chapter~\ref{cha:Partitioning and Synchronization Design} 는 많은 상황에서
+성능과 확장성을 높일 수 있는 방법들을 설명합니다.
+
+하지만, 대부분의 경우에 있어서, 어떤 주어진 코드 조각의 전과 후에 어떤 일이
+일어나는지 걱정된다면, 표준 기능들의 사용을 더 잘 하기 위해 이를 힌트로 삼아야
+합니다.
+이 기능들이 여러분이 걱정을 하지 않아도 되도록 하도록 해주세요.
+\iffalse
 
 In summary, if you acquire an exclusive lock, you {\em know} that
 anything you do while holding that lock will appear to happen after
@@ -264,3 +404,4 @@ However, in most cases, if you find yourself worrying about what happens
 before or after a given piece of code, you should take this as a hint to
 make better use of the standard primitives.
 Let these primitives do the worrying for you.
+\fi
