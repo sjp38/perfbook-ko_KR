@@ -4,6 +4,20 @@
 \section{What is the Difference Between ``Concurrent'' and ``Parallel''?}
 \label{sec:app:questions:What is the Difference Between ``Concurrent'' and ``Parallel''?}
 
+고전적 컴퓨팅 관점에서, ``concurrent'' 와 ``parallel'' 은 분명한 유의어입니다.
+하지만, 많은 사람들이 이 두개의 단어 사이의 차이점을 이야기 하는 것을 멈추지
+않았고, 이제 이 차이점들은 두개의 서로 다른 관점에서 이해될 수 있음이
+들어났습니다.
+
+첫번째 관점은 ``parallel'' 을 ``data parallel'' 의 약자로 취급하고,
+``concurrent'' 를 그 외의 대부분의 것으로 취급합니다.
+이 관점에서, parallel computing 에서는 전체 문제의 각각의 조각이 서로 다른 조각
+사이의 통신 없이 완전히 독립적으로 진행될 수 있습니다.
+이 경우, 조각들 사이의 협동은 거의 필요없거나 아예 필요 없습니다.
+반면에, concurrent computing 은 경쟁되는 락, 트랜잭션, 또는 다른 형태의 동기화
+메커니즘들과 같은 형태의 강한 상호 작용성을 가질 수 있습니다.
+\iffalse
+
 From a classic computing perspective, ``concurrent'' and ``parallel''
 are clearly synonyms.
 However, this has not stopped many people from drawing distinctions
@@ -20,14 +34,41 @@ In this case, little or no coordination among partitions is required.
 In contrast, concurrent computing might well have tight interdependencies,
 in the form of contended locks, transactions, or other synchronization
 mechanisms.
+\fi
 
 \QuickQuiz{}
+	RCU read-side 기능만을 유일한 동기화 수단으로 사용하는 프로그램의 한
+	부분을 생각해 봅시다.
+	이는 parallelism 또는 concurrency 인가요?
+	\iffalse
+
 	Suppose a portion of a program uses RCU read-side primitives
 	as its only synchronization mechanism.
 	Is this parallelism or concurrency?
+	\fi
 \QuickQuizAnswer{
+	그렇습니다.
+	\iffalse
+
 	Yes.
+	\fi
 } \QuickQuizEnd
+
+이는 물론, 그런 차이점이 뭐가 문제인가 하는 질문을 떠오르게 하는데, 이 질문은
+스케쥴러에 대한 두번째 관점을 가져올 수 있게 해줍니다.
+스케쥴러는 상당한 복잡성과 가능성을 갖는데, 경험에 의거한 법칙으로 이야기
+하자면, 병렬의 프로세스들이 더 긴밀하고 불규칙하게 통신할수록 스케쥴러에게 더
+높은 수준의 세련됨이 필요해집니다.
+따라서, parallel computing 의 상호 의존성의 제거는 parallel-computing
+프로그램들은 최소한의 기능만 갖춘 스케쥴러에서도 잘 동작함을 의미합니다.
+실제로, 완전한 parallel-computing 프로그램은 임의의 단위로 분할되고 하나의
+유니프로세서에 배치된 채로도 성공적으로 동작합니다.\footnote{
+	그렇습니다, 이는 parallel-computing 프로그램들은 순차적 수행에 잘
+	어울림을 의미합니다.
+	왜 물어보셨죠?}
+반면에, concurrent-computing 프로그램은 스케쥴러에 상당히 미묘한 점들을 필요로
+할겁니다.
+\iffalse
 
 This of course begs the question of why such a distinction matters,
 which brings us to the second perspective, that of the underlying scheduler.
@@ -44,6 +85,18 @@ being arbitrarily subdivided and interleaved onto a uniprocessor.\footnote{
 	Why did you ask?}
 In contrast, concurrent-computing programs might well require extreme
 subtlety on the part of the scheduler.
+\fi
+
+우린 그저 스케쥴러로부터의 합리적인 수준의 사항만을 알려주도록 요구해서,
+parallelism 과 concurrency 사이의 차이점을 무시할 수 있어야 한다는 반론이 있을
+수 있을 겁니다.
+이는 많은 경우에 좋은 전략이지만, 스케쥴러가 합리적으로 제공할 수 있는 정보의
+수준을 효율성, 성능, 그리고 확장성이 크게 제한하는 중요한 경우들이 존재합니다.
+그런 중요한 예제 가운데 하나는 스케쥴러가 하드웨어로 구현된 경우로, SIMD 나
+GPGPU 가 대부분 그렇습니다.
+또다른 예는 일의 단위가 상당히 짧은 워크로드로, 소프트웨어 기반의 스케쥴러라
+하더라도 간단함과 효율성 사이에서 어려운 선택을 해야만 하는 경우가 생깁니다.
+\iffalse
 
 One could argue that we should simply demand a reasonable level of
 competence from the scheduler, so that we could simply ignore any
@@ -57,6 +110,22 @@ hardware, as it often is in SIMD units or GPGPUs.
 Another example is a workload where the units of work are quite
 short, so that even a software-based scheduler must make hard choices
 between subtlety on the one hand and efficiency on the other.
+\fi
+
+이제, 이 두번째 관점은 워크로드가 현재 사용 가능한 스케쥴러와 들어맞도록, 즉
+parallel 워크로드는 간단한 스케쥴러에서 동작할 수 있고 concurrent 워크로드는 더
+세련된 스케쥴러를 필요로 하도록 만드는 것으로 생각될 수 있습니다.
+
+불행히도, 이 관점은 첫번째 관점으로부터 나온 의존성 기반의 차이점과 항상
+들어맞지는 않습니다.
+예를 들어, 상당히 독립적인 락 기반의, CPU 당 쓰레드 하나의 워크로드는
+스케쥴러의 결정이 필요치 않기 때문에 간단한 스케쥴러 위에서도 돌아갈 수
+있습니다.
+실제로, 이런 종류의 일부 워크로드는 순차적 기계 위에서조차도 한 부분 다음 다른
+부분이 돌아가는 식으로 수행될 수 있습니다.
+따라서, 그러한 워크로드는 첫번째 관점에 의해서는 ``concurrent'' 라 표시되지만
+두번째 관점을 취하면 ``parallel'' 이라 표시될 수 있을 것입니다.
+\iffalse
 
 Now, this second perspective can be thought of as making the workload
 match the available scheduler, with parallel workloads able to
@@ -72,12 +141,24 @@ In fact, some workloads of this type can even be run one after another
 on a sequential machine.
 Therefore, such a workload would be labeled ``concurrent'' by the first
 perspective and ``parallel'' by many taking the second perspective.
+\fi
 
 \QuickQuiz{}
+	두번째 (스케쥴러 기반의) 관점의 어떤 부분에서 락 기반의 CPU 당 하나의
+	쓰레드를 사용하는 워크로드가 ``concurrent'' 로 여겨질 수 있을까요?
+	\iffalse
+
 	In what part of the second (scheduler-based) perspective would
 	the lock-based single-thread-per-CPU workload be considered
 	``concurrent''?
+	\fi
 \QuickQuizAnswer{
+	해당 워크로드를 임의의 형태로 나누고 끼워넣으려 하는 사람입니다.
+	물론, 임의의 분할은 락 획득을 연관된 락 해제로부터 떼어내는 일로 귀결될
+	것인데, 이는 다른 쓰레드가 락을 획득하려 하는 것을 방지하게 될겁니다.
+	만약 그 락이 순수한 스핀락이라면, 이는 데드락을 초래 할수도 있습니다.
+	\iffalse
+
 	The people who would like to arbitrarily subdivide and interleave
 	the workload.
 	Of course, an arbitrary subdivision might end up separating
@@ -85,7 +166,24 @@ perspective and ``parallel'' by many taking the second perspective.
 	would prevent any other thread from acquiring that lock.
 	If the locks were pure spinlocks, this could even result in
 	deadlock.
+	\fi
 } \QuickQuizEnd
+
+이는 문제가 되지 않습니다.
+인류가 만든 어떤 규칙도 객관적 진실성에 대한 중요성을 갖지 않는데, 이는
+멀티프로세서 프로그램을 ``concurrent'' 와 ``parallel'' 로 카테고리를 나누는
+것에 대해서도 마찬가지입니다.
+
+이 카테고리화에서의 실패는 그런 규칙들이 쓸모없음을 의미하지 않으며, 오히려
+여러분이 그것들을 새로운 상황에 적용하려 할때에는 충분히 비판적인 프레임을
+취해야 함을 의미합니다.
+항상 그렇듯이, 그런 규칙은 적용될 수 있을 때에만 사용하고 그렇지 않을 때에는
+무시하세요.
+
+실제로, parallel, concurrent, map-reduce, task-based, 기타 등등 외에도 추가적인
+카테고리들이 생겨날 수 있습니다.
+누군가는 시간의 평가를 기다리고 있을 수도 있을텐데, 올바른 예측이길 바랍니다!
+\iffalse
 
 Which is just fine.
 No rule that humankind writes carries any weight against objective
@@ -100,3 +198,4 @@ As always, use such rules where they apply and ignore them otherwise.
 In fact, it is likely that new categories will arise in addition
 to parallel, concurrent, map-reduce, task-based, and so on.
 Some will stand the test of time, but good luck guessing which!
+\fi
