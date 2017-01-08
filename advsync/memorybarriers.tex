@@ -23,15 +23,15 @@ RCU.
 \fi
 
 \begin{table}
-\centering
+\centering{\tt
 \begin{tabular}{l|l}
-	Thread 1 & Thread 2 \\
+	\nf{Thread 1} & \nf{Thread 2} \\
 	\hline
-	\co{x = 1;} & \co{y = 1;} \\
-	\co{r1 = y;} & \co{r2 = x;} \\
+	x = 1;  & y = 1; \\
+	r1 = y; & r2 = x; \\
 	\hline
-	\multicolumn{2}{l}{\co{assert(r1 == 1 || r2 == 1);}} \\
-\end{tabular}
+	\multicolumn{2}{l}{assert(r1 == 1 || r2 == 1);} \\
+\end{tabular}}
 \caption{Memory Misordering: Dekker}
 \label{tab:advsync:Memory Misordering: Dekker}
 \end{table}
@@ -931,11 +931,11 @@ on this weaker if-then conditional ordering guarantee.
 \tt
 \scriptsize
 \begin{tabular}{l|l}
-	CPU 1 &			CPU 2 \\
+	\nf{CPU 1} &		\nf{CPU 2} \\
 	\hline
-	\co{access(A);} &	\co{access(B);} \\
-	\co{smp_mb();} &	\co{smp_mb();} \\
-	\co{access(B);} &	\co{access(A);} \\
+	access(A);	&	access(B); \\
+	\tco{smp_mb();}	&	\tco{smp_mb();} \\
+	access(B);	&	access(A); \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -1060,11 +1060,11 @@ pairings that portable software may depend on.
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		CPU 1 &			CPU 2 \\
+		\nf{CPU 1} &		\nf{CPU 2} \\
 		\hline
-		\co{A=1;} &		\co{Y=B;} \\
-		\co{smp_mb();} &	\co{smp_mb();} \\
-		\co{B=1;} &		\co{X=A;} \\
+		A=1;		&	Y=B; \\
+		\tco{smp_mb();}	&	\tco{smp_mb();} \\
+		B=1;		&	X=A; \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1110,11 +1110,11 @@ pairings that portable software may depend on.
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		CPU 1 &			CPU 2 \\
+		\nf{CPU 1} &		\nf{CPU 2} \\
 		\hline
-		\co{X=A;} &		\co{Y=B;} \\
-		\co{smp_mb();} &	\co{smp_mb();} \\
-		\co{B=1;} &		\co{A=1;} \\
+		X=A;            &	Y=B; \\
+		\tco{smp_mb();}	&	\tco{smp_mb();} \\
+		B=1;            &	A=1; \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1169,11 +1169,11 @@ pairings that portable software may depend on.
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		CPU 1 &			CPU 2 \\
+		\nf{CPU 1} &		\nf{CPU 2} \\
 		\hline
-		\co{X=A;} &		\co{B=2;} \\
-		\co{smp_mb();} &	\co{smp_mb();} \\
-		\co{B=1;} &		\co{A=1;} \\
+		X=A;		&	B=2; \\
+		\tco{smp_mb();}	&	\tco{smp_mb();} \\
+		B=1;		&	A=1; \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1313,11 +1313,11 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		CPU 1 &			CPU 2 \\
+		\nf{CPU 1} &		\nf{CPU 2} \\
 		\hline
-		\co{A=1;} &		\co{B=2;} \\
-		\co{smp_mb();} &	\co{smp_mb();} \\
-		\co{B=1;} &		\co{A=2;} \\
+		A=1;		&	B=2; \\
+		\tco{smp_mb();}	&	\tco{smp_mb();} \\
+		B=1;		&	A=2; \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1808,17 +1808,16 @@ the sequence of operations might be as follows:
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
 \tt \scriptsize
-\scriptsize
 \begin{tabular}{l|l}
-	CPU 1 &			CPU 2 \\
+	\nf{CPU 1} &		\nf{CPU 2} \\
 	\hline
-	(critical section) &	\co{atomic_xchg(&lck->a, 1)->1} \\
-	\co{smp_mb();} &	\co{lck->a->1} \\
-	\co{lck->a=0;} &	\co{lck->a->1} \\
-	&			\co{lck->a->0} \\
-	&			(implicit \co{smp_mb()} 1) \\
-	&			\co{atomic_xchg(&lck->a, 1)->0} \\
-	&			(implicit \co{smp_mb()} 2) \\
+	(critical section) &	\tco{atomic_xchg(&lck->a, 1)->1} \\
+	\tco{smp_mb();}    &	lck->a->1 \\
+	lck->a=0;	   &	lck->a->1 \\
+	&			lck->a->0 \\
+	&			(implicit \tco{smp_mb()} 1) \\
+	&			\tco{atomic_xchg(&lck->a, 1)->0} \\
+	&			(implicit \tco{smp_mb()} 2) \\
 	&			(critical section) \\
 \end{tabular}
 \end{minipage}
@@ -1985,7 +1984,7 @@ initial values {\tt \{A = 1, B = 2\}}:
 \tt
 \scriptsize
 \begin{tabular}{l|l}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 3; &	x = A; \\
 	B = 4; &	y = B; \\
@@ -2002,7 +2001,7 @@ in 24 different combinations, with loads denoted by ``ld'' and stores
 denoted by ``st'':
 \fi
 
-~ \\
+\vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
 \tt
 \scriptsize
@@ -2060,7 +2059,7 @@ initial values {\tt \{A = 1, B = 2, C = 3, P = \&A, Q = \&C\}}:
 \tt
 \scriptsize
 \begin{tabular}{l|l}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	B = 4; &	Q = P; \\
 	P = \&B &	D = *Q; \\
@@ -2818,7 +2817,7 @@ following sequence of events, with initial values
 \tt
 \scriptsize
 \begin{tabular}{l|l}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	B = 4; & \\
 	<write barrier> & \\
@@ -2890,7 +2889,7 @@ address load and the data load (again with initial values of
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	B = 4; & \\
 	<write barrier> & \\
@@ -2942,7 +2941,7 @@ access with initial values
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	M[1] = 4; & \\
 	<write barrier> & \\
@@ -3302,16 +3301,16 @@ This is demonstrated by two related examples, with the initial values of
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 0 &		CPU 1 \\
+	\nf{CPU 0} &	\nf{CPU 1} \\
 	\hline
-	\co{r1 = READ_ONCE(x);} &
-		\co{r2 = READ_ONCE(y);} \\
-	\co{if (r1 > 0)} &
-		\co{if (r2 > 0)} \\
-	~~~\co{WRITE_ONCE(y, 1);} &
-		~~~\co{WRITE_ONCE(x, 1);} \\
+	\tco{r1 = READ_ONCE(x);} &
+		\tco{r2 = READ_ONCE(y);} \\
+	if (r1 > 0) &
+		if (r2 > 0) \\
+	~~~\tco{WRITE_ONCE(y, 1);} &
+		~~~\tco{WRITE_ONCE(x, 1);} \\
 	\multicolumn{2}{l}{~} \\
-	\multicolumn{2}{l}{\co{assert(!(r1 == 1 && r2 == 1));}} \\
+	\multicolumn{2}{l}{\tco{assert(!(r1 == 1 && r2 == 1));}} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3325,11 +3324,11 @@ not), then adding the following CPU would guarantee a related assertion:
 \tt
 \scriptsize
 \begin{tabular}{l}
-	CPU 2 \\
+	\nf{CPU 2} \\
 	\hline
-	\co{WRITE_ONCE(y, 1);} \\
+	\tco{WRITE_ONCE(y, 1);} \\
 	\multicolumn{1}{l}{~} \\
-	\multicolumn{1}{l}{\co{assert(!(r1 == 1 && r2 == 1 && x == 1));}} \\
+	\multicolumn{1}{l}{\tco{assert(!(r1 == 1 && r2 == 1 && x == 1));}} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3420,7 +3419,7 @@ write barrier, though, again, a general barrier is viable:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 1; & \\
 	<write barrier> & \\
@@ -3439,7 +3438,7 @@ Or:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 1; & \\
 	<write barrier> & \\
@@ -3541,14 +3540,14 @@ loads.  Consider the following sequence of events with initial values
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 1; & \\
 	B = 2; & \\
 	<write barrier> & \\
 	C = \&B; & 	LOAD X\\
-	D = 4;	&	LOAD C (gets \&B) \\
-		&	LOAD *C (reads B) \\
+	D = 4;	&	LOAD C \nf{(gets \tco{&B})} \\
+		&	LOAD *C \nf{(reads \tco{B})} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3593,15 +3592,15 @@ values of {\tt \{B = 7, X = 9, Y = 8, C = \&Y\}}:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 1; & \\
 	B = 2; & \\
 	<write barrier> & \\
 	C = \&B; & 	LOAD X\\
-	D = 4;	&	LOAD C (gets \&B) \\
+	D = 4;	&	LOAD C \nf{(gets \tco{&B})} \\
 		&	<data dependency barrier> \\
-		&	LOAD *C (reads B) \\
+		&	LOAD *C \nf{(reads \tco{B})} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3636,7 +3635,7 @@ following sequence of events, with initial values
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 1; & \\
 	<write barrier> & \\
@@ -3678,7 +3677,7 @@ and the load of \co{A} on CPU~2, again with initial values of
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 1; & \\
 	<write barrier> & \\
@@ -3722,15 +3721,15 @@ with the same initial values of
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 	A = 1; & \\
 	<write barrier> & \\
 	B = 2; & \\
 		&	LOAD B \\
-		&	LOAD A (1\textsuperscript{st}) \\
+		&	LOAD A \nf{(1\textsuperscript{st})} \\
 		&	<read barrier> \\
-		&	LOAD A (2\textsuperscript{nd}) \\
+		&	LOAD A \nf{(2\textsuperscript{nd})} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3818,7 +3817,7 @@ For example, consider the following:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 		&	LOAD B \\
 		&	DIVIDE \\
@@ -3868,7 +3867,7 @@ load:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	CPU 1 &		CPU 2 \\
+	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
 		&	LOAD B \\
 		&	DIVIDE \\
@@ -4158,23 +4157,23 @@ operations concurrently:
   \# & Ordering: legitimate or not? \\
   \hline
   \hline
-  1 & \co{*A; *B; LOCK; *C; *D; UNLOCK; *E; *F;} \\
+  1 & \verb|*A; *B; LOCK; *C; *D; UNLOCK; *E; *F;| \\
   \hline
-  2 & \tt{*A; \{*B; LOCK;\} *C; *D; UNLOCK; *E; *F;} \\
+  2 & \verb|*A; {*B; LOCK;} *C; *D; UNLOCK; *E; *F;| \\
   \hline
-  3 & \tt{\{*F; *A;\} *B; LOCK; *C; *D; UNLOCK; *E;} \\
+  3 & \verb|{*F; *A;} *B; LOCK; *C; *D; UNLOCK; *E;| \\
   \hline
-  4 & \tt{*A; *B; \{LOCK; *C;\} *D; \{UNLOCK; *E;\} *F;} \\
+  4 & \verb|*A; *B; {LOCK; *C;} *D; {UNLOCK; *E;} *F;| \\
   \hline
-  5 & \co{*B; LOCK; *C; *D; *A; UNLOCK; *E; *F;} \\
+  5 & \verb|*B; LOCK; *C; *D; *A; UNLOCK; *E; *F;| \\
   \hline
-  6 & \co{*A; *B; *C; LOCK; *D; UNLOCK; *E; *F;} \\
+  6 & \verb|*A; *B; *C; LOCK; *D; UNLOCK; *E; *F;| \\
   \hline
-  7 & \co{*A; *B; LOCK; *C; UNLOCK; *D; *E; *F;} \\
+  7 & \verb|*A; *B; LOCK; *C; UNLOCK; *D; *E; *F;| \\
   \hline
-  8 & \tt{\{*B; *A; LOCK;\} \{*D; *C;\} \{UNLOCK; *F; *E;\}} \\
+  8 & \verb|{*B; *A; LOCK;} {*D; *C;} {UNLOCK; *F; *E;}| \\
   \hline
-  9 & \tt{*B; LOCK; *C; *D; UNLOCK; \{*F; *A;\} *E; } \\
+  9 & \verb|*B; LOCK; *C; *D; UNLOCK; {*F; *A;} *E;| \\
 \end{tabular}
 \caption{Lock-Based Critical Sections}
 \label{tab:advsync:Lock-Based Critical Sections}
@@ -4256,17 +4255,17 @@ a pair of locks named ``M'' and ``Q''.
 \fi
 
 \begin{table}[htbp]
-\scriptsize\centering
+\scriptsize\centering{\tt
 \begin{tabular}{r|l}
-  \co{CPU 1}     & \co{CPU 2} \\
+  \nf{CPU 1} &	\nf{CPU 2} \\
   \hline
-  \co{A = a;}    & \co{E = e;} \\
-  \co{LOCK M;}   & \co{LOCK Q;} \\
-  \co{B = b;}    & \co{F = f;} \\
-  \co{C = c;}    & \co{G = g;} \\
-  \co{UNLOCK M;} & \co{UNLOCK Q;} \\
-  \co{D = d;}    & \co{H = h;} \\
-\end{tabular}
+  A = a; &	E = e; \\
+  LOCK M; &	LOCK Q; \\
+  B = b; &	F = f; \\
+  C = c; &	G = g; \\
+  UNLOCK M; &	UNLOCK Q; \\
+  D = d; &	H = h; \\
+\end{tabular}}
 \caption{Ordering With Multiple Locks}
 \label{tab:advsync:Ordering With Multiple Locks}
 \end{table}
@@ -4324,17 +4323,17 @@ Table~\ref{tab:advsync:Ordering With Multiple CPUs on One Lock}?
 \fi
 
 \begin{table}[htbp]
-\scriptsize\centering
+\scriptsize\centering{\tt
 \begin{tabular}{r|l}
-  \co{CPU 1}     & \co{CPU 2} \\
+  \nf{CPU 1} &	\nf{CPU 2} \\
   \hline
-  \co{A = a;}    & \co{E = e;} \\
-  \co{LOCK M;}   & \co{LOCK M;} \\
-  \co{B = b;}    & \co{F = f;} \\
-  \co{C = c;}    & \co{G = g;} \\
-  \co{UNLOCK M;} & \co{UNLOCK M;} \\
-  \co{D = d;}    & \co{H = h;} \\
-\end{tabular}
+  A = a; &	E = e; \\
+  LOCK M; &	LOCK M; \\
+  B = b; &	F = f; \\
+  C = c; &	G = g; \\
+  UNLOCK M; &	UNLOCK M; \\
+  D = d; &	H = h; \\
+\end{tabular}}
 \caption{Ordering With Multiple CPUs on One Lock}
 \label{tab:advsync:Ordering With Multiple CPUs on One Lock}
 \end{table}

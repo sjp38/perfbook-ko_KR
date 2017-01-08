@@ -9,7 +9,7 @@ LATEXSOURCES = \
 
 LATEXGENERATED = autodate.tex qqz.tex contrib.tex origpub.tex
 
-ABBREVTARGETS := 1c hb mss mstx msr msn msnt 1csf
+ABBREVTARGETS := 1c hb msns mstx msr msn msnt 1csf
 
 PDFTARGETS := perfbook.pdf $(foreach v,$(ABBREVTARGETS),perfbook-$(v).pdf)
 
@@ -60,10 +60,18 @@ else
 	targ = $(default)
 endif
 
-.PHONY: all touchsvg clean distclean neatfreak 2c ls-unused $(ABBREVTARGETS)
+.PHONY: all touchsvg clean distclean neatfreak 2c ls-unused $(ABBREVTARGETS) mss perfbook-mss.pdf mssmsg help
 all: $(targ)
 
 2c: perfbook.pdf
+
+mss: perfbook-mss.pdf
+
+perfbook-mss.pdf: perfbook.pdf mssmsg
+
+mssmsg:
+	@echo "perfbook-mss.pdf is promoted to default target,"
+	@echo "built as perfbook.pdf."
 
 $(PDFTARGETS): %.pdf: %.tex %.bbl
 	sh utilities/runlatex.sh $(basename $@)
@@ -98,27 +106,27 @@ perfbook-1c.tex: perfbook.tex
 perfbook-hb.tex: perfbook.tex
 	sed -e 's/,twocolumn/&,letterpaperhb/' -e 's/setboolean{hardcover}{false}/setboolean{hardcover}{true}/' < $< > $@
 
-perfbook-mss.tex: perfbook.tex
-	sed -e 's/usepackage{courier}/usepackage[scaled=0.94]{couriers}/' < $< > $@
+perfbook-msns.tex: perfbook.tex
+	sed -e 's/\[scaled=\.94\]{couriers}/{courier}/' < $< > $@
 
 perfbook-mstx.tex: perfbook.tex
-	sed -e 's/usepackage{courier}/renewcommand*\\ttdefault{txtt}/' < $< > $@
+	sed -e 's/usepackage\[scaled=\.94\]{couriers}/renewcommand*\\ttdefault{txtt}/' < $< > $@
 
 perfbook-msr.tex: perfbook.tex
-	sed -e 's/usepackage{courier}/usepackage[scaled=0.94]{nimbusmono}/' < $< > $@
+	sed -e 's/\[scaled=\.94\]{couriers}/[scaled=.94]{nimbusmono}/' < $< > $@
 	@echo "## This target requires font package nimbus15. ##"
 
 perfbook-msn.tex: perfbook.tex
-	sed -e 's/usepackage{courier}/usepackage{nimbusmononarrow}/' < $< > $@
+	sed -e 's/\[scaled=\.94\]{couriers}/{nimbusmononarrow}/' < $< > $@
 	@echo "## This target requires font package nimbus15. ##"
 
 perfbook-msnt.tex: perfbook.tex
-	sed -e 's/usepackage{courier}/usepackage[zerostyle=a]{newtxtt}/' < $< > $@
+	sed -e 's/\[scaled=\.94\]{couriers}/[zerostyle=a]{newtxtt}/' < $< > $@
 	@echo "## This target requires font package newtxtt. ##"
 
 perfbook-1csf.tex: perfbook-1c.tex
 	sed -e 's/setboolean{sansserif}{false}/setboolean{sansserif}{true}/' \
-	    -e 's/usepackage{courier}/usepackage[var0]{inconsolata}/' < $< > $@
+	    -e 's/\[scaled=\.94\]{couriers}/[var0]{inconsolata}/' < $< > $@
 	@echo "## This target requires recent version (>= 1.3i) of mathastext. ##"
 
 # Rules related to perfbook_html are removed as of May, 2016
@@ -159,6 +167,25 @@ ifndef INKSCAPE
 	$(error "$< --> $@: inkscape not found. Please install it.")
 endif
 	@inkscape --export-pdf=$@ $<
+
+help:
+	@echo "Official targets:"
+	@echo "  Full,              Abbr."
+	@echo "  perfbook.pdf,      2c:   (default) 2-column layout"
+	@echo "  perfbook-1c.pdf,   1c:   1-column layout"
+	@echo "  perfbook-hb.pdf,   hb:   For hardcover books (2-column)"
+	@echo
+	@echo "Experimental targets:"
+	@echo "  Full,              Abbr."
+	@echo "  perfbook-msr.pdf,  msr:  2c with regular thickness courier clone"
+	@echo "  perfbook-msn.pdf,  msn:  2c with narrow courier clone"
+	@echo "  perfbook-mstx.pdf, mstx: 2c with txtt as monospace"
+	@echo "  perfbook-msnt.pdf, msnt: 2c with newtxtt as monospace (non-slashed 0)"
+	@echo "  perfbook-1csf.pdf, 1csf: 1c with sans serif font"
+	@echo "  perfbook-msns.pdf, msns: 2c with non-scaled courier"
+	@echo "  \"msr\" and \"msn\" require \"nimbus15\"."
+	@echo "  \"msnt\" requires \"newtxtt\"."
+	@echo "  \"1csf\" requires recent version (>=1.3i) of \"mathastext\"."
 
 clean:
 	find . -name '*.aux' -o -name '*.blg' \
