@@ -71,6 +71,19 @@
 	containing some pieces of the new and old values.
 	\fi
 \item[Cache:]
+	근래의 컴퓨터 시스템들에서 CPU 는 빈번하게 사용되는 데이터를 담고 있을
+	캐시를 갖습니다.
+	이런 캐시는 매우 간단한 해시 함수를 사용하는 하드웨어로 구현된 해시
+	테이블로 생각될 수 있습니다만, 각각의 해시 bucket (하드웨어 타입에서는
+	``set'' 이라 명명됩니다) 은 제한된 수의 데이터 항목만을 담고 있을 수
+	있습니다.
+	각각의 캐시의 해시 bucket 이 담고 있을 수 있는 데이터 항목의 갯수는
+	해당 캐시의 ``associativity'' 라고 명칭됩니다.
+	이런 데이터 항목들은 일반적으로 ``cache line'' 이라 불리우는데, CPU 와
+	메모리 사이에 돌아다니는 고정된 길이의 데이터 블락이라고 생각될 수
+	있습니다.
+	\iffalse
+
 	In modern computer systems, CPUs have caches in which to hold
 	frequently used data.
 	These caches can be thought of as hardware hash tables with very
@@ -82,7 +95,22 @@
 	These data items are normally called ``cache lines'', which
 	can be thought of a fixed-length blocks of data that circulate
 	among the CPUs and memory.
+	\fi
 \item[Cache Coherence:]
+	모든 CPU 들이 특정 변수에 대해 일련의 변화되는 값을 보게 되는 대부분의
+	근래의 SMP 기계들의 속성은 적어도 해당 변수에 대해 하나의 전역적인 값
+	변화의 순서로 일관성을 갖는다는 겁니다.
+	Cache coherence 또한 특정 변수에 대한 일련의 store 들의 마지막에는 모든
+	CPU 들이 그 변수의 마지막 값에 대해 동의를 할 것을 보장해 줍니다.
+	Cache coherence 는 하나의 변수에 의해 얻어진 일련의 값들에 대해서만
+	적용됨을 알아두시기 바랍니다.
+	반면에, 메모리 일관성 모델은 여러개의 변수들에 대한 load 와 store 가
+	어떻게 일어난 것으로 보이게 되는지를 설명합니다.
+	더 자세한 내용을 위해선
+	Section~\ref{sec:advsync:Single-Variable Memory Consistency} 을
+	참고하세요.
+	\iffalse
+
 	A property of most modern SMP machines where all CPUs will
 	observe a sequence of values for a given variable that is
 	consistent with at least one global order of values for
@@ -97,12 +125,28 @@
 	variables will appear to occur.
 	See Section~\ref{sec:advsync:Single-Variable Memory Consistency}
 	for more information.
+	\fi
 \item[Cache Coherence Protocol:]
+	메모리 일관성과 순서를 강제하고 다른 CPU 들이 각자의 캐시에 담겨있는
+	데이터의 일관적이지 않은 상태를 보는 것을 막아주는, 일반적으로
+	하드웨어로 구현되는 통신 프로토콜.
+	\iffalse
+
 	A communications protocol, normally implemented in hardware,
 	that enforces memory consistency and ordering, preventing
 	different CPUs from seeing inconsistent views of data held
 	in their caches.
+	\fi
 \item[Cache Geometry:]
+	캐시의 크기와 associativity 는 그것의 geometry 라 불리웁니다.
+	각각의 캐시는 이차원 배열로, 캐시 라인들의 행 (``set'') 은 같은 해시
+	값을 갖고, 캐시 라인들의 열 (``ways'') 는 그 안의 모든 캐시 라인이 서로
+	다른 해시 값을 갖는 것으로 생각될 수 있습니다.
+	특정 캐시의 associativity 는 그 열의 수이고 (따라서 ``way'' 라
+	불립니다---two-way set-associative 캐시는 두개의 ``way'' 를 갖습니다),
+	캐시의 크기는 행의 수와 열의 수의 곱입니다.
+	\iffalse
+
 	The size and associativity of a cache is termed its geometry.
 	Each cache may be thought of as a two-dimensional array,
 	with rows of cache lines (``sets'') that have the same hash
@@ -112,7 +156,19 @@
 	columns (hence the name ``way''---a two-way set-associative
 	cache has two ``ways''), and the size of the cache is its
 	number of rows multiplied by its number of columns.
+	\fi
 \item[Cache Line:]
+	(1) CPU 와 메모리 사이를 돌아다니는 데이터의 단위로, 일반적으로 그
+	크기는 2의 거듭제곱입니다.
+	일반적인 캐시라인의 크기는 16 바이트에서 256 바이트 사이입니다. \\
+	(2) 데이터의 캐시라인 하나 단위를 담아둘 수 있는 CPU 캐시의 물리적
+	위치. \\
+	(3) 데이터의 캐사라인 하나 단위를 담아둘 수 있는, 그러나 또한 캐시 라인
+	경계로 정렬되어 있는 메모리 상의 물리적 위치.
+	예를 들어, 256-바이트 캐시라인을 갖는 시스템에서 메모리 상의 캐시
+	라인의 첫번째 word 의 주소는 0x00 으로 끝날 겁니다.
+	\iffalse
+
 	(1) The unit of data that circulates among the CPUs and memory,
 	usually a moderate power of two in size.
 	Typical cache-line sizes range from 16 to 256 bytes. \\
@@ -123,7 +179,29 @@
 	on a cache-line boundary.
 	For example, the address of the first word of a cache line
 	in memory will end in 0x00 on systems with 256-byte cache lines.
+	\fi
 \item[Cache Miss:]
+	CPU 가 필요로 하는 데이터가 해당 CPU 의 캐시 안에 존재하지 않으면
+	하나의 캐시 미스가 발생합니다.
+	해당 데이터는 여러가지 이유로 캐시에 없을 수 있는데, 다음과 같은
+	이유들이 있을 수 있습니다:
+	(1) 이 CPU 는 기존에 해당 데이터를 액세스한 적이 없거나(``startup''
+	또는 ``warmup'' 미스),
+	(2) 이 CPU 는 최근에 자신의 캐시가 담고 있을 수 있는 것보다 더 많은
+	데이터에 액세스를 해서, 오래된 데이터 중 일부는 제거되었거나
+	(``capacity'' 미스),
+	(3) 이 CPU 는 특정 set 에 해당 set\footnote{
+		하드웨어 캐시 용어에서, ``set'' 이라는 말은 소프트웨어 캐시를
+		논할 때의 ``bucket'' 이란 말과 동일한 의미로 사용됩니다.}
+	이 담아둘 수 있는 것보다 많은 데이터에 액세스를 했거나
+	(``associativity'' 미스),
+	(4) 이 CPU 가 해당 데이터에 액세스한 후에 어떤 다른 CPU 가 해당
+	데이터에 (또는 같은 캐시 라인의 어떤 다른 데이터에) 쓰기를 수행해서
+	(``communication miss''), 또는
+	(5) 이 CPU 가 해당 캐시라인이 다른 CPU 의 캐시에 복사되어 있거나 해서
+	read-only 인데 쓰기를 수행해서입니다.
+	\iffalse
+
 	A cache miss occurs when data needed by the CPU is not in
 	that CPU's cache.
 	The data might be missing because of a number of reasons,
@@ -145,10 +223,28 @@
 	(5) this CPU attempted to write to a cache line that is
 	currently read-only, possibly due to that line being replicated
 	in other CPUs' caches.
+	\fi
 \item[Capacity Miss:]
+	연관된 CPU 가 해당 캐시에 담아둘 수 있는 것보다 많은 데이터를 최근에
+	액세스 해서 발생하는 캐시 미스.
+	\iffalse
+
 	A cache miss incurred because the corresponding CPU has recently
 	accessed more data than will fit into the cache.
+	\fi
 \item[Code Locking:]
+	크리티컬 섹션의 한 집합을 보호하기 위해 ``global lock'' 이 사용되어서
+	특정 쓰레드의 그런 집합으로의 액세스가 그 쓰레드가 어떤 데이터에
+	접근하려 하는가에 의해서가 아니라 현재 그 크리티컬 섹션들의 집합을
+	차지하고 있는 쓰레드들의 집합에 기반해서만 허용되거나 거부되는 간단한
+	락킹 디자인.
+	Code-locking 을 사용하는 프로그램의 확장성은 그 코드에 의해 제한됩니다;
+	해당 데이터 집합의 크기를 증가시키는 것은 일반적으로 확장성을
+	증가시키지 못할 겁니다 (사실, 일반적으로는 ``lock contention'' 을
+	증가시켜서 확장성을 \emph{떨어뜨립니다}).
+	``Data locking'' 에 대비됩니다.
+	\iffalse
+
 	A simple locking design in which a ``global lock'' is used to protect
 	a set of critical sections, so that access by a given thread
 	to that set is
@@ -160,10 +256,25 @@
 	scalability (in fact, will typically \emph{decrease} scalability
 	by increasing ``lock contention'').
 	Contrast with ``data locking''.
+	\fi
 \item[Communication Miss:]
+	이 CPU 가 액세스한 이후에 어떤 다른 CPU 가 해당 캐시 라인에 쓰기를
+	수행해서 발생하는 캐시 미스.
+	\iffalse
+
 	A cache miss incurred because the some other CPU has written to
 	the cache line since the last time this CPU accessed it.
+	\fi
 \item[Critical Section:]
+	어떤 동기화 메커니즘으로 보호되어서 그 수행이 그 기능으로 제한되는
+	코드의 부분.
+	예를 들어, 크리티컬 섹션들의 한 집합이 같은 global lock 으로
+	보호된다면, 한번에 그 크리티컬 섹션들 가운데 하나만이 수행됩니다.
+	만약 한 쓰레드가 그런 크리티컬 섹션 가운데 하나를 수행하고 있다면, 모든
+	다른 쓰레드는 그 첫번째 쓰레드가 해당 집합 내의 크리티컬 섹션들의
+	수행을 모두 완료하기 전까지는 대기해야만 합니다.
+	\iffalse
+
 	A section of code guarded by some synchronization mechanism,
 	so that its execution constrained by that primitive.
 	For example, if a set of critical sections are guarded by
@@ -172,6 +283,7 @@
 	If a thread is executing in one such critical section,
 	any other threads must wait until the first thread completes
 	before executing any of the critical sections in the set.
+	\fi
 \item[Data Locking:]
 	A scalable locking design in which each instance of a given
 	data structure has its own lock.
