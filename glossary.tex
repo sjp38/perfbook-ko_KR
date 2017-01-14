@@ -685,6 +685,19 @@
 	least one quiescent state each is termed a ``grace period''.
 	\fi
 \item[Read-Copy Update (RCU):]
+	Reader-writer 락킹이나 reference counting 의 대체물로 생각될 수 있는
+	하나의 동기화 메커니즘.
+	RCU 는 읽기 쓰레드들에게 매우 낮은 오버헤드의 액세스를 제공하는 반면,
+	쓰기 쓰레드에게는 앞서 존재한 읽기 쓰레드들의 성능 이득을 위해 기존
+	버전을 유지해야하는 추가적 오버헤드를 일으킵니다.
+	읽기 쓰레드들은 블락되지도 spin 하지도 않고, 따라서 데드락에 참여될 수
+	없습니다만, 정상적인 데이터를 볼 수 있고 업데이트와 동시에 수행될 수
+	있습니다.
+	따라서 RCU 는 정상적인 데이터가 (라우팅 테이블에서처럼) 지연되거나
+	(리눅스 커널의 System V IPC 구현에서처럼) 막아질 수 있는 읽기가
+	대부분인 환경에 가장 적합합니다.
+	\iffalse
+
 	A synchronization mechanism that can be thought of as a replacement
 	for reader-writer locking or reference counting.
 	RCU provides extremely low-overhead access for readers, while
@@ -696,7 +709,18 @@
 	RCU is thus best-suited for read-mostly situations where
 	stale data can either be tolerated (as in routing tables)
 	or avoided (as in the Linux kernel's System V IPC implementation).
+	\fi
 \item[Read-Side Critical Section:]
+	어떤 reader-writer 동기화 메커니즘의 읽기 권한 획득으로 보호되는 코드의
+	일부분.
+	예를 들어, 한 크리티컬 섹션들의 집합이 특정 전역적 reader-writer 락의
+	읽기 권한 획득으로 보호된다면, 크리티컬 섹션들의 첫번째 집합은 그 락의
+	read-side 크리티컬 섹션이 됩니다.
+	수에 상관없이 복수의 쓰레드들이 read-side 크리티컬 섹션을 동시에 수행할
+	수 있습니다만, 어떤 쓰레드도 write-side 크리티컬 섹션을 수행하고 있지
+	않은 경우에만 그렇습니다.
+	\iffalse
+
 	A section of code guarded by read-acquisition of
 	some reader-writer synchronization mechanism.
 	For example, if one set of critical sections are guarded by
@@ -708,7 +732,20 @@
 	Any number of threads may concurrently execute the read-side
 	critical sections, but only if no thread is executing one of
 	the write-side critical sections.
+	\fi
 \item[Reader-Writer Lock:]
+	Reader-writer 락은 수에 관계없이 복수의 읽기를 하는 쓰레드들을, 또는 단
+	하나의 쓰기 쓰레드들을 해당 락으로 보호되는 크리티컬 섹션들의 집합으로
+	들어갈 수 있도록 허용하는 mutual-exclusion 메커니즘입니다.
+	쓰기를 하려는 쓰레드는 모든 앞서 존재한, 읽기를 하는 쓰레드들이 해당
+	락을 놓을 때까지 기다려야만 하고, 비슷하게, 앞서 존재한 쓰기가
+	존재한다면, 쓰기를 하려는 모든 쓰레드는 해당 쓰기 쓰레드가 해당 락을
+	놓기를 기다려야 합니다.
+	Reader-writer 락에 있어서의 핵심 고려사항은 ``fairness'' 입니다:
+	끝나지 않는 읽기 쓰레드의 연속은 쓰기 쓰레드를 starve 시킬 수 있고, 그
+	반대도 마찬가지입니다.
+	\iffalse
+
 	A reader-writer lock is a mutual-exclusion mechanism that
 	permits any number of reading
 	threads, or but one writing thread, into the set of critical
@@ -719,6 +756,7 @@
 	wait for the writer to release the lock.
 	A key concern for reader-writer locks is ``fairness'':
 	can an unending stream of readers starve a writer or vice versa.
+	\fi
 \item[Sequential Consistency:]
 	A memory-consistency model where all memory references appear to occur
 	in an order consistent with
