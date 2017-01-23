@@ -146,6 +146,16 @@ future.
 
 \subsection{2.6.29 Linux Kernel}
 
+새로운 더욱 확장성 있는 구현, ``Tree RCU'' 가 bitmap 을 combining tree 로
+대체하면서 2.6.29 리눅스 커널에 받아들여졌습니다.
+이 구현은 근래의 멀티프로세서들의 계속해서 증가하는 코어의 갯수에서 영감을
+받아서 수백개의 CPU 환경을 위해 설계되었습니다.
+현재의 구조상의 한계는 262,144 개 CPU 인데, 이는 개발자들이 (순진한 것일 수도
+있지만) 한동안은 충분할 것이라 믿는 숫자입니다.
+이 구현은 또한 preemptible RCU 의 개선된 dynamic-tick 인터페이스 인터페이스를
+받아들였습니다.
+\iffalse
+
 A new more-scalable implementation, dubbed ``Tree RCU'', replaces
 the flat bitmap with a combining tree, and was accepted into the 2.6.29
 Linux kernel.
@@ -155,6 +165,14 @@ Its current architectural limit is 262,144 CPUs, which the developer
 (perhaps na\"ively) believes to be sufficient for quite some time.
 This implementation also adopts preemptible RCU's improved dynamic-tick
 interface.
+\fi
+
+Mathieu Desnoyers 는 리눅스 커널의 tracing code 가 RCU 를 사용하도록 하는데
+필요한 \co{rcu_read_lock_sched_notrace()} 와
+\co{rcu_read_unlock_sched_notrace()} 를 추가했습니다.
+이 API 들 없이는, RCU read-side 크리티컬 섹션을 추적하려는 시도는 무한 재귀
+문제를 일으킵니다.
+\iffalse
 
 Mathieu Desnoyers added
 \co{rcu_read_lock_sched_notrace()} and
@@ -163,6 +181,22 @@ which are required to permit the tracing code in the Linux kernel
 to use RCU.
 Without these APIs, attempts to trace RCU read-side critical sections
 lead to infinite recursion.
+\fi
+
+Eric Dumazet 은 리스트 포인터에 단일 비트 마커들이 저장될 수 있도록 하는 새로운
+종류의 RCU 로 보호되는 리스트를 추가했습니다.
+이 종류의 리스트는 여러개의 락이 없는 알고리즘들을 가능하게 하는데, Maged
+Michael 에 의해 보고된 것~\cite{MagedMichael04a} 등을 포함합니다.
+Eric 의 작업은 \co{hlist_nulls_add_head_rcu()}, \co{hlist_nulls_del_rcu()},
+\co{hlist_nulls_del_init_rcu()}, 그리고 \co{hlist_nulls_for_each_entry_rcu()}
+를 추가합니다.
+이는 또한 \co{hlist_nulls_node} 라는 이름의 새로운 구조체를 추가합니다.
+
+또한, 이건 엄격히 말해서 리눅스 커널의 부분은 아니긴 하지만, 동시에 Mathieu
+Desnoyers 는 그의 유저스페이스 RCU 구현~\cite{MathieuDesnoyers2009URCU} 을
+발표했습니다.
+이는 real-time user-level RCU 구현을 향한 중요한 첫걸음입니다.
+\iffalse
 
 Eric Dumazet added a new type of RCU-protected list that allows single-bit
 markers to be stored in the list pointers.
@@ -178,6 +212,7 @@ at about this same time, Mathieu Desnoyers announced his user-space
 RCU implementation~\cite{MathieuDesnoyers2009URCU}.
 This is an important first step towards a real-time user-level RCU
 implementation.
+\fi
 
 \subsection{2.6.31 Linux Kernel}
 
