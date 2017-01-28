@@ -450,6 +450,31 @@ and several miscellaneous fixes and cleanups.
 
 \subsection{2.6.38 Linux Kernel}
 
+Lai Jiangshan 은 \co{synchronize_sched_expedited()} 를 \co{kernel/sched.c} 에서
+그것이 유래한 \co{kernel/rcutree.c} 와 \co{kernel/rcu_tiny.c} 로 옮겼습니다.
+그는 또한 \co{orphan_cbs_list} 를 제거함으로써 CPU-hotplug 오퍼레이션 동안의
+RCU-callback 처리를 단순화 해서, offline 이 되는 CPU 에 의해 고아가 되는 RCU
+콜백들이 곧바로 해당 offline 화 시키는 동작을 함께 돕는 CPU 들에 의해 곧바로
+처리될 수 있도록 했습니다.
+Tejun Heo 는 \co{synchronize_sched_expedited()} 의 batching 기능을 개선했는데,
+이는 결국 많은 동시적 \co{synchronize_sched_expedited} 오퍼레이션들을 갖는
+워크로드들의 성능과 확장성을 개선했습니다.
+Fre\'ed\'eric Weisbecker 는 RCU 를 idle 상태일 때 더욱 전력에 효율적이도록
+만들어주는 RCU 핵심 코드상의 일부 변경을 제공했습니다.
+Mariusz Kozlowski 는 \co{__list_for_each_rcu()} 상의 문법상 에러를 고쳐졌고, 곧
+사라졌습니다.
+(하지만 이 고쳐진 버전은 필요한 경우를 위해 git tree 상에 존재합니다.)
+Nick Piggin 은 RCU 로 보호되는 bit-locked doubly-linked list 들을 위해
+\co{hlist_bl_set_first_rcu()},
+\co{hlist_bl_first_rcu()},
+\co{hlist_bl_del_init_rcu()},
+\co{hlist_bl_del_rcu()},
+\co{hlist_bl_add_head_rcu()}, 그리고
+\co{hlist_bl_for_each_entry_rcu()} 기능을 추가했습니다.
+Christoph Lameter 는 변수가 곧바로 접근되는 경우에 사용되기 위한
+\co{__get_cpu_var()} 의 최적화된 변종인 \co{__this_cpu_read()} 를 구현했습니다.
+\iffalse
+
 Lai Jiangshan moved \co{synchronize_sched_expedited()} out of
 \co{kernel/sched.c} and into \co{kernel/rcutree.c} and
 \co{kernel/rcu_tiny.c} where it belongs.
@@ -476,6 +501,18 @@ of bit-locked doubly-linked lists.
 Christoph Lameter implemented \co{__this_cpu_read()}, which is an
 optimized variant of
 \co{__get_cpu_var()} for use in cases where the variable is accessed directly.
+\fi
+
+또한, \co{TINY_RCU} 는 priority boosting 을 얻었고,
+\co{synchronize_srcu_expedited()} 의 race condition 이 고쳐졌고,
+\co{synchronized_srcu_expedited()} 가 동시적인 읽기 쓰레드들이 존재할 때에
+expedited 본성을 얻을 수 있도록 수정되었으며, grace-period 시작/종료 검사가
+개선되었고, \co{TREE_RCU} 의 leaf-level fanout 이 lock-contention 문제들을
+고치기 위해 16 으로 제한되었습니다.
+이 마지막 변경은 \co{TREE_RCU} 와 \co{TREE_PREEMPT_RCU} 가 지원할 수 있는 CPU
+들의 최대 갯수를 4,194,304 로 줄였는데, 이는 (다시 말하지만, 어쩌면 순진하게도)
+충분할 것으로 여겨집니다.
+\iffalse
 
 In addition, \co{TINY_RCU} gained priority boosting, a race condition
 in \co{synchronize_sched_expedited()} was fixed,
@@ -487,6 +524,7 @@ lock-contention problems.
 This last change reduces the maximum number of CPUs that \co{TREE_RCU}
 and \co{TREE_PREEMPT_RCU} can support down to 4,194,304, which is
 (again, perhaps na\"ively) believed to be sufficient.
+\fi
 
 \subsection{2.6.39 Linux Kernel}
 
