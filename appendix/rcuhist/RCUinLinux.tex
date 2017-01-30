@@ -554,6 +554,19 @@ MCE subsystem.
 
 \subsection{3.0 Linux Kernel}
 
+많은 사람들이 2.6.40 릴리즈가 될 것이라 예상했던 것은 3.0 릴리즈가 되었습니다.
+여기서 가장 중요한 RCU 기능은 Tree RCU 를 위한 priority boosting 의
+추가였습니다: 계획됐던 것보다 여러면에서
+중요해서~\cite{PaulEMcKenney2011RCU3.0trainwreck}, 3.0-rc7 뒤의 RCU 수정이
+되었습니다.
+Shaohua Li, Peter Zijlstra, Steven Rostedt 의 RCU, 스케쥴러, 그리고 thread 로
+돌아가는 인터럽트들 사이의 충돌의 fallout 처리에 대한 많은 도움에 감사를 드리는
+바입니다.
+또한, RCU CPU stall warning 들은, 여전히 커널 부트 패러미터나 \co{sysfs} 로
+조정될 수 있는 \co{rcu_cpu_stall_suppress} 모듈 패러미터로 불능화 될 수 있긴
+하지만, 이제 무조건적으로 Tree RCU 안으로 컴파일 됩니다.
+\iffalse
+
 What many expected to be the 2.6.40 release became instead the 3.0 release.
 The most important RCU feature was the addition of priority boosting
 for Tree RCU: Important in more ways than
@@ -566,6 +579,20 @@ In addition, RCU CPU stall warnings are now unconditionally compiled
 into Tree RCU, though they may still be disabled via the
 \co{rcu_cpu_stall_suppress} module parameter, which may be controlled
 from either the kernel boot parameter string or \co{sysfs}.
+\fi
+
+Mathieu Desnoyers 는 non-preemptible RCU 구현에 들어오게 되는
+\co{DEBUG_OBJECTS_RCU_HEAD} 체크를 활성화 시켰습니다.
+Lai Jiangshan 은 fire-and-forget \co{kfree_rcu()} 를 만들었고 (그리고 이를
+커널을 통해 적용했습니다), 또한 \co{exit_rcu()} 가 task 가 RCU read-side
+크리티컬 섹션 내에서 끝나는 경우에 디버깅 상태를 유지할 수 있도록 하기 위해
+\co{rcu_read_unlock()} 대신 \co{__rcu_read_unlock()} 을 호출하도록
+만들었습니다.
+Eric Dumazet 는 더 나아가서 \co{TINY_RCU} 를 감소시켰고 Gleb Natapov 는
+가상화가 guest OS 와의 문맥 전환 시에 일어나는 quiescent state 들 사이에 RCU 가
+신경을 쓸 수 있도록 RCU hook 들을 추가했습니다.
+Peter Zijlstra 는 RCU kthread 블록킹과 wakeup 을 streamline 시켰습니다.
+\iffalse
 
 Mathieu Desnoyers enabled \co{DEBUG_OBJECTS_RCU_HEAD} checking to
 be carried out in non-preemptible RCU implementations.
@@ -581,6 +608,7 @@ Gleb Natapov added RCU hooks to allow virtualization to call RCU's
 attention to quiescent states that occur when switching context to
 and from a guest OS.
 Peter Zijlstra streamlined RCU kthread blocking and wakeup.
+\fi
 
 \subsection{3.1 Linux Kernel}
 
