@@ -624,6 +624,17 @@ and Jan H. Sch\"{o}nherr.
 
 \subsection{3.2 Linux Kernel}
 
+3.2 리눅스 커널은 RCU 의 코드의 꼭대기부터 바닥까지의 검사 첫번째 단계에서
+발견된 문제들에 대한 여러 수정사항들을 담고 있습니다.
+이 검사의 결과물 가운데 하나는 코드의 irq 불능화된 구간이 preemptible RCU
+read-side 크리티컬 섹션의 시작이 아니라 끝과 겹치게 되면 데드락이 일어날 수
+있다는 것이었습니다.
+따라서, 부분적으로 irq 불능화된 코드 구간과 겹칠 수 있는 RCU read-side 크리티컬
+섹션들을 만들지 마세요:
+대신에, irq 불능화된 코드 섹션을 주어진 RCU read-side 크리티컬 섹션 안에 완전히
+집어넣거나 그 반대로 하거나 하세요.
+\iffalse
+
 The 3.2 Linux kernel contains a number of fixes to issues located
 during the first phase of a top-to-bottom inspection of RCU's code.
 One outcome of this inspection is that deadlock can occur if
@@ -633,6 +644,18 @@ Therefore, do not code RCU read-side critical sections that partially
 overlap with irq-disabled code sections:
 Instead, either fully enclose the irq-disable code sections within a
 given RCU read-side critical section or vice versa.
+\fi
+
+이 릴리즈는 RCU 이벤트 추적 기능을 처음으로 보였습니다.
+Eric Dumazet 는 RCU 의 kthread 들이 NUMA 시스템에 최적화된 방식으로 위치된
+메모리를 가지게 됨을 보장하는 \co{kthread_create_on_node()} 기능을
+적용했습니다.
+그는 또한 \co{rcu_assign_pointer()} 가 무조건적으로 메모리 배리어를 삽입하도록
+했는데, 특정 환경에서는 이 메모리 배리어가 생략되게 했던 기존의 컴파일러의
+마술이 그보다 최신의 버전의 컴파일러에서는 통하지 않았기 때문입니다.
+따라서, RCU 로 보호되는 포인터에 \co{NULL} 을 할당할 때에는,
+\co{rcu_assign_pointer()} 보다는 \co{RCU_INIT_POIINTER()} 를 사용하세요.
+\iffalse
 
 This release saw the first RCU event-tracing capabilities.
 Eric Dumazet applied the new
@@ -645,6 +668,14 @@ barrier to be omitted under certain circumstances fails in newer
 versions of the compiler.
 Therefore, when assigning \co{NULL} to an RCU-protected pointer,
 use \co{RCU_INIT_POINTER()} rather than \co{rcu_assign_pointer()}.
+\fi
+
+Shaohua Li 는 RCU 의 per-CPU kthread 들의 불필요한 self-wakeup 을 제거했고,
+Andi Kleen 은 일부 충돌되는 변수 선언들을 정리했습니다.
+Mike Galbraith 는 RCU 가 \co{RCU_BOOST_PRIO} 커널 패러미터를 무시하게 하는
+버그를 잡았고, 마지막으로, 계속해서 확장되는 RCU 의 기능들을 잡을 수 있도록
+rcutorture 가 진척을 만들었습니다.
+\iffalse
 
 Shaohua Li eliminated an unnecessary self-wakeup of RCU's per-CPU
 kthreads, and Andi Kleen cleaned up some conflicting variable
@@ -653,6 +684,7 @@ Mike Galbraith fixed a bug that caused RCU to ignore the
 \co{RCU_BOOST_PRIO} kernel parameter, and finally,
 rcutorture made some headway in catching up to the ever-expanding
 RCU capabilities.
+\fi
 
 \subsection{3.3 Linux Kernel}
 
