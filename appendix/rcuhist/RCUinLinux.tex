@@ -738,6 +738,15 @@ this has relatively low priority.
 
 \subsection{3.4 Linux Kernel}
 
+3.4 커널은 전력 효율성을 위해 급격한 idle 진입/종료 워크로드에 대한 단점을
+줄이는 작업을 포함했습니다.
+여기서 관리된 트레이드오프는 긴 idle 시간에 대비해서 idle 진입에 대한 작업의
+증가이고, 따라서 이 릴리즈에서의 변경사항들은 추가적인 노력이 의미없을 때를
+인식하는 데 대해 더 나은 일을 하는데, 예를 들어 CPU 가 워크로드 때문에 idle 을
+급격하게 진입했다가 빠져나간다면 CPU 가 더 오래 sleep 상태에 머무르게 하는
+idle-entry 동작을 취하는데에 약간의 이점이 있습니다.
+\iffalse
+
 The 3.4 kernel contains yet more energy-efficiency work, reducing their
 downsides to rapid idle entry/exit workloads.
 The tradeoff managed here is increased work on idle entry compared to
@@ -746,6 +755,24 @@ recognizing when additional effort is futile, for example, if the
 CPU is entering and exiting idle rapidly due to the workload, there is
 little point in taking idle-entry actions that would allow the CPU to
 stay asleep longer.
+\fi
+
+이 릴리즈는 또한 계속해서 증가하는 사용예인 idle CPU 들에서 RCU 를 호출하는
+행위를 처리하는데 사용되기 위한 \co{RCU_NOIDLE()} 을 추가했습니다.
+RCU 는 idle CPU 들을 무시하기 때문에, 이런 행위는 상당히 위험합니다.
+따라서 이 새로운 \co{RCU_NONIDLE()} 매크로는 RCU read-side 크리티컬 섹션이 그
+일을 할 수 있도록 idle 로부터 급격하게 빠져나가도록 합니다.
+
+RCU 의 CPU hotplug 처리가 개선되었고, rcutorture 는 RCU CPU stall 경고를
+테스트하기 위한 기본적 기능을 일부 얻었으며, 이 stall 경고 자체는 더 많은
+정보를 추가하고 sysfs 를 통해 타임아웃을 제어할 수 있는 기능을 추가함으로써
+개선되었습니다.
+\co{TREE_RCU} 는 \co{CONFIG_SMP=n} 커널에서는 더이상 사용되지 않습니다;
+\co{TINY_RCU} 가 그대신 사용됩니다.
+이 릴리즈는 또한, non-preemptible-RCU read-side 크리티컬 섹션 내에서의 잠자는
+행위와 RCU read-side 크리티컬 섹션 내에서의 idle loop 진입을 위한 lockdep-RCU
+체크의 추가를 포함합니다.
+\iffalse
 
 This release also added \co{RCU_NONIDLE()}, which is used to handle
 the increasingly frequent practice of invoking RCU from idle CPUs.
@@ -762,6 +789,22 @@ by adding the ability to control timeouts via sysfs.
 This release also saw the addition of lockdep-RCU checks for sleeping
 in a non-preemptible-RCU read-side critical section, as well as for
 entering the idle loop while in an RCU read-side critical section.
+\fi
+
+\co{TINY_RCU} 는 v3.0-rc7 RCU
+trainwreck~\cite{PaulEMcKenney2011RCU3.0trainwreck} 을 위한 \co{TREE_RCU}
+수정사항들을 상속받았습니다.
+Grace-period 초기화 프로세스는 기존의 single-node 최적화를 제거했으며, offline
+이 된 CPU 들에 남아있는 콜백들은 더이상 두번째의 grace period 전체를 거치지
+않아도 되게 되었습니다.
+더 나아가서, offline CPU 들은 더이상 RCU 콜백들을 호출할 수 없게 되었습니다.
+
+이 외에도 더 많은 전력 효율성 코드의 수정사항들이 idle CPU 위에서 비참하게
+살아있을 수도 있는 Time lazy 콜백들의 양을 제한했습니다.
+마지막으로, Fr\'ed\'eric Weisbecker, Heiko Carstens, Julia Lawall, Hugh
+Dickins, Jan Beulich, 그리고 Paul Gortmaker 에 의해서 다수의 수정사항들이
+추가되었습니다.
+\iffalse
 
 \co{TINY_RCU} inherited the \co{TREE_RCU} fixes for the v3.0-rc7 RCU
 trainwreck~\cite{PaulEMcKenney2011RCU3.0trainwreck}.
@@ -776,6 +819,7 @@ time lazy callbacks could languish on an idle CPU.
 Finally, a number of fixes were supplied by Fr\'ed\'eric Weisbecker,
 Heiko Carstens, Julia Lawall, Hugh Dickins, Jan Beulich, and Paul
 Gortmaker.
+\fi
 
 \subsection{3.5 Linux Kernel}
 
