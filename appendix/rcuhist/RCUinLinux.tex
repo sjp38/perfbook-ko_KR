@@ -1079,6 +1079,27 @@ Petkov.
 
 \subsection{3.13 Linux Kernel}
 
+3.13 커널은 \co{CONFIG_RCU_FAST_NOHZ} 수행에서의 일부 향상점들을 포함하는데,
+그가운데는 콜백들을 강화시키려는 너무 빈번한 시도를 막는 것도 있습니다.
+그런 변화가 필요한 이유는, 그와 같이 콜백들이 강화될 수 있도록 허용하는
+이벤트들은 일반적으로 수 밀리세컨드에 한번 정도만 발생해서, jiffy 마다 한번
+이상의 빈도로 콜백들을 강화하려는 시도는 성능과 전력의 낭비 외에는 아무일도
+하지 않는다는 것입니다.
+따라서 3.13 커널은 현재 jiffy 내에 이미 콜백을 강화시키려 시도한 적이 없을
+경우에만 시도를 합니다.
+
+새로 추가된 \co{rcu_is_watching()} 함수는 호출자가 RCU read-side 크리티컬
+섹션에 진입하기에 안전한가 그렇지 않은가를 판단할 수 있도록 해줍니다.
+달리 말하자면, \co{rcu_is_watching()} 은 해당 CPU 가 idle 이거나 offline 상태가
+아니라면 true 를 리턴합니다.
+또한, 새로 추가된 (Michael S.~Tsirkin 에 의해 제공된)
+\co{smp_mb__after_srcu_read_unlock()} 인터페이스는 \co{srcu_read_unlock()} 에서
+전체 메모리 배리어를 칠 것을 보장합니다.
+비록 \co{srcu_read_unlock()} 이 현재로써는 이미 전체 메모리 배리어를
+제공하지만, 기존의 구현들은 그리하지 않았고 미래의 구현들은 또다시 그리하지
+않게 될수도 있다는 점을 알아두시기 바랍니다.
+\iffalse
+
 The 3.13 kernel contains some improvements in \co{CONFIG_RCU_FAST_NO_HZ}
 execution, especially avoiding too-frequent attempts to advance callbacks.
 The rationale is that those events permitting callbacks to advance
@@ -1098,6 +1119,16 @@ guarantees a full memory barrier from \co{srcu_read_unlock()}.
 Note that although \co{srcu_read_unlock()} currently already provides
 a full memory barrier, earlier implementations did not do so and
 future implementations might once again not do so.
+\fi
+
+RCU 의 소스 파일들은 3.13 부터 새로운 장소로 옮겨졌는데, \co{kernel}
+디렉토리로부터 \co{kernel/rcu} 디렉토리로 옮겨졌습니다.
+
+마지막으로, Christoph Lameter 는 RCU 의 per-CPU 변수 API 사용을 업데이트 하는
+패치를 하나 제공했고 Kirill Tkhai 는 \co{CONFIG_RCU_NOCB_CPU_ALL} 과 함께
+만들어진 커널들이 중간중간 비어있는 CPU 숫자 규칙을 가진 시스템에서 돌아가는
+경우 부팅 중에 panic 을 발생시킬 수 있던 문제의 수정을 제공했습니다.
+\iffalse
 
 RCU's source files have a new home in 3.13, consolidated from the
 \co{kernel} directory into a new \co{kernel/rcu} directory.
@@ -1107,6 +1138,7 @@ per-CPU-variable APIs and Kirill Tkhai provided a fix for a problem
 in which kernels built with \co{CONFIG_RCU_NOCB_CPU_ALL} would
 panic on boot when running
 on systems with sparse CPU numbering.
+\fi
 
 \subsection{3.14 Linux Kernel}
 
