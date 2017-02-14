@@ -1,9 +1,10 @@
 #!/bin/sh
 #
-# Extract git commit date info to generate autodate.tex.
-# If invoked on not-clean git repository, append "(m)" to date field
-# for title.
-# If git status is not availabe, use current date instead.
+# Find hyphens used for number range and replace them with en dashes.
+# (for bibliography pages field, conversion to en dash is done by BiBTeX)
+#
+# Replacement candidate
+#   Volumes mm-nn -> Volumes mm--nn
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,26 +24,4 @@
 #
 # Authors: Akira Yokosawa <akiyks@gmail.com>
 
-export LC_TIME=C
-# check if we are in git repository
-if ! test -e .git
-then
-	date_str=`date -R`
-	modified=""
-else
-	date_str=`git show --format="%cD" | head -1`
-	# check if git status is clean
-	gitstatus=`git status --porcelain | wc -l`
-	if [ $gitstatus != "0" ]
-	then
-		modified="(m)"
-	else
-		modified=""
-	fi
-fi
-month=`date --date="$date_str" +%B`
-year=`date --date="$date_str" +%Y`
-day=`date --date="$date_str" +%e`
-
-env printf "\\date{%s %s, %s %s}\n" $month $day $year $modified
-env printf "\\\newcommand{\\\commityear}{%s}\n" $year
+cat $1 | sed -e 's/Volumes \([0-9]\+\)-\([0-9]\+\)/Volumes \1--\2/g'
