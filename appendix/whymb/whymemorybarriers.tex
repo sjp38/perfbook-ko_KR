@@ -3085,15 +3085,22 @@ Figure~\ref{fig:app:whymb:Why smp-read-barrier-depends() is Required} 는 캐시
 머신에서 이런 일이 어떻게 일어날 수 있는지 보입니다.
 리스트 헤더 {\tt head} 가 cache bank~0 에서 처리되고, 새 원소는 cache bank~1
 에서 처리된다고 생각해 봅시다.
+예를 들어,
+Figure~\ref{fig:app:whymb:Insert and Lock-Free Search} line~17 에서의
+\co{head.next} 의 로드는 cache bank~0 에 액세스 할 수 있을 것이며, line~20
+에서의 \co{p->key} 의 로드와 line~23 에서의 \co{p->next} 의 로드는 cache bank~1
+에 접근할 수 있을 겁니다.
 Alpha 에서, Figure~\ref{fig:app:whymb:Insert and Lock-Free Search} line~6-8 에
-의해 야기된 캐시 무효화는 \co{smp_wmb()} 에 의해 line~10 이전에 interconnect
-에 도착할 것을 보장합니다만, 새 값이 읽는 CPU 의 코어에 도착하는 순서에
+의해 야기된 (\co{p->next}, \co{p->key}, 그리고 \co{p->data} 를 위한) 캐시
+무효화는 \co{smp_wmb()} 에 의해 line~10 이전에 (\co{head.next} 에 대해)
+interconnect 에 도착할 것을 보장합니다만, 읽는 CPU 의 코어에 도착하는 순서에
 대해서는 아무런 보장을 하지 않습니다.
-예를 들어, 읽는 CPU 의 cache bank 1 이 매우 바쁜 한편 cache bank 0 는 아무 일도
+예를 들어, 읽는 CPU 의 cache bank~1 이 매우 바쁜 한편 cache bank~0 는 아무 일도
 하고 있지 않을 수 있습니다.
-이런 경우 새 원소에 대한 캐시 무효화 결과의 도착이 지연되어 읽는 CPU 는
-포인터의 새 값은 받지만, 캐시되어 있던, 새 원소의 예전 값을 읽는 결과가 나올 수
-있습니다.
+이런 경우 새 원소 (\co{p->next}, \co{p->key}, 그리고 \co{p->data}) 에 대한 캐시
+무효화 결과의 도착이 지연되어 읽는 CPU 는 \co{head.next} 를 위한 새 값은
+받지만, 캐시되어 있던, \co{p->key} 와 \co{p->next} 의 예전 값을 읽는 결과가
+나올 수 있습니다.
 여전히 제가 가상의 이야기를 하고 있다고 생각된다면, 더 자세한 정보를 위해 앞서
 이야기한 웹 사이트를 한번 방문해 보세요.\footnote{
 	물론, 눈치 빠른 독자는 더럽고 비열한 Alpha 는 더이상 어디에도 없지만,
