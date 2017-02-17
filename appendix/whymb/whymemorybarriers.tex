@@ -2621,6 +2621,10 @@ Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 	Table~\ref{tab:app:whymb:Memory Barrier Example 3} 에서 CPU~1 과 2 의
 	line~3-5 가 인터럽트 핸들러 안에서 수행되고, CPU~2 의 line~9 는
 	프로세스 레벨에서 수행된다고 생각해 봅시다.
+	달리 말하자면, 이 표의 세개의 열 모두의 코드가 같은 CPU 에서
+	수행되지만, 앞의 두개의 열의 코드는 인터럽트 핸들러에서 수행되고,
+	세번째 열의 것은 프로세스 레벨에서 수행되어서, 세번째 열의 코드는 앞의
+	두 열에 의해 인터럽트 당할 수 있다고 생각해 봅시다.
 	코드가 정확히 동작하도록 하는데, 달리 말하자면 단정문이 실패하지 않도록
 	하는데 어떤 변경이 필요할까요? 필요하다면 무엇일까요?
 	\iffalse
@@ -2629,7 +2633,6 @@ Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 	Table~\ref{tab:app:whymb:Memory Barrier Example 3}
 	are in an interrupt
 	handler, and that the CPU~2's line~9 runs at process level.
-	% TODO: Apply upstream change
 	In other words, the code in all three columns of the table
 	runs on the same CPU, but the first two columns run in an
 	interrupt handler, and the third column runs at process
@@ -2639,10 +2642,11 @@ Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 	correctly, in other words, to prevent the assertion from firing?
 	\fi
 \QuickQuizAnswer{
-	``e'' 의 로드 오퍼레이션이 ``a'' 의 로드 오퍼레이션 이전에 이루어졌음을
-	분명히 하도록 단정문이 쓰여져야 합니다.
+	단정문은 ``e'' 의 로드 오퍼레이션이 ``a'' 의 로드 오퍼레이션 이전에
+	이루어졌음을 분명히 해야 합니다.
 	리눅스 커널에서는 barrier() 를 앞의 예들에서 단정문에 사용되었던 메모리
-	배리어처럼 사용되는 것으로 이를 달성할 수 있을 것입니다.
+	배리어처럼 사용되는 것으로 이를 달성할 수 있을 것인데, 예를 들면 다음과
+	같습니다:
 	\iffalse
 
 	The assertion must ensure that the load of
@@ -2666,9 +2670,16 @@ assert(r1 == 0 || a == 1);
 \end{minipage}
 \vspace{5pt}
 
+	앞의 두 열의 코드에 대해서는 변경이 필요 없는데, 인터럽트 핸들러는
+	인터럽트 당하는 코드의 관점에서 보기에는 어토믹하게 수행되기
+	때문입니다.
+	\iffalse
+
 	No changes are needed to the code in the first two columns,
 	because interrupt handlers run atomically from the perspective
 	of the interrupted code.
+	\fi
+
 } \QuickQuizEnd
 
 \QuickQuiz{}
