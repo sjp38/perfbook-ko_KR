@@ -2629,6 +2629,12 @@ Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 	Table~\ref{tab:app:whymb:Memory Barrier Example 3}
 	are in an interrupt
 	handler, and that the CPU~2's line~9 runs at process level.
+	% TODO: Apply upstream change
+	In other words, the code in all three columns of the table
+	runs on the same CPU, but the first two columns run in an
+	interrupt handler, and the third column runs at process
+	level, so that the code in third column can be interrupted
+	by the code in the first two columns.
 	What changes, if any, are required to enable the code to work
 	correctly, in other words, to prevent the assertion from firing?
 	\fi
@@ -2639,12 +2645,30 @@ Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 	배리어처럼 사용되는 것으로 이를 달성할 수 있을 것입니다.
 	\iffalse
 
-	The assertion will need to written to ensure that the load of
+	The assertion must ensure that the load of
 	``e'' precedes that of ``a''.
 	In the Linux kernel, the barrier() primitive may be used to accomplish
 	this in much the same way that the memory barrier was used in the
-	assertions in the previous examples.
+	assertions in the previous examples, for example, as follows:
 	\fi
+
+\vspace{5pt}
+\begin{minipage}[t]{\columnwidth}
+\small
+\begin{verbatim}
+while (b == 0) ;
+smp_mb();
+d = 1;
+r1 = e;
+barrier();
+assert(r1 == 0 || a == 1);
+\end{verbatim}
+\end{minipage}
+\vspace{5pt}
+
+	No changes are needed to the code in the first two columns,
+	because interrupt handlers run atomically from the perspective
+	of the interrupted code.
 } \QuickQuizEnd
 
 \QuickQuiz{}
@@ -3083,19 +3107,24 @@ shows how this can happen on
 an aggressively parallel machine with partitioned caches, so that
 alternating cache lines are processed by the different partitions
 of the caches.
-Assume that the list header {\tt head} will be processed by cache bank~0,
-and that the new element will be processed by cache bank~1.
-On Alpha, the \co{smp_wmb()} will guarantee that the cache invalidates performed
-by lines~6-8 of
-Figure~\ref{fig:app:whymb:Insert and Lock-Free Search} will reach
-the interconnect before that of line~10 does, but
-makes absolutely no guarantee about the order in which the new values will
-reach the reading CPU's core.
+For example, the load of \co{head.next} on line~17 of
+Figure~\ref{fig:app:whymb:Insert and Lock-Free Search}
+might access cache bank~0,
+and the load of \co{p->key} on line~20 and of \co{p->next} on line~23
+might access cache bank~1.
+On Alpha, the \co{smp_wmb()} will guarantee that the cache invalidations
+performed by lines~6-8 of
+Figure~\ref{fig:app:whymb:Insert and Lock-Free Search}
+(for \co{p->next}, \co{p->key}, and \co{p->data}) will reach
+the interconnect before that of line~10 (for \co{head.next}), but
+makes absolutely no guarantee about the order of
+propagation through the reading CPU's cache banks.
 For example, it is possible that the reading CPU's cache bank~1 is very
 busy, but cache bank~0 is idle.
-This could result in the cache invalidates for the new element being
-delayed, so that the reading CPU gets the new value for the pointer,
-but sees the old cached values for the new element.
+This could result in the cache invalidations for the new element
+(\co{p->next}, \co{p->key}, and \co{p->data}) being
+delayed, so that the reading CPU loads the new value for \co{head.next},
+but loads the old cached values for \co{p->key} and \co{p->next}.
 See the documentation~\cite{Compaq01} called out earlier for more information,
 or, again, if you think that I am just making all this up.\footnote{
 	Of course, the astute reader will have already recognized that
