@@ -11,6 +11,23 @@
 \ContributedBy{Figure}{fig:app:rcuimpl:srcu:Sleeping While RCU Reading Considered Harmful}{Melissa Broussard}
 \end{figure}
 
+Classic RCU 는 read-side 크리티컬 섹션들이 순수한 스핀락들의 크리티컬 섹션들에
+의해 지켜지는 것과 똑같은 규칙을 지킬 것을 필요로 합니다: 블락되거나 sleep
+상태에 빠지는 어떠한 종류의 것들도 엄격히 금지됩니다.
+이는 많은 경우 RCU 의 사용에 문제가 되었고, Paul 은 RCU read-side 크리티컬 섹션
+안에서 임의적으로 잠드는 (또는 블록되는) 것을 허용하는 ``sleepable RCU'' (SRCU)
+를 위한 요청을 많이 받았습니다.
+Paul 은 기존에는 그런 요청들을 모두 작업할 수 없다고 거부했는데, RCU read-side
+안에서 임의로 sleep 상태에 빠지는 것은 grace period 를 불명확하게 연장시킬 수
+있는데, 이는 임의의 커다란 양의 메모리가 하나의 grace period 의 종료를 기다리는
+결과를 초래할 것이고, 이는 결국
+Figure~\ref{fig:app:rcuimpl:srcu:Sleeping While RCU Reading Considered Harmful}
+에 그려진 것처럼 대부분의 경우 메모리 부족으로 인한 시스템 멎음 상태의 재앙이
+되어버릴 수 있을 것이기 때문이었습니다.
+무엇보다도, 시스템 멎음 상태를 초래할 수 있는---심지어 올바르게
+사용되었음에도---모든 동시성 제어 기능은 존재할 가치가 없습니다.
+\iffalse
+
 Classic RCU requires that read-side critical sections
 obey the same rules
 obeyed by the critical sections of pure spinlocks: blocking or sleeping
@@ -28,6 +45,23 @@ Figure~\ref{fig:app:rcuimpl:srcu:Sleeping While RCU Reading Considered Harmful},
 with the most likely disaster being hangs due to memory exhaustion.
 After all, any concurrency-control primitive that could result in
 system hangs---even when used correctly---does not deserve to exist.
+\fi
+
+하지만, 스핀락 크리티컬 섹션들이 preemption 될 수 있을 것을 필요로 하는
+realtime 커널들~\cite{IngoMolnar05a} 또한 RCU read-side 크리티컬 섹션들이
+preemption 될 수 있을 것을 필요로 했습니다~\cite{PaulMcKenney05b}.
+Preemptible 크리티컬 섹션들은 데드락이 방지될 수 있도록 하기 위해
+lock-acquisition 기능이 블록될 수 있을 것을 필요로 했고, 이는 곧 RCU 의, 그리고
+스핀락의 크리티컬 섹션들이 락을 기다리며 블록될 수 있음을 의미하게 됩니다.
+하지만, 이 두가지 형태의 sleeping 은 이 잠든 task 들을 짧은 시간 내에 깨우기
+위해 사용될 수 있는 priority boosting 과 priority inheritance 라는 특수한
+속성을 갖습니다.
+
+하지만, realtime 커널들에서의 RCU 의 사용은 ``RCU read-side 크리티컬 섹션들은
+결코 잠들 수 없다'' 라고 새겨져 있는 석판에 생겨난 첫번째 흠집이었습니다.
+그렇다고는 하나, 들어오는 TCP 연결을 기다리면서 블록되는 것과 같은 불명확한
+시간동안의 잠듦은 realtime 커널들에서조차도 엄격히 금지되어 있습니다.
+\iffalse
 
 However, the realtime kernels that require spinlock critical sections
 be preemptible~\cite{IngoMolnar05a} also require that RCU read-side critical
@@ -46,25 +80,50 @@ of stone on which were inscribed ``RCU read-side critical sections can never
 sleep''.
 That said, indefinite sleeping, such as blocking waiting for an
 incoming TCP connection, is strictly verboten even in realtime kernels.
+\fi
 
 \QuickQuiz{}
+	Classic RCU read-side 크리티컬 섹션 안에서는 왜 잠드는 행위가 금지되어
+	있었나요?
+	\iffalse
+
 	Why is sleeping prohibited within Classic RCU read-side
 	critical sections?
+	\fi
 \QuickQuizAnswer{
+	잠드는 행위는 Classic RCU 에서는 quiescent state 인 컨텍스트 스위치를
+	암시하며, RCU 의 grace-period 탐지는 RCU read-side 크리티컬 섹션
+	내에서는 quiescent state 가 결코 나타나지 말아야 할것을 필요로 하기
+	때문입니다.
+	\iffalse
+
 	Because sleeping implies a context switch, which in Classic RCU is
 	a quiescent state, and RCU's grace-period detection requires that
 	quiescent states never appear in RCU read-side critical sections.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	quiescent state 에서 컨텍스트 스위치를 제거해버리고, user-mode 수행과
+	idle loop 를 quiescent state 로 남겨둠으로써 Classic RCU read-side
+	크리티컬 섹션에서의 잠드는 행위를 허용하는건 어떻습니까?
+	\iffalse
+
 	Why not permit sleeping in Classic RCU read-side critical sections
 	by eliminating context switch as a quiescent state, leaving user-mode
 	execution and idle loop as the remaining quiescent states?
+	\fi
 \QuickQuizAnswer{
+	이는 상당한 kernel-mode 수행으로 이루어진 부하를 갖는 시스템 (e.x: 커널
+	쓰레드로 인해) 은 grace period 의 완료를 하지 못해서 금방이든 나중이든
+	메모리 부족을 일으킬 겁니다.
+	\iffalse
+
 	This would mean that a system undergoing heavy kernel-mode
 	execution load (e.g., due to kernel threads) might never
 	complete a grace period, which
 	would cause it to exhaust memory sooner or later.
+	\fi
 } \QuickQuizEnd
 
 \subsection{SRCU Implementation Strategy}
