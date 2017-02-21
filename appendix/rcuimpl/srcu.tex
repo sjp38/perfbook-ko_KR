@@ -207,8 +207,13 @@ to \co{call_rcu()}.
 \subsubsection{Isolate Grace-Period Detection}
 \label{sec:app:rcuimpl:Isolate Grace-Period Detection}
 
+Classic RCU 에서는 단일 read-side 크리티컬 섹션이 무한하게 \emph{모든} RCU
+callback 들을 지연시킬 수 있는데, 예를 들면 다음과 같습니다:
+\iffalse
+
 In Classic RCU, a single read-side critical section could indefinitely
 delay \emph{all} RCU callbacks, for example, as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -221,6 +226,30 @@ delay \emph{all} RCU callbacks, for example, as follows:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+이런 부류의 동작은 만약 RCU 가 grace period 의 긴 시간동안의 지연에도 돌아갈 수
+있도록 주의깊게 설계된 하나의 subsystem 안에서만 사용되었다면 해결될 수도
+있었을 겁니다.
+이 긴 시간동안의 RCU read-side 지연이 사라지도록 강제한 RCU 의 \emph{모든}
+사용자를 하나의 격리된 subsystem 안에서의 하나의 RCU read-side 버그가 지연시킬
+수 있다는게 사실입니다.
+
+이 문제를 우회할 수 있는 한가지 방법은 grace-period 탐지가
+subsystem-by-subsystem 기반으로 이루어지도록 해서, 혼수상태의 RCU 읽기 쓰레드는
+grace period 를 해당 읽기 쓰레드의 subsystem 내에서만 지연시키도록 하는
+것입니다.
+각각의 subsystem 은 grace period 를 기다리는 메모리 블록들을 제한된 숫자까지만
+가질 수 있고, subsystem 의 수 역시 짐작건대 제한되어 있으므로, grace period 를
+기다리는 메모리의 양 역시 제한될 겁니다.
+특정 subsystem 의 설계자는 반드시: (1) SRCU read-side sleeping 이 제한되어
+있음을 분명히 보장하고 (2) \co{synchronize_srcu()} 를 기다리는 메모리의 양을
+제한해야만 합니다.\footnote{
+	예를 들어, SRCU 로 보호되는 해시 테이블은 hash chain 당 하나의 락을
+	가질 수 있어서, hash chain 당 최대 하나의 블록이
+	\co{synchronize_srcu()} 를 기다리도록 할 수 있습니다.}
+
+이게 정확히 SRCU 가 취한 방법으로, 다음 섹션에서 설명됩니다.
+\iffalse
 
 This sort of behavior might be tolerated if RCU were used only within
 a single subsystem that was carefully designed to withstand long-term
@@ -245,6 +274,7 @@ waiting for \co{synchronize_srcu()}.\footnote{
 
 This is precisely the approach that SRCU takes, as described in the
 following section.
+\fi
 
 \subsection{SRCU API and Usage}
 \label{sec:app:rcuimpl:SRCU API and Usage}
