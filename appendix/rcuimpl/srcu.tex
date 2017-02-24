@@ -305,6 +305,25 @@ long srcu_batches_completed(struct srcu_struct *sp);
 \subsubsection{Initialization and Cleanup}
 \label{sec:app:rcuimpl:Initialization and Cleanup}
 
+SRCU 를 사용하는 subsystem 각각은 \co{struct} \co{srcu_struct} 를 이 타입의
+변수를 선언하는 것으로, 또는, 예를 들면 \co{kamlloc()} 등을 사용해서 동적으로
+메모리를 할당하는 것으로 생성해야만 합니다.
+일단 이 구조체가 만들어지면, 이 구조체는 \co{init_srcu_struct()} 로 초기화
+되어야 하는데, 이 함수는 성공 시에는 0을, (예를 들어, 메모리 부족 같은 이유로
+인한) 실패 시에는 에러 코드를 리턴합니다.
+
+만약 \co{struct} \co{srcu_strcut} 가 동적으로 할당되었다면, 메모리에서 해제되기
+전에 \co{cleanup_srcu_struct()} 가 반드시 호출되어야 합니다.
+비슷하게, \co{struct} \co{srcu_strcut} 가 리눅스 커널 모듈 내에서 선언된
+변수라면, \co{cleanup_srcu_struct()} 는 해당 모듈이 언로드 되기 전에
+호출되어야만 합니다.
+어떤 방식으로든, 호출자는 \co{cleanup_srcu_struct()} 의 호출 전에 모든 SRCU
+read-side 크리티컬 섹션이 완료되었음을 (그리고 더이상 시작되지 않을 것을)
+보장해야 합니다.
+이를 달성하기 위한 방법 중 한가지가
+Section~\ref{sec:app:rcuimpl:Cleaning Up Safely} 에서 설명됩니다.
+\iffalse
+
 Each subsystem using SRCU must create an
 \co{struct} \co{srcu_struct},
 either by declaring a variable of this type or by
@@ -323,6 +342,7 @@ critical sections have completed (and that no more will commence) before
 calling \co{cleanup_srcu_struct()}.
 One way to accomplish this is described in
 Section~\ref{sec:app:rcuimpl:Cleaning Up Safely}.
+\fi
 
 \subsubsection{Read-Side Primitives}
 \label{sec:app:rcuimpl:Read-Side Primitives}
