@@ -395,7 +395,11 @@ reasonably store this index in the task structure.
 \subsubsection{Update-Side Primitives}
 \label{sec:app:rcuimpl:Update-Side Primitives}
 
+\co{synchronize_srcu()} 기능은 아래에 보여진 것처럼 사용될 수 있습니다:
+\iffalse
+
 The \co{synchronize_srcu()} primitives may be used as shown below:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -407,6 +411,22 @@ The \co{synchronize_srcu()} primitives may be used as shown below:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+Classic RCU 와의 유사점으로부터 유추할 수 있듯이, 이 기능은
+Table~\ref{tab:app:rcuimpl:SRCU Update and Read-Side Critical Sections} 에
+보여진 것처럼 이 \co{synchronize_src()} 가 시작하기 전에 시작된 모든 SRCU
+read-side 크리티컬 섹션들이 완료될 때까지 블록됩니다.
+여기서, CPU~1 은 CPU~0 의 SRCU read-side 크리티컬 섹션의 완료까지만 기다리면
+됩니다.
+CPU~2 의 SRCU read-side 크리티컬 섹션의 완료를 기다릴 필요는 없는데, CPU~2 는
+CPU~1 이 \co{synchronize_src()} 의 수행을 시작하기까지는 이 크리티컬 섹션을
+시작하지 않았기 때문입니다.
+마지막으로, CPU~1 의 \co{synchronize_srcu()} 는 CPU~3 의 SRCU read-side
+크리티컬 섹션을 기다릴 필요가 없는데, CPU~3 는 자신의 \co{struct}
+\co{srcu_struct} 로 \co{s1} 이 아니라 \co{s2} 를 사용하기 때문입니다.
+따라서 CPU~3 의 SRCU read-side 크리티컬 섹션은 CPU~0 과 2 와는 다른 grace
+period 집합에 연관됩니다.
+\iffalse
 
 As one might expect by analogy with Classic RCU, this primitive blocks
 until until after the completion of all SRCU read-side critical sections
@@ -422,6 +442,7 @@ SRCU read-side critical section, because CPU~3 is using \co{s2} rather
 than \co{s1} as its \co{struct} \co{srcu_struct}.
 CPU~3's SRCU read-side critical section is thus related to a different
 set of grace periods than those of CPUs~0 and 2.
+\fi
 
 \begin{table*}[htb]
 \scriptsize
