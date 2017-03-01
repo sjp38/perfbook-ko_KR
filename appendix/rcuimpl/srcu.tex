@@ -485,6 +485,26 @@ This primitive is used in ``torture tests'' that validate SRCU's operation.
 \subsubsection{Cleaning Up Safely}
 \label{sec:app:rcuimpl:Cleaning Up Safely}
 
+SRCU 를 안전하게 정리하기 (cleanning up) 는 하나의 도전이 될수 있습니다만,
+다행히도 많은 사용의 경우 그럴 필요가 없습니다.
+예를 들어, boot time 에 초기화를 하는 운영체제 커널에서의 사용의 경우 정리
+작업이 필요없습니다.
+하지만, load 할 수 있는 모듈 내에서의 사용은 연관된 모듈이 안전하게 unload
+되어야 한다면 정리 작업이 필요합니다.
+
+RCU torture 모듈과 같은 일부 경우에 있어서는, 알려진 작은 수의 쓰레드들만이
+특정한 \co{struct} \co{srcu_strcut} 에 대해 SRCU read-side 기능들을 사용합니다.
+이런 경우에 있어서는 module 종료 코드는 해당 쓰레드들을 종료시키고, 그것들이
+종료되길 기다린 후, 정리 작업을 진행하면 됩니다.
+
+예를 들면 디바이스 드라이버들과 같은 다른 경우에 있어서는 시스템의 어떤
+쓰레드이건 해당 SRCU 의 read-side 기능들을 사용하고 있을 수 있습니다.
+앞의 문단에서의 방법을 적용할 수도 있겠지만, 이는 결국 전체 reboot 과 같은
+결과를 나오게 할텐데, 이는 별로 매력적인 방법이 아닙니다.
+Figure~\ref{fig:app:rcuimpl:SRCU Safe Cleanup} 는 reboot 없이 정리 작업이
+이뤄질 수 있는 방법 한가지를 보입니다.
+\iffalse
+
 Cleaning up SRCU safely can be a challenge, but fortunately many
 uses need not do so.
 For example, uses in operating-system kernels that are initialized at
@@ -504,6 +524,7 @@ Although one could apply the method of the previous paragraph, this
 ends up being equivalent to a full reboot, which can be unattractive.
 Figure~\ref{fig:app:rcuimpl:SRCU Safe Cleanup} shows one way that cleanup
 could be accomplished without a reboot.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -537,6 +558,17 @@ could be accomplished without a reboot.
 \label{fig:app:rcuimpl:SRCU Safe Cleanup}
 \end{figure}
 
+\co{readside()} 함수는 line~5-11 의 RCU 와 line~10-13 의 SRCU read-side
+크리티컬 섹션을 겹치게 합니다.
+이 RCU read-side 크리티컬 섹션은 \co{nomoresrcu} 변수의 값을 지키기 위해 순수한
+RCU~\cite{PaulEdwardMcKenneyPhD} 를 사용합니다.
+만약 이 변수에 값이 할당되면, 우린 정리작업을 하고 있는 것이고, 따라서 뒤의
+SRCU read-side 크리티컬 섹션을 들어가지 않아야 하므로, 그대신 \co{-EINVAL} 을
+리턴합니다.
+한편, 우리가 아직 정리작업 중이 아니라면, 우린 SRCU read-side 크리티컬 섹션
+안으로 진입합니다.
+\iffalse
+
 The \co{readside()} function overlaps an RCU and an SRCU read-side
 critical section, with the former running from lines~5-11 and the
 latter running from lines~10-13.
@@ -553,6 +585,17 @@ If this variable is set, we are cleaning up, and therefore must not enter
 the SRCU read-side critical section, so we return \co{-EINVAL} instead.
 On the other hand, if we are not yet cleaning up, we proceed into the
 SRCU read-side critical section.
+\fi
+
+\co{cleanup()} 함수는 먼저 line~19 에서 \co{nomoresrcu} 변수에 값을 할당하지만,
+그러고나서는 모든 현재 존재하는 RCU read-side 크리티컬 섹션이 완료되기를
+line~20 에서의 \co{synchronize_rcu()} 기능을 통해 기다립니다.
+일단 \co{cleanup()} 함수가 line~21 에 다다르면, \co{nomoresrcu} 의 값이 0인
+것을 봤을 수 있는 모든 \co{readside()} 실행 쓰레드들은 이미 line~11 에 이르렀을
+것이고, 따라서 이미 각작의 SRCU read-side 크리티컬 섹션에 들어갔어야 합니다.
+모든 이후의 \co{readside()} 호출은 line~8 에서 종료될 것이고, 따라서 read-side
+크리티컬 섹션에 들어가지 않을 것입니다.
+\iffalse
 
 The \co{cleanup()} function first sets the \co{nomoresrcu} variable
 on line~19, but then must wait for all currently executing RCU read-side
@@ -564,12 +607,21 @@ to zero must have already reached line~11, and therefore already must
 have entered their SRCU read-side critical section.
 All future calls to \co{readside()} will exit via line~8, and will thus
 refrain from entering the read-side critical section.
+\fi
+
+따라서, 일단 \co{cleanup()} 이 line~21 에서의 \co{synchronize_srcu()} 호출을
+완료한다면, 모든 SRCU read-side 크리티컬 섹션들은 이미 완료되었을 것이고,
+새로운 크리티컬 섹션의 시작은 없을 겁니다.
+따라서 line~22 에서의 \co{cleanup_srcu_struct()} 호출을 통한 정리작업은
+안전합니다.
+\iffalse
 
 Therefore, once \co{cleanup()} completes its call to
 \co{synchronize_srcu()} on line~21, all SRCU read-side critical sections
 will have completed, and no new ones will be able to start.
 It is therefore safe on line~22 to call \co{cleanup_srcu_struct()}
 to clean up.
+\fi
 
 \subsection{Implementation}
 \label{sec:app:rcuimpl:Implementation}
