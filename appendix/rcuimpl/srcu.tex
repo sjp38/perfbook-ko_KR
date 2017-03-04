@@ -689,11 +689,18 @@ a time to proceed.
 \subsubsection{Initialization Implementation}
 \label{sec:app:rcuimpl:Initialization Implementation}
 
+SRCU 의 초기화 함수, \co{init_srcu_struct()} 가
+Figure~\ref{fig:app:rcuimpl:SRCU Initialization} 에 보여져 있습니다.
+이 함수는 단순히 \co{struct} \co{srcu_strcut} 의 필드들을 초기화 할 뿐이며,
+초기화가 성공하면 0을 리턴하고 그렇지 않으면 \co{-ENOMEM} 을 리턴합니다.
+\iffalse
+
 SRCU's initialization function, \co{init_srcu_struct()}, is shown in
 Figure~\ref{fig:app:rcuimpl:SRCU Initialization}.
 This function simply initializes the fields in the
 \co{struct} \co{srcu_struct}, returning zero if initialization succeeds
 or \co{-ENOMEM} otherwise.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -712,6 +719,19 @@ or \co{-ENOMEM} otherwise.
 \label{fig:app:rcuimpl:SRCU Initialization}
 \end{figure}
 
+SRCU 의 cleanup 함수들이
+Figure~\ref{fig:app:rcuimpl:SRCU Cleanup} 에 보여져 있습니다.
+주요 cleanup 함수인 \co{cleanup_srcu_struct()} 가 그림의 line~19-29 에 보여져
+있는데, 이 함수는 이 \co{strcut} \co{srcu_Strcut} 를 사용하는 읽기 쓰레드들이
+현재 존재하지 않음을 검증하기 위해 이 그림의 line~13-17 에 보여져 있는
+\co{srcu_readers_active()} 를 곧바로 호출합니다.
+
+\co{srcu_readers_active()} 함수는 단순히 각 노드의
+\co{srcu_readers_active_idx()} 의 값의 합을 리턴할 뿐이며,
+\co{srcu_readers_active_idx()} 는 line~1-11 에 보여진 것과 같이 해당 인덱스에
+연관된 per-CPU 카운터들의 값의 합을 구해서 그 결과를 리턴합니다.
+\iffalse
+
 SRCU's cleanup functions are shown in
 Figure~\ref{fig:app:rcuimpl:SRCU Cleanup}.
 The main cleanup function, \co{cleanup_srcu_struct()} is shown
@@ -725,6 +745,19 @@ The \co{srcu_readers_active()} function simply returns the sum of
 while \co{srcu_readers_active_idx()}, as shown on lines~1-11,
 sums up the per-CPU counters corresponding to the specified index,
 returning the result.
+\fi
+
+\co{srcu_readers_active()} 로부터 리턴받은 값이 0이 아니라면,
+\co{cleanup_srcu_struct()} 는 line~24 에서 경고를 내고는 단순히 line~25 와 26
+에서 리턴해서 여전히 사용중인 \co{strcut} \co{srcu_strcut} 의 해제 작업을 하지
+않습니다.
+그런 경고는 항상 버그에 연관되어 있으며, 버그가 레포트 되었으므로, 있을 법한
+메모리 오염을 알리기보다는 약간의 메모리 누수와 함께 시스템이 지속되도록 하는게
+낫습니다.
+
+그렇지 않다면, \co{cleanup_srcu_struct()} 는 line~27 과 28 에서 per-CPU
+카운터들의 배열을 해제하고 포인터들의 값을 \co{NULL} 로 만듭니다.
+\iffalse
 
 If the value returned from \co{srcu_readers_active()} is non-zero,
 then \co{cleanup_srcu_struct()} issues a warning on line~24 and
@@ -736,6 +769,7 @@ with a modest memory leak than to introduce possible memory corruption.
 
 Otherwise, \co{cleanup_srcu_struct()} frees the array of per-CPU
 counters and \co{NULL}s the pointer on lines~27 and 28.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
