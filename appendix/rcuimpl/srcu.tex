@@ -812,10 +812,44 @@ counters and \co{NULL}s the pointer on lines~27 and 28.
 \subsubsection{Read-Side Implementation}
 \label{sec:app:rcuimpl:Read-Side Implementation}
 
+\co{srcu_read_lock()} 을 구현하는 코드가
+Figure~\ref{fig:app:rcuimpl:Read-Side Acquisition} 에 보여져 있습니다.
+이 함수는 메모리 배리어와 어토믹 인스트럭션을 사용하지 않도록 주의깊게
+만들어졌습니다.
+\iffalse
+
 The code implementing \co{srcu_read_lock()} is shown in
 Figure~\ref{fig:app:rcuimpl:Read-Side Acquisition}.
 This function has been carefully constructed to avoid the
 need for memory barriers and atomic instructions.
+\fi
+
+Line~5 와 11 은 코드가 preemption 당하지 않은채 하나의 CPU 위에서 수행되도록
+강제하기 위해 preemption 을 불가능하게 만들었다가 다시 가능하게 만듭니다.
+Line~6 는 grace-period 카운터의 가장 아래 bit 을 가져오는데, 이 bit 은 이 SRCU
+read-side 크리티컬 섹션을 위해 per-CPU 카운터들의 어떤 rank 가 선택될 것인지
+결정하는데 사용됩니다.
+Line~7 에서의 \co{barrier()} 호출은 이 인덱스가 최소 한번은 가져와 질
+것을\footnote{
+	이 이름에도 불구하고, \co{barrier()} 는 CPU 가 코드와 메모리 액세스의
+	수행을 재조합할 수 있는 능력에는 어떠한 영향도 끼치지 않음을 알아두시기
+	바랍니다.}
+강제하는 컴파일러에의 지시어로, 이로 인해 line~9 에서 사용되는 인덱스가 line~12
+에서 리턴하는 값과 동일하게 합니다.
+Line~8-9 는 현재 CPU 의 선택된 카운터를 증가시킵니다.\footnote{
+	\co{smp_processor_id()} 기능은 preemption 이 불능화 되었을 때에만
+	장기적 의미를 가짐을 알아 두시기 바랍니다.
+	Preemption 이 불능화 되어 있지 않다면, 이 기능을 곧바로 뒤따르는
+	preemption 이 뒤따르는 코드들은 다른 CPU 에서 수행되는 결과를 초래할 수
+	있습니다.}
+Line~10 은 non-\co{CONFIG_PREEMPT} 빌드의 어떠한 코드도 잘못 순서잡히는 것을
+막기 위해, 뒤따르는 코드 수행이 line~8-9 \emph{뒤에} 수행되도록 강제합니다.
+하지만, \co{CONFIG_PREEMPT} 커널에서는 여기 필요했던 \co{barrier()} 호출이
+line~11 의 \co{preempt_enable()} 안에 내장되어 있으므로, 이 경우에 있어
+\co{srcu_barrier()} 는 no-op 이 됩니다.
+마지막으로, line~12 는 인덱스를 리턴해서 이게 연관된 \co{srcu_read_unlock()} 에
+사용될 수 있도록 합니다.
+\iffalse
 
 Lines~5 and 11 disable and re-enable preemption, in order to force
 the sequence of code to execute unpreempted on a single CPU.
@@ -845,6 +879,7 @@ call is embedded in the \co{preempt_enable()} on line~11, so the
 \co{srcu_barrier()} is a no-op in that case.
 Finally, line~12 returns the index so that it may be passed in to the
 corresponding \co{srcu_read_unlock()}.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -868,6 +903,19 @@ corresponding \co{srcu_read_unlock()}.
 \label{fig:app:rcuimpl:Read-Side Acquisition}
 \end{figure}
 
+\co{srcu_read_unlock()} 의 코드가
+Figure~\ref{fig:app:rcuimpl:Read-Side Release} 에 보여져 있습니다.
+다시 한번, line~3 과 7 은 전체 코드가 preemption 되지 않은 하나의 CPU 위에서
+수행될 수 있도록 preemption 을 불능화 / 재가능화 시킵니다.
+\co{CONFIG_PREEMPT} 커널들에서는, line~3 의 \co{preempt_disable()} 이
+\co{barrier()} 기능을 내장하고 있으며, 그렇지 않은 경우에는 line~4 에서
+\co{barrier()} 가 제공됩니다.
+다시 한번, 이 지시어는 뒤따르는 코드가 겹쳐지는 인터럽트 핸들러들의 관점에서 이
+크리티컬 섹션 뒤에 수행되도록 강제합니다.
+Line~5 와 6 은 이 CPU 를 위한 카운터의 값을 감소시키는데, 이 때 사용되는
+인덱스는 연관된 \co{srcu_read_lock()} 에서 사용된 것과 동일한 것입니다.
+\iffalse
+
 The code for \co{srcu_read_unlock()} is shown in
 Figure~\ref{fig:app:rcuimpl:Read-Side Release}.
 Again, lines~3 and 7 disable and re-enable preemption so that the
@@ -880,6 +928,7 @@ the critical section from the perspective of intervening
 interrupt handlers.
 Lines~5 and 6 decrement the counter for this CPU, but with the same
 index as was used by the corresponding \co{srcu_read_lock()}.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -898,11 +947,18 @@ index as was used by the corresponding \co{srcu_read_lock()}.
 \label{fig:app:rcuimpl:Read-Side Release}
 \end{figure}
 
+핵심은, 특정 CPU 의 카운터들은 다른 CPU 들에 의해 해당 CPU 의 인터럽트
+핸들러들과의 협동을 통해서만 보여질 수 있다는 점입니다.
+이런 인터럽트 핸들러들은 카운터를 보게 되기 전에 모든 필요한 메모리 배리어들을
+사용했음을 분명히 할 책임을 갖습니다.
+\iffalse
+
 The key point is that a given CPU's counters
 can be observed by other CPUs only in
 cooperation with that CPU's interrupt handlers.
 These interrupt handlers are responsible for ensuring that any needed
 memory barriers are executed prior to observing the counters.
+\fi
 
 \subsubsection{Update-Side Implementation}
 \label{sec:app:rcuimpl:Update-Side Implementation}
