@@ -963,6 +963,23 @@ memory barriers are executed prior to observing the counters.
 \subsubsection{Update-Side Implementation}
 \label{sec:app:rcuimpl:Update-Side Implementation}
 
+SRCU 의 핵심 포인트는 \co{synchronize_sched()} 는 현재 수행중인 preemption
+불능화된 영역의 코드가 완료될 때까지 블록된다는 것입니다.
+\co{synchronize_srcu()} 기능은
+Figure~\ref{fig:app:rcuimpl:Update-Side Implementation} 에 보여진 것처럼 이
+효과를 많이 사용합니다.
+
+Line~5 는 grace-period 카운터의 스냅샷을 얻어옵니다.
+Line~6 는 mutex 를 획득하고, line~7-10 은 스냅샷을 얻어온 후 최소 두개의 grace
+period 가 지났는지 체크해보고, 만약 그렇다면, 락을 해제하고 리턴합니다---이
+경우, 다른 누군가가 우리가 해야할 일을 대신 해 준 셈입니다.
+그렇지 않다면, line~11 에서 \co{srcu_read_lock()} 에서 grace period 카운터의
+증가된 값을 보는 다른 CPU 는 \co{synchronize_srcu()} 에 진입하기 전에 이 CPU 에
+의해 만들어진 변경도 역시 볼 수 있을 것을 보장합니다.
+이 보장은 다음 grace period 를 블록하고 있지 않은 모든 SRCU read-side 크리티컬
+섹션들이 모든 이전의 변경들을 보았음을 분명히 하기 위해 필요합니다.
+\iffalse
+
 The key point behind SRCU is that \co{synchronize_sched()}
 blocks until all currently-executing preempt-disabled regions of
 code complete.
@@ -982,6 +999,19 @@ also sees any changes made by this CPU prior to entering
 This guarantee is required to make sure that any SRCU read-side
 critical sections not blocking the next grace period have seen
 any prior changes.
+\fi
+
+Line~12 는 grace-period 카운터의 밑바닥의 bit 을 하나 나중에 per-CPU 카운터
+배열로의 인덱스로 사용하기 위해 가져오고, 이후 line~13 에서 grace-period
+카운터의 값을 증가시킵니다.
+Line~14 는 이제 모든 현재 수행중인 \co{srcu_read_lock()} 이 완료되길 기다리고,
+이로 인해 우리가 line~15 에 다다랐을 때에는, 모든 \co{srcu_read_lock()} 의
+현존하는 인스턴스들은 \co{sp->completed} 의 업데이트된 값을 사용하고 있게
+됩니다.
+따라서, line~15 에서 \co{srcu_readers_active_idx()} 로 얻어와지는 카운터들은
+단조적으로 그 값이 감소되는 것이 보장되어서, 일단 그 합이 0에 다다르면, 거기에
+도달했음이 보장됩니다.
+\iffalse
 
 Line~12 fetches the bottom bit of the grace-period counter for later
 use as an index into the per-CPU counter arrays, and then line~13
@@ -994,6 +1024,25 @@ Therefore, the counters sampled in by \co{srcu_readers_active_idx()}
 on line~15 are guaranteed to
 be monotonically decreasing, so that once their sum reaches zero, it
 is guaranteed to stay there.
+\fi
+
+하지만, \co{srcu_read_unlock()} 기능에는 메모리 배리어가 없으므로, CPU 는
+카운터 값 감소를 SRCU 크리티컬 섹션 안으로 재배열 할 수 있고, 따라서 SRCU 로
+보호되는 데이터 구조로의 레퍼런스가 SRCU 크리티컬 섹션 바깥으로 ``새어나올''
+수도 있습니다.
+이 시나리오는 line~17 의 \co{synchronize_sched()} 에 의해서 해결되어지는데, 이
+기능은 \co{preempt_disable()} 코드 (\co{srcu_read_unlock()} 과 같은) 내에서
+수행되고 있는 모든 CPU 들이 그 코드 수행을 완료할 때까지 블록되도록 합니다.
+특정 \co{preempt_disable()} 코드 의 완료는 그 코드를 수행중인 CPU 에 의해
+보여지므로, 이 코드의 완료는 모든 앞의 SRCU read-side 크리티컬 섹션의 완료를
+의미합니다.
+필요한 모든 메모리 배리어들은 이 완료의 발견을 하는 코드에 의해 제공되어집니다.
+
+따라서, 이 시점에서는 line~18 에서와 같이 mutex 를 해제하고 호출자에게
+리턴하기에 안전하며, 호출자는 같은 \co{struct} \co{srcu_struct} 를 공유하고
+있는 모든 SRCU read-side 크리티컬 섹션들이 \co{synchronize_srcu()} 호출 전에
+만든 모든 업데이트를 볼 수 있을 것임을 확신할 수 있습니다.
+\iffalse
 
 However, there are no memory barriers in the \co{srcu_read_unlock()}
 primitive, so the CPU is within its rights to reorder the counter
@@ -1015,6 +1064,7 @@ on line~18 and return to the caller, who can now be assured that
 all SRCU read-side critical sections sharing the same
 \co{struct} \co{srcu_struct}
 will observe any update made prior to the call to \co{synchronize_srcu()}.
+\fi
 
 \begin{figure}[htbp]
 { \scriptsize
@@ -1045,9 +1095,24 @@ will observe any update made prior to the call to \co{synchronize_srcu()}.
 \end{figure}
 
 \QuickQuiz{}
+	\co{synchronize_sched()} 에 의해 구분되는 업데이트들이 순서대로 수행될
+	것이라고 가정해도 되는 이유가 무엇이죠?
+	\iffalse
+
 	Why is it OK to assume that updates separated by
 	\co{synchronize_sched()} will be performed in order?
+	\fi
 \QuickQuizAnswer{
+	이 특성은 RCU 가 동작할 수 있기 위한 측면에서 \co{synchronize_sched()}
+	에 필요한 것이기 때문입니다.
+	예를 들어, 리스트에서 객체를 하나 제거하고, \co{synchronize_sched()} 를
+	호출하고, 이어서 해당 객체를 메모리에서 해제시키는 코드 시퀀스를 생각해
+	봅시다.
+	이 속성이 주어지지 않는다면, 해당 객체는 그것이 리스트에서 제거되기도
+	전에 메모리에서 해제된 것으로 나타날 수 있는데, 이는
+	\co{synchronize_sched()} 가 막을 수 있다고 여겨지는 상황 그 자체입니다!
+	\iffalse
+
 	Because this property is required for the \co{synchronize_sched()}
 	aspect of RCU to work at all.
 	For example, consider a code sequence that removes an object
@@ -1057,9 +1122,18 @@ will observe any update made prior to the call to \co{synchronize_srcu()}.
 	to be freed before it was
 	removed from the list, which is precisely the situation that
 	\co{synchronize_sched()} is supposed to prevent!
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	\co{synchronize_srcu()}
+	(Figure~\ref{fig:app:rcuimpl:Update-Side Implementation})
+	의 line~17 은 왜 line~18 의 mutex 해제보다 앞서야 하죠?
+	이 두 라인이 서로 바뀌게 하려면 어떤 변경이 있어야 할까요?
+	그런 변경은 의미가 있을까요?
+	왜 그럴까요?
+	\iffalse
+
 	Why must line~17 in \co{synchronize_srcu()}
 	(Figure~\ref{fig:app:rcuimpl:Update-Side Implementation})
 	precede the release of the mutex on line~18?
@@ -1067,7 +1141,26 @@ will observe any update made prior to the call to \co{synchronize_srcu()}.
 	interchanged?
 	Would such a change be worthwhile?
 	Why or why not?
+	\fi
 \QuickQuizAnswer{
+	그 순서가 반대가 된 상태에서, CPU~0 가 \co{synchronize_srcu()} 의
+	line~13 에 도달했으며, CPU~1 과 CPU~2 가 또다른 \co{synchronize_srcu()}
+	를 각각 수행하기 시작했으며, CPU~3 는 \co{srcu_read_lock()} 을 수행하기
+	시작했다고 생각해 봅시다.
+	CPU~0 가 line~13 에서 카운터의 값을 증가시키기 직전에 CPU~1 이
+	\co{synchronize_srcu()} 의 line~6 에 도달했다고 생각해 봅시다.
+	가장 중요한건, CPU~3 가 뒤따르는 SRCU read-side 크리티컬 섹션에서
+	\co{srcu_read_lock()} 을 다른 순서로 수행해서 CPU~0 가
+	\co{sp->completed} 를 증가시키기 \emph{전에} SRCU 로 보호되는 어떤
+	데이터 구조로의 레퍼런스를 획득했지만, CPU~0 가 이 증가 작업을 한
+	\emph{후에} \co{srcu_read_lock()} 을 수행합니다.
+
+	이렇게 되면 CPU~0 는 line~15-16 에서의 ``while'' 루프를 빠져나오고
+	mutex 를 해제하기 전에 CPU~3 가 SRCU read-side 크리티컬 섹션을
+	완료하기를 기다리지 \emph{않습니다} (기억하세요, CPU 는 코드를 재배열할
+	수 있습니다).
+	\iffalse
+
 	Suppose that the order was reversed, and that CPU~0
 	has just reached line~13 of
 	\co{synchronize_srcu()}, while both CPU~1 and CPU~2 start executing
@@ -1087,6 +1180,22 @@ will observe any update made prior to the call to \co{synchronize_srcu()}.
 	SRCU read-side critical section before exiting the ``while''
 	loop on lines~15-16 and releasing the mutex (remember, the
 	CPU could be reordering the code).
+	\fi
+
+	이제 CPU~2 가 이 mutex 를 뒤이어서 획득하고, 또다시 \co{sp->completed}
+	를 증가시킵니다.
+	이 CPU 는 이제 CPU~3 가 SRCU read-side 크리티컬 섹션을 완료하기를
+	line~15-16 에서의 루프를 빠져나가고 mutex 를 해제하기 전에 기다려야
+	합니다.
+	하지만 CPU~3 가 다시 순서를 뒤바꿔서, SRCU read-side 크리티컬 섹션을
+	들어갈 때 얻어온 포인터로의 마지막 레퍼런스를 수행하기 전에
+	\co{srcu_read_unlock()} 을 완료한다고 생각해 봅시다.
+
+	CPU~1 은 이제 mutex 를 획득하지만, \co{sp->completed} 카운터가 둘
+	씩이나 증가되었음을 확인하게 되고, 따라서 빠른 종료를 취하게 됩니다.
+	이 호출자는 CPU~3 가 여전히 레퍼런스 하고 있는 원소를 메모리에서
+	해제시켜버릴 수도 있습니다 (CPU~3 의 비순차적 수행 때문에요).
+	\iffalse
 	
 	Now suppose that CPU~2 acquires the mutex next,
 	and again increments \co{sp->completed}.
@@ -1103,6 +1212,26 @@ will observe any update made prior to the call to \co{synchronize_srcu()}.
 	therefore take the early exit.
 	The caller might well free up the element that CPU~3 is
 	still referencing (due to CPU~3's out-of-order execution).
+	\fi
+
+	이런 정말 같지 않은, 하지만 완전히 가능한 시나리오를 방지하기 위해,
+	\co{synchronize_srcu()} 내에서의 마지막 \co{synchronize_sched()} 는
+	반드시 mutex 해제를 앞서야 합니다.
+
+	다른 해결 방안은 \co{synchronize_srcu()} 의 line~7 에서의 비교 구문이
+	해당 카운터의 최소 세개의 값 증가를 체크하도록 바꾸는 것이 될겁니다.
+	하지만, 그런 변경은 해시 테이블이 복수의 쓰레드들을 사용해 업데이트
+	되거나 unload 되는 것과 같은 ``bulk update'' 시나리오의 응답시간을
+	증가시킬 겁니다.
+	현재의 코드에서, \co{synchronize_srcu()} 의 동시적 호출에 의한
+	응답시간은 최대 두개의 SRCU grace period 를 취하게 될 것인데, 이 변경을
+	가하면, 세개의 SRCU grace period 를 필요로 하게 될겁니다.
+
+	어떤 접근법이 정말로 더 나은 것인지를 판단하기 위해서는 더 많은 경험이
+	필요할 겁니다.
+	다만, 먼저 여러 동시적 업데이트 쓰레드에 의한 SRCU 의 사용이 먼저
+	있어야 할겁니다.
+	\iffalse
 
 	To prevent this perhaps improbable, but entirely possible,
 	scenario, the final \co{synchronize_sched()} must precede
@@ -1122,6 +1251,7 @@ will observe any update made prior to the call to \co{synchronize_srcu()}.
 	is really better.
 	For one thing, there must first be some use of SRCU with
 	multiple concurrent updaters.
+	\fi
 } \QuickQuizEnd
 
 \subsection{SRCU Summary}
