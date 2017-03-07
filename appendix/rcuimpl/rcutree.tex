@@ -4,6 +4,16 @@
 \label{app:rcuimpl:rcutree:Hierarchical RCU Overview}
 \OriginallyPublished{Appendix}{app:rcuimpl:rcutree:Hierarchical RCU Overview}{Hierarchical RCU Overview}{Linux Weekly News}{PaulEMcKenney2008HierarchicalRCU}
 
+Classic RCU 의 read-side 기능들은 훌륭한 성능과 확장성을 갖긴 합니다만, 언제
+이전부터 존재한 read-side 크리티컬 섹션들이 완료되었는지를 결정하는데 사용되는
+update-side 기능들은 수십개의 CPU 들만을 고려한 채 설계되었습니다.
+이것들의 확장성은 각 grace period 마다 최소 한번은 각 CPU 에 의해 획득되어야
+하는 global lock 에 의해 제한됩니다.
+Classic RCU 는 실제로는 수백개의 CPU 들까지도 확장성을 갖고, 대략 천개의 CPU
+들까지도 확장성을 갖도록 (더 길어지는 grace period 를 대가로) 꼼수를 부릴 수
+있지만, 발전되는 중인 멀티코어 시스템들은 더 높은 확장성을 필요로 할겁니다.
+\iffalse
+
 Although Classic RCU's read-side primitives enjoy excellent
 performance and scalability, the update-side primitives, which
 determine when pre-existing read-side critical sections have
@@ -14,6 +24,19 @@ Although Classic RCU actually scales to a couple of hundred CPUs, and
 can be tweaked to scale to roughly a thousand CPUs (but at the expense of
 extending grace periods), emerging multicore systems will require
 it to scale better.
+\fi
+
+또한, Classic RCU 는 최적화 되지 않은 dynticks 인터페이스를 가지고 있어서,
+Classic RCU 는 매 grace period 마다 최소 한번씩은 깨어나게 할겁니다.
+이 문제를 자세히 보려면, 4개의 CPU 만이 바쁘게 유지되고 있을 정도로 적은
+부하만을 가지고 있는 16-CPU 시스템을 생각해 보세요.
+완벽한 세계에서는, 나머지 열두개의 CPU 들은 에너지를 아끼기 위해 깊은 sleep
+모드로 빠져있을 수 있을 겁니다.
+불행히도, 네개의 바쁜 CPU 들이 자주 RCU update 동작을 수행한다면, 이 열두개의
+idle CPU 들은 자주 깨어나서 상당한 전력을 소모할 겁니다.
+따라서, Classic RCU 에의 주요 변경 사항들은 항상 잠들어있는 CPU 들을 놔두어야
+합니다.
+\iffalse
 
 In addition, Classic RCU has a sub-optimal dynticks interface,
 with the result that Classic RCU will wake up every CPU at least
@@ -27,11 +50,36 @@ Unfortunately, if the four busy CPUs are frequently performing
 RCU updates, those twelve idle CPUs will be awakened frequently,
 wasting significant energy.
 Thus, any major change to Classic RCU should also leave sleeping CPUs lie.
+\fi
+
+Classic 과 hierarchical 구현들 둘 다 Classic RCU 의 semantic 과 동일한 API 들을
+가지고 있습니다만, 기존의 구현은 ``classic RCU'' 로 불리울 것이고, 새로운
+구현은 ``hierarchical RCU'' 라 불릴 겁니다.
+\iffalse
 
 Both the classic and the hierarchical implementations
 have Classic RCU semantics and identical APIs, however,
 the old implementation will be called ``classic RCU''
 and the new implementation will be called ``hierarchical RCU''.
+\fi
+
+Section~\ref{app:rcuimpl:rcutree:Review of RCU Fundamentals}
+은 RCU 의 기본에 대한 짧은 개괄을 제공하고
+Section~\ref{app:rcuimpl:rcutree:Brief Overview of Classic RCU Implementation}
+은 기존의 ``Classic RCU'' 구현에 대한 전반적인 개괄을 제공합니다.
+Section~\ref{app:rcuimpl:rcutree:RCU Desiderata}
+은 RCU 에서 일어나지 않을 것 같은 일들을 나열해보고,
+Section~\ref{app:rcuimpl:rcutree:Towards a More Scalable RCU Implementation}
+과~\ref{app:rcuimpl:rcutree:Towards a Greener RCU Implementation}
+에서는 확장성과 전력 효율성을 위한 설계상의 고려할 점들을 각각 알아보고,
+Section~\ref{app:rcuimpl:rcutree:State Machine}
+에서 hierarchical RCU state machine 을 설명합니다.
+Section~\ref{app:rcuimpl:rcutree:Use Cases},
+Section~\ref{app:rcuimpl:rcutree:Testing}
+는 테스트를 다루고, 마지막으로
+Section~\ref{app:rcuimpl:rcutree:Conclusion}
+에서 결론을 내립니다.
+\iffalse
 
 Section~\ref{app:rcuimpl:rcutree:Review of RCU Fundamentals}
 gives a brief review of RCU fundamentals and
@@ -50,6 +98,7 @@ Section~\ref{app:rcuimpl:rcutree:Testing}
 covers testing, and finally,
 Section~\ref{app:rcuimpl:rcutree:Conclusion}
 presents concluding remarks.
+\fi
 
 \subsection{Review of RCU Fundamentals}
 \label{app:rcuimpl:rcutree:Review of RCU Fundamentals}
