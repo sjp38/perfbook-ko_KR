@@ -103,6 +103,15 @@ presents concluding remarks.
 \subsection{Review of RCU Fundamentals}
 \label{app:rcuimpl:rcutree:Review of RCU Fundamentals}
 
+가장 기본적 형태에 있어, RCU 는 일이 끝나길 기다리는 방법입니다.
+물론, 일이 끝나길 기다리는 방법은 레퍼런스 카운트, reader-writer 락, 이벤트,
+등등 매우 많이 존재합니다.
+RCU 의 커다란 장점은 (대략) 20,000 개의 서로 다른 일들을 명시적으로 하나하나 다
+정보를 추적할 필요 없이, 그리고 명시적 추적에서는 피할 수 없는 성능의 하락,
+확장성의 제약, 복잡한 데드락 시나리오, 메모리 누수 문제 없이 각각 기다릴 수
+있다는 겁니다.
+\iffalse
+
 In its most basic form, RCU is a way of waiting for things to finish.
 Of course, there are a great many other ways of waiting for things to
 finish, including reference counts, reader-writer locks, events, and so on.
@@ -112,6 +121,23 @@ track each and every one of them, and without having to worry about
 the performance degradation, scalability limitations, complex deadlock
 scenarios, and memory-leak hazards that are inherent in schemes
 using explicit tracking.
+\fi
+
+RCU 의 경우, 기다리는 것들은 ``RCU read-side 크리티컬 섹션'' 이라 불리웁니다.
+하나의 RCU read-side 크리티컬 섹션은 \co{rcu_read_lock()} 기능으로 시작하고,
+연관된 \co{rcu_read_unlock()} 기능으로 종료됩니다.
+RCU read-side 크리티컬 섹션들은 중첩될 수 있고, 명시적으로 블록되거나 잠들지
+않는다면, 상당히 많은 양의 임의적 코드를 포함할 수 있습니다 (
+Section~\ref{app:rcuimpl:Sleepable RCU Implementation} 에서 설명한 SRCU 라
+불리는 특수한 형태의 RCU 는 SRCU read-side 크리티컬 섹션 내에서의 일반적인
+sleeping 을 허용하긴 하지만요).
+여러분이 이러한 표준을 준수한다면, 여러분은 \emph{모든} 코드 조각에 대해
+완료되길 기다리는데에 RCU 를 사용할 수 있습니다.
+
+RCU 는 언제 이것들이 끝나는지를 간접적으로 판단함으로써 이 기능을 구현하는데,
+classic RCU 의 경우 다른 곳~\cite{McKenney98} 에서, preemptible RCU 의 경우
+Section~\ref{app:rcuimpl:Preemptible RCU} 에서 자세히 설명합니다.
+\iffalse
 
 In RCU's case, the things waited on are called
 ``RCU read-side critical sections''.
@@ -131,6 +157,20 @@ other things have finished, as has been described
 elsewhere~\cite{McKenney98}
 for classic RCU and
 Section~\ref{app:rcuimpl:Preemptible RCU} for preemptible RCU.
+\fi
+
+자세히 말하자면,
+page~\pageref{fig:defer:Readers and RCU Grace Period} 의
+Figure~\ref{fig:defer:Readers and RCU Grace Period} 에서 보인 바와 같이, RCU 는
+앞서 존재하기 시작한 RCU read-side 크리티컬 섹션들과 그것들에 의해 수행된
+메모리 오퍼레이션들이 완전히 종료되기를 기다리는 방법입니다.
+
+하지만, 특정 grace period 가 시작한 후에 시작된 RCU read-side 크리티컬 섹션들은
+해당 grace period 종료 뒤까지도 연장될 수 있음을 알아두시기 바랍니다.
+
+다음 섹션은 Classic RCU 구현이 어떻게 동작하는지에 대한 높은 수준에서의 개관을
+제공합니다.
+\iffalse
 
 In particular, as shown in the
 Figure~\ref{fig:defer:Readers and RCU Grace Period} on
@@ -147,6 +187,7 @@ period.
 
 The following section gives a very high-level view of how
 the Classic RCU implementation operates.
+\fi
 
 \subsection{Brief Overview of Classic RCU Implementation}
 \label{app:rcuimpl:rcutree:Brief Overview of Classic RCU Implementation}
