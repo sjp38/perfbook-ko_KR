@@ -192,6 +192,15 @@ the Classic RCU implementation operates.
 \subsection{Brief Overview of Classic RCU Implementation}
 \label{app:rcuimpl:rcutree:Brief Overview of Classic RCU Implementation}
 
+Classic RCU 구현 아래의 핵심 컨셉은, Classic RCU read-side 크리티컬 섹션은 커널
+코드에 국한되어 있고 블록이 허용되어있지 않다는 것입니다.
+이말은 언제든 어떤 CPU 가 블록되어 있는 중으로 보이거나, idle loop 을 돌고
+있거나, 커널 모드를 빠져나가 있다면, 우리는 해당 CPU 에서 앞서 수행중이던 RCU
+read-side 크리티컬 섹션이 모두 완료되었어야 함을 알 수 있다는 것입니다.
+그런 상태는 ``quiescent states'' 라 불리며, 각각의 CPU 가 적어도 하나의
+quiscent state 를 거쳤다면, 해당 RCU grace period 는 끝납니다.
+\iffalse
+
 The key concept behind the Classic RCU implementation is that
 Classic RCU read-side critical sections are confined to kernel
 code and are not permitted to block.
@@ -202,6 +211,7 @@ that CPU must have completed.
 Such states are called ``quiescent states'', and
 after each CPU has passed through at least one quiescent state,
 the RCU grace period ends.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -209,6 +219,23 @@ the RCU grace period ends.
 \caption{Flat Classic RCU State}
 \label{fig:app:rcuimpl:rcutree:Flat Classic RCU State}
 \end{figure}
+
+Classic RCU 의 가장 중요한 데이터 구조는 \co{rcu_ctrlblk} 구조체로,
+Figure~\ref{fig:app:rcuimpl:rcutree:Flat Classic RCU State} 에 보인 것처럼 CPU
+당 하나의 bit 을 담고 있는 \co{->cpumask} 필드를 가지고 있습니다.
+각각의 CPU 의 bit 은 각각의 grace period 의 시작지점에서 1로 설정되고, 각각의
+CPU 는 quiescent state 를 지날 때마다 자신의 bit 의 값을 해제합니다.
+여러개의 CPU 들이 각자의 bit 을 동시적으로 값 해제하고자 할 수 있으며 이는
+\co{->cpumask} 필드를 오염시킬 수 있기 때문에, 그런 문제를 방지하기 위해
+\co{->cpumask} 필드를 보호하는데에 \co{->lock} 스핀락이 사용됩니다.
+안타깝게도, 멀티코어 트렌드가 지속된다면 곧 흔한 경우가 될 수백개가 넘는 CPU 가
+존재한다면 이 스핀락 또한 상당한 경쟁상태로 성능에 악영향을 줄 수 있습니다.
+더 나쁜건, \emph{모든} CPU 들이 각자의 bit 을 값 해제해야 한다는 사실은 CPU
+들이 grace period 동안은 잠들지 않아야 함을 말하는데, 이는 Linux 의 전력 소모
+감소 능력이 제한됨을 말합니다.
+
+다음 섹션은 새로운 real-time 이 아닌 RCU 구현에서 필요한 것들을 나열합니다.
+\iffalse
 
 Classic RCU's most important data structure is the \co{rcu_ctrlblk}
 structure, which contains the \co{->cpumask} field, which contains
@@ -234,6 +261,7 @@ Linux's ability to conserve power.
 
 The next section lays out what we need from a new non-real-time
 RCU implementation.
+\fi
 
 \subsection{RCU Desiderata}
 \label{app:rcuimpl:rcutree:RCU Desiderata}
