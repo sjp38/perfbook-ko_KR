@@ -2123,16 +2123,15 @@ QRCU 는 정말로 올바르게 동작할까요?
 이야기합니다 (해당 논문 page~12  아래쪽의 Section~5.1 을 보세요).
 뭐가 맞을까요?
 
-저는 Algave, Korening, 그리고 Tautschig 가 문제를 찾아냈던 코드를 들여다볼 수는
-없었기 때문에 알수가 없습니다, 해당 저자들은 그런 동시성 벤치마크들이 그들이
-연구를 시작하게 된 실제 세계의 예제와 동일할 필요는 없다고 이야기 했지만요.
-어떻게 보면, QRCU 는 리눅스 커널에 포함되어지지도 않았고, 제가 알기로는 어떤
-다른 제품 소프트웨어에 사용되지도 않았기 때문에 사실 큰 문제가 되지는 않습니다.
-
-하지만, QRCU 를 사용할 생각이라면, 조심하시기 바랍니다.
-QRCU 의 정확성 증명은 그것 자체로 올바를 수도, 그렇지 않을 수도 있습니다.
-이는 정형적 검증이 완전하게 테스트를 대체할 수는 없을 것이라 생각되는 한가지
-이유입니다.
+둘 다 맞는 것으로 드러났습니다!
+QRCU 가 formal-verification 벤치마크에 추가되었을 때에, 그 안의 메모리
+배리어들이 제거되어 있었고, 따라서 버그가 존재하는 버전의 QRCU 였습니다.
+따라서 여기서의 진짜 새로운 소식은 여러개의 formal-verification 도구들이 이
+버그가 존재하는 QRCU 를 올바르지 않게도 올바른 것으로 증명했다는 겁니다.
+그리고 이게 formal-verification 도구들은 그들 스스로가 bug 가 추가된 버전의
+코드를 검증해 보는 것으로 테스트 되어야 하는 이유입니다.
+만약 특정 도구가 주입된 버그를 찾지 못한다면, 그 도구는 분명히 믿을 수
+없습니다.
 \iffalse
 
 Is QRCU really correct?
@@ -2152,14 +2151,36 @@ And this is why formal-verification tools themselves should be tested
 using bug-injected versions of the code being verified.
 If a given tool cannot find the injected bugs, then that tool is
 clearly untrustworthy.
+\fi
 
 \QuickQuiz{}
+	하지만 다른 formal-verification 도구들은 종종 특정한 부류의 버그들을
+	찾는 것을 위해 설계됩니다.
+	예를 들어, 극히 일부의 formal-verification 도구들은 해당 스펙 상의
+	에러만을 찾아낼 겁니다.
+	그러니, 이 ``분명히 믿을 수 없습니다'' 라는 말은 약간 너무한 거
+	아닌가요?
+	\iffalse
+
 	But different formal-verification tools are often designed to
 	locate particular classes of bugs.
 	For example, very few formal-verification tools will find
 	an error in the specification.
 	So isn't this ``clearly untrustworthy'' judgment a bit harsh?
+	\fi
 \QuickQuizAnswer{
+	많은 formal-verification 도구들이 어떤 방향으로 특수화 되어 있는 것은
+	분명한 사실입니다.
+	예를 들어, Promela 는 현실적인 메모리 모델들을 다루지 않고 (비록
+	Promela 에 그것들이 프로그램 될 수는
+	있지만요~\cite{Desnoyers:2013:MSM:2506164.2506174}),
+	CBMD~\cite{EdmundClarke2004CBMC} 는 확률적인 hang 과 데드락을 파악하지
+	못하며, Nidhugg~\cite{CarlLeonardsson2014Nidhugg} 은 데이터의
+	비결정성에 연관된 버그는 찾지 못합니다.
+	하지만 이는 이 도구들이 찾기 위해 설계된 버그 외의 것을 찾을 거라고
+	믿을 수는 없음을 의미합니다.
+	\iffalse
+
 	It is certainly true that many formal-verification tools are
 	specialized in some way.
 	For example, Promela does not handle realistic memory models
@@ -2171,6 +2192,21 @@ clearly untrustworthy.
 	bugs involving data nondeterminism.
 	But this means that that these tools cannot be trusted to find
 	bugs that they are not designed to locate.
+	\fi
+
+	그리고, 따라서 formal-verification 도구들을 만드는 사람들은 분명하게
+	어떤 부류의 버그들을 그들의 도구들이 발견할 수 없고 파악할 수 없는지에
+	대해 ``껍데기에 진실을 말해야'' 합니다.
+	그러지 않는다면, 실제 사용자가 어떤 버그를 파악하지 못하는 도구를 처음
+	발견하면, 그 사용자는 그 도구에 상당히 거칠고 극단적으로 공식적인
+	비난을 가할 겁니다.
+	맞습니다, 맞아요, 여러분의 최고의 노력을 다했다고 말할 것이 존재하겠죠,
+	하지만 적절한 면책 조항 없이 그걸 너무 앞에 놓으면 여러분의 도구가
+	그로부터 회복될지 안될지도 모를 부정적인 반응의 더미를 쉽게 이끌어낼
+	수도 있습니다.
+
+	경고했어요!
+	\iffalse
 
 	And therefore people creating formal-verification tools should
 	``tell the truth on the label'', clearly calling out what
@@ -2186,9 +2222,15 @@ clearly untrustworthy.
 	to recover from.
 
 	You have been warned!
+	\fi
 } \QuickQuizEnd
 
-% TODO: apply upstream change
+따라서, 여러분이 QRCU 를 사용하려 한다면, 주의하시기 바랍니다.
+그것의 올바름에 대한 증명은 그 자체가 옳을수도 아닐수도 있습니다.
+이는 Donald Knuth 가 오래전부터 지적한대로 formal verification 이 완전히
+테스트를 교체할 수는 없을 거라 이야기 되는 이유입니다.
+\iffalse
+
 Therefore, if you do intend to use QRCU, please take care.
 Its proofs of correctness might or might not themselves be correct.
 Which is one reason why formal verification is unlikely to
