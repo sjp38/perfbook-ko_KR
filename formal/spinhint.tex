@@ -563,9 +563,10 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 	때입니다.
 \iffalse
 
-\item	\co{spin -a qrcu.spin}
+\begin{description}[style=nextline]
+\item	[\tco{spin -a qrcu.spin}]
 	Create a file \path{pan.c} that fully searches the state machine.
-\item	\co{cc -DSAFETY -o pan pan.c}
+\item	[\tco{cc -DSAFETY -o pan pan.c}]
 	Compile the generated state-machine search.  The \co{-DSAFETY}
 	generates optimizations that are appropriate if you have only
 	assertions (and perhaps \co{never} statements).  If you have
@@ -596,7 +597,7 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 	기다려야 할겁니다.
 \iffalse
 
-\item	\co{./pan}
+\item	[\tco{./pan}]
 	This actually searches the state space.  The number of states
 	can reach into the tens of millions with very small state
 	machines, so you will need a machine with large memory.
@@ -641,12 +642,13 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 	\co{-l} 플래그는 변경된 지역 변수들의 값들도 포함시킬 겁니다.
 \iffalse
 
-\item	\co{spin -t -p qrcu.spin}
+\item	[\tco{spin -t -p qrcu.spin}]
 	Given \co{trail} file output by a run that encountered an
 	error, output the sequence of steps leading to that error.
 	The \co{-g} flag will also include the values of changed
 	global variables, and the  \co{-l} flag will also include
 	the values of changed local variables.
+\end{description}
 \fi
 \end{itemize}
 
@@ -2142,18 +2144,57 @@ However, a recent paper by Alglave et al.~\cite{JadeAlglave2013-cav}
 says otherwise (see Section~5.1 of the paper at the bottom of page~12).
 Which is it?
 
-I do not know, as I never have been able to track down the code in which
-Algave, Kroening, and Tautschig found a flaw, though the authors did
-point out that the concurrency benchmarks are not necessarily equivalent
-to the real-world examples that they were derived from.
-In some sense, it does not matter, as QRCU never was accepted into the
-Linux kernel, nor to the best of my knowledge was it ever used in any
-other production software.
+It turns out that both are correct!
+When QRCU was added to a suite of formal-verification benchmarks,
+its memory barriers were omitted, thus resulting in a buggy version
+of QRCU.
+So the real news here is that a number of formal-verification tools
+incorrectly proved this buggy QRCU correct.
+And this is why formal-verification tools themselves should be tested
+using bug-injected versions of the code being verified.
+If a given tool cannot find the injected bugs, then that tool is
+clearly untrustworthy.
 
-However, if you do intend to use QRCU, please take care.
+\QuickQuiz{}
+	But different formal-verification tools are often designed to
+	locate particular classes of bugs.
+	For example, very few formal-verification tools will find
+	an error in the specification.
+	So isn't this ``clearly untrustworthy'' judgment a bit harsh?
+\QuickQuizAnswer{
+	It is certainly true that many formal-verification tools are
+	specialized in some way.
+	For example, Promela does not handle realistic memory models
+	(though they can be programmed into
+	Promela~\cite{Desnoyers:2013:MSM:2506164.2506174}),
+	CBMC~\cite{EdmundClarke2004CBMC} does not detect probabilistic
+	hangs and deadlocks, and
+	Nidhugg~\cite{CarlLeonardsson2014Nidhugg} does not detect
+	bugs involving data nondeterminism.
+	But this means that that these tools cannot be trusted to find
+	bugs that they are not designed to locate.
+
+	And therefore people creating formal-verification tools should
+	``tell the truth on the label'', clearly calling out what
+	classes of bugs their tools can and cannot detect.
+	Otherwise, the first time a practitioner finds a tool
+	failing to detect a bug, that practitioner is likely to
+	make extremely harsh and extremely public denunciations
+	of that tool.
+	Yes, yes, there is something to be said for putting your
+	best foot forward, but putting it too far forward without
+	appropriate disclaimers can easily trigger a land mine of
+	negative reaction that your tool might or might not be able
+	to recover from.
+
+	You have been warned!
+} \QuickQuizEnd
+
+% TODO: apply upstream change
+Therefore, if you do intend to use QRCU, please take care.
 Its proofs of correctness might or might not themselves be correct.
 Which is one reason why formal verification is unlikely to
-completely replace testing.
+completely replace testing, as Donald Knuth pointed out so long ago.
 \fi
 
 \QuickQuiz{}
@@ -2164,7 +2205,7 @@ completely replace testing.
 
 	Given that we have two independent proofs of correctness for
 	the QRCU algorithm described herein, and given that the
-	proof of incorrectness covers what is likely a different
+	proof of incorrectness covers what is known to be a different
 	algorithm, why is there any room for doubt?
 	\fi
 \QuickQuizAnswer{
