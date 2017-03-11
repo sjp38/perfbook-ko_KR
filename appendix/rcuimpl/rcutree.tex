@@ -266,10 +266,32 @@ RCU implementation.
 \subsection{RCU Desiderata}
 \label{app:rcuimpl:rcutree:RCU Desiderata}
 
+Real-time RCU 의 요구사항~\cite{PaulMcKenney05b} 을 나열해 보는게 좋은 시작점이
+될겁니다:
+\iffalse
+
 The list of real-time RCU desiderata~\cite{PaulMcKenney05b}
 is a very good start:
+\fi
 
 \begin{enumerate}
+\item	하나의 RCU grace period 는 모든 이전부터 존재한 RCU read-side 크리티컬
+	섹션들이 완료될 때까지 끝날 수 없도록 하는 지연된 해체.
+\item	일년 365일 24시간 지속되는 동작을 지원할 수 있는 신뢰성.
+\item	Irq 핸들러에서 호출할 수 있을 것.
+\item	너무 많은 콜백들이 존재한다면 grace period 들을 신속히 처리할 수 있는
+	메커니즘이 존재할 수 있도록 하는, 억제된 메모리 사용량 (LCA2005
+	리스트로 효력이 약화되었습니다.)
+\item	RCU 가 어떤 있음직한 메모리 할당자와도 동작할 수 있도록 해주는 메모리
+	블락들의 독립성.
+\item	CPU 나 태스크의 지역적 메모리 에서의 평범한, 어토믹하지 않은 인스트럭션
+	동작이 허용될 수 있도록 하는 동기화에 자유로운 read side (이건 LCA2005
+	리스트에서 강화되었습니다.).
+\item	Update-side 락이 RCU read-side 크리티컬 섹션 내에서 획득되어지는,
+	리눅스 커널의 여러곳에서 사용되는 무조건적인 read-to-write 업그레이드.
+\item	호환성 있는 API.
+\iffalse
+
 \item	Deferred destruction, so that an RCU grace period cannot end
 	until all pre-existing RCU read-side critical sections have
 	completed.
@@ -288,6 +310,31 @@ is a very good start:
 	places in the Linux kernel where the update-side lock is
 	acquired within the RCU read-side critical section.
 \item	Compatible API.
+\fi
+
+\item	이건 real-time RCU 가 될 것은 아니기에, preemption 가능한 RCU read-side
+	크리티컬 섹션에 대한 요구사항은 빠졌습니다.
+	하지만, 과거 수년동안의 변경사항들을 처리하기 위해 다음의 새로운
+	요구사항들을 추가할 필요가 있습니다.
+
+\item	극단적으로 낮은 internal-to-RCU 락 경쟁상황을 갖는 확장성.
+	RCU 는 최소 1,024 개, 가능하면 최소 4,096 개의 CPU 들을 지원해야
+	합니다.
+\item	전력 효율성: RCU 는 저전력 상태의 dynticks-idle CPU 들을 깨우지
+	않으면서도 언제 현재의 grace period 가 종료되는지를 알 수 있어야
+	합니다.
+	이는 real-time RCU 에서 구현되었습니다만, 상당한 단순화를 필요로
+	합니다.
+\item	RCU read-side 크리티컬 섹션들은 irq 핸들러는 물론이고 NMI 핸들러
+	내에서도 사용이 가능해야 합니다.  Preemptible RCU 의 경우에는 별도로
+	구현된 \co{synchronize_sched()} 덕분에 이 필요성이 없었음을 알아두시기
+	바랍니다.
+\item	RCU 는 반복되는 CPU-hotplug 오퍼레이션들의 상황에서도 잘 동작해야
+	합니다.
+	이는 classic RCU 와 real-time RCU 에서의 필요사항들을 가져올 뿐입니다.
+\item	앞서 등록된 모든 RCU 콜백들이 완료되길 기다릴 수 있어야만 하는데, 이는
+	이미 \co{rcu_barrier()} 의 형태로 제공되긴 합니다.
+\iffalse
 
 \item	Because this is not to be a real-time RCU, the requirement for
 	preemptible RCU read-side critical sections can be dropped.
@@ -313,6 +360,18 @@ is a very good start:
 \item	It must be possible to wait for all previously registered
 	RCU callbacks to complete, though this is already provided
 	in the form of \co{rcu_barrier()}.
+\fi
+\item	RCU 와 다양한 무한 루프 버그들, 그리고 RCU grace period 가 종료되기를
+	막는 하드웨어 상의 문제들을 진단하는데 도움이 될 수 있도록, 응답을
+	하는데 실패하는 CPU 들을 파악할 수 있다면 좋습니다.
+\item	하나의 RCU grace period 가 마지막 연관된 RCU read-side 크리티컬 섹션이
+	완료되는데에 수백 마이크로세컨드 만이 걸릴 수 있도록 하는 RCU grace
+	period 의 극단적인 속도 촉진이 가능하면 좋습니다.
+	하지만, 그런 동작은 상당한 CPU 오버헤드를 가져올 거라 예상되어지며,
+	각각이 RCU grace period 를 기다려야 하는 긴 일련의 오퍼레이션들을
+	처리해야 할때 유용할 겁니다.
+\iffalse
+
 \item	Detecting CPUs that are failing to respond is desirable,
 	to assist diagnosis both of RCU and of various infinite
 	loop bugs and hardware failures that can prevent RCU grace
@@ -325,11 +384,17 @@ is a very good start:
 	severe CPU overhead, and would be primarily useful when
 	carrying out a long sequence of operations that each needed
 	to wait for an RCU grace period.
+\fi
 \end{enumerate}
+
+새로운 효구사항들 가운데 가장 압박이 되는건 첫번째 항목인 확장성입니다.
+따라서 다음 섹션은 RCU 의 내부 락들의 경쟁 상황을 수십배 줄여주는지 설명합니다.
+\iffalse
 
 The most pressing of the new requirements is the first one, scalability.
 The next section therefore describes how to make order-of-magnitude reductions
 in contention on RCU's internal locks.
+\fi
 
 \subsection{Towards a More Scalable RCU Implementation}
 \label{app:rcuimpl:rcutree:Towards a More Scalable RCU Implementation}
