@@ -406,6 +406,25 @@ in contention on RCU's internal locks.
 \label{fig:app:rcuimpl:rcutree:Hierarchical RCU State}
 \end{figure}
 
+락 경쟁을 줄여주는 효과적인 방법 가운데 하나는
+Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU State} 에 보인 것처럼
+계층을 만드는 것입니다.
+여기서, 각각의 네개의 \co{rcu_node} 구조체는 자신의 락을 가지고 있어서, CPU~0
+과 1 만이 좌하단의 \co{rcu_node} 의 락을 획득하며, CPU~2 와 3 만이 중하단의
+\co{rcu_node} 의 락을 획득하고, CPU~4 와 5 만이 우하단의 \co{rcu_node} 의 락을
+획득합니다.
+어떤 특정 grace period 동안에도, 아래쪽 \co{rcu_node} 구조체들에 접근하는 CPU
+들 가운데 하나만이 위의 \co{rcu_node} 에 접근하게 되어서, 각각의 CPU 짝 들
+가운데 마지막 하나만이 연관된 grace period 에 대한 quiescent state 를 기록하게
+됩니다.
+
+이는 락 경쟁의 상당한 감소를 초래합니다:
+여섯개의 CPU 들이 하나의 락을 위해 매 grace period 마다 경쟁하는 대신, 위쪽
+\co{rcu_node} 락에 세개의 CPU 만이 경쟁하고 (50\% 경쟁 감소) 아래쪽
+\co{rcu_node} 의 락에 대해서는 각각 두개의 CPU 만이 경쟁을 합니다 (67\% 경쟁
+감소).
+\iffalse
+
 One effective way to reduce lock contention is to create a hierarchy,
 as shown in
 Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU State}.
@@ -426,6 +445,7 @@ we have only three for the upper \co{rcu_node}'s lock
 (a reduction of 50\%) and only
 two for each of the lower \co{rcu_node}s' locks (a reduction
 of 67\%).
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -433,6 +453,18 @@ of 67\%).
 \caption{Mapping {\tt rcu\_node} Hierarchy Into Array}
 \label{fig:app:rcuimpl:rcutree:Mapping rcu-node Hierarchy Into Array}
 \end{figure}
+
+\co{rcu_node} 구조체들의 트리는 \co{rcu_state} 구조체 안의 선형적 배열로 트리의
+루트를 0번 원소로 저장하는 식으로 내장되는데,
+Figure~\ref{fig:app:rcuimpl:rcutree:Mapping rcu-node Hierarchy Into Array} 에
+여덟개의 CPU 를 갖는 시스템에서 세 단계를 갖는 계층으로 구성했을 때를 보이고
+있습니다.
+각각의 화살표는 특정 \co{rcu_node} 구조체를 그 부모로 연결시키는데,
+\co{rcu_node} 의 \co{->parent}  필드를 나타냅니다.
+각각의 \co{rcu_node} 는 자신이 관리하는 CPU 들의 범위를 나타내는데, 루트 노드는
+모든 CPU 들을 관리하고, leaf 레벨의 각각의 노드는 한쌍의 CPU 들을 관리합니다.
+이 배열은 컴파일 시점에 \co{NR_CPUS} 값에 따라 정적으로 할당됩니다.
+\iffalse
 
 The tree of \co{rcu_node} structures is embedded into
 a linear array in the \co{rcu_state} structure,
@@ -448,6 +480,7 @@ level covers half of the CPUs, and each node in the leaf level covering
 a pair of CPUs.
 This array is allocated statically at compile time based on the value
 of \co{NR_CPUS}.
+\fi
 
 \begin{figure}[htbp]
 \centering
@@ -455,6 +488,26 @@ of \co{NR_CPUS}.
 \caption{Hierarchical RCU Grace Period}
 \label{fig:app:rcuimpl:rcutree:Hierarchical RCU Grace Period}
 \end{figure}
+
+Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU Grace Period}
+안의 다이어그램들의 시퀀스는 어떻게 grace period 들이 파악되는지를 보입니다.
+첫번째 그림에서는 어떤 CPU 도 빨간 네모로 표시되었듯이 quiescent state 에
+이르지 못했습니다.
+모든 여섯개의 CPU 들이 동시에 RCU 에게 자신이 quiescent state 에 이르렀노라고
+이야기하고자 한다고 생각해 봅시다.
+각각의 쌍 안의 CPU 들 중 하나만이 연관된 아래쪽 \co{rcu_node} 의 락을 획득할 수
+있을 것이고, 따라서 두번째 그림은 그런 운좋은 CPU 들이 0, 3, 그리고 5 라고
+초록색 네모로 나타내고 있습니다.
+이 운좋은 CPU 들이 일단 마무리 되면, 다른 CPU 들이 락을 획득할 것인데, 세번째
+그림으로 보인 바와 같습니다.
+이 CPU 들 각각은 자신들이 자신의 그룹 내에서는 마지막에 이르렀음을 보게 되고,
+따라서 모든 세개의 CPU 들은 위쪽의 \co{rcu_node} 로 이동하려 시도하게 됩니다.
+한번에 하나만이 위쪽 \co{rcu_node} 구조체의 락을 얻을 수 있고, 네번째,
+다섯번째, 그리고 여섯번째 그림은 CPU~1, CPU~2, 그리고 CPU~4 가 순서대로 그 락을
+잡는다는 가정 하에 상태의 흐름을 보입니다.
+마지막 여섯번째 그림은 모든 CPU 들이 quiescent state 를 지난, 그래서 grace
+period 가 끝난 경우를 보이고 있습니다.
+\iffalse
 
 The sequence of diagrams in
 Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU Grace Period}
@@ -478,6 +531,7 @@ states assuming that CPU~1, CPU~2, and CPU~4 acquire
 the lock in that order.
 The sixth and final figure in the group shows that all CPUs have passed
 through a quiescent state, so that the grace period has ended.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -485,6 +539,23 @@ through a quiescent state, so that the grace period has ended.
 \caption{Hierarchical RCU State 4,096 CPUs}
 \label{fig:app:rcuimpl:rcutree:Hierarchical RCU State 4,096 CPUs}
 \end{figure}
+
+앞의 예에서, Classic RCU 에서라면 여섯개의 CPU 들이 경쟁하게 될 터인 것을 어떤
+하나의 락에 대해서는 세개가 넘는 CPU 들이 경쟁하지 않았습니다.
+하지만, 더 많은 수의 CPU 들에서라면 이보다도 극적인 락 경쟁의 감소가
+가능합니다.
+64 개의 아래쪽 구조체와 64*64=4,096 CPU 들로 구성된,
+Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU State 4,096 CPUs} 에 보인
+것과 같은 \co{rcu_node} 구조체들의 계층을 생각해 보세요.
+
+여기서 각각의 아래쪽 \co{rcu_node} 구조체의 락들은 64 개의 CPU 들에 의해
+획득되어지는데, 이는 Classic RCU 의 하나의 글로벌 락에 4,096 개의 CPU 들이
+경쟁하는 것에 비해 64배의 감소입니다.
+비슷하게, 특정 grace period 동안에, 아래쪽 \co{rcu_node} 구조체의 CPU 들 가운데
+하나만이 위쪽 \co{rcu_node} 구조체의 락을 잡을 것이므로, 이는 또다시 4,096 개의
+CPU 로 구성된 시스템에서 동작하는 Classic RCU 가 겪게 되는 경쟁의 64x
+감소입니다.
+\iffalse
 
 In the above sequence, there were never more than three CPUs
 contending for any one lock, in happy contrast to Classic RCU,
@@ -503,11 +574,33 @@ the lower \co{rcu_node} structures will acquire the
 upper \co{rcu_node} structure's lock, which is again
 a 64x reduction from the contention level that would be experienced
 by Classic RCU running on a 4,096-CPU system.
+\fi
 
 \QuickQuiz{}
+	잠깐만요!
+	이 새로운 락들을 가지고, 데드락은 어떻게 막나요?
+	\iffalse
+
 	Wait a minute!
 	With all those new locks, how do you avoid deadlock?
+	\fi
 \QuickQuizAnswer{
+	한번에 한개의 \co{rcu_node} 구조체의 락만을 잡도록 하는 것으로 데드락이
+	막아집니다.
+	이 알고리즘은 두개의 락을 더 사용하는데, 하나는 grace-period 진척과
+	동시에 CPU hotplug 오퍼레이션이 수행되는 것을 막고 (\co{onofflock})
+	또하나는 한번에 하나의 CPU 만이 quiescent state 가 빨리 끝나도록
+	강제하는데에 사용됩니다 (\co{fqslock}).
+	이것들은 락킹 계층에 반하고, 따라서 \co{fqslock} 은 \co{onofflock} 보다
+	먼저 획득되어야만 하는데, 이말은 \co{rcu_node} 구조체의 락들보다 먼저
+	획득되어야만 한다는 말입니다.
+
+	또한, 실제 사용에서의 효율이 중요하듯이, 한버에 하나의 \co{rcu_node} 의
+	락만을 잡는 것을 거부함은 어떤 것이 잡혀있는지를 추적할 필요가 없음을
+	의미합니다.
+	그런 추적은 불필요할 뿐 아니라 고통스러울 겁니다.
+	\iffalse
+
 	Deadlock is avoided by never holding more than one of the
 	\co{rcu_node} structures' locks at a given time.
 	This algorithm uses two more locks, one to prevent CPU hotplug
@@ -524,26 +617,57 @@ by Classic RCU running on a 4,096-CPU system.
 	one of the \co{rcu_node} locks means that it is unnecessary
 	to track which ones are held.
 	Such tracking would be painful as well as unnecessary.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	왜 64-배 감소에서 멈추는 거죠?
+	왜 그이상 가서 수백배까지 줄이지 않는거예요?
+	\iffalse
+
 	Why stop at a 64-times reduction?
 	Why not go for a few orders of magnitude instead?
+	\fi
 \QuickQuizAnswer{
+	RCU 는 수백개의 CPU 을 갖는 시스템에서도 문제없이 동작하기 때문에,
+	64개의 CPU 들이 하나의 락을 경쟁하도록 하는 것으로도 충분합니다.
+	이 락들은 상당히 드물게 획득되어지므로, 각각의 CPU 는 grace period 마다
+	한번씩 정도만 이 일을 하게 될 것이고, grace period 는 밀리세컨드
+	단위까지 길어짐을 기억해 두시기 바랍니다.
+	\iffalse
+
 	RCU works with no problems on
 	systems with a few hundred CPUs, so allowing 64 CPUs to contend on
 	a single lock leaves plenty of headroom.
 	Keep in mind that these locks are acquired quite rarely, as each
 	CPU will check in about one time per grace period, and grace periods
 	extend for milliseconds.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 전 McKenney 의 Quick Quiz 2 에의 게으른 변명 따위 신경쓰지
+	않아요!!!
+	저는 하나의 락에 경쟁하는 CPU 들의 수를 16이나 그정도 쯤까지 더
+	합리적인 수준으로 낮추고 싶어요!!!
+	\iffalse
+
 	But I don't care about McKenney's lame excuses in the answer to
 	Quick Quiz 2!!!
 	I want to get the number of CPUs contending on a single lock down
 	to something reasonable, like sixteen or so!!!
+	\fi
 \QuickQuizAnswer{
+	좋아요, 그럼 그렇게 해보세요!
+	\co{CONFIG_RCU_FANOUT=16} 으로 설정하고 (\co{NR_CPUS=4096 에 대해})
+	나면 가장 낮은 단계에서의 256 \co{rcu_node} 구조체, 중간 계층에서의 16
+	개의 \co{rcu_node} 구조체, 그리고 하나의 root 레벨 \co{rcu_node} 를
+	갖게 되어 세단계의 계층을 갖게 될 겁니다.
+	이에 대해 지불하게 될 비용은 더 많은 \co{rcu_node} 구조체들이 어떤 CPU
+	들이 자신의 quiescent state 를 완료하는데 도움이 필요한지를 체크하는데
+	더 많은 작업이 걸릴 거라는 겁니다 (64 대신 256 이 되는거죠).
+	\iffalse
+
 	OK, have it your way, then!
 	Set \co{CONFIG_RCU_FANOUT=16} and (for \co{NR_CPUS=4096})
 	you will get a
@@ -553,6 +677,7 @@ by Classic RCU running on a 4,096-CPU system.
 	The penalty you will pay is that more \co{rcu_node} structures
 	will need to be scanned when checking to see which CPUs need help
 	completing their quiescent states (256 instead of only 64).
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[htb]
@@ -562,16 +687,37 @@ by Classic RCU running on a 4,096-CPU system.
 \label{fig:app:rcuimpl:rcutree:Hierarchical RCU State With BH}
 \end{figure}
 
+실제 구현은 RCU 콜백의 리스트와 같은 per-CPU 데이터를 유지하도록 되어 있으며,
+이는 \co{rcu_data} 구조체에 정리되어 있습니다.
+또한, rcu (\co{call_rcu()} 에서의) 와 rcu\_bh (\co{call_rcu_bh()} 에서의) 는
+각각
+Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU State With BH} 에 보인
+것과 같이 각각의 계층을 유지합니다.
+\iffalse
+
 The implementation maintains some per-CPU data, such as lists of
 RCU callbacks, organized into \co{rcu_data} structures.
 In addition, rcu (as in \co{call_rcu()}) and
 rcu\_bh (as in \co{call_rcu_bh()}) each maintain their own
 hierarchy, as shown in
 Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU State With BH}.
+\fi
 
 \QuickQuiz{}
+	좋아요, 근데 색깔은 뭘 의미하나요?
+	\iffalse
+
 	OK, so what is the story with the colors?
+	\fi
 \QuickQuizAnswer{
+	(\co{rcu_ctrlblk} 을 포함해서) \co{rcu_state} 에 비슷한 데이터 구조들은
+	노란색으로, 어떤 CPU 들이 들어와 있는지를 파악하는데 사용되는 bitmap
+	들을 포함한 것들은 핑크로, 그리고 per-CPU \co{rcu_data} 구조체들은
+	파란색으로 표시되어 있습니다.
+	(\co{rcu_dynticks} 와 같이) 전력을 아끼기 위해 사용되는 데이터
+	구조체들은 초록색으로 칠해져 있습니다.
+	\iffalse
+
 	Data structures analogous to \co{rcu_state} (including
 	\co{rcu_ctrlblk}) are yellow,
 	those containing the bitmaps used to determine when CPUs have checked
@@ -579,9 +725,14 @@ Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU State With BH}.
 	and the per-CPU \co{rcu_data} structures are blue.
 	The data structures used to conserve energy
 	(such as \co{rcu_dynticks}) will be colored green.
+	\fi
 } \QuickQuizEnd
 
+다음 섹션은 에너지 소모 감소에 대해 이야기 해봅니다.
+\iffalse
+
 The next section discusses energy conservation.
+\fi
 
 \subsection{Towards a Greener RCU Implementation}
 \label{app:rcuimpl:rcutree:Towards a Greener RCU Implementation}
