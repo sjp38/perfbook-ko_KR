@@ -836,6 +836,29 @@ The following section presents a high-level view of the RCU state machine.
 \label{fig:app:rcuimpl:rcutree:Generic RCU State Machine}
 \end{figure}
 
+충분히 높은 단계에서 보면, 리눅스 커널 RCU 구현은
+Figure~\ref{fig:app:rcuimpl:rcutree:Generic RCU State Machine} 에 보인 state
+machine 으로 볼 수 있습니다.
+바쁘게 동작하는 시스템에서의 이 state machine 의 일반적인 경우의 수행경로는
+가장 위쪽 두개의 루프로ㅡ 각각의 grace period (GP) 의 시작으로 초기화되어서,
+quiescent state (QS) 를 기다리고, 각 CPU 가 grace period 동안 첫번째 quiescent
+state 를 지나가는 경로입니다.
+그런 시스템에서는, quiescent state 는 각 컨텍스트 스위치마다 발생할 수도 있고,
+idle 이거나 user-mode 코드를 수행중인 CPU 에서는 각 scheduling-clock 인터럽트
+마다 발생할 수 있습니다.
+CPU-hotplug 이벤트는 state machine 을 ``CPU Offline'' 상자로 가져가게 되며,
+quiescent state 로의 빠른 전환을 실패하게 하는 ``holdout'' CPU 들의 존재 시에는
+``Send resched IPIs to Hodout CPUs'' 상자로의 전환을 일으킬 겁니다.
+불필요하게 dyntick-idle CPU 들을 불필요하게 깨우는 것을 막는 RCU 구현은 그런
+CPU 들을 연장된 quiescent state 에 있는 것으로 표시해 둘 것이고 ``CPUs in
+dyntick-idle Mode?'' 결정 마름모꼴의 ``Y'' 브랜치를 취하게 될 것입니다 (하지만
+dyntick-idle 모드의 CPU 들은 resched IPI 들을 보내지 \emph{않을} 것임을
+알아두세요).
+마지막으로, \co{CONFIG_RCU_CPU_STALL_DETECTOR} 가 켜져있다면, quiescent state
+에 이르기까지의 정말로 너무 긴 딜레이는 ``Complain About Holdout CPUs'' 경로를
+수행하게 만들겁니다.
+\iffalse
+
 At a sufficiently high level, Linux-kernel RCU implementations can
 be thought of as high-level state machines as shown in
 Figure~\ref{fig:app:rcuimpl:rcutree:Generic RCU State Machine}.
@@ -859,11 +882,26 @@ will \emph{not} be sent resched IPIs).
 Finally, if \co{CONFIG_RCU_CPU_STALL_DETECTOR} is enabled,
 truly excessive delays in reaching quiescent states will exercise the
 ``Complain About Holdout CPUs'' path.
+\fi
 
 \QuickQuiz{}
+	하지만 이 state diagram 은 dyntick-idle CPU 들이 reschedule IPI 들을
+	맞게 될 것을 보이고 있지 않나요?  그게 그것들을 깨워버리지 않을까요?
+	\iffalse
+
 	But doesn't this state diagram indicate that dyntick-idle CPUs will
 	get hit with reschedule IPIs?  Won't that wake them up?
+	\fi
 \QuickQuizAnswer{
+	아니요.
+	RCU 는 CPU 그룹들을 처리하고 있음을 명심하세요.
+	하나의 특정한 그룹은 dyntick-idle CPU 들과 어떻게든 quiescent state 를
+	지나는 것을 막도록 관리되는 평범한 모드의 CPU 들을 모두 포함하고 있을
+	수 있습니다.
+	뒤쪽 그룹들만이 reschedule IPI 를 받을 겁니다; dyntick-idle CPU 들은
+	단지 extended quiescent state 로 표시되어질 뿐입니다.
+	\iffalse
+
 	No.
 	Keep in mind that RCU is handling groups of CPUs.
 	One particular group might contain both dyntick-idle CPUs and
@@ -871,6 +909,7 @@ truly excessive delays in reaching quiescent states will exercise the
 	a quiescent state.
 	Only the latter group will be sent a reschedule IPI; the dyntick-idle
 	CPUs will merely be marked as being in an extended quiescent state.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[htb]
@@ -879,6 +918,16 @@ truly excessive delays in reaching quiescent states will exercise the
 \caption{RCU State Machine and Hierarchical RCU Data Structures}
 \label{fig:app:rcuimpl:rcutree:RCU State Machine and Hierarchical RCU Data Structures}
 \end{figure}
+
+앞의 satte machine 의 내용은 또다른 데이터 구조와 상호작용하게 되는데,
+Figure~\ref{fig:app:rcuimpl:rcutree:RCU State Machine and Hierarchical RCU Data Structures}
+에 보인 것과 같습니다.
+하지만, 이 state machine 의 내용은 어떤 RCU 구현에 있어서도 그대로 C 코드로
+변환되어지지는 않습니다.
+그보다는, 이 구현들은 커널 내에 event-driven 코드로 만들어져 있습니다.
+따라서, 다음 섹션은 일부 ``사용 예'', 또는 RCU 알고리즘이 앞의 state machine 의
+내용을 진행하는 방법은 물론이고 관련된 데이터 구조를 알아봅니다.
+\iffalse
 
 The events in the above state schematic interact with different
 data structures, as shown in
@@ -890,6 +939,7 @@ the kernel.
 Therefore, the following section describes some ``use cases'',
 or ways in which the RCU algorithm traverses the above state schematic
 as well as the relevant data structures.
+\fi
 
 \subsection{Use Cases}
 \label{app:rcuimpl:rcutree:Use Cases}
