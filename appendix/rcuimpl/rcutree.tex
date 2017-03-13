@@ -737,6 +737,19 @@ The next section discusses energy conservation.
 \subsection{Towards a Greener RCU Implementation}
 \label{app:rcuimpl:rcutree:Towards a Greener RCU Implementation}
 
+앞서 언급되었듯이, 이러한 노력의 중요한 목표는 전력 소모를 방지하기 위해 잠자는
+CPU 들을 깨우지 않는 것입니다.
+반면에, Classic RCU 는 잠들어 있는 CPU 들을 어떤 겨웅에 있어서는 매 grace
+period 마다 한번씩은 깨울 것인데, 이는 적은 수의 CPU 들만이 바쁘게 일을 하면서
+RCU update 를 하고 있고 나머지 대부분의 CPU 들은 idle 상태일 때에
+비효율적입니다.
+이 상황은 peak load 를 위해 맞춰진 시스템들에서 자주 발생하며, 우린 이런 상황을
+잘 대처할 필요가 있습니다.
+더 나아가서, 우린 긴시간 동작하는 RCU read-side 크리티컬 섹션을 담고 있으며
+인터럽트를 처리하는 dynticks-idle CPU 가 RCU grace period 가 끝나는 것을 막는데
+실패하는, Classic RCU 의 오랫동안 있어왔던 버그를 고칠 필요가 있습니다.
+\iffalse
+
 As noted earlier, an important goal of this effort is to leave sleeping
 CPUs lie in order to promote energy conservation.
 In contrast, classic RCU will happily awaken each and every sleeping CPU
@@ -750,16 +763,30 @@ Furthermore, we need to fix a long-standing bug in Classic RCU where
 a dynticks-idle CPU servicing an interrupt containing a long-running
 RCU read-side critical section will fail to prevent an RCU grace period
 from ending.
+\fi
 
 \QuickQuiz{}
+	그런 어처구니 없는 버그가 있다면, Linux 는 대체 어떻게 동작하고
+	있는거죠?
+	\iffalse
+
 	Given such an egregious bug, why does Linux run at all?
+	\fi
 \QuickQuizAnswer{
+	리눅스 커널은 (상대적으로) 얌전한 디바이스 드라이버들을 가지고 있기
+	때문입니다.
+	만약 그것들 가운데 일부가 RCU read-side 크리티컬 섹션 내에서 spin 을 수
+	밀리세컨드까지 한다면 이는 이 버그를 일으킬 수 있습니다.
+	그러나 이 버그는 고쳐져야만 하고, 이 RCU 변종은 그런 수정을 합니다.
+	\iffalse
+
 	Because the Linux kernel contains device drivers that are (relatively)
 	well behaved.
 	Few if any of them spin in RCU read-side critical sections for the
 	many milliseconds that would be required to provoke this bug.
 	The bug nevertheless does need to be fixed, and this variant of
 	RCU does fix it.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[htb]
@@ -768,6 +795,20 @@ from ending.
 \caption{Hierarchical RCU State With Dynticks}
 \label{fig:app:rcuimpl:rcutree:Hierarchical RCU State With Dynticks}
 \end{figure}
+
+이는 모든 CPU 들이 per-CPU \co{rcu_dynticks} 구조체 안에 위치한 카운터들을
+조정하도록 함으로써 이루어집니다.
+간단히 말해서, 이 카운터들은 연관된 CPU 가 dynticks idle 모드에 있을 경우에는
+짝수의 값을 가지고, 그렇지 않을 때에는 홀수의 값을 갖습니다.
+따라서 RCU 는 이 \co{rcu_dynticks} 카운터들이 홀수인 CPU 들에 대해서만
+quiescent state 를 기다리면 되고, 그 카운터의 값이 짝수인 잠들어있는 CPU 들은
+깨울 필요가 없습니다.
+Figure~\ref{fig:app:rcuimpl:rcutree:Hierarchical RCU State With Dynticks} 에
+보여진 것처럼, 각각의 per-CPU \co{rcu_dynticks} 구조체는 ``rcu'' 와 ``rcu\_bh''
+구현에 의해 공유됩니다.
+
+다음 섹션은 높은 레벨에서의 RCU state machine 에 대한 개요를 보입니다.
+\iffalse
 
 This is accomplished by requiring that all CPUs manipulate counters
 located in a per-CPU \co{rcu_dynticks} structure.
@@ -783,6 +824,7 @@ each per-CPU \co{rcu_dynticks} structure
 is shared by the ``rcu'' and ``rcu\_bh'' implementations.
 
 The following section presents a high-level view of the RCU state machine.
+\fi
 
 \subsection{State Machine}
 \label{app:rcuimpl:rcutree:State Machine}
