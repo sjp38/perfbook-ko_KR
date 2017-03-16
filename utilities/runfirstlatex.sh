@@ -43,9 +43,10 @@ echo "pdflatex 1 for $basename.pdf"
 pdflatex $basename > /dev/null 2>&1 < /dev/null || :
 if grep -q '! Emergency stop.' $basename.log
 then
+	grep -B 15 -A 5 '! Emergency stop.' $basename.log
 	echo "----- Fatal latex error, see $basename.log for details. -----"
 	exit 1
 fi
-grep 'Latex Warning:' $basename.log > $basename-warning.log
+grep 'LaTeX Warning:' $basename.log > $basename-warning.log
 touch $basename-first.log
 exit 0

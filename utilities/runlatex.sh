@@ -23,10 +23,48 @@
 # http://www.gnu.org/licenses/gpl-2.0.html.
 #
 # Copyright (C) IBM Corporation, 2012
-# Copyright (C) Akira Yokosawa, 2016
+# Copyright (C) Akira Yokosawa, 2016, 2017
 #
 # Authors: Paul E. McKenney <paulmck@us.ibm.com>
 #          Akira Yokosawa <akiyks@gmail.com>
+
+diff_warning () {
+	if diff -q $basename-warning.log $basename-warning-prev.log >/dev/null
+	then
+		echo "No more improvement is expected, giving up."
+		return 0 ;
+	else
+#		echo "Some improvements are observed, continuing."
+		return 1 ;
+	fi
+}
+
+identical_warnings () {
+	if test -r $basename-warning-prev.log
+	then
+		if test "$iter" -gt "$min_iter" && diff_warning
+		then
+			return 0 ;
+		fi
+	fi
+	return 1 ;
+}
+
+iterate_latex () {
+	pdflatex $basename > /dev/null 2>&1 < /dev/null || :
+	if grep -q '! Emergency stop.' $basename.log
+	then
+		grep -B 15 -A 5 '! Emergency stop.' $basename.log
+		echo "----- Fatal latex error, see $basename.log for details. -----"
+		exit 1
+	fi
+	if test -r $basename-warning.log
+	then
+		mv -f $basename-warning.log $basename-warning-prev.log
+	fi
+	grep 'LaTeX Warning:' $basename.log > $basename-warning.log
+	return 0 ;
+}
 
 if test -z "$1"
 then
@@ -43,78 +81,38 @@ then
 		exit 1
 	fi
 	echo "pdflatex 1 for $basename.pdf"
-	pdflatex $basename > /dev/null 2>&1 < /dev/null || :
-	if grep -q '! Emergency stop.' $basename.log
-	then
-		echo "----- Fatal latex error, see $basename.log for details. -----"
-		exit 1
-	fi
-	grep 'LaTex Warning:' $basename.log > $basename-warning.log
+	iterate_latex
 fi
 rm -f $basename-first.log
 iter=2
 echo "pdflatex 2 for $basename.pdf # for possible bib update"
-pdflatex $basename > /dev/null 2>&1 < /dev/null || :
-if grep -q '! Emergency stop.' $basename.log
-then
-    echo "----- Fatal latex error, see $basename.log for details. -----"
-    exit 1
-fi
-grep 'LaTex Warning:' $basename.log > $basename-warning.log
+iterate_latex
+min_iter=2
 while grep -q 'LaTeX Warning: There were undefined references' $basename.log
 do
-	if test -r $basename-warning-prev.log
+	if identical_warnings
 	then
-		if test "$iter" -gt 2 && diff -q $basename-warning.log $basename-warning-prev.log >/dev/null
-		then
-			echo "No more improvement is expected, giving up."
-			break
-#		else
-#			echo "Some improvements are observed, continuing."
-		fi
+		break
 	fi
 	iter=`expr $iter + 1`
 	echo "pdflatex $iter for $basename.pdf # remaining undefined refs"
-	pdflatex $basename > /dev/null 2>&1 < /dev/null || :
-	if grep -q '! Emergency stop.' $basename.log
-	then
-		echo "----- Fatal latex error, see $basename.log for details. -----"
-		exit 1
-	fi
-	if test -r $basename-warning.log
-	then
-		mv -f $basename-warning.log $basename-warning-prev.log
-	fi
-	grep 'LaTex Warning:' $basename.log > $basename-warning.log
+	iterate_latex
 done
+min_iter=3
 while grep -q 'LaTeX Warning: Label(s) may have changed' $basename.log
 do
-	if test -r $basename-warning-prev.log;
+	if identical_warnings
 	then
-		if test "$iter" -gt 3 && diff -q $basename-warning.log $basename-warning-prev.log >/dev/null
-		then
-			echo "No more improvement is expected, giving up."
-			break
-#		else
-#			echo "Some improvements are observed, continuing."
-		fi
+		break
 	fi
 	iter=`expr $iter + 1`
-	echo "pdflatex $iter for $basename.pdf # label(s) may have been changed"
-	pdflatex $basename > /dev/null 2>&1 < /dev/null || :
-	if grep -q '! Emergency stop.' $basename.log
-	then
-		echo "----- Fatal latex error, see $basename.log for details. -----"
-		exit 1
-	fi
-	if test -r $basename-warning.log
-	then
-		mv -f $basename-warning.log $basename-warning-prev.log
-	fi
-	grep 'LaTex Warning:' $basename.log > $basename-warning.log
+	echo "pdflatex $iter for $basename.pdf # label(s) may have changed"
+	iterate_latex
 done
-if grep "LaTeX Warning:" $basename.log
+if grep -q "LaTeX Warning:" $basename.log
 then
+	echo "----- Excerpt around remaining warning messages -----"
+	grep -B 8 -A 5 "LaTeX Warning:" $basename.log | tee $basename-warning.log
 	echo "----- You can see $basename-warning.log for the warnings above. -----"
 	echo "----- If you need to, see $basename.log for details. -----"
 	rm -f $basename-warning-prev.log
