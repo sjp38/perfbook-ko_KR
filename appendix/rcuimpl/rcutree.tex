@@ -1154,6 +1154,19 @@ structure's bits are set in turn while holding that structure's
 \subsubsection{Pass Through a Quiescent State}
 \label{app:rcuimpl:rcutree:Pass Through a Quiescent State}
 
+RCU 의 rcu 와 rcu\_bh 향은 서로 다른 quiescent state 집합을 갖습니다.
+Quiescent state 는 rcu 에 있어서는 컨텍스트 스위치, idle (dynticks 또는 idle
+루프), 그리고 user-mode 수행인 반면, rcu\_bh 에 있어서는 interrupt 가 활성화 된
+채의 softirq 바깥 모든 코드입니다.
+Rcu 를 위한 quiescent state 는 곧 rcu\_bh 를 위한 quiescent state 이기도 하다는
+점을 알아 두시기 바랍니다.
+Rcu 를 위한 quiescent state 들은 \co{rcu_qsctr_inc()} 를 호출하는 것으로
+기록되고, rcu\_bh 를 위한 quiescent state 들은 \co{rcu_bh_qsctr_inc()} 를
+호출함으로써 기록되어집니다.
+이 두개의 함수들은 각자의 상태를 현재 CPU 의 \co{rcu_data} 구조체 안에
+기록합니다.
+\iffalse
+
 The rcu and rcu\_bh flavors of RCU have different sets of quiescent
 states.
 Quiescent states for rcu are context switch, idle (either dynticks or
@@ -1166,6 +1179,16 @@ while quiescent states for rcu\_bh are recorded by invoking
 \co{rcu_bh_qsctr_inc()}.
 These two functions record their state in the current CPU's
 \co{rcu_data} structure.
+\fi
+
+이 함수들은 스케쥴러에서 호출되어지는데, \co{__do_softirq()} 와
+\co{rcu_check_callbacks()} 에서입니다.
+뒤의 함수는 scheduling-clock 인터럽트에 의해서 호출되어지며, 이 인터럽트가
+\co{rcu_qsctr_inc()} 또는 \co{rcu_bh_qsctr_inc()} 를 호출한 quiescent state
+에서 발생한 것인지를 판단하기 위해 상태를 분석합니다.
+이 함수는 또한 \co{RCU_SOFTIRQ} 에 의해서도 호출되는데, 나중에 softirq
+컨텍스트에서 현재 CPU 에서 \co{rcu_process_callbacks()} 를 호출되게 합니다.
+\iffalse
 
 These functions are invoked from the scheduler, from
 \co{__do_softirq()}, and from \co{rcu_check_callbacks()}.
@@ -1176,6 +1199,7 @@ a quiescent state, invoking \co{rcu_qsctr_inc()} and/or
 It also raises \co{RCU_SOFTIRQ}, which results in
 \co{rcu_process_callbacks()} being invoked on the current
 CPU at some later time from softirq context.
+\fi
 
 \subsubsection{Announce a Quiescent State to RCU}
 \label{app:rcuimpl:rcutree:Announce a Quiescent State to RCU}
