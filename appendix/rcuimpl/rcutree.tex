@@ -1204,10 +1204,34 @@ CPU at some later time from softirq context.
 \subsubsection{Announce a Quiescent State to RCU}
 \label{app:rcuimpl:rcutree:Announce a Quiescent State to RCU}
 
+앞에서 언급된 \co{rcu_process_callbacks()} 함수는 몇가지 의무를 가지고
+있습니다:
+\iffalse
+
 The afore-mentioned \co{rcu_process_callbacks()} function
 has several duties:
+\fi
 
 \begin{enumerate}
+\item	언제 너무 오래 유지된 grace period 를 (\co{force_quiescent_state()}를
+	통해) 끝낼지 판단하는 것.
+\item	다른 CPU 가 grace period 의 끝을 파악했을 때 (\co{rcu_process_gp_end()}
+	를 통해) 적절한 행동을 취하는 것.
+	``적절한 행동`` 은 이 CPU 의 콜백들을 수행하고 새로운 grace period 를
+	기록하는 것을 포함합니다.
+	이 똑같은 함수는 다른 CPU 가 새로운 grace period 를 시작하는 것에 대한
+	응답으로 상태를 업데이트 합니다.
+\item	현재 CPU 의 quiescent state 들을 (결국은 \co{cpu_quiet()} 를 호출하는
+	\co{rcu_check_quiescent_state()} 를 통해) RCU 메커니즘의 핵심에 알리는
+	것.
+	이는 물론 현재 grace period 의 끝을 표시합니다.
+\item	진행중인 grace period 가 없고 이 CPU 가 여전히 grace period 를 기다리고
+	있는 RCU 콜백들을 가지고 있다면 (\co{cpu_needs_another_gp()} 와
+	\co{rcu_start_gp()} 를 통해) 새로운 grace period 를 시작하는 것.
+\item	Grace period 가 끝난 이 CPU 의 콜백들을 (\co{rcu_do_batch()} 를 통해)
+	호출하는 것.
+\iffalse
+
 \item	Determining when to take measures to end an over-long grace period
 	(via \co{force_quiescent_state()}).
 \item	Taking appropriate action when some other CPU detected the end of
@@ -1226,11 +1250,18 @@ has several duties:
 	\co{rcu_start_gp()}).
 \item	Invoking any of this CPU's callbacks whose grace period has ended
 	(via \co{rcu_do_batch()}).
+\fi
 \end{enumerate}
+
+이 동작들은 앞의 grace period 로부터의 quiescent state 를 현재의 grace period
+에게 보고한다던가 하는 것과 같은 버그를 막기 위해 매우 조심스럽게 짜여져
+동작합니다.
+\iffalse
 
 These interactions are carefully orchestrated in order to avoid
 buggy behavior such as reporting a quiescent state from the previous
 grace period against the current grace period.
+\fi
 
 \subsubsection{Enter and Leave Dynticks Idle Mode}
 \label{app:rcuimpl:rcutree:Enter and Leave Dynticks Idle Mode}
