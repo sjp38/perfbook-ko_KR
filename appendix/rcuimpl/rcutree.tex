@@ -1266,6 +1266,23 @@ grace period against the current grace period.
 \subsubsection{Enter and Leave Dynticks Idle Mode}
 \label{app:rcuimpl:rcutree:Enter and Leave Dynticks Idle Mode}
 
+스케쥴러는 dynticks-idle 모드에 들어가기 위해 \co{rcu_enter_nohz()} 를
+호출하고, 거기서 나오기 위해 \co{rcu_exit_nohz()} 를 호출합니다.
+\co{rcu_enter_nohz()} 함수는 per-CPU \co{dynticks_nesting} 변수와 per-CPU
+\co{dynticks} 변수의 값을 증가시키는데, \co{dynticks} 는 따라서 짝수의 값을
+가져야만 합니다.
+\co{rcu_exit_nohz()} 함수는 같은 per-CPU \co{dynticks_nesting} 변수의 값을
+감소시키고 per-CPU \co{dynticks} 카운터의 값을 증가시키는데, 따라서
+\co{dynticks} 는 홀수 값을 갖게 됩니다.
+
+\co{dynticks} 카운터는 다른 CPU 에 의해 보여질 수 있습니다.
+만약 그 값이 짝수라면, 첫번째 CPU 는 연장된 quiescent state 안에 있는 것입니다.
+비슷하게, 만약 그 카운터의 값이 grace period 동안 바뀌었다면, 첫번째 CPU 는
+grace period 동안의 언젠가에 연장된 quiescent state 안에 있었던 셈입니다.
+하지만, 또한 보여져야만 하는 \co{dynticks_nmi} per-CPU 변수가 하나 더 있는데,
+이에 대해 아래에서 설명합니다.
+\iffalse
+
 The scheduler invokes \co{rcu_enter_nohz()} to
 enter dynticks-idle mode, and invokes \co{rcu_exit_nohz()}
 to exit it.
@@ -1285,6 +1302,7 @@ the first CPU must have been in an extended quiescent state at some
 point during the grace period.
 However, there is another \co{dynticks_nmi} per-CPU variable
 that must also be sampled, as will be discussed below.
+\fi
 
 \subsubsection{Interrupt from Dynticks Idle Mode}
 \label{app:rcuimpl:rcutree:Interrupt from Dynticks Idle Mode}
