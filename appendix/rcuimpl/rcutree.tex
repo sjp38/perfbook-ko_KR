@@ -1307,6 +1307,23 @@ that must also be sampled, as will be discussed below.
 \subsubsection{Interrupt from Dynticks Idle Mode}
 \label{app:rcuimpl:rcutree:Interrupt from Dynticks Idle Mode}
 
+Dynticks idle 모드로부터의 인터럽트는 \co{rcu_irq_enter()} 와
+\co{rcu_irq_exit()} 에서 처리되어집니다.
+\co{rcu_irq_enter()} 함수는 per-CPU \co{dynticks_nesting} 변수의 값을
+증가시키고, 만약 기존 값이 0 이었다면, \co{dynticks} per-CPU 변수의 값 또한
+증가시킵니다 (이제 홀수 값을 갖게 될겁니다).
+
+\co{rcu_irq_exit()} 함수는 per-CPU \co{dynticks_nesting} 변수의 값을
+감소시키고, 새로운 값이 0이라면, \co{dynticks} per-CPU 변수의 값을 증가시킵니다
+(이제 짝수 값을 갖게 될겁니다).
+
+Irq 핸들러에 들어가게 되면 dynticks idle 모드를 빠져나가는 것이고 그 반대도
+성립됨을 알아두시기 바랍니다.
+이렇게 들어가고 빠져나오는게 서로 일치하지 못하는 것은 상당한 혼란을 가져올 수
+있습니다.
+경고 드렸습니다.
+\iffalse
+
 Interrupts from dynticks idle mode are handled by
 \co{rcu_irq_enter()} and \co{rcu_irq_exit()}.
 The \co{rcu_irq_enter()} function increments the
@@ -1323,6 +1340,7 @@ Note that entering an irq handler exits dynticks idle mode
 and vice versa.
 This enter/exit anti-correspondence can cause much confusion.
 You have been warned.
+\fi
 
 \subsubsection{NMI from Dynticks Idle Mode}
 \label{app:rcuimpl:rcutree:NMI from Dynticks Idle Mode}
