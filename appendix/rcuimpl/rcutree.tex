@@ -1561,6 +1561,16 @@ extended quiescent states.
 \subsubsection{Offline a CPU}
 \label{app:rcuimpl:rcutree:Offline a CPU}
 
+CPU-offline 이벤트는 \co{rcu_cpu_notify()} 가 \co{rcu_offline_cpu()} 를
+호출하게 하며, 이 함수는 결국 해당 데이터 구조의 rcu 와 rcu\_bh 인스턴스
+모두에서 \co{__rcu_offline_cpu()} 를 호출하게 됩니다.
+이 함수는 꺼지는 CPU 의 bit 들의 값을 지워서 나중의 grace period 가 이 CPU 가
+quiescent state 를 발표할 것이라 기대하지 않게끔 하고, 나아가서는 offline 으로
+발생한 extended quiescent state 를 알리기 위해 \co{cpu_quiet()} 를 호출합니다.
+이 작업은 동시의 grace-period 초기화와의 상호간섭을 막기 위해 잡혀지는,
+전역적인 \co{->onofflock} 과 함께 수행됩니다.
+\iffalse
+
 CPU-offline events cause \co{rcu_cpu_notify()} to invoke
 \co{rcu_offline_cpu()}, which in turn invokes
 \co{__rcu_offline_cpu()} on both the rcu and the rcu\_bh
@@ -1572,11 +1582,25 @@ the offline-induced extended quiescent state.
 This work is performed with the global \co{->onofflock}
 held in order to prevent interference with concurrent grace-period
 initialization.
+\fi
 
 \QuickQuiz{}
+	하지만 \co{->onofflock} 을 잡는 또다른 이유는 여러개의 동시적인
+	online/offline 오퍼레이션들을 방지하기 위함이 맞지요?
+	\iffalse
+
 	But the other reason to hold \co{->onofflock} is to prevent
 	multiple concurrent online/offline operations, right?
+	\fi
 \QuickQuizAnswer{
+	분명, 아닙니다!
+	CPU-hotplug 코드의 동기화 설계는 복수의 동시적인 CPU online/offline
+	오퍼레이션들을 방지하므로, 한번에 하나의 CPU 의 online/offline
+	오퍼레이션만이 수행될 수 있습니다.
+	따라서, \co{->onofflock} 의 유일한 목적은 CPU online 또는 offline
+	오퍼레이션이 grace-period 초기화와 동시에 수행되는 것을 막는 것입니다.
+	\iffalse
+
 	Actually, no!
 	The CPU-hotplug code's synchronization design prevents multiple
 	concurrent CPU online/offline operations, so only one CPU
@@ -1584,6 +1608,7 @@ initialization.
 	Therefore, the only purpose of \co{->onofflock} is to prevent a CPU
 	online or offline operation from running concurrently with grace-period
 	initialization.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Online a CPU}
