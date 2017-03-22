@@ -1375,6 +1375,20 @@ this counter with an even value.
 \subsubsection{Note That a CPU is in Dynticks Idle Mode}
 \label{app:rcuimpl:rcutree:Note That a CPU is in Dynticks Idle Mode}
 
+\co{force_quiescent_state()} 함수는 세 단계의 state machine 을 구현합니다.
+첫번째 단계 (\co{RCU_INITIALIZING}) 은 \co{rcu_start_gp()} 가 grace-period
+초기화를 완료하기를 기다립니다.
+이 상태는 \co{force_quiescent_state()} 에 의해서가 아니라 \co{rcu_start_gp()}
+에 의해 종료됩니다.
+
+두번째 단계 (\co{RCU_SAVE_DYNTICK}) 에서는 \co{dyntick_save_progress_counter()}
+함수가 아직 quiescent state 를 보고하지 않은 CPU 들을 스캔하면서 각각의 per-CPU
+\co{dynticks} 와 \co{dynticks_nmi} 카운터들의 값을 기록합니다.
+만약 이 카운터들이 모두 짝수 값을 갖는다면, 연관된 CPU 는 dynticks-idle 상태에
+있는 것으로, 따라서 extended quiescent state 로 알려지는 겁니다
+(\co{cpu_quiet_msk()} 로 보고됩니다).
+\iffalse
+
 The \co{force_quiescent_state()} function implements a
 three-phase state machine.
 The first phase (\co{RCU_INITIALIZING}) waits for \co{rcu_start_gp()}
@@ -1389,6 +1403,30 @@ have not yet reported a quiescent state, recording their per-CPU
 If these counters both have even-numbered values, then the corresponding
 CPU is in dynticks-idle state, which is therefore noted as an extended
 quiescent state (reported via \co{cpu_quiet_msk()}).
+\fi
+
+세번째 단계 (\co{RCU_FORCE_QS}) 에서는 \co{rcu_implicit_dynticks_qs()} 함수가
+다시 (명시적으로든 \co{RCU_SAVE_DYNTICK}) 단계를 통해 묵시적으로든) 아직
+quiescent state 를 보고하지 않은 CPU 들을 스캔하면서, per-CPU \co{dynticks} 와
+\co{dynticks_nmi} 카운터들을 스캔합니다.
+이것들 각각이 그 값을 바꿨거나 이제 짝수라면, 거기에 연관된 CPU 는 dynticks
+idle 을 지나왔거나 아직 그 안에 있는 것으로, 앞에서와 같이 extended quiescent
+state 에 있는 것을 알리는 겁니다.
+
+\co{rcu_implicit_dynticks_qs()} 가 특정 CPU 가 dynticks idle 모드에 들어가
+있지도 않고 quiescent state 를 보고하지도 않았음을 알게 되면, 이 함수는
+\co{rcu_implicit_offline_qs()} 를 호출하는데, 이 함수는 해당 CPU 가 offline
+인지 확인하는데, offline 임은 또한 extended quiescent state 로 보고되어
+있습니다.
+만약 해당 CPU 가 online 상태라면, \co{rcu_implicit_offline_qs()} 는 여기에 RCU
+로 quiescent state 를 보고할 의무를 다시 한번 알리기 위해 reschedule IPI 를
+날립니다.
+
+\co{force_quiescent_state()} 는 지겁적으로 \co{dyntick_save_progress_counter()}
+도 \co{rcu_implicit_dynticks_qs()} 도 호출하지 않고, 대신 이 함수들을 CPU 들을
+스캔하고 extended quiescent state 를 보고하는데에 연관된 공통된 코드들을 추상화
+시킨 함수인, \co{rcu_process_dyntick()} 함수에게 넘김을 알아두시기 바랍니다.
+\iffalse
 
 In the third phase (\co{RCU_FORCE_QS}), the
 \co{rcu_implicit_dynticks_qs()} function again scans the CPUs
@@ -1414,25 +1452,60 @@ invoke either \co{dyntick_save_progress_counter()} or
 to an intervening \co{rcu_process_dyntick()} function that
 abstracts out the common code involved in scanning the CPUs and reporting
 extended quiescent states.
+\fi
 
 \QuickQuiz{}
+	한 CPU 가 dyntick-idle 모드에서 빠져나오고선 다른 CPU 가 첫번째 CPU 가
+	dyntick-idle 모드에 있었음을 알게 되자마자 quiescent state 를
+	지나가버리면 어떻게 되나요?
+	두 CPU 모두 동시에 quiescent state 를 보고하려 해서, 혼란이 생기지
+	않을까요?
+	\iffalse
+
 	And what happens if one CPU comes out of dyntick-idle mode and then
 	passed through a quiescent state just as another CPU notices that the
 	first CPU was in dyntick-idle mode?
 	Couldn't they both attempt to report a quiescent state at the same
 	time, resulting in confusion?
+	\fi
 \QuickQuizAnswer{
+	두 CPU 모두 같은 leaf \co{rcu_node} 구조체의 락을 잡으려 할겁니다.
+	락을 잡으려 하는 첫번째 것이 quiescent state 를 보고하고 연관된 bit 의
+	값을 지울 거고, 두번째 것은 락을 잡고나서 이 bit 이 이미 지워져 있음을
+	보게 될겁니다.
+	\iffalse
+
 	They will both attempt to acquire the lock on the same leaf
 	\co{rcu_node} structure.
 	The first one to acquire the lock will report the quiescent state
 	and clear the appropriate bit, and the second one to acquire the
 	lock will see that this bit has already been cleared.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 \emph{모든} CPU 들이 dyntick-idle 모드에 있으면 어떻게 되죠?
+	이게 현재의 RCU grace period 가 영원히 끝나지 못하게 하지는 않을까요?
+	\iffalse
+
 	But what if \emph{all} the CPUs end up in dyntick-idle mode?
 	Wouldn't that prevent the current RCU grace period from ever ending?
+	\fi
 \QuickQuizAnswer{
+	실제로 그럴겁니다!
+	하지만, RCU 콜백들을 가지고 있는 CPU 들은 dyntick-idle 모드에 빠질 수
+	없게 되어 있어서, \emph{모든} CPU 들이 dyntick-idle 모드에 빠질 수 있는
+	유일한 방법은 시스템 내에 RCU 콜백이 정말 하나도 없을 때입니다.
+	그리고 시스템에 RCU 콜백이 하나도 없다면, RCU grace period 가 끝나길
+	기다려야 할 이유도 없죠.
+	사실, RCU grace period 가 \emph{시작}될 필요도 없는 겁니다.
+
+	만약 어떤 irq 핸들러가 RCU 콜백이 연관된 CPU 에 보이게 해서 해당 CPU 가
+	dyntick-idle 모드의 바깥으로 나오도록 강제할 거고, 결국 현재의 RCU
+	grace period 가 종료되도록 하는 \co{call_rcu()} 를 한다면 RCU 가 재시작
+	될겁니다.
+	\iffalse
+
 	Indeed it will!
 	However, CPUs that have RCU callbacks are not permitted to enter
 	dyntick-idle mode, so the only way that \emph{all} the CPUs could
@@ -1447,13 +1520,31 @@ extended quiescent states.
 	which will cause an RCU callback to appear on the corresponding CPU,
 	which will force that CPU out of dyntick-idle mode, which will in turn
 	permit the current RCU grace period to come to an end.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	\co{force_quiescent_state()} 가 세단계 state machine 이란 것을 놓고
+	보면, 모든 CPU 들을 스캐닝 하는 것 때문에 스케쥴링 응답시간을 세배로
+	늘리는 것 아닌가요?
+	\iffalse
+
 	Given that \co{force_quiescent_state()} is a three-phase state
 	machine, don't we have triple the scheduling latency due to scanning
 	all the CPUs?
+	\fi
 \QuickQuizAnswer{
+	아, 하지만 이 세단계는 같은 CPU 위에서 back-to-back 으로 수행되진 않을
+	거고, 더 나아가서 첫번째 (초기화) 단계는 스캐닝을 아예 하지 않아요.
+	따라서, 이 세단계 알고리즘에서의 스케쥴링 응답시간은 한단계 알고리즘의
+	것과 크게 다르지 않습니다.
+	스케쥴링 응답시간이 문제가 된다면, state machine 이 CPU 들을 점진적으로
+	스캔하도록 상태를 per-leaf-\co{rcu_node} 에 저장하는 방식으로 코드를
+	고치는게 한가지 방법이 될 수 있습니다.
+	하지만 일단은 실제 세계에서 발생하는 문제를 제게 보여주세요,
+	\emph{그러면} 제가 그걸 고치겠습니다!
+	\iffalse
+
 	Ah, but the three phases will not execute back-to-back on the same CPU,
 	and, furthermore, the first (initialization) phase doesn't do any
 	scanning.
@@ -1464,6 +1555,7 @@ extended quiescent states.
 	by keeping state on a per-leaf-\co{rcu_node} basis.
 	But first show me a problem in the real world, \emph{then}
 	I will consider fixing it!
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Offline a CPU}
