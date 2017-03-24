@@ -1614,6 +1614,16 @@ initialization.
 \subsubsection{Online a CPU}
 \label{app:rcuimpl:rcutree:Online a CPU}
 
+CPU-online 이벤트는 \co{rcu_cpu_notify()} 가 \co{rcu_online_cpu()} 를 호출하게
+하는데, 이 함수는 새로 켜지는 CPU 의 dynticks state 를 초기화 하며, 이어서 새로
+들어온 CPU 의 \co{rcu_data} 구조체를 초기화 하고 이 CPU 의 (global 한
+\co{->onofflock} 으로 보호되는) bit 들을 나중의 grace period 들이 이 CPU 의
+quiescent state 를 기다리도록 하게 설정하는 \co{rcu_init_percpu_data()} 를
+호출합니다.
+마지막으로, \co{rcu_online_cpu()} 는 이 CPU 를 위한 RCU softirq vector 를
+설정합니다.
+\iffalse
+
 CPU-online events cause \co{rcu_cpu_notify()} to invoke
 \co{rcu_online_cpu()}, which initializes the incoming CPU's
 dynticks state, and then invokes \co{rcu_init_percpu_data()}
@@ -1623,12 +1633,29 @@ the global \co{->onofflock}) so that future grace periods
 will wait for a quiescent state from this CPU.
 Finally, \co{rcu_online_cpu()}
 sets up the RCU softirq vector for this CPU.
+\fi
 
 \QuickQuiz{}
+	Global 한 \co{->onofflock} 의 획득을 위한 동작들을 모두 보면, 수천개의
+	CPU 들이 동작하는 경우에는 이게 상당한 락 경쟁이 되지 않을까요?
+	\iffalse
+
 	Given all these acquisitions of the global \co{->onofflock},
 	won't there
 	be horrible lock contention when running with thousands of CPUs?
+	\fi
 \QuickQuizAnswer{
+	실제로, grace period 당 이 락에 대한 세개의 획득 동작만이 있을 것이고,
+	각각의 grace period 는 수 밀리세컨드 동안 유지됩니다.
+	이런 획득들 가운데 하나는 현재 grace period 를 위한 CPU 초기화에 의해서
+	이루어지고, 나머지 두개는 CPU 의 online 화와 offline 화입니다.
+	이 나중 두개의 동작은 CPU-hotplug 락킹으로 인해 동시에 수행될 수는
+	없으므로, 언제든 이 락에 대해 최대 두개의 CPU 들만이 경쟁하게 됩니다.
+
+	따라서 \co{->onofflock} 에 대한 락 경쟁은 수천개의 CPU 를 가진
+	시스템에서도 문제가 되지 않습니다.
+	\iffalse
+
 	Actually, there can be only three acquisitions of this lock per grace
 	period, and each grace period lasts many milliseconds.
 	One of the acquisitions is by the CPU initializing for the current
@@ -1639,17 +1666,48 @@ sets up the RCU softirq vector for this CPU.
 
 	Lock contention on \co{->onofflock} should therefore
 	be no problem, even on systems with thousands of CPUs.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Dyntick-idle CPU 탐지와 offline CPU 탐지를 합쳐서 코드를 단순화 시키는
+	건 어떤가요?
+	\iffalse
+
 	Why not simplify the code by merging the detection of dyntick-idle
 	CPUs with that of offline CPUs?
+	\fi
 \QuickQuizAnswer{
+	그런 병합 작업이 최종적으로는 옳은 일이 될겁니다.
+	하지만, 그러기 위해서는 다음과 같은 도전이 존재합니다:
+	\iffalse
+
 	It might well be that such merging may eventually be the right
 	thing to do.
 	In the meantime, however, there are some challenges:
+	\fi
 
 	\begin{enumerate}
+	\item	CPU 들은 그것들이 유보된 RCU 콜백들을 가지고 있는 동안은
+		dyntick-idle 모드에 빠질 수 없는데, CPU 는 유보된 콜백들을
+		가진채로 offline 으로 빠질 수 있습니다.
+		이 말은 offline 이 되는 CPU 들은 다른 CPU 에게 자신의 콜백들을
+		옮겨야 한다는 의미이며, 따라서 우린 CPU 들이 그냥 offline 으로
+		빠지도록 할 수 없습니다.
+	\item	오늘날의 리눅스 시스템은 실제 CPU 갯수보다 훨씬 많은
+		\co{NR_CPUS} 를 가지고 동작합니다.
+		따라서 통합을 하는 방법은 애초에 존재하지도 않으면서 offline 이
+		아닌 CPU 들을 불필요하게 기다리는 것이 될 수 있습니다.
+	\item	RCU 는 이미 부팅 중간에 CPU 들이 하나씩 online 이 되는
+		상황에서도 동작할 수 있으며, 따라서 online 과정을 처리해야만
+		합니다.
+		이 온라인 과정은 grace-period 초기화와 배타적으로 수행되어야
+		하며, 따라서 \co{->onofflock} 은 여전히 사용되어져야 합니다.
+	\item	CPU 들은 종종 매우 빈번하게 dyntick-idle 모드를 들어갔나 나왔다
+		하며, 따라서 dyntick-idle 모드에 들어가고 나오는 코드 경로를
+		무겁게 하는건 합리적이지 않습니다.
+	\iffalse
+
 	\item	CPUs are not allowed to go into dyntick-idle mode while they
 		have RCU callbacks pending, but CPUs \emph{are} allowed to go
 		offline with callbacks pending.
@@ -1670,6 +1728,7 @@ sets up the RCU softirq vector for this CPU.
 		extremely frequently, so it is not reasonable to use the
 		heavyweight online/offline code path for entering and exiting
 		dyntick-idle mode.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
 
