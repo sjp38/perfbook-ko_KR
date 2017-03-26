@@ -1763,6 +1763,20 @@ CPU's stack.
 \subsection{Testing}
 \label{app:rcuimpl:rcutree:Testing}
 
+RCU 는 기본적인 동기화 코드이므로, RCU 에서의 모든 실패는 무작위적이고 디버깅
+하기 어려운 메모리 오렴을 초래합니다.
+따라서 RCU 는 \emph{매우} 안정적일 필요가 매우 중요합니다.
+이 안정성 중 일부는 조심스런 설계에서 기인하지만, 최종적으로는 고문이라고도
+알려진 상당한 스트레스 테스팅에 의존해야만 합니다.
+
+다행히도, Geneva Convention 이 어떤 인종들에게 적용되는지에 대한 일부 논쟁이
+있긴 했지만, 소프트웨어에는 여전히 적용되지 않습니다.
+따라서, 소프트웨어를 고문하는건 여전히 합법입니다.
+실제로, 여러분이 여러분의 소프트웨어를 고문하지 않는다면 상상할 수 있는 가장
+불편한 시점에 소프트웨어가 꺼짐으로써 \emph{여러분을} 고문하는 결과가
+나올겁니다.
+\iffalse
+
 RCU is fundamental synchronization code, so any failure of RCU
 results in random, difficult-to-debug memory corruption.
 It is therefore extremely important that RCU be \emph{highly} reliable.
@@ -1778,6 +1792,22 @@ Therefore, it is still legal to torture your software.
 In fact, it is strongly encouraged, because if you don't torture your
 software, it will end up torturing \emph{you} by crashing at the most
 inconvenient times imaginable.
+\fi
+
+따라서, 우리는 rcutorture 모듈을 사용해 RCU 를 매우 고통스럽게 고문합니다.
+
+하지만, RCU 의 흔한 사용 경우에 대해서만 고문을 가하는걸로는 충분하지 않습니다.
+예를 들어 CPU 들이 동시적으로 online 되고 offline 되는 경우와 CPU 들이
+동시적으로 dynticks idle 모드를 들어오고 나가는 것과 같이 일반적이지 않은
+상황에 대해서도 고문을 할 필요가 있습니다.
+저는 rcutorture 모듈과 동시적으로 수행되는 CPU 들을 online 시키고 offline
+시키는 간단한 스크립트를 사용합니다.
+이 모듈은 dynticks idle 모드를 스트레스 테스트 하기 위해 \co{test_no_idle_hz}
+모듈 패러키터를 받습니다.
+완벽해지기 위해, 저는 가끔 여기에 병렬적으로 kernbench 를 돌리기도 합니다.
+128-way 머신에서 열시간동안 이런 종류의 고문을 돌리는 건 대부분의 버그들을
+잡기에 충분합니다.
+\iffalse
 
 Therefore, we torture RCU quite vigorously using the rcutorture module.
 
@@ -1793,6 +1823,14 @@ Just to be fully paranoid, I sometimes run a kernbench workload in parallel
 as well.
 Ten hours of this sort of torture on a 128-way machine seems sufficient
 to shake out most bugs.
+\fi
+
+이것조차도 완전한 이야기는 아닙니다.
+Alexey Dobriya 과 Nick Piggin 이 2008 년 초에 보였듯이, RCU 를 연관된 커널
+패러미터들의 모든 조합들과 고문할 필요가 있습니다.
+연관된 커널 패러미터들은 또다른 간단한 스크립트로 규정될 수 있는데, 다음과
+같습니다:
+\iffalse
 
 Even this is not the complete story.
 As Alexey Dobriyan and Nick Piggin demonstrated in early 2008, it is
@@ -1800,8 +1838,22 @@ also necessary to torture RCU with all relevant combinations of kernel
 parameters.
 The relevant kernel parameters may be identified using yet another
 simple script, and are as follows:
+\fi
 
 \begin{enumerate}
+\item    \co{CONFIG_CLASSIC_RCU}: Classic RCU.
+\item    \co{CONFIG_PREEMPT_RCU}: Preemptible (real-time) RCU.
+\item    \co{CONFIG_TREE_RCU}: 거대한 SMP 시스템에서의 Classic RCU.
+\item    \co{CONFIG_RCU_FANOUT}: 각 \co{rcu_node} 의 자식의 수.
+\item    \co{CONFIG_RCU_FANOUT_EXACT}: \co{rcu_node} 트리의 밸런스를 맞춤.
+\item    \co{CONFIG_HOTPLUG_CPU}: CPU 들이 offline 되고 online 되는 것을 허용.
+\item    \co{CONFIG_NO_HZ}: dyntick-idle 모드를 활성화.
+\item    \co{CONFIG_SMP}: multi-CPU 오퍼레이션을 활성화.
+\item    \co{CONFIG_RCU_CPU_STALL_DETECTOR}: RCU 가 CPU 들이 언제 extended
+	quiescent-state 를 들어가는지 파악할 수 있게 함.
+\item    \co{CONFIG_RCU_TRACE}: Debugfs 안에 RCU trace 파일을 생성함.
+\iffalse
+
 \item    \co{CONFIG_CLASSIC_RCU}: Classic RCU.
 \item    \co{CONFIG_PREEMPT_RCU}: Preemptible (real-time) RCU.
 \item    \co{CONFIG_TREE_RCU}: Classic RCU for huge SMP systems.
@@ -1816,7 +1868,27 @@ simple script, and are as follows:
 \item    \co{CONFIG_RCU_CPU_STALL_DETECTOR}: Enable RCU to detect
 		when CPUs go on extended quiescent-state vacations.
 \item    \co{CONFIG_RCU_TRACE}: Generate RCU trace files in debugfs.
+\fi
 \end{enumerate}
+
+우리는 heierarchical RCU 는 잘못된 lockdep 을 갖지는 않을 것이라는 아마도
+자연스러운 가정 하에 \co{CONFIG_DEBUG_LOCK_ALLOC} 설정은 무시합니다.
+10개의 환경 구성 변수들이 있는데, 이것들이 비의존적인 boolean 변수들이라면
+1,024 개의 조합을 만들 겁니다.
+다행히도 앞의 세개는 상호 배타적이어서 조합의 수를 384 개로 줄입니다만,
+\co{CONFIG_RCU_FANOUT} 은 그 값을 2 부터 64 까지 가질 수 있어서, 조합의 수를
+12,096 까지 늘립니다.
+이건 상당한 수의 조합입니다.
+
+주요한 발견 중 하나는 \co{CONFIG_NO_HZ} 와 \co{CONFIG_PREEMPT} 는
+\co{CONFIG_CLASSIC_RCU} 나 \co{CONFIG_PREEMPT_RCU} 가 켜져 있다면 변경된 동작을
+취할 수 있다는 것으로, 이 두개의 기존부터 존재한 RCU 구현들만이 앞의 두개의
+환경구성 구현과 함께 변경되었기 때문입니다.
+이는 가능한 조합 가운데 거의 3분의 2를 제거합니다.
+
+더 나아가서, \co{CONFIG_RCU_FANOUT} 의 모든 설정 가능한 값이 상당히 다른 결과를
+내놓지는 않고, 실제로 몇개의 경우들만이 따로 테스트 되면 됩니다:
+\iffalse
 
 We ignore the \co{CONFIG_DEBUG_LOCK_ALLOC} configuration
 variable under the perhaps-naive assumption that hierarchical RCU
@@ -1839,8 +1911,18 @@ This cuts out almost two thirds of the possible combinations.
 Furthermore, not all of the possible values of
 \co{CONFIG_RCU_FANOUT} produce significantly different results,
 in fact only a few cases really need to be tested separately:
+\fi
 
 \begin{enumerate}
+\item	싱글 노드 ``트리''.
+\item	2단계 밸런스 잡힌 트리.
+\item	3단계 밸런스 잡힌 트리.
+\item	\co{CONFIG_RCU_FANOUT} 은 밸런스 잡히지 않은 트리를 명시하지만
+	\co{CONFIG_RCU_FANOUT_EXACT} 없이는 자동으로 밸런스 잡히게 되는
+	자동으로 밸런스 잡힌 트리.
+\item	밸런스 잡히지 않은 트리.
+\iffalse
+
 \item	Single-node ``tree''.
 \item	Two-level balanced tree.
 \item	Three-level balanced tree.
@@ -1848,7 +1930,23 @@ in fact only a few cases really need to be tested separately:
 	specifies an unbalanced tree, but such that it is auto-balanced
 	in absence of \co{CONFIG_RCU_FANOUT_EXACT}.
 \item	Unbalanced tree.
+\fi
 \end{enumerate}
+
+더 보자면, \co{CONFIG_HOTPLUG_CPU} 는 \co{CONFIG_SMP} 가 주어졌을 때에만 의미를
+갖고, \co{CONFIG_RCU_CPU_STALL_DETECTOR} 는 의존성이 없으며, 한번만 테스트 되면
+됩니다 (저보다 더 편집증적인 누군가는 이것도 \co{CONFIG_SMP} 를 켰을때와 껐을
+때에 대해 모두 테스트할 수도 있겠습니다).
+비슷하게, \co{CONFIG_RCU_TRACE} 는 한번만 테스트 되면 됩니다만, (저처럼) 정말로
+편집증에 걸린 사람은 \co{CONFIG_NO_HZ} 를 켰을때와 껐을 때에 대해 모두 테스트
+할 수 있을 겁니다.
+
+이건 15개의 테스트 케이스만을 가지고도 RCU 의 상당한 부분을 커버할 수 있게
+해줍니다.
+모든 테스트 케이스들은 rcutorture 를 돌리기 위해, 그리고
+\co{CONFIG_HOTPLUG_CPU=n} 이 실제로 영향을 끼치게 하기 위해 다음과 같은 환경
+구성 패러미터들을 명시하게 됩니다.
+\iffalse
 
 Looking further, \co{CONFIG_HOTPLUG_CPU} makes sense only
 given \co{CONFIG_SMP}, and \co{CONFIG_RCU_CPU_STALL_DETECTOR}
@@ -1864,6 +1962,7 @@ test cases.
 All test cases specify the following configuration parameters in order
 to run rcutorture and so that \co{CONFIG_HOTPLUG_CPU=n} actually
 takes effect:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1877,10 +1976,18 @@ CONFIG_HIBERNATION=n
 \end{minipage}
 \vspace{5pt}
 
+이 15 개의 테스트 케이스들은 다음과 같습니다:
+\iffalse
+
 The 15 test cases are as follows:
+\fi
 
 \begin{enumerate}
+\item	작은 시스템들을 위한 싱글 노드 ``트리'' 를 강제:
+\iffalse
+
 \item	Force single-node ``tree'' for small systems:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1897,7 +2004,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	커다란 시스템을 위해 2단계 트리를 강제:
+\iffalse
+
 \item	Force two-level tree for large systems:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1914,7 +2025,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	거대한 시스템들을 위한 3단계 트리를 강제:
+\iffalse
+
 \item	Force three-level tree for huge systems:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1931,7 +2046,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	밸런스 잡힌 트리를 향한 자동 밸런스 잡기를 테스트:
+\iffalse
+
 \item	Test autobalancing to a balanced tree:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1948,7 +2067,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	밸런스 잡히지 않은 트리를 테스트
+\iffalse
+
 \item	Test unbalanced tree:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1966,7 +2089,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	CPU-stall 탐지를 비활성화:
+\iffalse
+
 \item	Disable CPU-stall detection:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -1983,8 +2110,12 @@ The 15 test cases are as follows:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+\item	CPU-stall 탐지와 dyntick idle 모드를 비활성화:
+\iffalse
 
 \item	Disable CPU-stall detection and dyntick idle mode:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2002,7 +2133,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	CPU-stall 탐지와 CPU hotplug 를 비활성화:
+\iffalse
+
 \item	Disable CPU-stall detection and CPU hotplug:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2020,7 +2155,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	CPU-stall 탐지, dyntick idle 모드, 그리고 CPU hotplug 를 비활성화:
+\iffalse
+
 \item	Disable CPU-stall detection, dyntick idle mode, and CPU hotplug:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2038,7 +2177,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	SMP, CPU-stall 탐지, dyntick idle 모드, 그리고 CPU hotplug 를 비활성화:
+\iffalse
+
 \item	Disable SMP, CPU-stall detection, dyntick idle mode, and CPU hotplug:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2056,9 +2199,15 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+	이 조합은 수많은 컴파일러 경고들을 나오게 했습니다.
+
+\item	SMP 와 CPU hotplug 를 비활성화:
+\iffalse
+
 	This combination located a number of compiler warnings.
 
 \item	Disable SMP and CPU hotplug:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2076,7 +2225,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	Classic RCU 를 preemption 없이 dynticks idle 과 테스트:
+\iffalse
+
 \item	Test Classic RCU with dynticks idle but without preemption:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2092,7 +2245,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	Classic RCU 를 dynticks idle 없이 preemption 과 함께 테스트:
+\iffalse
+
 \item	Test Classic RCU with preemption but without dynticks idle:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2108,7 +2265,11 @@ The 15 test cases are as follows:
 \end{minipage}
 \vspace{5pt}
 
+\item	Preemptible RCU 를 dynticks idle 과 함께 테스트:
+\iffalse
+
 \item	Test Preemptible RCU with dynticks idle:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -2123,7 +2284,11 @@ The 15 test cases are as follows:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+\item	Preemptible RCU 를 dynticks idle 없이 테스트:
+\iffalse
+
 \item	Test Preemptible RCU without dynticks idle:
+\fi
 
 \vspace{5pt}
 
@@ -2141,6 +2306,17 @@ The 15 test cases are as follows:
 \vspace{5pt}
 \end{enumerate}
 
+RCU 핵심 코드에 대한 커다란 변경에 대해서는 앞의 조합 각각에 대해, 그리고
+\co{CONFIG_HOTPLUG_CPU} 의 경우를 위해 CPU offlining 과 onlining 과 함께
+rcutorture 를 돌려봐야 합니다.
+작은 변경에 대해서는 각각의 경우에 kernbench 를 돌리는 것으로 충분할 겁니다.
+물론, 이 변경이 특정한 환경구성 패러미터의 조합의 부분집합에 국한되어 있다면,
+테스트 케이스의 수를 줄일 수도 있을 겁니다.
+
+소프트웨어 고문: Geneva Convection 은 (아직은) 이를 금지하지 않고 있으며, 전
+이걸 강력히 추천합니다!
+\iffalse
+
 For a large change that affects RCU core code, one should run
 rcutorture for each of the above combinations, and concurrently
 with CPU offlining and onlining for cases with
@@ -2152,6 +2328,7 @@ number of test cases.
 
 Torturing software: the Geneva Convention does not (yet) prohibit
 it, and I strongly recommend it!
+\fi
 
 \subsection{Conclusion}
 \label{app:rcuimpl:rcutree:Conclusion}
