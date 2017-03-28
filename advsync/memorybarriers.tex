@@ -3922,10 +3922,16 @@ as shown in Figure~\ref{fig:advsync:Speculative Loads Cancelled by Barrier}.
 \subsubsection{Transitivity}
 \label{sec:advsync:Transitivity}
 
+``이행성(transitivity)'' 은 실제의 컴퓨터 시스템에서 항상 제공되지는 않는, 순서
+맞추기에 대한 상당히 직관적인 개념입니다.  다음의 예는 초기값
+{\tt \{X~=~0, Y~=~0\}} 상에서의 이행성을 보여줍니다:
+\iffalse
+
 ``Transitivity'' is a deeply intuitive notion about ordering that is not
 always provided by real computer systems.  The following example
 demonstrates transitivity with initial values of
 {\tt \{X~=~0, Y~=~0\}}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3940,6 +3946,22 @@ demonstrates transitivity with initial values of
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
+
+CPU 2 의 \co{X} 로드가 1을 리턴했고 \co{Y} 로드가 0을 리턴했다고 해봅시다.
+이는 CPU~2 의
+\co{X} 로드가 CPU~1 의 \co{X} 스토어 뒤에 이루어졌고 CPU~2 의 \co{Y} 로드는
+CPU~3 의 \co{Y} 스토어 전에 이루어졌음을 의미합니다.
+그럼 "CPU~3 의 \co{X} 로드는 0을 리턴할 수 있나요?"
+
+CPU~2 의 \co{X} 로드는 CPU~1 의 스토어 후에 이루어졌으니, CPU~3 의 \co{X}
+로드는 1을 리턴하는게 자연스럽습니다.  이런 생각이 이행성의 한 예입니다: CPU~A
+에서 실행된 로드가 CPU~B 에서의 같은 변수에 대한 로드를 뒤따른다면, CPU~A 의
+로드는 CPU~B 의 로드가 내놓은 값과 같거나 그 후의 값을 내놓아야 합니다.
+
+리눅스 커널에서 범용 배리어의 사용은 이행성을 보장합니다.  따라서, 앞의 예에서
+CPU~2 의 \co{X} 로드가 1을, \co{Y} 로드는 0을 리턴했다면, CPU~3 의 \co{X}
+로드는 반드시 1을 리턴합니다.
+\iffalse
 
 Suppose that CPU~2's load from~\co{X} returns~1 and its load from~\co{Y} returns~0.
 This indicates that CPU~2's load from~\co{X} in some sense follows CPU~1's
@@ -3957,11 +3979,18 @@ In the Linux kernel, use of general memory barriers guarantees
 transitivity.  Therefore, in the above example, if CPU~2's load from~\co{X}
 returns~1 and its load from~\co{Y} returns~0, then CPU~3's load from~\co{X} must
 also return~1.
+\fi
+
+하지만, 읽기나 쓰기 배리어에 대해서는 이행성이 보장되지 {\em 않습니다}.
+예를 들어, 앞의 예에서 CPU~2 의 범용 배리어가 아래처럼 읽기 배리어로 바뀐
+경우를 같은 초기값 조건 {\tt \{X~=~0, Y~=~0\}} 에서 생각해 봅시다:
+\iffalse
 
 However, transitivity is {\em not} guaranteed for read or write barriers.
 For example, suppose that CPU~2's general barrier in the above example
 is changed to a read barrier as shown below with the same initial values of
 {\tt \{X~=~0, Y~=~0\}}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -3976,6 +4005,24 @@ is changed to a read barrier as shown below with the same initial values of
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
+
+이 코드는 이행성을 갖지 않습니다: 이 예에서는, CPU~2 의 \co{X} 로드가 1을
+리턴하고, \co{Y} 로드는 0을 리턴하지만 CPU~3 의 \co{X} 로드가 0을 리턴하는 것도
+완전히 합법적입니다.
+
+CPU~2 의 읽기 배리어가 자신의 읽기는 순서를 맞춰줘도, CPU~1 의 스토어와의
+순서를 맞춰준다고는 보장할 수 없다는게 핵심입니다.  따라서, CPU~1 과 CPU~2 가
+버퍼나 캐시를 공유하는 시스템에서 이 예제 코드가 실행된다면, CPU~2 는 CPU~1 이
+쓴 값에 좀 빨리 접근할 수 있을 것입니다.  따라서 CPU~1 과 CPU~2 의 접근으로
+조합된 순서를 모든 CPU 가 동의할 수 있도록 하기 위해 범용 배리어가 필요합니다.
+
+범용 배리어는 ``글로벌 이행성'' 을 제공해서, 모든 CPU 들이 오퍼레이션들의
+순서에 동의하게 할 것입니다.  반면, release-acquire 조합은 ``로컬 이행성'' 만을
+제공해서, 해당 조합이 사용된 CPU 들만이 해당 액세스들의 조합된 순서에 동의함이
+보장됩니다.  예를 들어,
+Figure~\ref{fig:advsync:Example of Local Transitivity (Release-Acquire Pair)}
+에 보인 것처럼 Herman Hollerith 의 C 코드로 보면:
+\iffalse
 
 This substitution destroys transitivity: in this example, it is perfectly
 legal for CPU~2's load from~\co{X} to return~1, its load from~\co{Y} to return~0,
@@ -3994,6 +4041,7 @@ pairs provides only ``local transitivity'', so that only those CPUs on
 the chain are guaranteed to agree on the combined order of the accesses.
 For example, switching to C~code in deference to Herman Hollerith shown in
 Figure~\ref{fig:advsync:Example of Local Transitivity (Release-Acquire Pair)}:
+\fi
 
 \begin{figure}[htbp]
 \scriptsize
@@ -4034,9 +4082,15 @@ Figure~\ref{fig:advsync:Example of Local Transitivity (Release-Acquire Pair)}:
 \label{fig:advsync:Example of Local Transitivity (Release-Acquire Pair)}
 \end{figure}
 
+\co{cpu0()}, \co{cpu1()}, 그리고 \co{cpu2()} 는
+\co{smp_store_release()}-\co{smp_load_acquire()} 쌍의 연결을 통한 로컬 이행성에
+동참하고 있으므로, 다음과 같은 결과는 나오지 않을 겁니다:
+\iffalse
+
 Because \co{cpu0()}, \co{cpu1()}, and \co{cpu2()} participate in a local transitive
 chain of \co{smp_store_release()}-\co{smp_load_acquire()} pairs, the following
 outcome is prohibited:
+\fi
 
 {\scriptsize
 \begin{verbatim}
@@ -4044,9 +4098,15 @@ outcome is prohibited:
 \end{verbatim}
 }
 
+더 나아가서, \co{cpu0()} 와 \co{cpu1()} 사이의 release-acquire 관계로 인해,
+\co{cpu1()} 은 \co{cpu0()} 의 쓰기를 봐야만 하므로, 다음과 같은 결과도 없을
+겁니다:
+\iffalse
+
 Furthermore, because of the release-acquire relationship between \co{cpu0()}
 and \co{cpu1()}, \co{cpu1()} must see \co{cpu0()}'s writes, so that the following
 outcome is prohibited:
+\fi
 
 {\scriptsize
 \begin{verbatim}
@@ -4054,9 +4114,14 @@ outcome is prohibited:
 \end{verbatim}
 }
 
+하지만, release-acquire 타동성은 동참한 CPU 들에만 적용되므로 \co{cpu3()} 에는
+적용되지 않습니다.  따라서, 다음과 같은 결과가 가능합니다:
+\iffalse
+
 However, the transitivity of release-acquire is local to the participating
 CPUs and does not apply to \co{cpu3()}.  Therefore, the following outcome
 is possible:
+\fi
 
 {\scriptsize
 \begin{verbatim}
@@ -4064,7 +4129,11 @@ is possible:
 \end{verbatim}
 }
 
+비슷하게, 다음과 같은 결과도 가능합니다:
+\iffalse
+
 As an aside, the following outcome is also possible:
+\fi
 
 {\scriptsize
 \begin{verbatim}
@@ -4072,6 +4141,22 @@ As an aside, the following outcome is also possible:
           && r5 == 1
 \end{verbatim}
 }
+
+\co{cpu0()}, \co{cpu1()}, 그리고 \co{cpu2()} 는 그들의 읽기와 쓰기를 순서대로
+보게 되지만, release-acquire 체인에 관여되지 않은 CPU 들은 그 순서에 이견을
+가질 수 있습니다.  이런 이견은 \co{smp_load_acquire()} 와
+\co{smp_store_release()} 의 구현에 사용되는 완화된 메모리 배리어 인스트럭션들은
+항상 배리어 앞의 스토어들을 뒤의 로드들에 앞세울 필요는 없다는 사실에서
+기인합니다.  이 말은 \co{cpu3()} 는 \co{cpu0()} 의 \co{u} 로의 스토어를
+\co{cpu1()} 의 \co{v} 로부터의 로드 뒤에 일어난 것으로 볼 수 있다는 뜻입니다,
+\co{cpu0()} 와 \co{cpu1()} 은 이 두 오퍼레이션이 의도된 순서대로 일어났음에
+모두 동의하는데도 말입니다.
+
+하지만, \co{smp_load_acquire()} 는 마술이 아님을 명심하시기 바랍니다.
+구체적으로, 이 함수는 단순히 순서 규칙을 지키며 인자로부터의 읽기를 수행합니다.
+이것은 어떤 특정한 값이 읽힐 것인지는 보장하지 {\em 않습니다}.  따라서, 다음과
+같은 결과도 가능합니다:
+\iffalse
 
 Although \co{cpu0()}, \co{cpu1()}, and \co{cpu2()} will see their respective reads and
 writes in order, CPUs not involved in the release-acquire chain might
@@ -4087,6 +4172,7 @@ However, please keep in mind that \co{smp_load_acquire()} is not magic.
 In particular, it simply reads from its argument with ordering.  It does
 {\em not} ensure that any particular value will be read.  Therefore, the
 following outcome is possible:
+\fi
 
 {\scriptsize
 \begin{verbatim}
@@ -4094,11 +4180,19 @@ following outcome is possible:
 \end{verbatim}
 }
 
+이런 결과는 어떤 것도 재배치 되지 않는, 순차적 일관성을 가진 가상의
+시스템에서도 일어날 수 있음을 기억해 두시기 바랍니다.
+
+다시 말하지만, 당신의 코드가 글로벌 이행성을 필요로 한다면, 범용 배리어를
+사용하십시오.
+\iffalse
+
 Note that this outcome can happen even on a mythical sequentially
 consistent system where nothing is ever reordered.
 
 To reiterate, if your code requires global transitivity, use general
 barriers throughout.
+\fi
 
 \subsection{Locking Constraints}
 \label{sec:advsync:Locking Constraints}
