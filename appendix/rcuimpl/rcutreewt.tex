@@ -137,10 +137,33 @@ data-structure descriptions.
 \subsubsection{Tracking Dyntick State}
 \label{app:rcuimpl:rcutreewt:Tracking Dyntick State}
 
+Per-CPU \co{rcu_dynticks} 구조체는 다음 필드들을 이용해 dynticks state 를
+추적합니다:
+\iffalse
+
 The per-CPU \co{rcu_dynticks} structure tracks dynticks state using the
 following fields:
+\fi
 
 \begin{itemize}
+\item	\co{dynticks_nesting}:
+	이 \co{int} 는 연관된 CPU 가 RCU read-side 크리티컬 섹션들을 모니터
+	되어야 하는 이유의 수를 셉니다.
+	만약 이 CPU 가 dynticks-idle 모드에 있다면, 이 필드는 irq 가 감싸진
+	횟수를 세고, 그렇지 않다면 irq 감싸진 횟수보다 하나 큰 값을 갖습니다.
+\item	\co{dynticks}:
+	이 \co{int} 카운터의 값은 연관된 CPU 가 dynticks-idle 모드에 있고 현재
+	해당 CPU 에서 수행 중인 irq 핸들러가 없다면 짝수의 값을 갖고, 그렇지
+	않다면 홀수의 값을 갖습니다.
+	달리 말하자면, 이 카운터의 값이 홀수라면, 연관된 CPU 는 RCU read-side
+	크리티컬 섹션에 있을 수 있습니다.
+\item	\co{dynticks_nmi}:
+	이 \co{int} 카운터의 값은 연관된 CPU 가 NMI 핸들러 수행중이라면
+	홀수인데, 이 CPU 가 irq 핸들러 수행중이지 않은 채로 dyntick-idle 모드에
+	있는 동안 NMI 를 받았을 때에만 입니다.
+	그렇지 않다면, 이 카운터의 값은 짝수입니다.
+\iffalse
+
 \item	\co{dynticks_nesting}:
 	This \co{int} counts the number of reasons that the corresponding
 	CPU should be monitored for RCU read-side critical sections.
@@ -158,9 +181,14 @@ following fields:
 	in an NMI handler, but only if the NMI arrived while this
 	CPU was in dyntick-idle mode with no irq handlers running.
 	Otherwise, the counter's value will be even.
+\fi
 \end{itemize}
 
+이 상태는 rcu 와 rcu\_bh 구현 사이에서 공유됩니다.
+\iffalse
+
 This state is shared between the rcu and rcu\_bh implementations.
+\fi
 
 \subsubsection{Nodes in the Hierarchy}
 \label{app:rcuimpl:rcutreewt:Nodes in the Hierarchy}
