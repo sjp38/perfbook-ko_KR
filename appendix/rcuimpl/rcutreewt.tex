@@ -193,14 +193,38 @@ This state is shared between the rcu and rcu\_bh implementations.
 \subsubsection{Nodes in the Hierarchy}
 \label{app:rcuimpl:rcutreewt:Nodes in the Hierarchy}
 
+앞서 언급했듯이, \co{rcu_node} 계층은
+page~\pageref{fig:app:rcuimpl:rcutree:Mapping rcu-node Hierarchy Into Array}
+의
+Figure~\ref{fig:app:rcuimpl:rcutree:Mapping rcu-node Hierarchy Into Array}
+에 보인 것처럼 \co{rcu_state} 구조체 안에 평면화 되어 존재합니다.
+이 계층 안의 \co{rcu_node} 각각은 다음과 같은 필드들을 갖습니다:
+\iffalse
+
 As noted earlier, the \co{rcu_node} hierarchy is flattened into
 the \co{rcu_state} structure as shown in
 Figure~\ref{fig:app:rcuimpl:rcutree:Mapping rcu-node Hierarchy Into Array}
 on
 page~\pageref{fig:app:rcuimpl:rcutree:Mapping rcu-node Hierarchy Into Array}.
 Each \co{rcu_node} in this hierarchy has fields as follows:
+\fi
 
 \begin{itemize}
+\item	\co{lock}:
+	이 스핀락은 이 구조체의 상수가 아닌 필드들을 보호합니다.
+	이 락은 softirq 컨텍스트에서 얻어지고, 따라서 irq 들을 비활성화 시켜야
+		합니다.
+\QuickQuiz{}
+	\co{rcu_data} 구조체의 \co{lock} 을 획득할 때 그냥 bottom halves
+		(softirq) 를 비활성화시키는게 어떤가요?
+	그게 더 빠르지 않겠어요?
+\QuickQuizAnswer{
+	이 락은 irq 핸들러들에서 수행될 수 있는 \co{call_rcu()} 에서 호출된
+	함수에서 획득될 수 있기 때문입니다.
+	따라서, 이 락을 획득할 때 irq 들은 \emph{반드시} 비활성화 되어야만
+	합니다.
+\iffalse
+
 \item	\co{lock}:
 	This spinlock guards the non-constant fields in this structure.
 	This lock is acquired from softirq context, so must disable
@@ -217,6 +241,21 @@ Each \co{rcu_node} in this hierarchy has fields as follows:
 	Therefore, irqs \emph{must} be disabled when
 	holding this lock.
 } \QuickQuizEnd
+\fi
+
+	루트 \co{rcu_node} 의 \co{lock} 필드는 추가적인 의무를 갖습니다:
+	\begin{enumerate}
+	\item	CPU-stall 검사를 직렬화 시켜서, 하나의 stall 이 하나의 CPU 에
+		의해서만 보고될 수 있도록 합니다.
+		이는 수천개의 CPU 들이 존재하는 시스템에서는 중요합니다!
+	\item	새로운 grace period 를 시작하는 것을 직렬화 시켜서, 여러 CPU
+		들이 grace period 들을 동시에 시작하지 않도록 합니다.
+	\item	새로운 grace period 들이 하나의 grace period 에 국한되어서
+		시작되어야 할 필요를 없앱니다.
+	\item	Reschedule IPI 들의 갯수를 너무 지나치지 않도록 유지하기 위해
+		(\co{force_quiescent_state()} 의) state machine forcing
+		quiescent state 들을 직렬화 시킵니다.
+	\iffalse
 
 	The \co{lock} field of the root \co{rcu_node} has additional
 	responsibilities:
@@ -234,7 +273,28 @@ Each \co{rcu_node} in this hierarchy has fields as follows:
 		(in \co{force_quiescent_state()}) in order to
 		keep the number of reschedule IPIs down to a dull
 		roar.
+	\fi
 	\end{enumerate}
+\item	\co{qsmask}:
+	이 bitmask 는 현재의 grace period 가 끝나기 위해 지나가야 하는
+	quiescent state 를 여전히 통과해야 하는 CPU 들 (leaf \co{rcu_node}
+	구조체들을 위해) 이나 CPU 들의 그룹들 (leaf 가 아닌 \co{rcu_node}
+	구조체들을 위해) 을 추적합니다.
+\item	\co{qsmaskinit}:
+	이 bitmask 는 어떤 CPU 들이나 CPU 들의 그룹들이 다음 grace period 들이
+	끝나기 위해 quiescent state 를 지나가야 하는지를 추적합니다.
+	Online/offline 코드는 \co{qsmaskinit} 필드들을 조정하는데, 각 grace
+	period 의 시작 때 \co{qsmask} 필드들이 복사되어집니다.
+	이 복사 작업은 왜 grace period 초기화가 online/offline 오퍼레이션들과
+	배타적으로 수행되어야 하는지에 대한 이유 중 하나입니다.
+\item	\co{grpmask}:
+	이 bitmask 는 하나의 bit set 을 가지며, 이는 부모 \co{rcu_node}
+	구조체의 \co{qsmask} 와 \co{qsmaskinit} 필드들에서의 이 \co{rcu_node}
+	구조체의 위치에 연관되어 있습니다.
+	이 필드의 사용은 Manfred Spraul 이 제안한대로 quiescent-state 처리를
+	단순화 시킵니다.
+\iffalse
+
 \item	\co{qsmask}:
 	This bitmask tracks which CPUs (for leaf \co{rcu_node} structures)
 	or groups of CPUs (for non-leaf \co{rcu_node} structures)
@@ -256,19 +316,54 @@ Each \co{rcu_node} in this hierarchy has fields as follows:
 	fields.
 	Use of this field simplifies quiescent-state processing,
 	as suggested by Manfred Spraul.
+\fi
 
 \QuickQuiz{}
+	Leaf \co{rcu_node} 구조체의 \co{qsmask} 와 \co{qsmaskinit} 필드들은
+	어떤가요?
+	이 필드들의 어떤 bit 들이 이 \co{rcu_node} 구조체에 의해 처리되는 각
+	CPU 들에 연관되는지를 알기 위한 어떤 방법이 필요하지 않나요?
+	\iffalse
+
 	How about the \co{qsmask} and \co{qsmaskinit}
 	fields for the leaf \co{rcu_node} structures?
 	Doesn't there have to be some way to work out
 	which of the bits in these fields corresponds
 	to each CPU covered by the \co{rcu_node} structure
 	in question?
+	\fi
 \QuickQuizAnswer{
+	실제로 그렇습니다!
+	각 CPU 의 \co{rcu_data} 구조체의 \co{grpmask} 필드가 이 일을 합니다.
+	\iffalse
+
 	Indeed there does!
 	The \co{grpmask} field in each CPU's \co{rcu_data}
 	structure does this job.
+	\fi
 } \QuickQuizEnd
+
+\item	\co{grplo}:
+	이 필드는 이 \co{rcu_node} 구조체에 의해 처리되는 CPU 들 중 가장 낮은
+	숫자의 CPU 의 숫자를 담고 있습니다.
+\item	\co{grphi}:
+	이 필드는 이 \co{rcu_node} 구조체에 의해 처리되는 CPU 들 중 가장 높은
+	숫자의 CPU 의 숫자를 담고 있습니다.
+\item	\co{grpnum}:
+	이 필드는 부모 \co{rcu_node} 구조체의, 이 \co{rcu_node} 구조체가
+	연관되어 있는 \co{qsmask} 와 \co{qsmaskinit} 필드들의 bit 수를 담고
+	있습니다.
+	달리 말하자면, 특정 \co{rcu_node} 구조체로의 포인터 \co{rnp} 가 있다면,
+	\co{1UL << rnp->grpnum == rnp->grpmask} 가 될 겁니다.
+	이 \co{grpnum} 필드는 tracing 출력을 위해서만 사용됩니다.
+\item	\co{level}:
+	이 필드는 루트 \co{rcu_node} 구조체에서는 0이 되고, 루트의 자식인
+	\co{rcu_node} 구조체에서는 1의 값을, 그리고 계층의 아래로 가면서
+	이런식으로 값을 갖게 됩니다.
+\item	\co{parent}:
+	이 필드는 부모 \co{rcu_node} 구조체로의 포인터이며, 루트 \co{rcu_node}
+	구조체에 있어서는 NULL 입니다.
+\iffalse
 
 \item	\co{grplo}:
 	This field contains the number of the lowest-numbered CPU covered
@@ -291,6 +386,7 @@ Each \co{rcu_node} in this hierarchy has fields as follows:
 \item	\co{parent}:
 	This field is a pointer to the parent \co{rcu_node} structure,
 	or NULL for the root \co{rcu_node} structure.
+\fi
 \end{itemize}
 
 \subsubsection{Per-CPU Data}
