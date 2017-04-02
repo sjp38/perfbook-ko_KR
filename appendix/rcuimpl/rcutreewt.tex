@@ -213,15 +213,6 @@ Each \co{rcu_node} in this hierarchy has fields as follows:
 \item	\co{lock}:
 	이 스핀락은 이 구조체의 상수가 아닌 필드들을 보호합니다.
 	이 락은 softirq 컨텍스트에서 얻어지고, 따라서 irq 들을 비활성화 시켜야
-		합니다.
-\QuickQuiz{}
-	\co{rcu_data} 구조체의 \co{lock} 을 획득할 때 그냥 bottom halves
-		(softirq) 를 비활성화시키는게 어떤가요?
-	그게 더 빠르지 않겠어요?
-\QuickQuizAnswer{
-	이 락은 irq 핸들러들에서 수행될 수 있는 \co{call_rcu()} 에서 호출된
-	함수에서 획득될 수 있기 때문입니다.
-	따라서, 이 락을 획득할 때 irq 들은 \emph{반드시} 비활성화 되어야만
 	합니다.
 \iffalse
 
@@ -229,19 +220,32 @@ Each \co{rcu_node} in this hierarchy has fields as follows:
 	This spinlock guards the non-constant fields in this structure.
 	This lock is acquired from softirq context, so must disable
 	irqs.
+\fi
 
 \QuickQuiz{}
+	\co{rcu_data} 구조체의 \co{lock} 을 획득할 때 그냥 bottom halves
+	(softirq) 를 비활성화시키는게 어떤가요?
+	그게 더 빠르지 않겠어요?
+	\iffalse
+
 	Why not simply disable bottom halves (softirq) when acquiring
 	the \co{rcu_data} structure's \co{lock}?
 	Wouldn't this be faster?
+	\fi
 \QuickQuizAnswer{
+	이 락은 irq 핸들러들에서 수행될 수 있는 \co{call_rcu()} 에서 호출된
+	함수에서 획득될 수 있기 때문입니다.
+	따라서, 이 락을 획득할 때 irq 들은 \emph{반드시} 비활성화 되어야만
+	합니다.
+	\iffalse
+
 	Because this lock can be acquired from functions
 	called by \co{call_rcu()}, which in turn can be
 	invoked from irq handlers.
 	Therefore, irqs \emph{must} be disabled when
 	holding this lock.
+	\fi
 } \QuickQuizEnd
-\fi
 
 	루트 \co{rcu_node} 의 \co{lock} 필드는 추가적인 의무를 갖습니다:
 	\begin{enumerate}
