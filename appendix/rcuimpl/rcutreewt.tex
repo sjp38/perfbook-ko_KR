@@ -846,6 +846,22 @@ Each of these fields is described below.
 \subsubsection{RCU Global State}
 \label{app:rcuimpl:rcutreewt:RCU Global State}
 
+\co{rcu_state} 구조체는 RCU (rcu 와 rcu\_bh) 인스턴스 각각을 위한 RCU 의 global
+state 를 담고 있습니다.  이는 \co{rcu_node} 구조체의 계층과 관련된 필드들도
+있고, \co{node} 배열 자체, 계층의 각 단계들을 향한 포인터들을 담는 \co{level}
+배열, 이 계층 상의 각 단계의 노드의 갯수를 담는 \co{levelcnt} 배열, 이 계층의
+각 단계의 노드별 자식의 갯수를 담는 \co{levelspread} 배열, 그리고 각 CPU 의
+\co{rcu_data} 구조체로의 포인터의 \co{rda} 배열을 포함합니다.  \co{rcu_state}
+구조체 또한 다양한 현재 grace period 의 자세한 내용들과 다른 메커니즘들
+(\co{signaled}, \co{gpnum}, \co{completed}, \co{onofflock}, \co{fqslock},
+\co{jiffies_force_qs}, \co{n_force_qs}, \co{n_force_qs_lh},
+\co{n_force_qs_ngp}, \co{gp_start}, \co{jiffies_stall}, 그리고
+\co{dynticks_completed}) 과의 상호작용을 조정하는 다양한 필드들을 갖고
+있습니다.
+
+이 필드들 각각에 대해 아래에서 설명합니다.
+\iffalse
+
 The \co{rcu_state} structure contains RCU's global state for
 each instance of RCU (rcu and rcu\_bh).
 It includes fields relating to
@@ -868,9 +884,19 @@ interaction with other mechanisms (\co{signaled},
 and \co{dynticks_completed}).
 
 Each of these fields are described below.
+\fi
 
 \begin{itemize}
 \item	\co{node}:
+	이 필드는 \co{rcu_node} 구조체의 배열로, 계층 상의 루트 노드는
+	\co{->node[0]} 에 위치합니다.
+	이 배열의 크기는 \co{NUM_RCU_NODES} C 전처리기 매크로로 명시되는데,
+	Section~\ref{app:rcuimpl:rcutreewt:Kernel Parameters} 에서 설명되듯이
+	\co{NR_CPUS} 와 \co{CONFIG_RCU_FANOUT} 을 가지고 계산됩니다.
+	첫번째 원소부터 시작해서 \co{->node} 배열을 순회하는 것은 \co{rcu_node}
+	계층을 breadth-first 탐색하는 것과 같은 효과를 냅니다.
+	\iffalse
+
 	This field is the array of \co{rcu_node} structures,
 	with the root node of the hierarchy being located at
 	\co{->node[0]}.
@@ -882,7 +908,22 @@ Each of these fields are described below.
 	Note that traversing the \co{->node} array starting at
 	element zero has the effect of doing a breadth-first search
 	of the \co{rcu_node} hierarchy.
+	\fi
 \item	\co{level}:
+	이 필드는 \co{node} 뱅렬로의 포인터들의 배열입니다.
+	해당 계층의 루트 노드는 \co{->level[0]} 를 통해 참조되며, 계층상 두번째
+	단계의 (존재한다면) 첫번째 노드는 \co{->level[1]} 로 참조되며, 나머지도
+	그렇게 구성됩니다.
+	첫번째 leaf 노드는 \co{->level[NUM_RCU_LVLS-1]} 로 참조되며, 따라서
+	\co{level} 배열의 크기는 \co{NUM_RCU_LVLS} 로 명시되는데,
+	Section~\ref{app:rcuimpl:rcutreewt:Kernel Parameters} 에서 설명된대로
+	계산됩니다.
+	\co{->level} 필드는 \co{rcu_node} 계층의 한 단계를, 예를 들면 leaf
+	노드들을 스캔하기 위해 \co{->node} 와 함께 조합되어 사용됩니다.
+	\co{->level} 의 원소들은 부팅 시점에 \co{rcu_init_one()} 함수에 의해
+	채워집니다.
+	\iffalse
+
 	This field is an array of pointers into the \co{node} array.
 	The root node of the hierarchy is referenced by
 	\co{->level[0]}, the first node of the second level of
@@ -897,7 +938,26 @@ Each of these fields are described below.
 	for example, all of the leaf nodes.
 	The elements of \co{->level} are filled in by the
 	boot-time \co{rcu_init_one()} function.
+	\fi
 \item	\co{levelcnt}:
+	이 필드는 \co{rcu_node} 계층의 각 단계의 노드의 갯수들을 담고 있는
+	배열로, leaf \co{rcu_node} 구조체를 참조하는 \co{rcu_data} 구조체의
+	갯수를 포함해서, 이 배열은 \co{->level} 배열보다 원소를 하나 더 많이
+	갖게 됩니다.
+	\co{->levelcnt[0]} 는 이 계층의 꼭대기에 있는 하나의 루트 \co{rcu_node}
+	에 연관되어서 1의 값을 항상 가질 겁니다.
+	이 배열은 C 전처리키 매크로로
+	Section~\ref{app:rcuimpl:rcutreewt:Kernel Parameters} 에서 설명된 대로
+	계산되는
+	\co{NUM_RCU_LVL_0},
+	\co{NUM_RCU_LVL_1},
+	\co{NUM_RCU_LVL_2}, 그리고
+	\co{NUM_RCU_LVL_3},
+	의 값으로 초기화 됩니다.
+	\co{->levelcnt} 필드는 디버깅 목적으로 이 계층의 다른 부분들을 초기화
+	하는데에 사용됩니다.
+	\iffalse
+
 	This field is an array containing the number of \co{rcu_node}
 	structures in each level of the hierarchy, including the
 	number of \co{rcu_data} structures referencing the leaf
@@ -915,24 +975,58 @@ Each of these fields are described below.
 	Section~\ref{app:rcuimpl:rcutreewt:Kernel Parameters}.
 	The \co{->levelcnt} field is used to initialize
 	other parts of the hierarchy and for debugging purposes.
+	\fi
 \item	\co{levelspread}:
+	이 필드의 각 원소는 \co{rcu_node} 계층의 연관된 각 단계의 희망되는
+	자식들의 갯수를 담습니다.
+	이 배열의 원소들의 값들은 실행시점에 \co{CONFIG_RCU_FANOUT_EXACT} 커널
+	패러미터로 선택되는 두개의 \co{rcu_init_levelspread()} 함수들 중 하나로
+	계산됩니다.
+	\iffalse
+
 	Each element of this field contains the desired number of children
 	for the corresponding level of the \co{rcu_node} hierarchy.
 	This array's element's values are computed at runtime
 	by one of the two \co{rcu_init_levelspread()} functions,
 	selected by the \co{CONFIG_RCU_FANOUT_EXACT} kernel parameter.
+	\fi
 \item	\co{rda}:
+	이 필드의 각 원소는 연관된 CPU 의 \co{rcu_data} 구조체로의 포인터를
+	담고 있습니다.
+	이 배열은 부팅 시점에 \co{RCU_DATA_PTR_INIT()} 매크로로 초기화 됩니다.
+	\iffalse
+
 	Each element of this field contains a pointer to the
 	corresponding CPU's \co{rcu_data} structure.
 	This array is initialized at boot time by the
 	\co{RCU_DATA_PTR_INIT()} macro.
+	\fi
 \item	\co{signaled}:
+	이 필드는
+	Section~\ref{app:rcuimpl:rcutreewt:Forcing Quiescent States} 에서
+	설명된 것처럼 \co{force_quiescent_state()} 함수에 의해 사용되는 상태를
+	유지하기 위해 사용됩니다.
+	이 필드는 다음의 값들 중 하나를 취합니다:
+	\iffalse
+
 	This field is used to maintain state used by the
 	\co{force_quiescent_state()} function, as described in
 	Section~\ref{app:rcuimpl:rcutreewt:Forcing Quiescent States}.
 	This field takes on values as follows:
+	\fi
 	\begin{itemize}
 	\item	\co{RCU_GP_INIT}:
+		이 값은 현재의 grace period 가 초기화 되어가는 과정이 진행
+		중이어서 \co{force_quiescent_state()} 는 아무 동작도 하지
+		말아야 함을 알립니다.
+		물론, 이런 상황이 발생하기 위해선 grace-period 초기화가 세개의
+		jiffiy 만큼이나 길게 수행될 필요가 있겠지만, 여러분이 매우 많은
+		수의 CPU 들을 사용한다면 이 race 는 실제로 일어날 수 있습니다.
+		일단 grace-period 초기화가 완료된다면, 이 값은
+		(\co{CONFIG_NO_HZ} 라면) \co{RCU_SAVE_DYNTICK} 이나
+		\co{RCU_FORCE_QS} 로 설정됩니다.
+		\iffalse
+
 		This value indicates that the current grace period
 		is still in the process of being initialized,
 		so that \co{force_quiescent_state()} should take
@@ -944,14 +1038,34 @@ Each of these fields are described below.
 		Once grace-period initialization is complete,
 		this value is set to either \co{RCU_SAVE_DYNTICK}
 		(if \co{CONFIG_NO_HZ}) or \co{RCU_FORCE_QS} otherwise.
+		\fi
 	\item	\co{RCU_SAVE_DYNTICK}:
+		이 값은 현재의 grace period 를 위한 quiescent state 를 아직
+		보고하지 않은 모든 CPU 에 대해 \co{force_quiescent_state()} 가
+		dynticks state 를 체크해야 함을 알립니다.
+		Quiescent state 는 dyntick-idle 모드에 있는 모든 CPU 들
+		아래에서 보고될 겁니다.
+		\iffalse
+
 		This value indicates that \co{force_quiescent_state()}
 		should check the dynticks state of any CPUs that have
 		not yet reported quiescent states for the current
 		grace period.
 		Quiescent states will be reported on behalf of any
 		CPUs that are in dyntick-idle mode.
+		\fi
 	\item	\co{RCU_FORCE_QS}:
+		이 값은 현재의 grace period 를 위한 quiescent state 를 아직
+		보고하지 않은 모든 CPU 에 대해 \co{force_quiescent_state()} 가
+		dynticks state 와 online/offline 상태를 다시 체크해야 함을
+		알립니다.
+		다시 dynticks state 를 체크하는 것은 이 구현이 dynticks-idle
+		state 에 있지만, 그게 체크될 때 irq 나 NMI 핸들러에 있었던 CPU
+		의 경우에 대해서도 처리할 수 있게 해줍니다.
+		이외에 모두 실패한다면, 이 꾸물거리는 CPU 에게 reschedule IPI
+		가 날아갈 겁니다.
+		\iffalse
+
 		This value indicates that \co{force_quiescent_state()}
 		should recheck dynticks state along with the online/offline
 		state of any CPUs that have
@@ -963,27 +1077,60 @@ Each of these fields are described below.
 		times it was checked.
 		If all else fails, a reschedule IPI will be sent to
 		the laggard CPU.
+		\fi
 	\end{itemize}
+	이 필드는 루트 \co{rcu_node} 구조체의 락으로 보호됩니다.
+	\iffalse
+
 	This field is guarded by the root \co{rcu_node} structure's lock.
+	\fi
 
 \QuickQuiz{}
+	그럼 이 앞에서 이야기된 이 구조체의 필드들은 뭘로 보호되나요?
+	\iffalse
+
 	So what guards the earlier fields in this structure?
+	\fi
 \QuickQuizAnswer{
+	아무것도 보호하지 않는데, 그것들은 컴파일 시점이나 부팅 시점에 그 값이
+	설정되는 상수들이기 때문입니다.
+	물론, \co{->node} 배열 안의 \co{rcu_node} 안의 필드들은 바뀔 수도
+	있겠습니다만, 그것들은 별도로 보호됩니다.
+	\iffalse
+
 	Nothing does, as they are constants set at compile time
 	or boot time.
 	Of course, the fields internal to each \co{rcu_node}
 	in the \co{->node} array may change, but they are
 	guarded separately.
+	\fi
 } \QuickQuizEnd
 
 \item	\co{gpnum}:
+	이 필드는 현재 grace period 의 수를, 또는 현재 grace period 가 없다면
+	마지막 grace period 의 수를 갖습니다.
+	이 필드는 루트 \co{rcu_node} 구조체의 락으로 보호됩니다만, 이 락을 잡지
+	않은채로도 빈번히 액세스 됩니다 (하지만 수정되진 않습니다).
+	\iffalse
+
 	This field contains the number of the current grace period,
 	or that of the last grace period if no grace period is currently
 	in effect.
 	This field is guarded by the root \co{rcu_node} structure's lock,
 	but is frequently accessed (but never modified) without holding
 	this lock.
+	\fi
 \item	\co{completed}:
+	이 필드는 마지막으로 완료된 grace period 의 수를 갖습니다.
+	현재 진행중인 grace period 가 없다면 이는 \co{->gpnum} 과 동일하고,
+	현재 진행중인 grace period 가 있다면 \co{->gpnum} 보다 1 작습니다.
+	원론적으로, 이 두개의 필드들을 하나의 boolean 으로 바꿀 수도 있을 텐데,
+	일부 버전의 Linux 에서의 Classic RCU 가 그러합니다만, 실제로는 두개의
+	숫자를 갖는 편이 race 처리에 훨씬 간단합니다.
+	이 필드는 루트 \co{rcu_node} 구조체의 락으로 보호됩니다만, 이 락을 잡지
+	않은채로도 빈번히 액세스 됩니다 (하지만 수정되진 않습니다).
+	\iffalse
+
 	This field contains the number of the last completed grace period.
 	As such, it is equal to \co{->gpnum} when there is no grace period
 	in progress, or one less than \co{->gpnum} when there is a
@@ -995,17 +1142,39 @@ Each of these fields are described below.
 	This field is guarded by the root \co{rcu_node} structure's lock,
 	but is frequently accessed (but never modified) without holding
 	this lock.
+	\fi
 \item	\co{onofflock}:
+	이 필드는 grace-period 초기화와 동시에 online/offline 처리가 수행되는
+	것을 막습니다.
+	여기엔 하나의 예외가 있습니다: 만약 \co{rcu_node} 계층이 하나의
+	구조체로만 이루어져 있다면, 이 하나의 구조체의 \co{->lock} 필드가 이
+	일을 대신 처리할 겁니다.
+	\iffalse
+
 	This field prevents online/offline processing from running
 	concurrently with grace-period initialization.
 	There is one exception to this: if the \co{rcu_node}
 	hierarchy consists of but a single structure, then
 	that single structure's \co{->lock} field will instead take on
 	this job.
+	\fi
 \item	\co{fqslock}:
+	이 필드는 두개 이상의 task 가 \co{force_quiescent_state()} 로 quiescent
+	state 를 강제하는 것을 막습니다.
+	\iffalse
+
 	This field prevents more than one task from forcing quiescent
 	states with \co{force_quiescent_state()}.
+	\fi
 \item	\co{jiffies_force_qs}:
+	이 필드는 CPU 들을 quiescent state 로 강제하기 위해, 그리고/또는
+	extended quiescent state 를 보고하기 위해 언제
+	\co{force_quiescent_state()} 가 호출되어야 하는지를 jiffy 단위로
+	기록하고 있습니다.
+	이 필드는 루트 \co{rcu_node} 구조체의 락으로 보호됩니다만, 이 락 없이도
+	자주 액세스 됩니다 (하지만 수정은 되지 않습니다).
+	\iffalse
+
 	This field contains the time, in jiffies, when
 	\co{force_quiescent_state()} should be invoked in order to
 	force CPUs into quiescent states and/or report extended
@@ -1013,7 +1182,15 @@ Each of these fields are described below.
 	This field is guarded by the root \co{rcu_node} structure's lock,
 	but is frequently accessed (but never modified) without holding
 	this lock.
+	\fi
 \item	\co{n_force_qs}:
+	이 필드는 \co{force_quiescent_state()} 가 grace period 가 이미
+	완료되었거나, 동시적으로 \co{force_quiescent_state()} 를 수행중인 다른
+	CPU 가 있거나, \co{force_quiescent_state()} 가 너무 최근에 수행된 적이
+	있거나 하지 않고 실제로 일을 수행한 횟수를 셉니다.
+	이 필드는 tracing 과 디버깅에 사용되며, \co{->fqslock} 으로 보호됩니다.
+	\iffalse
+
 	This field counts the number of calls to \co{force_quiescent_state()}
 	that actually do work, as opposed to leaving early due to
 	the grace period having already completed, some other
@@ -1021,20 +1198,45 @@ Each of these fields are described below.
 	or \co{force_quiescent_state()} having run too recently.
 	This field is used for tracing and debugging, and
 	is guarded by \co{->fqslock}.
+	\fi
 \item	\co{n_force_qs_lh}:
+	이 필드는 \co{force_quiescent_state()} 가 \co{->fqslock} 이 다른 CPU 에
+	의해 잡혀 있었던 관계로 곧바로 리턴한 대략적 횟수를 셉니다.
+	이 필드는 tracing 과 debugging 에 사용되며 대략적인 수인 만큼 어떤
+	락으로도 보호되지 않습니다.
+	\iffalse
+
 	This field holds an approximate count of the number of times that
 	\co{force_quiescent_state()} returned early due to the
 	\co{->fqslock} being held by some other CPU.
 	This field is used for tracing and debugging, and is not
 	guarded by any lock, hence its approximate nature.
+	\fi
 \item	\co{n_force_qs_ngp}:
+	이 필드는 성공적으로 \co{->fqslock} 을 잡았지만 진행중인 grace period
+	가 없다는 것을 알아차리게 된 \co{force_quiescent_state()} 수행 횟수를
+	셉니다.
+	이 필드는 tracing 과 debugging 을 위해 사용되며, \co{->fqslock} 으로
+	보호됩니다.
+	\iffalse
+
 	This field counts the number of times that
 	\co{force_quiescent_state()} that successfully acquire
 	\co{->fqslock}, but then find that there is no grace period
 	in progress.
 	This field is used for tracing and debugging, and
 	is guarded by \co{->fqslock}.
+	\fi
 \item	\co{gp_start}:
+	이 필드는 가장 최근의 grace period 가 시작한 시간을 jiffy 단위로
+	기록합니다.
+	이는 stalled CPU 들의 파악에 사용됩니다만,
+	\co{CONFIG_RCU_CPU_STALL_DETECTOR} 커널 패러미터가 선택되었을 때만의
+	이야기입니다.
+	이 필드는 루트 \co{rcu_node} 의 \co{->lock} 으로 보호됩니다만, 가끔은
+	이 락을 잡지 않고도 액세스 됩니다 (하지만 수정되진 않습니다).
+	\iffalse
+
 	This field records the time at which the most recent grace period
 	began, in jiffies.
 	This is used to detect stalled CPUs, but only when the
@@ -1042,7 +1244,16 @@ Each of these fields are described below.
 	This field is guarded by the root \co{rcu_node}'s \co{->lock},
 	but is sometimes accessed (but not modified) outside of this
 	lock.
+	\fi
 \item	\co{jiffies_stall}:
+	이 필드는 현재의 grace period 가 연장될 시간을 jiffy 단위로 기록하며,
+	CPU stall 을 체크하기 위해 사용되기 적합할 겁니다.
+	\co{->gp_start} 와 같이, 이 필드는 \co{CONFIG_RCU_CPU_STALL_DETECTOR}
+	커널 패러미터가 선택되었을 때에만 존재합니다.
+	이 필드는 루트 \co{rcu_node} 의 \co{->lock} 으로 보호됩니다만, 가끔은
+	이 락을 잡지 않은 채 액세스 됩니다 (하지만 수정되지는 않습니다).
+	\iffalse
+
 	This field holds the time, in jiffies, at which the current
 	grace period will have extended for so long that it will
 	be appropriate to check for CPU stalls.
@@ -1051,7 +1262,19 @@ Each of these fields are described below.
 	This field is guarded by the root \co{rcu_node}'s \co{->lock},
 	but is sometimes accessed (but not modified) outside of this
 	lock.
+	\fi
 \item	\co{dynticks_completed}:
+	이 필드는 \co{force_quiescent_state()} 가 dyntick state 의 스냅샷을
+	찍을 때의 \co{->completed} 의 값을 기록합니다만, 또한 매 grace period
+	의 시작 때마다 기존 grace period 로 초기화 됩니다.
+	이 필드는 기존 grace period 로부터의 dyntick-idle quiescent state 가
+	현재 grace period 에 적용되는 것을 막는데에 사용됩니다.
+	이 필드는 \co{CONFIG_NO_HZ} 커널 패러미터가 선택되었을 때에만
+	존재합니다.
+	이 필드는 루트 \co{rcu_node} 의 \co{->lock} 으로 보호됩니다만, 가끔은
+	이 락을 잡지 않은 채로 액세스 됩니다 (하지만 수정되지는 않습니다).
+	\iffalse
+
 	This field records the value of \co{->completed} at the time when
 	\co{force_quiescent_state()} snapshots dyntick state, but
 	is also initialized to an earlier grace period at the beginning
@@ -1064,6 +1287,7 @@ Each of these fields are described below.
 	This field is guarded by the root \co{rcu_node}'s \co{->lock},
 	but is sometimes accessed (but not modified) outside of this
 	lock.
+	\fi
 \end{itemize}
 
 \subsubsection{Kernel Parameters}
