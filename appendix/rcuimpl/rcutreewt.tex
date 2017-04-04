@@ -396,6 +396,26 @@ Each \co{rcu_node} in this hierarchy has fields as follows:
 \subsubsection{Per-CPU Data}
 \label{app:rcuimpl:rcutreewt:Per-CPU Data}
 
+\co{rcu_data} 구조체는 RCU 의 per-CPU 상태를 담고 있습니다.
+이 상태는 grace period 와 quiescent state 들을 관리하는 조정을 위한 변수들을
+담고 있습니다 ( \co{completed}, \co{gpnum}, \co{passed_quiesc_completed},
+\co{passed_quiesc}, \co{qs_pending}, \co{beenonline}, \co{mynode}, 그리고
+\co{grpmask}).
+\co{rcu_data} 구조체는 또한 RCU 콜백들로 관련되는 조정을 위한 변수들 또한 담고
+있습니다 (\co{nxtlist}, \co{nxttail}, \co{qlen}, 그리고 \co{blimit}).
+Dynticks 가 활성화된 커널들은 관련된 조정을 위한 변수들을 \co{rcu_data} 구조체
+안에 가지고 있습니다
+(\co{dynticks}, \co{dynticks_snap}, 그리고 \co{dynticks_nmi_snap}).
+\co{rcu_data} 구조체는 tracing 에서 사용되는 이벤트 카운터들을 담고 있습니다
+(\co{dynticks_fqs} given dynticks, \co{offline_fqs}, 그리고 \co{resched_ipi}).
+마지막으로, 한 쌍의 필드들은 언제 quiescent state 를 강제해야 하는지 판단하기
+위해 \co{rcu_pending()} 호출 횟수를 세고 있고 (\co{n_rcu_pending} 그리고
+\co{n_rcu_pending_force_qs}), \co{cpu} 필드는 해당 \co{rcu_data} 구조체가 어떤
+CPU 에 연관되어 있는지를 알립니다.
+
+이 필드들 각각에 대해 아래에서 설명합니다.
+\iffalse
+
 The \co{rcu_data} structure contains RCU's per-CPU state.
 It contains control variables governing grace periods and
 quiescent states (\co{completed}, \co{gpnum}, \co{passed_quiesc_completed},
@@ -415,8 +435,27 @@ to determine when to force quiescent states (\co{n_rcu_pending} and
 CPU to which a given \co{rcu_data} structure corresponds.
 
 Each of these fields is described below.
+\fi
 
 \begin{itemize}
+\item	\co{completed}:
+	이 필드는 이 CPU 가 끝나길 기다리고 있는 최근의 grace period 들의 수를
+	담습니다.
+\item	\co{gpnum}:
+	이 필드는 이 CPU 가 시작되길 신경쓰고 있는 최근의 grace period 들의
+	수를 담습니다.
+\item	\co{passed_quiesc_completed}:
+	이 필드는 이 CPU 가 마지막으로 quiescent state 를 지났을 때 가장 최근에
+	완료된 grace period 의 수를 담습니다.
+	``가장 최근에 완료된'' 이란 말은 quiescent state 를 지나는 CPU 의
+	관점에서입니다: 만약 이 CPU 가 아직 (말하자면) 42 번 grace period 가
+	완료되길 신경쓰고 있지 않다면, 여전히 값 41 을 기록하고 있게 될겁니다.
+	이 CPU 가 이미 quiescent state 를 지나갔는가 여부가 grace period 가
+	완료될 수 있는 유일한 방법이기 때문에 이건 괜찮습니다.
+	이 필드는 부팅할 때와 CPU 를 online 화 시킬 때의 race condition 을
+	없애기 위해 (미신적일 수 있는) 과거의 grace period 수로 초기화 됩니다.
+\iffalse
+
 \item	\co{completed}:
 	This field contains the number of the most recent grace period
 	that this CPU is aware of having completed.
@@ -437,6 +476,20 @@ Each of these fields is described below.
 	This field is initialized to a (possibly mythical) past
 	grace period number to avoid race conditions when booting
 	and when onlining a CPU.
+\fi
+\item	\co{passed_quiesc}:
+	이 필드는 이 CPU 가 \co{passed_quiesc_completed} 에 저장된 수의 grace
+	period 가 완료된 이래로 quiescent state 를 지난적이 있는지를
+	가리킵니다.
+	이 필드는 연관된 CPU 가 새로운 grace period 의 시작을 신경쓰게 될때마다
+	지워집니다.
+\item	\co{qs_pending}:
+	이 필드는 이 CPU 가 코어 RCU 메커니즘이 자신이 quiescent state 를
+	지나길 기다리고 있음을 알고 있음을 알립니다.
+	이 필드는 이 CPU 가 새로운 grace period 를 파악하거나 한 CPU 가 online
+	이 될 때 값이 채워집니다.
+\iffalse
+
 \item	\co{passed_quiesc}:
 	This field indicates whether this CPU has passed
 	through a quiescent state since the grace period number
@@ -448,23 +501,64 @@ Each of these fields is described below.
 	RCU mechanism is waiting for it to pass through a quiescent state.
 	This field is set to one when the CPU detects a new grace
 	period or when a CPU is coming online.
+\fi
 
 \QuickQuiz{}
+	Offline 이 되는 건 모든 진행중인 grace period 를 처리해야할 extended
+	quiescent state 인데도 왜 CPU 가 online 이 될 때 \co{qs_pending} 의
+	값을 1 로 설정하는 거죠?
+	\iffalse
+
 	But why bother setting \co{qs_pending} to one when a CPU
 	is coming online, given that being offline is an extended
 	quiescent state that should cover any ongoing grace period?
+	\fi
 \QuickQuizAnswer{
+	이게 CPU 가 online 이 되는 것과 새로운 grace period 가 시작하는 사이의
+	race 를 해결하는 걸 돕기 때문입니다.
+	\iffalse
+
 	Because this helps to resolve a race between a CPU coming online
 	just as a new grace period is starting.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	왜 \co{passed_quiesc_completed} 에 마지막으로 완료된 grace period 의
+	수를 기록하는거죠?
+	그건 어떤 grace period 도 진행중이지 않을 때에 보여진 quiescent state
+	들이 올바르지 않게 다음에 시작되는 grace period 에 적용되는 것에 이 RCU
+	구현이 취약해 지게 하지 않나요?
+	\iffalse
+
 	Why record the last completed grace period number in
 	\co{passed_quiesc_completed}?
 	Doesn't that cause this RCU implementation to be vulnerable
 	to quiescent states seen while no grace period was in progress
 	being incorrectly applied to the next grace period that starts?
+	\fi
 \QuickQuizAnswer{
+	한 grace period 의 종료 근처에서 알려진 quiescent state 가 올바르지
+	않게 다음 grace period 에 적용되는 race 를 막기 위해, 특히 dyntick 과
+	CPU-offline grace period 들을 위해 우린 마지막으로 완료된 grace period
+	수를 기록합니다.
+	따라서, \co{force_quiescent_state()} 와 그 부류들은 모두 그런 race 들을
+	막기 위해 마지막으로 완료된 grace period 수를 체크합니다.
+
+	이제 이 dyntick 과 CPU-offline grace period 들은 어떤 grace period 가
+	실제로 살아있을 때에만 체크됩니다.
+	어떤 grace period 도 진행중이지 않을 때에 기록될 수 있는 유일한
+	quiescent state 들은 스스로 파악되는 quiescent state 들로,
+	\co{passed_quiesc_completed}, \co{passed_quiesc}, 그리고
+	\co{qs_pending} 에 기록되는 것들입니다.
+	이 변수들은 연관된 CPU 가 새로운 grace period 가 시작했음을 알게 됐을
+	때마다 초기화 되어서, 시대에 뒤져버린 quiescent state 가 새로운 grace
+	period 에 적용되는 것을 막습니다.
+
+	그렇지만, grace-period 응답시간을 최적화 하는 건 \co{completed} 에
+	더해서 \co{gpnum} 이 추적될 것을 필요로 할수 있습니다.
+	\iffalse
+
 	We record the last completed grace period number in order
 	to avoid races where a quiescent state noted near the end of
 	one grace period is incorrectly applied to the next grace
@@ -485,23 +579,61 @@ Each of these fields is described below.
 
 	All that said, optimizing grace-period latency may require that
 	\co{gpnum} be tracked in addition to \co{completed}.
+	\fi
 } \QuickQuizEnd
 
 \item	\co{beenonline}:
+	초기값 0을 갖는 이 필드는 연관된 CPU 가 online 이 될 때마다 값이
+	설정됩니다.
+	이 필드는 online 이 된 적 없는 CPU 들을 위한 불필요한 tracing 출력이
+	생성되는 것을 막기 위해 사용되며, 실제 CPU 들의 수보다 과하게 많은
+	\co{NR_CPUS} 를 가는 커널들에서 유용합니다.
+	\iffalse
+
 	This field, initially zero, is set to one whenever the corresponding
 	CPU comes online.
 	This is used to avoid producing useless tracing output for CPUs
 	that never have been online, which is useful in kernels where
 	\co{NR_CPUS} greatly exceeds the actual number of CPUs.
+	\fi
 
 \QuickQuiz{}
+	실제 CPU 들의 수보다 많은 \co{NR_CPUS} 를 갖는 시스템을 운영하는 이유가
+	뭐죠?
+	\iffalse
+
 	What is the point of running a system with \co{NR_CPUS}
 	way bigger than the actual number of CPUs?
+	\fi
 \QuickQuizAnswer{
+	이는 다양한 시스템에서 돌아가는 하나의 리눅스 커널 바이너리를 만들 수
+	있게 해서 운영과 검증을 간단하게 해주기 때문입니다.
+	\iffalse
+
 	Because this allows producing a single binary of the Linux kernel
 	that runs on a wide variety of systems, greatly easing administration
 	and validation.
+	\fi
 } \QuickQuizEnd
+
+\item	\co{mynode}:
+	이 필드는 이 연관된 CPU 를 처리하는 leaf \co{rcu_node} 구조체로의
+	포인터입니다.
+\item	\co{grpmask}:
+	이 필드는 \co{mynode->qsmask} 의 어떤 bit 이 연관된 CPU 를 나타내는지를
+	알리는 하나의 bit 이 set 되어있는 bitmask 입니다.
+\item	\co{nxtlist}:
+	이 필드는 이 CPU 에 위치한 가장 오래된 RCU 콜백 (\co{rcu_head} 구조체)
+	으로의 포인터이고, 이 CPU 가 현재 콜백을 가지고 있지 않다면 \co{NULL}
+	입니다.
+	추가적인 콜백들은 \co{next} 포인터들을 통해 연결될 수 있습니다.
+\item	\co{nxttail}:
+	이 필드는 \co{nxtlist} 콜백 리스트로의 double-indirect tail 포인터들의
+	배열입니다.
+	만약 \co{nxtlist} 가 비어있다면, 모든 \co{nxttail} 포인터들은 이
+	\co{nxtlist} 필드를 가리키게 됩니다.
+	\co{nxttail} 배열의 각 원소들은 다음과 같은 의미를 갖습니다:
+	\iffalse
 
 \item	\co{mynode}:
 	This field is a pointer to the leaf \co{rcu_node} structure that
@@ -520,7 +652,25 @@ Each of these fields is described below.
 	If \co{nxtlist} is empty, then all of the \co{nxttail} pointers
 	directly reference the \co{nxtlist} field.
 	Each element of the \co{nxttail} array has meaning as follows:
+	\fi
 	\begin{itemize}
+	\item	\co{RCU_DONE_TAIL=0}:
+		이 원소는 자신의 grace period 를 지나와서 호출될 준비가 된
+		마지막 콜백의 \co{->next} 필드를 가리키거나 그런 콜백이
+		없다면 \co{nxtlist} 필드를 가리킵니다.
+	\item	\co{RCU_WAIT_TAIL=1}:
+		이 원소는 현재의 grace period 가 끝나길 기다리고 있는 마지막
+		콜백의 \co{next} 필드를 가리키고 있지만, 그런 콜백이 존재하지
+		않는다면 \co{RCU_DONE_TAIL} 원소와 같습니다.
+	\item	\co{RCU_WAIT_TAIL=2}:
+		이 원소는 다음 grace period 를 기다릴 준비가 된 마지막 콜백의
+		\co{next} 필드를 가리키고 있으며, 그런 콜백이 없다면
+		\co{RCU_WAIT_TAIL} 원소와 같습니다.
+	\item	\co{RCU_WAIT_TAIL=3}:
+		이 원소는 이 리스트의 마지막 콜백의 \co{next} 필드를 가리키고
+		있으며, 이 리스트가 비어있다면 \co{nxtlist} 필드를 가리킵니다.
+	\iffalse
+
 	\item	\co{RCU_DONE_TAIL=0}:
 		This element references the \co{->next} field of
 		the last callback that has passed through its grace
@@ -540,15 +690,55 @@ Each of these fields is described below.
 		This element references the \co{next} field of the
 		last callback in the list, or references the \co{nxtlist}
 		field if the list is empty.
+	\fi
 	\end{itemize}
 
 \QuickQuiz{}
+	이 웃기는 여러 꼬리를 가진 리스트 보다는 여러개의 리스트를 그냥
+	유지하는게 어때요?
+	\iffalse
+
 	Why not simply have multiple lists rather than this funny
 	multi-tailed list?
+	\fi
 \QuickQuizAnswer{
+	Lai Jiangshan 덕에, 이 여러 꼬리를 가진 리스트 방법은 콜백 처리를
+	단순화 시킵니다.
+	\iffalse
+
 	Because this multi-tailed approach, due to Lai Jiangshan,
 	simplifies callback processing.
+	\fi
 } \QuickQuizEnd
+
+\item	\co{qlen}:
+	이 필드는 \co{nxtlist} 에 들어가 있는 콜백들의 수를 담습니다.
+\item	\co{blimit}:
+	이 필드는 한번에 호출될 수 있는 콜백들의 최대 갓수를 담습니다.
+	이 한계는 많은 부하 아래에서의 시스템의 반응성을 개선합니다.
+\item	\co{dynticks}:
+	이 필드는
+	Section~\ref{app:rcuimpl:rcutreewt:Tracking Dyntick State} 에서
+	이야기한대로 연관된 CPU 의 \co{rcu_dynticks} 구조체를 참조합니다.
+\item	\co{dynticks_snap}:
+	이 필드는 \co{dynticks->dynticks} 의 예전 값을 담고 있는데,
+	\co{force_quiescent_state()} 가 체크하는, 이 CPU 가 irq 핸들러에 있을
+	때마다 언제 CPU 가 dynticks idle state 를 지나가는지 판단하는데에
+	사용됩니다.
+\item	\co{dynticks_nmi_snap}:
+	이 필드는 \co{dynticks->dynticks_nmi} 의 예전 값을 갖는데,
+	\co{force_quiescent_state()} 가 체크하는, 이 CPU 가 NMI 핸들러에 있을
+	때마다 언제 CPU 가 dynticks idle state 를 지나가는지 판단하는데에
+	사용됩니다.
+\item	\co{dynticks_fqs}:
+	이 필드는 dynticks-idle 모드로 인해 이 \co{rcu_data} 구조체에 연관된
+	CPU 의 아래에서 다른 CPU 가 몇번이나 quiescent state 를 알렸는지 그
+	횟수를 셉니다.
+\item	\co{offline_fqs}:
+	이 필드는 offline 이 되는 일로 인해 이 \co{rcu_data} 구조체에 연관된
+	CPU 의 아래에서 다른 CPU 가 몇번이나 quiescent state 를 알렸는지 그
+	횟수를 셉니다.
+\iffalse
 
 \item	\co{qlen}:
 	This field contains the number of callbacks queued on
@@ -581,15 +771,35 @@ Each of these fields is described below.
 	a quiescent state on behalf of
 	the CPU corresponding to this \co{rcu_data} structure due to
 	its being offline.
+\fi
 
 \QuickQuiz{}
+	그래서 일부 불쌍한 CPU 는 모든 각각의 offline CPU 아래에서도 quiescent
+	state 들을 알려야 한다는 건가요?
+	으얽웕!
+	그건 적은 수의 CPU 를 가지고 있지만 큰 값의 \co{NR_CPUS} 를 가진,
+	흔하지 않은 시스템에서는 지나친 오버헤드가 되지 않을까요?
+	\iffalse
+
 	So some poor CPU has to note quiescent states on behalf of
 	each and every offline CPU?
 	Yecch!
 	Won't that result in excessive overheads in the not-uncommon
 	case of a system with a small number of CPUs but a large value
 	for \co{NR_CPUS}?
+	\fi
 \QuickQuizAnswer{
+	실제로는, 그러지 않을 겁니다!
+
+	Offline CPU 들은 \co{qsmask} 와 \co{qsmaskinit} bit mask 들에서
+	빠져있고, 따라서 RCU 는 일반적으로 이것들을 무시합니다.
+	하지만, offline CPU 가 \co{qsmask} bit 을 설정되고 있는 결과가 나오게
+	하는 online/offline 오퍼레이션들에서의 race 가 존재합니다.
+	이 race 들은 물론 올바르게 처리되어야 하며, 그게 처리되게 하는 방법은
+	다른 CPU 들에게 RCU 가 offline CPU 로부터의 quiescent state 를 기다리고
+	있다고 알려주는 겁니다.
+	\iffalse
+
 	Actually, no it will not!
 
 	Offline CPUs are excluded from both the \co{qsmask} and
@@ -599,7 +809,22 @@ Each of these fields is described below.
 	These races must of course be handled correctly, and the way
 	they are handled is to permit other CPUs to note that RCU
 	is waiting on a quiescent state from an offline CPU.
+	\fi
 } \QuickQuizEnd
+
+\item	\co{resched_ipi}:
+	이 필드는 reschedule IPI 가 연관된 CPU 로 보내어진 횟수를 셉니다.
+	이런 IPI 들은 offline 인것도 dynticks idle state 에 있는 것도 아니면서
+	시간 내에 quiescent state 를 지나지 못한 CPU 들에게 보내어집니다.
+\item	\co{n_rcu_pending}:
+	이 필드는 non-dynticks-idle CPU 들에게 jiffy 마다 호출되는
+	\co{rcu_pending()} 을 호출한 횟수를 셉니다.
+\item	\co{n_rcu_pending_force_qs}:
+	이 필드는 \co{n_rcu_pending} 의 값의 threshold 를 갖습니다.
+	만약 \co{n_rcu_pending} 이 이 threshold 에 닿는다면, 이는 현재의 grace
+	period 가 너무 길게 이어졌음을 의미하며, 따라서 이걸 신속화 시키기 위해
+	\co{force_quiescent_state()} 가 호출됩니다.
+\iffalse
 
 \item	\co{resched_ipi}:
 	This field counts the number of times that a reschedule IPI
@@ -615,6 +840,7 @@ Each of these fields is described below.
 	If \co{n_rcu_pending} reaches this threshold, that indicates
 	that the current grace period has extended too long, so
 	\co{force_quiescent_state()} is invoked to expedite it.
+\fi
 \end{itemize}
 
 \subsubsection{RCU Global State}
