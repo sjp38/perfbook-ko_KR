@@ -1293,9 +1293,28 @@ Each of these fields are described below.
 \subsubsection{Kernel Parameters}
 \label{app:rcuimpl:rcutreewt:Kernel Parameters}
 
+다음의 커널 패러미터들이 이 RCU 변종에 영향을 끼칩니다:
+\iffalse
+
 The following kernel parameters affect this variant of RCU:
+\fi
 
 \begin{itemize}
+\item	\co{NR_CPUS}, 시스템의 CPU 의 최대 갯수.
+\item	\co{CONFIG_RCU_FANOUT}, \co{rcu_node} 계층의 각 노드의 바람직한 자식
+	노드의 수.
+\item	\co{CONFIG_RCU_FANOUT_EXACT}, \co{rcu_node} 계층의 rebalancing 을 막는
+	boolean 값.
+\item	\co{CONFIG_HOTPLUG_CPU}, CPU 들이 online 이 되고 offline 이 될 수
+	있도록 허용.
+\item	\co{CONFIG_NO_HZ}, dynticks-idle 모드가 지원되는지 여부를 알림.
+\item	\co{CONFIG_SMP}, 복수개의 CPU 들이 존재할 수 있음을 알림.
+\item	\co{CONFIG_RCU_CPU_STALL_DETECTOR}, RCU grace period 가 너무 길게
+	연장된다면 RCU 는 stalled CPU 를 체크해야 함을 알림.
+\item	\co{CONFIG_RCU_TRACE}, RCU 가 \co{debugfs} 에 tracing 정보를 제공해야
+	함을 알림.
+\iffalse
+
 \item	\co{NR_CPUS}, the maximum number of CPUs in the system.
 \item	\co{CONFIG_RCU_FANOUT}, the desired number of children for
 	each node in the \co{rcu_node} hierarchy.
@@ -1309,6 +1328,7 @@ The following kernel parameters affect this variant of RCU:
 	check for stalled CPUs when RCU grace periods extend too long.
 \item	\co{CONFIG_RCU_TRACE}, indicating that RCU should provide
 	tracing information in \co{debugfs}.
+\fi
 \end{itemize}
 
 \begin{figure*}[tbp]
@@ -1350,6 +1370,15 @@ The following kernel parameters affect this variant of RCU:
 \label{fig:app:rcuimpl:rcutreewt:Determining Shape of RCU Hierarchy}
 \end{figure*}
 
+\co{CONFIG_RCU_FANOUT} 과 \co{NR_CPUS} 패러미터들은
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Determining Shape of RCU Hierarchy} 에
+보인 것처럼 컴파일 시점에 \co{rcu_node} 계층의 모습을 결정하는데에 사용됩니다.
+Line~1 은 \co{rcu_node} 계층의 최대 depth 를 정하는데, 여기선 3 입니다.
+최대 허용된 depth 를 늘리는 행위는 여기저기 변경을 필요로 하는데, 예를 들면
+line~6-26 의 \co{#if} 문에 또다른 경우를 추가합니다.
+Line~2-4 는 각각 fanout, fanout 의 제곱, 그리고 fanout 의 세제곱을 계산합니다.
+\iffalse
+
 The \co{CONFIG_RCU_FANOUT} and \co{NR_CPUS} parameters are used to
 determine the shape of the \co{rcu_node} hierarchy at compile time,
 as shown in
@@ -1361,6 +1390,18 @@ elsewhere, for example, adding another leg to the \co{#if}
 statement running from lines~6-26.
 Lines~2-4 compute the fanout, the square of the fanout, and the cube
 of the fanout, respectively.
+\fi
+
+이후에 이 값들은 \co{rcu_node} 계층의 요구되는 depth 를 결정하기 위해
+\co{NR_CPUS} 와 비교되어지며, 이 depth 는 \co{NUM_RCU_LVLS} 에 저장되는데 이는
+\co{rcu_state} 구조체의 여러 배열들의 크기를 정하는데 사용되어집니다.
+루트 단계에는 항상 하나의 노드가 존재하며, leaf 단계 아래에는 \co{NUM_CPUS}
+갯수의 \co{rcu_data} 구조체가 존재합니다.
+루트 단계 이상의 단계가 존재한다면, leaf 단계에서의 노드의 갯수는 \co{NR_CPUS}
+를 \co{RCU_FANOUT_SQ} 로 나누고 반올림 한 값으로 계산됩니다.
+다른 단계에서의 노드들의 갯수는 (예를 들면) \co{RCU_FANOUT_SQ} 대신
+\co{RCU_FANOUT} 을 사용하는 식으로 비슷하지만 약간 다르게 계산됩니다.
+\iffalse
 
 Then these values are compared to \co{NR_CPUS} to determine the required
 depth of the \co{rcu_node} hierarchy, which is placed into
@@ -1374,6 +1415,16 @@ the leaf level is computed
 by dividing \co{NR_CPUS} by \co{RCU_FANOUT}, rounding up.
 The number of nodes at other levels is computed in a similar manner,
 but using (for example) \co{RCU_FANOUT_SQ} instead of \co{RCU_FANOUT}.
+\fi
+
+이어서 Line~28 은 이 모든 단계의 수들을 더해서 \co{rcu_node} 구조체들의 수와
+\co{rcu_data} 구조체의 수를 더한 값을 구합니다.
+마지막으로, line~29 는 이 합으로부터 (\co{rcu_data} 구조체들의 갯수인)
+\co{NR_CPUS} 를 빼서 \co{rcu_node} 구조체의 갯수를 구해서 \co{NUM_RCU_NODES}
+안에 저장합니다.
+이 값은 \co{rcu_state} 구조체의 \co{->nodes} 배열의 크기를 정하는데에
+사용됩니다.
+\iffalse
 
 Line~28 then sums up all of the levels, resulting in the number of
 \co{rcu_node} structures plus the number of \co{rcu_data} structures.
@@ -1383,6 +1434,7 @@ of \co{rcu_node} structures, which is retained in
 \co{NUM_RCU_NODES}.
 This value is then used to size the \co{->nodes} array in the
 \co{rcu_state} structure.
+\fi
 
 \subsection{External Interfaces}
 \label{app:rcuimpl:rcutreewt:External Interfaces}
