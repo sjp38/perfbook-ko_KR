@@ -1532,6 +1532,20 @@ These external APIs are each described in the following sections.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:RCU Read-Side Critical Sections}
+는 RCU read-side 크리티컬 섹션들을 표시하는 함수들을 보입니다.
+Line~1-6 은 ``rcu'' read-side 크리티컬 섹션을 시작하는 \co{__rcu_read_lock()}
+을 보입니다.
+Line~3 은 preemption 을 불능화 하고,
+line~4 는 RCU read-side 크리티컬 섹션의 시작을 알리는 가벼운 표시이고,
+line~5 는 lockdep 상태를 업데이트 합니다.
+Line~8-13 은 \co{__rcu_read_lock()} 의 반대 역할인 \co{__rcu_read_unlock()} 을
+보입니다.
+Line~15-20 은 \co{__rcu_read_lock_bh()} 를 보이고 line~22-27 은
+\co{__rcu_read_unlock_bh()} 을 보이는데, 앞의 두개와 비슷한 함수입니다만,
+preemption 이 아니라 bottom-half 처리를 불능화하고 활성화 합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:RCU Read-Side Critical Sections}
 shows the functions that demark RCU read-side critical sections.
 Lines~1-6 show \co{__rcu_read_lock()}, which begins an ``rcu''
 read-side critical section.
@@ -1546,15 +1560,45 @@ Lines~15-20 show \co{__rcu_read_lock_bh()} and lines~22-27 show
 \co{__rcu_read_unlock_bh()}, which are analogous to the previous
 two functions, but disable and enable bottom-half processing rather
 than preemption.
+\fi
 
 \QuickQuiz{}
+	전 RCU read-side 처리가 \emph{빠를} 거라고 생각했는데요!
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:RCU Read-Side Critical Sections}
+	에 보인 함수들은 너무 쓰레기가 많이 들어있어서 이건 느릴 \emph{수밖에}
+	없겠는걸요!
+	이게 뭡니까?
+	\iffalse
+
 	I thought that RCU read-side processing was supposed to
 	be \emph{fast}!
 	The functions shown in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:RCU Read-Side Critical Sections}
 	have so much junk in them that they just \emph{have} to be slow!
 	What gives here?
+	\fi
 \QuickQuizAnswer{
+	외양은 착각을 일으킬 수 있습니다.
+	\co{preempt_disable()}, \co{preempt_enable()},
+	\co{local_bh_disable()}, 그리고 \co{local_bh_enable()} 는 각각 로컬
+	데이터에 대한 하나의 atomic 하지 않은 변경을 가합니다.
+	그것조차도 \co{CONFIG_PREEMPT} 를 가정한 것이고, 그렇지 않다면
+	\co{preempt_disable()} 과 \co{preempt_enable()} 함수는 아무 코드도
+	수행하지 않으며 컴파일러 지시어도 내놓지 않습니다.
+	\co{__acquire()} 와 \co{__release()} 함수들은 아무 코드도 (아무
+	컴파일러 지시어도) 만들지 않고 문법 분석 버그 탐색 프로그램인
+	\co{sparse} 에 사용될 뿐입니다.
+	마지막으로, \co{rcu_read_acquire()} 와 \co{rcu_read_release()} 는
+	실제로 그 비용이 비쌀 수 있는 경우인, 락 순서 디버깅 기능인 ``lockdep''
+	이 활성화 되어 있는 경우가 아니라면 아무 코드도 (아무 컴파일러
+	지시어도) 내놓지 않습니다.
+
+	짧게 말해서, 여러분이 디버깅 옵션을 켜놓은 커널 해커가 아니라면, 이
+	함수들은 매우 가볍고, 일부 경우에는 완전히 오버헤드가 없습니다.
+	그리고, 포틀랜드 지역 가구 판매사에서 말하는 걸 인용하자면, ``free is a
+	\co{very} good price''.
+	\iffalse
+
 	Appearances can be deceiving.
 	The \co{preempt_disable()}, \co{preempt_enable()},
 	\co{local_bh_disable()}, and \co{local_bh_enable()} each
@@ -1575,6 +1619,7 @@ than preemption.
 	and in some cases, absolutely free of overhead.
 	And, in the words of a Portland-area furniture retailer,
 	``free is a \emph{very} good price''.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{\tt call\_rcu()}
