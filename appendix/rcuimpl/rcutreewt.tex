@@ -1682,6 +1682,24 @@ than preemption.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree call-rcu}
+는 \co{__call_rcu()}, \co{call_rcu()}, 그리고
+\co{call_rcu_bh()} 의 코드를 보입니다.
+\co{call_rcu()} 와 \co{call_rcu_bh()} 는 \co{__call_rcu()} 의 wrapper 일 뿐임을
+알아주시기 바라며, 따라서 여기서는 더이상 다루지 않습니다.
+
+관심을 \co{__call_rcu()} 로 돌려보면, line~9-10 은 명시된 \co{rcu_head} 를
+초기화하고, line~11 은 \co{__call_rcu()} 가 호출되기 전에 수행된 RCU 로
+보호되는 데이터 구조로의 업데이트가 콜백 등록 전에 된것으로 보여질 것을
+보장합니다.
+Line~12 와 34 는 인터럽트 핸들러로부터의 \co{__call_rcu()} 호출에 의한 파괴적
+간섭을 막기 위해 인터럽트를 비활성화하고 재활성화 합니다.
+Line~13 은 현재 CPU 의 \co{rcu_data} 구조체로의 레퍼런스를 얻어오고, line~14 는
+현재 grace period 가 끝나지 않았다면 콜백들을 진행시키기 위해
+\co{rcu_process_gp_end()} 를 수행하고, line~15 는 새로운 grace period 가
+시작되면 상태를 기록하기 위해 \co{check_for_new_grace_period()} 를 호출합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree call-rcu}
 shows the code for \co{__call_rcu()}, \co{call_rcu()}, and
 \co{call_rcu_bh()}.
 Note that \co{call_rcu()} and \co{call_rcu_bh()} are simple wrappers
@@ -1699,13 +1717,30 @@ structure, line~14 invokes \co{rcu_process_gp_end()} in order
 to advance callbacks if the current grace period has now ended,
 while line~15 invokes \co{check_for_new_grace_period()} to
 record state if a new grace period has started.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree call-rcu}
+	의 line~13 에서 현재 CPU 의 \co{rcu_data} 구조체로의 레퍼런스를
+	가져오는데에 간단히 \co{__get_cpu_var()} 를 사용하는게 어떤가요?
+	\iffalse
+
 	Why not simply use \co{__get_cpu_var()} to pick up a
 	reference to the
 	current CPU's \co{rcu_data} structure on line~13 in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree call-rcu}?
+	\fi
 \QuickQuizAnswer{
+	우리는 \co{call_rcu()} 에서 호출되었거나 (이 경우라면 우린
+	\co{__get_cpu_var(rcu_data)} 를 사용해야 할겁니다) \co{call_rcu_bh()}
+	에서 호출되었을 수 있습니다 (이 경우라면
+	\co{__get_cpu_var(rcu_bh_data)} 를 사용해야 합니다).
+	우리가 넘긴 \co{rcu_state} 구조체가 뭔가에 관계없이 \co{->rda[]} 배열을
+	사용하는 것은 어떤 API 의 \co{__call_rcu()} 가 호출되었는가에 관계없이
+	올바르게 동작합니다 (Lai Jiangshan 에 의해
+	제안되었습니다~\cite{LaiJiangshan2008NewClassicAlgorithm}).
+	\iffalse
+
 	Because we might be called either from \co{call_rcu()}
 	(in which case we would need \co{__get_cpu_var(rcu_data)})
 	or from \co{call_rcu_bh()} (in which case we would need
@@ -1714,7 +1749,24 @@ record state if a new grace period has started.
 	\co{rcu_state} structure we were passed works correctly
 	regardless of which API \co{__call_rcu()} was invoked from
 	(suggested by Lai Jiangshan~\cite{LaiJiangshan2008NewClassicAlgorithm}).
+	\fi
 } \QuickQuizEnd
+
+Line~16 과 17 은 새로운 콜백을 집어넣습니다.
+Line~18 과 19 는 진행중인 grace period 가 있는지 체크해보며, 그렇지 않다면
+line~23 에서 루트 \co{rcu_node} 구조체의 락을 얻어오고 line~24 에서 새로운
+grace period 를 시작하기 위해 (그리고 얻어온 락을 내려놓기 위해)
+\co{rcu_start_gp()} 를 실행합니다.
+
+Line~26 은 이 CPU 를 너무 많은 RCU 콜백들이 기다리고 있지 않은지 확인해보고,
+만약 그렇다면 line~27 에서 콜백들이 수행되는 비율을 증가시키기 위해
+\co{->blimit} 을 증가시키며, line~28 에서는 제공된 CPU 들이 quiescent state 를
+지나도록 시도하기 위해 급히 \co{force_quiescent_state()} 를 호출합니다.
+그렇지 않다면, line~29-32 에서 grace period 가 시작된 이래로 (또는 지난번의
+\co{force_quiescent_state()} 호출 이래로) 너무 오래되었는지 확인하고, 만약
+그렇다면 line~33 에서 다시한번 제공된 CPU 들이 quiescent state 를 지나도록
+시도하기 위해 \co{force_quiescent_state()} 를 급하지 않게 호출합니다.
+\iffalse
 
 Lines~16 and 17 enqueue the new callback.
 Lines 18 and 19 check to see there is a grace period in progress,
@@ -1732,6 +1784,7 @@ the grace period started (or since the last call to
 \co{force_quiescent_state()}, as the case may be), and, if so,
 line~33 invokes \co{force_quiescent_state()} non-urgently, again
 to convince holdout CPUs to pass through quiescent states.
+\fi
 
 \subsubsection{\tt rcu\_check\_callbacks()}
 \label{app:rcuimpl:rcutreewt:rcu-check-callbacks}
