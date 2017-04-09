@@ -1845,6 +1845,15 @@ to convince holdout CPUs to pass through quiescent states.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-check-callbacks}
+는 각 CPU 에서 jiffy 마다 한번씩 scheduling-clock 인터럽트 핸들러에서 호출되는
+코드를 보입니다.
+\co{rcu_pending()} 함수 (\co{__rcu_pending()} 의 wrapper 입니다) 가 실행되고,
+이게 0이 아닌 값을 리턴하면, \co{rcu_check_callbacks()} 가 호출됩니다.
+(\co{rcu_pending()} 을 \co{rcu_check_callbacks()} 안으로 합칠 생각도 있었음을
+알아두시기 바랍니다.)
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-check-callbacks}
 shows the code that is called from the scheduling-clock interrupt
 handler once per jiffy from each CPU.
 The \co{rcu_pending()} function (which is a wrapper for \co{__rcu_pending()})
@@ -1852,6 +1861,36 @@ is invoked, and if it returns non-zero, then \co{rcu_check_callbacks()}
 is invoked.
 (Note that there is some thought being given to merging \co{rcu_pending()}
 into \co{rcu_check_callbacks()}.)
+\fi
+
+\co{__rcu_opending()} 의 시작과 함께, line~4 는 이 \co{rcu_pending()} 의 호출
+횟수를 세는데, 언제 quiescent state 를 강제할지 결정하는데 사용하기
+위해서입니다.
+Line~6 은 \co{CONFIG_RCU_CPU_STALL_DETECTOR} 가 선택되어 있다면 커널 내에서
+spinning 하고 있거나, 또는 하드웨어 문제를 겪고 있는 CPU 들을 보고하기 위해
+\co{check_cpu_stall()} 을 호출합니다.
+Line~7-23 은 여러 검새를 하고, RCU 가 현재 CPU 가 다른 일을 하도록 해야 한다면
+0 이 아닌 값을 리턴합니다.
+Line~7 은 현재 CPU 가 현재의 grace period 를 위해 quiescent state 를 빚지고
+있는지 검사하고,
+line~9 는 현재 CPU 가 끝난 grace period 를 위한, 따라서 호출될 준비가 된 콜백을
+가지고 있는지 검사하며,
+line~11 은 현재 CPU 가 다른 RCU grace period 가 지나가길 기다려야 하는 콜백을
+가지고 있는지 보기 위해 \co{cpu_needs_another_gp()} 를 호출하며,
+line~13 은 현재 grace period 가 끝났는지 체크하고,
+line~15 는 새로운 grace period 가 시작되었는지 검사하며,
+마지막으로 line~17-22 에서는 제공된 CPU 들이 quiescent state 를 지나도록
+강제해야 할 시간인지 체크합니다.
+이 마지막 검사는 다음과 같이 나뉘어집니다: (1) line~17-18 은 진행중인 grace
+period 가 있는지 체크하고, 만약 그렇다면 line~19-22 에서
+\co{force_quiescent_state()} 가 호출되기에 충분할 정도로 jiffy 들 (line~19-20)
+또는 \co{rcu_pending()} 호출 (line~21-22) 이 지나갔는지 체크합니다.
+이 검사들 중 어느것도 해당하지 않는다면, line~24 에서 0을 리턴하여
+\co{rcu_check_callbacks()} 가 호출될 필요가 없음을 알립니다.
+
+Line~27-33 은 단순히 \co{__rcu_pending()} 을 두번, 한번은 ``rcu'' 를 위해
+그다음은 ``rcu\_bh'' 를 위해 호출하는 \co{rcu_pending()} 을 보입니다.
+\iffalse
 
 Starting with \co{__rcu_pending()}, line~4 counts this call to
 \co{rcu_pending()} for use in deciding when to force quiescent states.
@@ -1882,14 +1921,32 @@ zero, indicating that \co{rcu_check_callbacks()} need not be invoked.
 Lines~27-33 show \co{rcu_pending()}, which simply invokes
 \co{__rcu_pending()} twice, once for ``rcu'' and again for
 ``rcu\_bh''.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-check-callbacks}
+	의 line~29-32 에서 \co{rcu_pending()} 이 항상 두번 호출된다는 점을
+	생각해보면 이 두개의 구조체들에 대한 검사들을 하나로 합칠 방법이 있어야
+	하는거 아닌가요?
+	\iffalse
+
 	Given that \co{rcu_pending()} is always called twice
 	on lines~29-32 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-check-callbacks},
 	shouldn't there be some way to combine the checks of the
 	two structures?
+	\fi
 \QuickQuizAnswer{
+	미안해요, 이건 훼이크 질문이었어요.
+	C 언어의 단락 boolean 표현에 대한 평가 규칙은 \co{rcu_state} 에 대한
+	\co{__rcupending()} 호출이 0을 리턴했을 때에만 \co{rcu_bh_state} 를
+	위한 두번째 호출을 수행할 것을 보장합니다.
+
+	이런 순서로 두개의 함수 호출이 이루어지는 이유는 ``rcu\_bh'' 보다는
+	``rcu'' 가 더 자주 사용되기 때문으로, 따라서 첫번째 호출이 0이 아닌
+	값을 리턴할 확률이 두번째 것보다 높습니다.
+	\iffalse
+
 	Sorry, but this was a trick question.
 	The C language's short-circuit boolean expression evaluation
 	means that \co{__rcu_pending()} is invoked on
@@ -1900,7 +1957,15 @@ Lines~27-33 show \co{rcu_pending()}, which simply invokes
 	``rcu'' is used more heavily than is ``rcu\_bh'', so
 	the first call is more likely to return non-zero than
 	is the second.
+	\fi
 } \QuickQuizEnd
+
+Line~35-48 은 \co{rcu_check_callbacks()} 함수를 보이는데, 이 함수는
+scheduling-clock 인터럽트가 연장된 quiescent state 를 인터럽트 했는지 검사하고,
+만약 그렇다면 RCU 의 softirq 처리를 시작 (\co{rcu_process_callbacks()} 합니다.
+Line~37-41 은 ``rcu'' 를 위한 이 검사를 수행하고 line~42-43 은 ``rcu\_bh'' 를
+위한 이 검사를 수행합니다.
+\iffalse
 
 Lines~35-48 show \co{rcu_check_callbacks()}, which checks to see
 if the scheduling-clock interrupt interrupted an extended quiescent
@@ -1908,6 +1973,21 @@ state, and then initiates RCU's softirq processing
 (\co{rcu_process_callbacks()}).
 Lines~37-41 perform this check for ``rcu'', while lines~42-43
 perform the check for ``rcu\_bh''.
+\fi
+
+Line~37-39 는 이 scheduling clock 인터럽트가 사용자 모드 수행으로부터
+들어왔는지 (line~37) 또는 idle 루프로부터 곧바로 들어왔는지 (line~38 의
+\co{idle_cpu()} 수행) 를 인터럽트의 단계를 건드리지 않고 e들어왔는지 (line~38
+의 뒷부분과 line~39) 검사합니다.
+이 검사에 걸린다면, 즉 scheduling clock 인터럽트가 연장된 quiescent state
+로부터 왔다면, ``rcu'' 를 위한 모든 quiescent state 는 또한 ``rcu\_bh'' 를 위한
+quiescent state 이기도 하므로, line~40 과 41 은 이 quiescent state 를 두 종류의
+RCU 모두를 위한 것으로 보고합니다.
+
+비슷하게 ``rcu\_bh'' 를 위해서도 line~42 에서 이 scheduling-clock 인터럽트가
+softirq 가 활성화된 코드 영역에서 온 것인지 검사하고 만약 그렇다면 line~43 에서
+이 quiescent state 를 ``rcu\_bh'' 만을 위한 것으로 보고합니다.
+\iffalse
 
 Lines~37-39 check to see if the scheduling clock interrupt came
 from user-mode execution (line~37) or directly from the idle
@@ -1922,24 +2002,44 @@ both flavors of RCU.
 Similarly for ``rcu\_bh'', line~42 checks to see if the scheduling-clock
 interrupt came from a region of code with softirqs enabled, and, if so
 line~43 reports the quiescent state for ``rcu\_bh'' only.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-check-callbacks}
+	의 line~42 는 \co{in_hardirq()} 검사도 해야하지 않습니까?
+	\iffalse
+
 	Shouldn't line~42 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-check-callbacks}
 	also check for \co{in_hardirq()}?
+	\fi
 \QuickQuizAnswer{
+	아니요.
+	\co{rcu_read_lock_bh()} 기능은 softirq 를 비활성화 하지, hardirq 를
+	비활성화 하지는 않습니다.
+	\co{call_rcu_bh()} 는 앞서 존재한 ``rcu\_bh'' read-side 크리티컬 섹션이
+	완료되기만 기다리면 되므로, 우린 \co{in_softirq()} 만을 검사합니다.
+	\iffalse
+
 	No.
 	The \co{rcu_read_lock_bh()} primitive disables
 	softirq, not hardirq.
 	Because \co{call_rcu_bh()} need only wait for pre-existing
 	``rcu\_bh'' read-side critical sections to complete,
 	we need only check \co{in_softirq()}.
+	\fi
 } \QuickQuizEnd
+
+어느 경우든, line~45 는 RCU softirq 를 수행하는데, 이는 이 CPU 에서 (인터럽트가
+현재의 scheduler-clock 인터럽트 후에 재활성화 되거나 하는) 미래에
+\co{rcu_process_callbacks()} 가 호출되게 할겁니다.
+\iffalse
 
 In either case, line~45 invokes an RCU softirq, which will result in
 \co{rcu_process_callbacks()} being called on this CPU at some future
 time (like when interrupts are re-enabled after exiting the
 scheduler-clock interrupt).
+\fi
 
 \subsubsection{\tt rcu\_process\_callbacks()}
 \label{app:rcuimpl:rcutreewt:rcu-process-callbacks}
