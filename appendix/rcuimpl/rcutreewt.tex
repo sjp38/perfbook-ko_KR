@@ -2084,6 +2084,19 @@ scheduler-clock interrupt).
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-process-callbacks}
+는 \co{__rcu_process_callbacks()} 의 wrapper 인 \co{rcu_process_callbacks()} 의
+코드를 보입니다.
+이 함수들은 예를 들면 RCU 코어는 이 CPU 가 뭔가 할 필요가 있다고 생각할 이유가
+있다면 일반적으로 행해지는,
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-check-callbacks} 의
+line~47 과 같이 \co{raise_softirq(RCU_SOFTIRQ)} 호출의 결과로 실행됩니다.
+
+Line~7-10 은 현재의 grace period 가 시작된지 한참이 지났는지 체크하고, 만약
+그렇다면 line~11 에서 제공된 CPU 들이 이 grace period 를 위해 quiescent state
+를 지나가도록 설득하기 위해 \co{force_quiescent_state()} 를 호출합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-process-callbacks}
 shows the code for \co{rcu_process_callbacks()}, which is a wrapper around
 \co{__rcu_process_callbacks()}.
 These functions are invoked as a result of a call to
@@ -2096,16 +2109,47 @@ Lines~7-10 check to see if it has been awhile since the current grace
 period started, and, if so, line~11 invokes \co{force_quiescent_state()}
 in order to try to convince holdout CPUs to pass through a quiescent
 state for this grace period.
+\fi
 
 \QuickQuiz{}
+	하지만
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-process-callbacks}
+	의 \co{__rcu_process_callbacks} 에서 grace period 가 실제로
+	진행중인지도 체크해 봐야 하지 않을까요?
+	\iffalse
+
 	But don't we also need to check that a grace period is
 	actually in progress in \co{__rcu_process_callbacks} in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-process-callbacks}?
+	\fi
 \QuickQuizAnswer{
+	실제로 우린 그렇게 합니다!
+	그리고 \co{force_quiescent_state()} 가 하는 첫번째 일이 바로 그
+	검사입니다.
+	\iffalse
+
 	Indeed we do!
 	And the first thing that \co{force_quiescent_state()} does
 	is to perform exactly that check.
+	\fi
 } \QuickQuizEnd
+
+어떤 경우든, line~12 는 \co{rcu_process_gp_end()} 를 호출하는데, 이 함수는 어떤
+다른 CPU 가 이 CPU 가 신경쓰고 있던 grace period 를 끝내버리진 않았는지
+검사하고, 만약 그렇다면 해당 grace period 의 종료를 알아채고 그에 맞춰 이 CPU
+의 RCU 콜백들을 진행시킵니다.
+Line~13 은 \co{rcu_check_quiescent_state()} 를 호출하는데, 이 함수는 어떤 다른
+CPU 가 새로운 grace period 를 시작했는지, 또한 현재의 CPU 가 현재의 grace
+period 를 위한 quiescent state 를 지났는지 검사하고, 만약 그렇다면 상태를
+올바르게 업데이트 합니다.
+Line~14 는 진행중인 grace period 가 존재치 않는지 검사하고 현재 CPU 가 다른
+grace period 를 필요로 하는 콜백들을 가지고 있지 않은지 검사합니다.
+만약 그렇다면, line~15 는 루트 \co{rcu_node} 구조체의 락을 획득하고, line~17
+에서 새로운 grace period ㄹ르 시작하는 \co{rcu_start_gp()} 를 호출합니다
+(그리고 루트 \co{rcu_node} 구조체의 락을 해제합니다).
+어떤 경우든, line~18 은 이 CPU 의 콜백들 가운데 grace period 가 완료된 것들을
+모두 실행합니다.
+\iffalse
 
 In any case, line~12 invokes \co{rcu_process_gp_end()}, which checks to
 see if some other CPU ended the
@@ -2123,12 +2167,26 @@ and line~17 invokes \co{rcu_start_gp()}, which starts a new grace
 period (and also releases the root \co{rcu_node} structure's lock).
 In either case, line~18 invokes \co{rcu_do_batch()}, which
 invokes any of this CPU's callbacks whose grace period has completed.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-process-callbacks}
+	에서 두개의 CPU 들이 새로운 grace period 를 동시적으로 시작하려
+	시도하면 어떻게 되나요?
+	\iffalse
+
 	What happens if two CPUs attempt to start a new grace
 	period concurrently in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree rcu-process-callbacks}?
+	\fi
 \QuickQuizAnswer{
+	해당 CPU 들 가운데 하나는 루트 \co{rcu_node} 구조체의 락을 획득할
+	것이고, 해당 CPU 가 grace period 를 시작할 겁니다.
+	다른 CPU 는 이후에 이 락을 획득하고 \co{rcu_start_gp()} 를 호출할텐데,
+	이 함수는 grace period 가 이미 진행 중임을 보게 될 것이고, 곧바로 락을
+	해제하고 리턴할 겁니다.
+	\iffalse
+
 	One of the CPUs will be the first to acquire the root
 	\co{rcu_node} structure's lock, and that CPU will start
 	the grace period.
@@ -2136,7 +2194,19 @@ invokes any of this CPU's callbacks whose grace period has completed.
 	\co{rcu_start_gp()}, which, seeing that a grace period
 	is already in progress, will immediately release the
 	lock and return.
+	\fi
 } \QuickQuizEnd
+
+Line~21-30 은 \co{rcu_process_callbacks()} 로, \co{__rcu_process_callbacks()}
+의 wrapper 입니다.
+Line~24 는 모든 앞의 RCU read-side 크리티컬 섹션들이 뒤따르는 RCU 처리에 앞서
+완료된 것으로 보일 것을 보장하기 위해 메모리 배리어를 실행합니다.
+Line~25-26 과 27-28 은 각각 ``rcu'' 와 ``rcu\_bh'' 를 위해
+\co{__rcu_process_callbacks()} 를 호출하고, 마지막으로 line~29 에서
+\co{__rcu_process_callbacks()} 에 의해 진행된 모든 RCU 처리 과정이 뒤따르는 RCU
+read-side 크리티컬 섹션들 전에 보일 수 있도록 보장하기 위해 메모리 배리어를
+수행합니다.
+\iffalse
 
 Lines~21-30 are \co{rcu_process_callbacks()}, which is again a
 wrapper for \co{__rcu_process_callbacks()}.
@@ -2148,6 +2218,7 @@ Lines~25-26 and 27-28 invoke \co{__rcu_process_callbacks()} for
 line~29 executes a memory barrier to ensure that any RCU
 processing carried out by \co{__rcu_process_callbacks()}
 is seen prior to any subsequent RCU read-side critical sections.
+\fi
 
 \subsubsection{{\tt rcu\_needs\_cpu()} and {\tt rcu\_cpu\_notify()}}
 \label{app:rcuimpl:rcutreewt:rcu-needs-cpu and rcu-cpu-notify}
