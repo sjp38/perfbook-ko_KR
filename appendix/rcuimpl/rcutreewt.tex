@@ -2261,6 +2261,24 @@ is seen prior to any subsequent RCU read-side critical sections.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-needs-cpu and rcu-cpu-notify}
+는 \co{rcu_needs_cpu()} 와 \co{rcu_cpu_notify()} 함수의 코드를 보이는데,
+이것들은 리눅스 커널에서 각각 dynticks-idle 모드로의 전환을 체크하고 CPU
+hotplug 를 처리하기 위해 호출됩니다.
+
+Line~1-5 는 \co{rcu_needs_cpu()} 를 보이는데, 이 함수는 단순히 명시된 CPU 가
+``rcu'' (line~3) 또는 ``rcu\_bh'' (line~4) 콜백을 가지고 있는지 체크합니다.
+
+Line~7-28 은 \co{rcu_cpu_notify()} 를 보이는데, 이 함수는 일반적인 \co{switch}
+구문을 사용하는 매우 일반적인 CPU-hotplug notifier 함수입니다.
+Line~16 은 명시된 CPU 가 online 이 되려 한다면 \co{rcu_online_cpu()} 를
+호출하고, line~22 는 명시된 CPU 가 offline 으로 가려 한다면
+\co{rcu_offline_cpu()} 를 호출합니다.
+CPU-hotplug 오퍼레이션은 atomic 하지 않으며, 여러 grace period 를 거칠 정도로
+길어질 수 있음을 알아두어야 합니다.
+따라서 RCU 는 들어오거나 나가는 과정 상의 CPU 들을 우아하게 처리해야만 합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-needs-cpu and rcu-cpu-notify}
 shows the code for \co{rcu_needs_cpu()} and \co{rcu_cpu_notify()},
 which are invoked by the Linux kernel to check on switching to
 dynticks-idle mode and to handle CPU hotplug, respectively.
@@ -2277,6 +2295,7 @@ It is important to note that CPU-hotplug operations are not atomic,
 but rather happen in stages that can extend for multiple grace periods.
 RCU must therefore gracefully handle CPUs that are in the process
 of coming or going.
+\fi
 
 \subsection{Initialization}
 \label{app:rcuimpl:rcutreewt:Initialization}
