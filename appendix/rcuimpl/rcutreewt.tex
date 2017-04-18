@@ -2724,11 +2724,39 @@ which is used for tracing when traversing the full hierarchy.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init}
+는 \co{__rcu_init()} 함수와 그것의 helper macro 인 \co{RCU_DATA_PTR_INIT()} 를
+보입니다.
+\co{__rcu_init()} 함수는 부팅 초기에 스케쥴러가 초기화 되기 전에, 그리고 하나
+이상의 CPU 가 동작하기 전에 호출됩니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init}
 shows the \co{__rcu_init()} function and its \co{RCU_DATA_PTR_INIT()}
 helper macro.
 The \co{__rcu_init()} function is invoked during early boot,
 before the scheduler has initialized, and before more than one
 CPU is running.
+\fi
+
+\co{RCU_DATA_PTR_INIT()} 매크로는 \co{rcu_state} 구조체로의 포인터와
+\co{rcu_data} per-CPU 변수 의 집합의 이름을 인자로 받습니다.
+이 매크로는 per-CPU \co{rcu_data} 구조체들을 스캔하고, 각 \co{rcu_data}
+구조체의 \co{->mynode} 포인터가 연관된 leaf \co{rcu_node} 구조체를 가리키도록
+값을 할당합니다.
+이 매크로는 또한 명시된 \co{rcu_state} 구조체의 \co{->rda[]} 배열을 그 원소들이
+각각 연관된 \co{rcu_data} 구조체를 가리키도록 값을 채웁니다.
+Line~3 은 첫번째 leaf \co{rcu_node} 구조체로의 포인터를 (이 매크로의 호출자에
+의해 선언되어야만 하는) 지역 변수 \co{rnp} 에 넣고, line~4 는 연관된 leaf-node
+숫자인 지역 변수 \co{j} 를 0으로 할당합니다.
+Line~5-10 으로 구성되는 루프의 각 단계에서는 연관된 (\co{NR_CPUS} 로 명시된)
+잠재적 CPU 들의 초기화를 수행합니다.
+이 루프 안에서, line~6 는 우리가 현재 leaf \co{rcu_node} 구조체의 한계를 넘어
+움직였는지 체크하고, 만약 그렇다면 line~7 에서 다음 구조체로 진행합니다.
+그러고 나서는, 여전히 루프 안에서, line~8 은 현재 CPU 의 \co{rcu_data} 구조체의
+\co{->mynode} 포인터가 현재 leaf \co{rcu_node} 구조체를 가리키도록 만들고,
+line~9 는 현재 CPU 의 (\co{rcu_state} 구조체 안의) \co{->rda[]} 원소가 현재 CPU
+의 \co{rcu_data} 구조체를 가리키도록 만듭니다.
+\iffalse
 
 The \co{RCU_DATA_PTR_INIT()} macro takes as arguments a pointer to
 an \co{rcu_state} structure and the name of a set of \co{rcu_data}
@@ -2754,13 +2782,29 @@ of the current CPU's \co{rcu_data} structure to reference the current
 leaf \co{rcu_node} structure, and line~9 sets the current CPU's \co{->rda[]}
 element (within the \co{rcu_state} structure) to reference the
 current CPU's \co{rcu_data} structure.
+\fi
 
 \QuickQuiz{}
+	C-preprocessor 매크로는 \emph{너무} 1990년대 스러워요!
+	왜 요즘 시대에 걸맞게
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init} 의
+	\co{RCU_DATA_PTR_INIT()} 을 함수로 바꾸지 않는거죠?
+	\iffalse
+
 	C-preprocessor macros are \emph{so} 1990s!
 	Why not get with the times and convert \co{RCU_DATA_PTR_INIT()}
 	in Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init}
 	to be a function?
+	\fi
 \QuickQuizAnswer{
+	왜냐하면, 특정 CPU 의 per-CPU 변수 인스턴스로의 레퍼런스를 함수에 넘길
+	수는 있겠지만, 특정 per-CPU 변수의 인스턴스의 전체 집합으로의
+	레퍼런스를 함수에 넘길 좋은 방법이 없기 때문입니다.
+	물론 누군가는 포인터들의 배열을 만들고 그 배열로의 레퍼런스를 넘길 수도
+	있겠습니다만, 그건 \co{RCU_DATA_PTR_INIT()} 매크로가 가장 먼저 하는 일
+	중 하나입니다.
+	\iffalse
+
 	Because, although it is possible to pass a reference to
 	a particular CPU's instance of a per-CPU variable to a function,
 	there does not appear to be a good way pass a reference to
@@ -2769,7 +2813,18 @@ current CPU's \co{rcu_data} structure.
 	One could of course build an array of pointers, then pass a
 	reference to the array in, but that is part of what
 	the \co{RCU_DATA_PTR_INIT()} macro is doing in the first place.
+	\fi
 } \QuickQuizEnd
+
+\co{__rcu_init()} 함수는 먼저 line~19 에서 \co{rcu_state} 구조체를 가지고
+\co{rcu_init_one()} 을 호출하고, 이어서 이 \co{rcu_state} 구조체와 per-CPU
+변수들의 \co{rcu_data} 집합을 가지고 \co{RCU_DATA_PTR_INIT()} 을 호출합니다.
+Line~21-22 에서는 이를 \co{rcu_bh_state} 와 \co{rcu_bh_data} 에 대해
+반복합니다.
+Line~24-26 에 걸쳐진 루프는 현재 online 인 각 CPU 에 대해 \co{rcu_cpu_notify()}
+를 호출하고, line~27 은 CPU 가 online 이 될 때마다, RCU 에게 그 존재를 알리기
+위해 \co{rcu_cpu_notify()} 가 호출되도록 알림을 설정합니다.
+\iffalse
 
 The \co{__rcu_init()} function first invokes \co{rcu_init_one()}
 on the \co{rcu_state} structure on line~19, then invokes
@@ -2782,22 +2837,42 @@ each CPU that is currently online (which should be only the boot
 CPU), and line~27 registers a notifier so that \co{rcu_cpu_notify()}
 will be invoked each time a CPU comes online, in order to inform
 RCU of its presence.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init}
+	의 line~25-26 에서 online CPU 가 마지막으로 알려졌을 때와 line~27 에서
+	\co{register_cpu_notifier()} 가 호출된 시점 사이에서 어떤 CPU 가 online
+	이 되면 어떤 일이 벌어지나요?
+	\iffalse
+
 	What happens if a CPU comes online between the time
 	that the last online CPU is notified on lines~25-26 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init}
 	and the time that \co{register_cpu_notifier()} is invoked
 	on line~27?
+	\fi
 \QuickQuizAnswer{
+	이 시점에서는 하나의 CPU 만이 online 이므로, 또다른 CPU 가 online 이
+	되는 유일한 방법은 이 CPU 가 해당 CPU 를 online 으로 두는 것으로,
+	성립되지 않는 이야기입니다.
+	\iffalse
+
 	Only one CPU is online at this point, so the only way another
 	CPU can come online is if this CPU puts it online, which it
 	is not doing.
+	\fi
 } \QuickQuizEnd
+
+\co{rcu_cpu_notify()} 과 연관된 함수들은 뒤의
+Section~\ref{app:rcuimpl:rcutreewt:CPU Hotplug}
+에서 더 이야기 하겠습니다.
+\iffalse
 
 The \co{rcu_cpu_notify()} and related functions are discussed in
 Section~\ref{app:rcuimpl:rcutreewt:CPU Hotplug}
 below.
+\fi
 
 \subsection{CPU Hotplug}
 \label{app:rcuimpl:rcutreewt:CPU Hotplug}
