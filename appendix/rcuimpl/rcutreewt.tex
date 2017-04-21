@@ -2944,6 +2944,18 @@ as that CPU comes online.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init-percpu-data}
+는 \co{rcu_init_percpu_data()} 의 코드를 보이는데, 이 함수는 부팅때 또는 특정
+CPU 가 online 이 될 때 특정 CPU 의 \co{rcu_data} 구조체를 초기화 합니다.
+이 함수는 또한 이 CPU 가 다음 grace period 에 참여할 수 있도록 \co{rcu_node}
+계층을 설정합니다.
+
+Line~8 은 명시된 \co{rcu_state} 구조체를 기반으로 이 CPU 의 \co{rcu_data}
+구조체로의 포인터를 가져오고, 이 포인터를 로컬 변수 \co{rdp} 에 넣습니다.
+Line~9 는 명시된 \co{rcu_state} 구조체를 위한 루트 \co{rcu_node} 구조체로의
+포인터를 가져와서 로컬 변수 \co{rnp} 에 넣습니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init-percpu-data}
 shows the code for \co{rcu_init_percpu_data()}, which initializes
 the specified CPU's \co{rcu_data} structure in response to booting
 up or to that CPU coming online.
@@ -2956,6 +2968,18 @@ into the local variable \co{rdp}.
 Line~9 gets a pointer to the root \co{rcu_node} structure for the
 specified \co{rcu_state} structure, placing it in local variable
 \co{rnp}.
+\fi
+
+Line~11-29 는 \co{rcu_data} 구조체의 필드들을 일관성 있는 값을 보장하기 위해
+루트 \co{rcu_node} 구조체의 락으로 보호하면서 초기화 합니다.
+Line~17 은 tracing 을 위해 중요한데, 많은 리눅스 배포판들이 \co{NR_CPUS} 를
+매우 큰 수로 설정해서 \co{rcu_data} 구조체를 trace 할 때 지나치게 많은 출력을
+초래할 수 있기 때문입니다.
+이 문제를 해결하기 위해 \co{->beenonline} 필드가 사용되는데, 이 필드는 이미
+online 이 된 CPU 에 \co{rcu_data} 구조체가 연관될 때 값을 1로 설정하고, 그 외의
+모든 다른 \co{rcu_data} 구조체들을 위한 부분은 0으로 설정됩니다.
+이는 tracing 코드가 불필요한 CPU 들을 쉽게 무시할 수 있도록 해줍니다.
+\iffalse
 
 Lines~11-29 initialize the fields of the \co{rcu_data} structure
 under the protection of the root \co{rcu_node} structure's lock
@@ -2968,6 +2992,18 @@ it will be set to the value one on any \co{rcu_data} structure
 corresponding to a CPU that has ever been online, and set to zero
 for all other \co{rcu_data} structures.
 This allows the tracing code to easily ignore irrelevant CPUs.
+\fi
+
+Line~30-40 은 online 이 되는 CPU 의 bit 을 \co{rcu_node} 계층으로 전파하는데,
+루트 \co{rcu_node} 에 도달하거나 연관된 bit 이 이미 값 설정되어 있거나 할때까지
+전파됩니다.
+이 bit-setting 은 새로운 grace period 의 초기화를 배제하기 위해
+\co{->onofflock} 의 보호 아래 이루어지고, 추가적으로, 각 \co{rcu_node} 구조체도
+이 락의 보호 아래 초기화 됩니다.
+이어서 line~41 은 RCU 에게 이 CPU 가 extended quiescent state 에 있었음을
+알리는 신호를 주기 위해 \co{cpu_quiet()} 를 호출하고 마지막으로 line~42 에서
+irq 들을 다시 활성화 시킵니다.
+\iffalse
 
 Lines~30-40 propagate the onlining CPU's bit up the \co{rcu_node}
 hierarchy, proceeding until either the root \co{rcu_node} is
@@ -2980,22 +3016,42 @@ of its lock.
 Line~41 then invokes \co{cpu_quiet()} to signal RCU that this
 CPU has been in an extended quiescent state, and finally, line~42
 re-enables irqs.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init-percpu-data}
+	의 line~41 에서는, 우리가 다양한 락들을 사용해 grace period 들을
+	배제시켰음에도, 그리고 모든 앞서 존재한 grace period 들은 이 기존에
+	offline 이 된 CPU 들을 기다리지 않을 것임에도, 왜 \co{cpu_quiet()} 를
+	호출하는거죠?
+	\iffalse
+
 	Why call \co{cpu_quiet()} on line~41 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-init-percpu-data},
 	given that we are excluding grace periods with various
 	locks, and given that any earlier grace periods would not have
 	been waiting on this previously-offlined CPU?
+	\fi
 \QuickQuizAnswer{
+	새로운 grace period 는 line~40 에서 \co{->onofflock} 이 해제된 직후에
+	시작되었을 수 있습니다.
+	\co{cpu_quiet()} 는 그런 grace period 를 진척시키는 도움을 줄겁니다.
+	\iffalse
+
 	A new grace period might have started just after the
 	\co{->onofflock} was released on line~40.
 	The \co{cpu_quiet()} will help expedite such a grace period.
+	\fi
 } \QuickQuizEnd
+
+\co{rcu_init_percpu_data()} 가 부팅될 때만 호출되는게 아니라, 특정 CPU 가
+online 이 될 때마다 매번 호출된다는 점을 기억해 두시기 바랍니다.
+\iffalse
 
 It is important to note that \co{rcu_init_percpu_data()} is invoked
 not only at boot time, but also every time that a given CPU is brought
 online.
+\fi
 
 \subsubsection{\tt rcu\_online\_cpu()}
 \label{app:rcuimpl:rcutreewt:rcu-online-cpu}
