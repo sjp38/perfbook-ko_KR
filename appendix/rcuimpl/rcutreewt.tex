@@ -3196,6 +3196,21 @@ invoked by subsequent \co{raise_softirq()} invocations on this CPU.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
+는 \co{__rcu_offline_cpu()} 와 그 wrapper 함수인 \co{rcu_offline_cpu()} 의
+코드를 보입니다.
+이 (그림의 line~43-47 에 보인) wrapper 함수의 목적은 단순히
+\co{__rcu_offline_cpu()} 를 두번, 한번은 ``rcu'' 를 위해 그리고 ``rcu\_bh'' 를
+위해 호출하는 것 뿐입니다.
+\co{__rcu_offline_cpu()} 함수의 목적은 미래의 grace period 가 offline 이 된 CPU
+를 기다리는 것을 방지하는 것, extended quiescent state 를 알리는 것, 그리고 이
+CPU 에서 처리중인 모든 RCU callback 이 새로 위치해야 할 곳을 찾는 것입니다.
+
+그림의 line~1-41 에 보여진 \co{__rcu_offline_cpu()} 로 돌아가서, line~12 는
+명시된 \co{rcu_state} 의 \co{->onofflock} 을 획득해서 여러 \co{rcu_node} 계층을
+위한 grace-period 초기화를 배제시킵니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
 shows the code for \co{__rcu_offline_cpu()} and its wrapper
 function, \co{rcu_offline_cpu()}.
 The purpose of this wrapper function (shown in lines~43-47 of the figure)
@@ -3210,14 +3225,33 @@ Turning to \co{__rcu_offline_cpu()}, shown on lines~1-41 of the figure,
 line~12 acquires the specified \co{rcu_state} structure's
 \co{->onofflock}, excluding grace-period initialization for
 multi-\co{rcu_node} hierarchies.
+\fi
 
 \QuickQuiz{}
+	하지만 작은 시스템이어서 \co{rcu_node} 계층이 하나의 구조체만을
+	갖는다면 어떻게 되나요?
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu} 의
+	코드에서, 이 경우에 무엇이 동시의 grace-period 초기화를 방지하나요?
+	\iffalse
+
 	But what if the \co{rcu_node} hierarchy has only a single
 	structure, as it would on a small system?
 	What prevents concurrent grace-period initialization in that
 	case, given the code in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}?
+	\fi
 \QuickQuizAnswer{
+	Line~16 에서의 \co{rcu_node} 구조체의 \co{->lock} 획득이 grace-period
+	초기화를 배제시키는데, 초기화 역시 새로운 grace period 를 위한
+	\co{rcu_node} 구조체의 초기화를 위해 이 똑같은 락을 획득해야 하기
+	때문입니다.
+
+	이 \co{->onofflock} 은 multi-node 계층들을 위해서만 필요하며, 그런
+	경우에 커다란 시스템에서는 놀랍도록 큰 비용이 될, \emph{모든}
+	\co{rcu_node} 구조체의 \co{->lock} 필드들을 획득하고 잡는 것에 대한
+	대체로 사용됩니다.
+	\iffalse
+
 	The later acquisition of the sole \co{rcu_node} structure's
 	\co{->lock} on line~16 excludes grace-period initialization,
 	which must acquire this same lock in order to initialize this
@@ -3228,7 +3262,16 @@ multi-\co{rcu_node} hierarchies.
 	holding \emph{all} of the \co{rcu_node} structures'
 	\co{->lock} fields, which would be incredibly painful on
 	large systems.
+	\fi
 } \QuickQuizEnd
+
+Line~13 은 이 CPU 의 \co{rcu_Data} 구조체의 \co{->mynode} 포인터를 사용해서 이
+CPU 에 연관된 leaf \co{rcu_node} 구조체로의 포인터를 가져옵니다
+(Figure~\ref{fig:app:rcuimpl:rcutree:Initialized RCU Data Layout} 를
+참고하세요).
+Line~14 는 이 CPU 의 leaf \co{rcu_node} 구조체의 \co{qsmask} 필드에 사용할 mask
+를 가져옵니다.
+\iffalse
 
 Line~13 picks up a pointer to the leaf \co{rcu_node} structure corresponding
 to this CPU, using the \co{->mynode} pointer in this CPU's \co{rcu_data}
@@ -3236,6 +3279,24 @@ structure
 (see Figure~\ref{fig:app:rcuimpl:rcutree:Initialized RCU Data Layout}).
 Line~14 picks up a mask with this CPU's bit set for use on
 the leaf \co{rcu_node} structure's \co{qsmask} field.
+\fi
+
+이어서 line~15-25 의 루프는 이 CPU 의 bit 들을 이 CPU 의 leaf \co{rcu_node}
+구조체부터 시작해서 \co{rcu_node} 계층을 위로 따라가며 지워갑니다.
+Line~16 은 현재 \co{rcu_node} 구조체의 \co{->lock} 필드를 획득하고, line~17
+에서는 이 CPU 에 (또는, 계층의 위로 가면 그룹에) 연관된 bit 을
+\co{->qsmaskinit} 필드로부터 지워서 미래의 grace period 를 이 CPU 로부터의
+quiescent state 를 기다리지 않도록 만듭니다.
+그 결과 \co{->qsmaskinit} 의 값이 line~18 에서 체크되는 것처럼 0이 아니라면,
+현재 \co{rcu_node} 구조체는 추적해야만 하는 online CPU 들을 갖고 있다는 것이고,
+따라서 line~19 에서 현재 \co{rcu_node} 구조체의 \co{->lock} 을 해제하고 line~20
+에서 루프를 빠져나갑니다.
+그렇지 않다면, 우리는 \co{rcu_node} 계층을 따라 진행해야 합니다.
+이 경우, line~22 는 다음 단계에 적용할 mask 를 가져오고 line~23 에서 현재
+\co{rcu_node} 구조체의 \co{->lock} 을 해제한 후, line~24 에서 이 계층의 다음
+레벨로 넘어갑니다.
+Line~25 는 루프를 나가는데, 이 계층의 꼭대기에서일 겁니다.
+\iffalse
 
 The loop spanning lines~15-25 then clears this CPU's bits up the
 \co{rcu_node} hierarchy, starting with this CPU's leaf \co{rcu_node}
@@ -3255,19 +3316,42 @@ In this case, line~22 picks up the mask to apply to the next level up,
 line~23 releases the current \co{rcu_node} structure's \co{->lock},
 and line~24 advances up to the next level of the hierarchy.
 Line~25 exits the loop should we exit out the top of the hierarchy.
+\fi
 
 \QuickQuiz{}
+	하지만 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
+	의 line~25 가 정말로 이 루프를 끝낼까요?
+	그렇다면, 또는 그렇지 않다면 왜죠?
+	\iffalse
+
 	But does line~25 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
 	ever really exit the loop?
 	Why or why not?
+	\fi
 \QuickQuizAnswer{
+	Line~25 가 이 루프를 끝내는 유일한 방법은 \emph{모든} CPU 들이 offline
+	이 되려 할 때입니다.
+	이는 2.6.28 버전까지의 리눅스 커널에서는 일어날 수 없는 일입니다만,
+	shutdown 과정 중에 모든 CPU 들이 오프라인이 되도록 설계되는 다른 환경이
+	있을 수도 있습니다.
+	\iffalse
+
 	The only way that line~25 could exit the loop is if \emph{all}
 	CPUs were to be put offline.
 	This cannot happen in the Linux kernel as of 2.6.28, though
 	other environments have been designed to offline all CPUs
 	during the normal shutdown procedure.
+	\fi
 } \QuickQuizEnd
+
+Line~26 은 명시된 \co{rcu_state} 구조체의 \co{->completed} 필드를 로컬 변수
+\co{lastcomp} 로 가져오고, line~27 은 \co{->onofflock} 을 해제하고 (하지만 irq
+는 비활성화 된 채로 둡니다), line~28 은 offline 이 되는 CPU 가 이제 extended
+quiescent state 에 있음을 알리고, 이 quiescent state 를 자신이 시작된 곳이
+아니라 다른 grace period 에게 보고하는 것을 막기 위해 \co{lastcomp} 를 넘기는
+\co{cpu_quiet()} 함수를 호출합니다.
+\iffalse
 
 Line~26 picks up the specified \co{rcu_state} structure's
 \co{->completed} field into the local variable \co{lastcomp},
@@ -3276,8 +3360,18 @@ and line~28 invokes \co{cpu_quiet()} in order to note that the
 CPU being offlined is now in an extended quiescent state, passing
 in \co{lastcomp} to avoid reporting this quiescent state against
 a different grace period than it occurred in.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu} 의
+	line~26 이 상당히 비순차적으로 수행되어서 \co{lastcomp} 는 어떤 앞의
+	grace period 로 설정되어 있지만 현재 grace period 는 여전히 이제
+	offline 이 된 CPU 를 기다리고 있다고 생각해 봅시다.
+	이런 경우, \co{cpu_quiet()} 호출은 이 quiescent state 를 보고하는데
+	실패하고, 따라서 이 grace period 가 이 이제는 offline 이 된 CPU 를
+	영원히 기다리게 되지 않을까요?
+	\iffalse
+
 	Suppose that line~26 got executed seriously out of order in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu},
 	so that \co{lastcomp} is set to some prior grace period, but
@@ -3286,7 +3380,18 @@ a different grace period than it occurred in.
 	In this case, won't the call to \co{cpu_quiet()} fail to
 	report the quiescent state, thus causing the grace period
 	to wait forever for this now-offline CPU?
+	\fi
 \QuickQuizAnswer{
+	먼저, line~16 과 12 에서의 락 획득은 line~26 의 수행이 그렇게까지
+	비순차적으로 되지 못하게 합니다.
+	그러나, line~26 이 그렇게까지 극적으로 잘못 순서지어지는 일이 발생한다
+	하더라도, \co{force_quiescent_state()} 가 결국은 호출되어서, 현재 grace
+	period 가 offline CPU 로부터의 quiescent state 를 기다리고 있었다는 걸
+	알리게 될 겁니다.
+	그렇게 되면 \co{force_quiescent_state()} 는 이 offline 이 된 CPU 에
+	extended quiescetn state 가 있는 것으로 보고할 겁니다.
+	\iffalse
+
 	First, the lock acquisitions on lines~16 and 12 would prevent
 	the execution of line~26 from being pushed that far out of
 	order.
@@ -3297,21 +3402,54 @@ a different grace period than it occurred in.
 	CPU.
 	Then \co{force_quiescent_state()} would report the extended
 	quiescent state on behalf of the offlined CPU.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Offline CPU 가 extended quiescent state 에 있음에도, 왜
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
+	의 line~28 은 자신이 어떤 grace period 를 처리하고 있는지 신경써야
+	하는거죠?
+	\iffalse
+
 	Given that an offline CPU is in an extended quiescent state,
 	why does line~28 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
 	need to care which grace period it is
 	dealing with?
+	\fi
 \QuickQuizAnswer{
+	이 경우엔 실제로 그런 신경을 쓸 필요가 없습니다.
+	하지만, 많은 다른 경우에는 \emph{실제로} 신경을 써야 하므로,
+	\co{cpu_quiet()} 함수는 grace-peiod 숫자를 인자로 받으며, 따라서 어떤
+	값을 넘기긴 해야 합니다.
+	\iffalse
+
 	It really does not need to care in this case.
 	However, because it \emph{does} need to care in many other
 	cases, the \co{cpu_quiet()} function does take the
 	grace-period number as an argument, so some value must be
 	supplied.
+	\fi
 } \QuickQuizEnd
+
+Line~29-39 는 offline 이 되는 CPU 의 모든 RCU 콜백들을 현재 돌아가는 CPU 로
+옮깁니다.
+이 작업은 옮겨지는 콜백들의 순서를 재배치 하는걸 막아야 하는데, 그러지 않는다면
+\co{rcu_barrier()} 가 올바르게 동작하지 못할 것이기 때문입니다.
+Line~29 는 현재 동작 중인 CPU 의 \co{rcu_data} 구조체로의 포인터를 로컬 변수
+\co{rdp_me} 로 가져옵니다.
+Line~30 은 이어서 offline 이 되는 CPU 가 어떤 RCU 콜백들을 가지고 있는지 체크해
+봅니다.
+만약 그렇다면, line~31-38 에서 그것들을 옮깁니다.
+Line~31 은 콜백들의 리스트를 수행중인 CPU 의 리스트의 끝에 이어붙입니다.
+Line~32-33 은 수행중인 CPU 의 콜백 tail 포인터를 offline 이 되는 CPU 의
+그것으로 바꿔치기하고, 이어서 line~34-36 에서 offline 이 되는 CPU 의 리스트를
+텅비도록 초기화 합니다.
+Line~37 은 offline 이 되는 CPU 의 콜백 리스트의 길이를 현재 수행중인 CPU 의
+그것에 더하고, 마지막으로 line~38 에서 offline 이 되는 CPU 의 리스트의 길이를
+0으로 설정합니다.
+\iffalse
 
 Lines~29-39 move any RCU callbacks from the CPU going offline to the
 currently running CPU.
@@ -3329,8 +3467,18 @@ CPU's list to be empty.
 Line~37 adds the length of the going-offline CPU's callback list to
 that of the currently running CPU, and, finally, line~38 zeroes the
 going-offline CPU's list length.
+\fi
 
 \QuickQuiz{}
+	하지만
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
+	의 이 리스트 이동은 모든 offline 이 되는 CPU 의 콜백들이 설령 호출될
+	준비가 되어 있는 상태였을지라도 다른 grace period 로 가도록 만듭니다.
+	이건 비효율적이지 않나요?
+	뿐만 아니라, offline 이 되고는 online 으로 돌아오는 CPU 들의 불행한
+	패턴은 특정 콜백이 영원히 호출되지 않게 할 수 있지 않나요?
+	\iffalse
+
 	But this list movement in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-offline-cpu}
 	makes all of the going-offline CPU's callbacks go through
@@ -3339,15 +3487,28 @@ going-offline CPU's list length.
 	Furthermore, couldn't an unfortunate pattern of CPUs going
 	offline then coming back online prevent a given callback from
 	ever being invoked?
+	\fi
 \QuickQuizAnswer{
+	비효율적이지만, 간단합니다.
+	이게 흔히 수행되는 코드 경로가 아니란 점을 놓고 보면, 이건 괜찮은
+	트레이드오프입니다.
+	Starvation 문제는 문제가 될 수 있겠지만, online 과 offline 과정이 여러
+	grace period 에 관여되는 경우엔 예외일 겁니다.
+	\iffalse
+
 	It is inefficient, but it is simple.
 	Given that this is not a commonly executed code path, this
 	is the right tradeoff.
 	The starvation case would be a concern, except that the
 	online and offline process involves multiple grace periods.
+	\fi
 } \QuickQuizEnd
 
+마지막으로, line~40 은 irq 들을 재활성화 시킵니다.
+\iffalse
+
 Finally, line~40 re-enables irqs.
+\fi
 
 \subsection{Miscellaneous Functions}
 \label{app:rcuimpl:rcutreewt:Miscellaneous Functions}
