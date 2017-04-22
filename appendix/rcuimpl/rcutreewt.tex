@@ -3080,6 +3080,26 @@ online.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-online-cpu}
+는 RCU 에게 특정 CPU 가 online 이 되는 것을 알리는 \co{rcu_online_cpu()} 의
+코드를 보이고 있습니다.
+
+Dynticks (\co{CONFIG_NO_HZ}) 가 활성화 되어 있으면, line~6 는 명시된 CPU 의
+\co{rcu_dynticks} 구조체로의 레퍼런스를 얻어오는데, 이 구조체는 RCU 의 ``rcu''
+와 ``rcu\_bh'' 구현 사이에 공유됩니다.
+Line~7 은 \co{->dynticks_nesting} 필드의 값을 1로 설정해서 새로 online 이 되는
+CPU 가 dynticks-idle 모드에 있지 않다는 사실을 반영시킵니다 (다시 말하건대
+\co{->dynticks_nesting} 필드는 연관된 CPU 가 RCU read-side 크리티컬 섹션들을
+추적해야 하는 필요의 이유들의 수를 추적하며, 이 경우에는 process-level 코드를
+수행할 수 있기 때문입니다).
+Line~8 은 \co{->dynticks} 필드는 홀수의 값으로 강제하는데, 이 값은 최소한
+기존에 online 이었을 때의 마지막 값만큼은 커야 하는데, 역시 새로 online 이 된
+CPU 들이 dynticks-idle 모드에 있지 않다는 사실을 반영하는 것이며, line~9 는
+\co{->dynticks_nmi} 필드를 짝수의 값으로 강제하는데, 이 값은 기존에 online
+이었을 때 가졌던 마지막 값만큼은 큰 값으로, 이 CPU 가 현재 NMI 핸들러 안에서
+실행되고 있다는 사실을 반영합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-online-cpu}
 shows the code for \co{rcu_online_cpu()}, which informs RCU that the
 specified CPU is coming online.
 
@@ -3099,6 +3119,14 @@ mode, and line~9 forces the \co{->dynticks_nmi} field to an even value
 that is at least as large as the last value it had when previously
 online, reflecting the fact that this CPU is not currently executing
 in an NMI handler.
+\fi
+
+Line~11-13 은 \co{CONFIG_NO_HZ} 커널 패러미터의 값과 관계 없이 수행됩니다.
+Line~11 은 명시된 CPU 의 ``rcu'' 를 위한 \co{rcu_data} 구조체를 초기화 하며,
+line~12 는 ``rcu\_bh'' 를 위해 같은 일을 행합니다.
+마지막으로, line~13 은 이 CPU 의 뒤따르는 \co{raise_softirq()} 호출에 의해
+\co{rcu_process_callbacks()} 가 호출되도록 등록합니다.
+\iffalse
 
 Lines~11-13 are executed regardless of the value of the
 \co{CONFIG_NO_HZ} kernel parameter.
@@ -3106,6 +3134,7 @@ Line~11 initializes the specified CPU's \co{rcu_data} structure
 for ``rcu'', and line~12 does so for ``rcu\_bh''.
 Finally, line~13 registers the \co{rcu_process_callbacks()} to be
 invoked by subsequent \co{raise_softirq()} invocations on this CPU.
+\fi
 
 \subsubsection{\tt rcu\_offline\_cpu()}
 \label{app:rcuimpl:rcutreewt:rcu-offline-cpu}
