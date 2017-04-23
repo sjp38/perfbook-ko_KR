@@ -882,7 +882,7 @@ CPUs' accesses are to one single variable.
 In this single-variable case, cache coherence guarantees the
 global ordering, at least assuming that some of the more aggressive
 compiler optimizations are disabled via the Linux kernel's
-\co{ACCESS_ONCE()} directive or C++11's relaxed
+\co{READ_ONCE()} and \co{WRITE_ONCE()} directives or C++11's relaxed
 atomics~\cite{PeteBecker2011N3242}.
 In contrast, if there are multiple variables, memory barriers are
 required for the CPUs to consistently agree on the order for current
@@ -931,11 +931,11 @@ on this weaker if-then conditional ordering guarantee.
 \tt
 \scriptsize
 \begin{tabular}{l|l}
-	\nf{CPU 1} &		\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	access(A);	&	access(B); \\
-	\tco{smp_mb();}	&	\tco{smp_mb();} \\
-	access(B);	&	access(A); \\
+	<access> A	& <access> B \\
+	<memory barrier>& <memory barrier> \\
+	<access> B	& <access> A \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -1060,11 +1060,11 @@ pairings that portable software may depend on.
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		\nf{CPU 1} &		\nf{CPU 2} \\
+		\nf{CPU 1}	& \nf{CPU 2} \\
 		\hline
-		A=1;		&	Y=B; \\
-		\tco{smp_mb();}	&	\tco{smp_mb();} \\
-		B=1;		&	X=A; \\
+		STORE A = 1	& Y = LOAD B \\
+		<memory barrier>& <memory barrier> \\
+		STORE B = 1	& X = LOAD A \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1110,11 +1110,11 @@ pairings that portable software may depend on.
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		\nf{CPU 1} &		\nf{CPU 2} \\
+		\nf{CPU 1}	& \nf{CPU 2} \\
 		\hline
-		X=A;            &	Y=B; \\
-		\tco{smp_mb();}	&	\tco{smp_mb();} \\
-		B=1;            &	A=1; \\
+		X = LOAD A	& Y = LOAD B \\
+		<memory barrier>& <memory barrier> \\
+		STORE B = 1	& STORE A = 1 \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1169,11 +1169,11 @@ pairings that portable software may depend on.
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		\nf{CPU 1} &		\nf{CPU 2} \\
+		\nf{CPU 1}	& \nf{CPU 2} \\
 		\hline
-		X=A;		&	B=2; \\
-		\tco{smp_mb();}	&	\tco{smp_mb();} \\
-		B=1;		&	A=1; \\
+		X = LOAD A	& STORE B = 2 \\
+		<memory barrier>& <memory barrier> \\
+		STORE B = 1	& STORE A = 1 \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1263,9 +1263,19 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	The scenario is as follows, with~A and~B both initially zero:
 	\fi
 
-	CPU~0: A=1; \co{smp_mb()}; r1=B;
-
-	CPU~1: B=1; \co{smp_mb()}; r2=A;
+	\vspace{5pt}
+	\begin{minipage}[t]{\columnwidth}
+	\tt
+	\scriptsize
+	\begin{tabular}{l|l}
+		\nf{CPU 0}	& \nf{CPU 1} \\
+		\hline
+		STORE A = 1	& STORE B = 1 \\
+		<memory barrier>& <memory barrier> \\
+		r1 = LOAD B	& r2 = LOAD A \\
+	\end{tabular}
+	\end{minipage}
+	\vspace{5pt}
 
 	두 로드 모두 관련된 스토어를 보지 못한다면, 두 CPU 들이 모두 실행을
 	마쳤을 때, \co{r1} 과 \co{r2} 둘 다 0일 겁니다.
@@ -1313,11 +1323,11 @@ keep in mind that they used to be a \emph{lot} harder on some systems!
 	\tt
 	\scriptsize
 	\begin{tabular}{l|l}
-		\nf{CPU 1} &		\nf{CPU 2} \\
+		\nf{CPU 1}	& \nf{CPU 2} \\
 		\hline
-		A=1;		&	B=2; \\
-		\tco{smp_mb();}	&	\tco{smp_mb();} \\
-		B=1;		&	A=2; \\
+		STORE A = 1	& STORE B = 2 \\
+		<memory barrier>& <memory barrier> \\
+		STORE B = 1	& STORE A = 2 \\
 	\end{tabular}
 	\end{minipage}
 	\vspace{5pt}
@@ -1809,16 +1819,16 @@ the sequence of operations might be as follows:
 \begin{minipage}[t]{\columnwidth}
 \tt \scriptsize
 \begin{tabular}{l|l}
-	\nf{CPU 1} &		\nf{CPU 2} \\
+	\nf{CPU 1}		& \nf{CPU 2} \\
 	\hline
-	(critical section) &	\tco{atomic_xchg(&lck->a, 1)->1} \\
-	\tco{smp_mb();}    &	lck->a->1 \\
-	lck->a=0;	   &	lck->a->1 \\
-	&			lck->a->0 \\
-	&			(implicit \tco{smp_mb()} 1) \\
-	&			\tco{atomic_xchg(&lck->a, 1)->0} \\
-	&			(implicit \tco{smp_mb()} 2) \\
-	&			(critical section) \\
+	(critical section)	& \tco{atomic_xchg(&lck->a, 1)} $\rightarrow$1 \\
+	<memory barrier>	& LOAD lck->a $\rightarrow$1 \\
+	STORE lck->a = 0	& LOAD lck->a $\rightarrow$1 \\
+				& LOAD lck->a $\rightarrow$0 \\
+				& (implicit memory barrier \#1) \\
+				& \tco{atomic_xchg(&lck->a, 1)} $\rightarrow$0 \\
+				& (implicit memory barrier \#2) \\
+				& (critical section) \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -1977,7 +1987,7 @@ interface between the CPU and rest of the system (the dotted lines).
 
 
 For example, consider the following sequence of events given the
-initial values {\tt \{A~=~1, B~=~2\}}:
+initial values of shared variables {\tt \{A~=~1, B~=~2\}}:
 \fi
 
 \vspace{5pt}
@@ -1987,8 +1997,8 @@ initial values {\tt \{A~=~1, B~=~2\}}:
 \begin{tabular}{l|l}
 	\nf{CPU 1} &	\nf{CPU 2} \\
 	\hline
-	A = 3; &	x = A; \\
-	B = 4; &	y = B; \\
+	STORE A = 3 &	x = LOAD B \\
+	STORE B = 4 &	y = LOAD A \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -2007,23 +2017,23 @@ denoted by ``st'':
 \tt
 \scriptsize
 \begin{tabular}{llll}
-	st A=3, & st B=4, & x=ld A$\rightarrow$3, & y=ld B$\rightarrow$4 \\
-	st A=3, & st B=4, & y=ld B$\rightarrow$4, & x=ld A$\rightarrow$3 \\
-	st A=3, & x=ld A$\rightarrow$3, & st B=4, & y=ld B$\rightarrow$4 \\
-	st A=3, & x=ld A$\rightarrow$3, & y=ld B$\rightarrow$2, & st B=4 \\
-	st A=3, & y=ld B$\rightarrow$2, & st B=4, & x=ld A$\rightarrow$3 \\
-	st A=3, & y=ld B$\rightarrow$2, & x=ld A$\rightarrow$3, & st B=4 \\
-	st B=4, & st A=3, & x=ld A$\rightarrow$3, & y=ld B$\rightarrow$4 \\
+	st A=3, & st B=4, & x=ld B$\rightarrow$3, & y=ld A$\rightarrow$4 \\
+	st A=3, & st B=4, & y=ld A$\rightarrow$4, & x=ld B$\rightarrow$3 \\
+	st A=3, & x=ld B$\rightarrow$3, & st B=4, & y=ld A$\rightarrow$4 \\
+	st A=3, & x=ld B$\rightarrow$3, & y=ld A$\rightarrow$2, & st B=4 \\
+	st A=3, & y=ld A$\rightarrow$2, & st B=4, & x=ld B$\rightarrow$3 \\
+	st A=3, & y=ld A$\rightarrow$2, & x=ld B$\rightarrow$3, & st B=4 \\
+	st B=4, & st A=3, & x=ld B$\rightarrow$3, & y=ld A$\rightarrow$4 \\
 	st B=4, & ... & & \\
 	... & & & \\
 \end{tabular}
+\vspace{3pt}
 \end{minipage}
-\vspace{5pt}
-
+%
 따라서 수행 결과로 다음과 같이 네개의 서로 다른 값 조합이 만들어질 수 있습니다:
 \iffalse
 
-and can thus result in four different combinations of values:
+and can thus result in four different combinations of local values:
 \fi
 
 \vspace{5pt}
@@ -2031,10 +2041,10 @@ and can thus result in four different combinations of values:
 \tt
 \scriptsize
 \begin{tabular}{ll}
-	x == 1, & y == 2 \\
-	x == 1, & y == 4 \\
-	x == 3, & y == 2 \\
-	x == 3, & y == 4 \\
+	x == 2, & y == 1 \\
+	x == 2, & y == 3 \\
+	x == 4, & y == 1 \\
+	x == 4, & y == 3 \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -2052,7 +2062,8 @@ perceived by the loads made by another CPU in the same order as the stores were
 committed.
 
 As a further example, consider this sequence of events given the
-initial values {\tt \{A~=~1, B~=~2, C~=~3, P~=~\&A, Q~=~\&C\}}:
+initial values of shared variables
+{\tt \{A~=~1, B~=~2, C~=~3, P~=~\&A, Q~=~\&C\}}:
 \fi
 
 \vspace{5pt}
@@ -2060,10 +2071,10 @@ initial values {\tt \{A~=~1, B~=~2, C~=~3, P~=~\&A, Q~=~\&C\}}:
 \tt
 \scriptsize
 \begin{tabular}{l|l}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	B = 4; &	Q = P; \\
-	P = \&B &	D = *Q; \\
+	STORE B = 4	& Q = LOAD P \\
+	STORE P = \&B	& D = LOAD *Q \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -2097,7 +2108,15 @@ CPU~2 는 *Q 의 로드를 요청하기 전에 P 를 Q 에 할당할 것이므�
 \iffalse
 
 Note that CPU~2 will never try and load~C into~D because the CPU will load~P
-into~Q before issuing the load of~*Q.
+into~Q before issuing the load of~*Q.\footnote{Although it might sound
+	counterintuitive, one of the results,
+	{\tt\scriptsize (Q~==~\&B) and (D~==~2)},
+	does not necessarily mean that CPU~1's
+	{\tt\scriptsize STORE B~=~4} was issued
+	{\em after} {\tt\scriptsize STORE P~=~\&B}.
+	To reach a consensus in ordering, we need a pair of memory barriers
+	as is described in
+	Section~\ref{sec:advsync:Data Dependency Barriers}.}
 \fi
 
 \subsection{Device Operations}
@@ -2114,20 +2133,20 @@ Some devices present their control interfaces as collections of memory
 locations, but the order in which the control registers are accessed is very
 important.  For instance, imagine an Ethernet card with a set of internal
 registers that are accessed through an address port register~(A) and a data
-port register~(D).  To read internal register~5, the following code might then
-be used:
+port register~(D).  To read internal register~5, the following code (in C)
+might then be used:
 \fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-*A = 5;
-x = *D;
+WRITE_ONCE(*A, 5);
+x = READ_ONCE(*D);
 \end{verbatim}
+\vspace{1pt}
 \end{minipage}
-\vspace{5pt}
-
+%
 하지만 이는 다음의 두 순서로 만들어질 수 있을 것입니다:
 \iffalse
 
@@ -2141,9 +2160,9 @@ but this might show up as either of the following two sequences:
 STORE *A = 5, x = LOAD *D
 x = LOAD *D, STORE *A = 5
 \end{verbatim}
+\vspace{1pt}
 \end{minipage}
-\vspace{5pt}
-
+%
 해당 레지스터를 읽은 \emph{뒤에} 그 주소를 설정하는 두번째 순서는 거의 틀림없이
 오동작을 일으킬 겁니다.
 \iffalse
@@ -2152,8 +2171,8 @@ the second of which will almost certainly result in a malfunction, since it set
 the address \emph{after} attempting to read the register.
 \fi
 
-\subsection{Guarantees}
-\label{sec:advsync:Guarantees}
+\subsection{Minimal Guarantees}
+\label{sec:advsync:Minimal Guarantees}
 
 하나의 CPU 에 대해 기대할 수 있는, 몇개의 최소한의 보장들이 있습니다:
 
@@ -2163,17 +2182,18 @@ the address \emph{after} attempting to read the register.
 	따라서, 다음의 코드에서:
 \iffalse
 
-There are some minimal guarantees that may be expected of a CPU:
+In our abstract memory model, there are some minimal guarantees of ordering
+that may be expected of a CPU without any need of memory barriers:
 
 \begin{enumerate}
 \item	On any given CPU, dependent memory accesses will be issued in order,
-	with respect to itself.  This means that for:
+	with respect to itself.  This means that for a sequence (in C):
 \fi
 
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-Q = P; D = *Q;
+Q = READ_ONCE(P); D = READ_ONCE(*Q);
 \end{verbatim}
 \end{minipage}
 
@@ -2198,7 +2218,9 @@ Q = LOAD P, D = LOAD *Q
 	따라서, 다음의 코드에서:
 \iffalse
 
-	and always in that order.
+	and always in that order.\footnote{Again, you can not assume
+		any ordering between~\co{P} and the value loaded via
+		the pointer when they are updated by another CPU.}
 
 \item	Overlapping loads and stores within a particular CPU will appear to be
 	ordered within that CPU.  This means that for:
@@ -2207,7 +2229,7 @@ Q = LOAD P, D = LOAD *Q
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-a = *X; *X = b;
+a = READ_ONCE(*X); WRITE_ONCE(*X, b);
 \end{verbatim}
 \end{minipage}
 
@@ -2234,7 +2256,7 @@ a = LOAD *X, STORE *X = b
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-*X = c; d = *X;
+WRITE_ONCE(*X, c); d = READ_ONCE(*X);
 \end{verbatim}
 \end{minipage}
 
@@ -2287,7 +2309,7 @@ And there are a number of things that \emph{must} or \emph{must not} be assumed:
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-X = *A; Y = *B; *D = Z;
+X = READ_ONCE(*A); Y = READ_ONCE(*B); WRITE_ONCE(*D, Z);
 \end{verbatim}
 \end{minipage}
 
@@ -2319,7 +2341,7 @@ STORE *D = Z,  Y = LOAD *B,  X = LOAD *A
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-X = *A; Y = *(A + 4);
+X = READ_ONCE(*A); Y = READ_ONCE(*(A + 4));
 \end{verbatim}
 \end{minipage}
 
@@ -2332,9 +2354,9 @@ X = *A; Y = *(A + 4);
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-X = LOAD *A; Y = LOAD *(A + 4);
-Y = LOAD *(A + 4); X = LOAD *A;
-{X, Y} = LOAD {*A, *(A + 4) };
+X = LOAD *A, Y = LOAD *(A + 4)
+Y = LOAD *(A + 4), X = LOAD *A
+{X, Y} = LOAD {*A, *(A + 4) }
 \end{verbatim}
 \vspace{1pt}
 \end{minipage}
@@ -2348,7 +2370,7 @@ Y = LOAD *(A + 4); X = LOAD *A;
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-*A = X; *(A + 4) = Y;
+WRITE_ONCE(*A, X); WRITE_ONCE(*(A + 4), Y);
 \end{verbatim}
 \end{minipage}
 
@@ -2360,9 +2382,9 @@ Y = LOAD *(A + 4); X = LOAD *A;
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-STORE *A = X; STORE *(A + 4) = Y;
-STORE *(A + 4) = Y; STORE *A = X;
-STORE {*A, *(A + 4) } = {X, Y};
+STORE *A = X, STORE *(A + 4) = Y
+STORE *(A + 4) = Y, STORE *A = X
+STORE {*A, *(A + 4) } = {X, Y}
 \end{verbatim}
 \vspace{1pt}
 \end{minipage}
@@ -2376,7 +2398,7 @@ STORE {*A, *(A + 4) } = {X, Y};
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-*A = X; *A = Y;
+WRITE_ONCE(*A, X); WRITE_ONCE(*A, Y);
 \end{verbatim}
 \end{minipage}
 
@@ -2389,8 +2411,8 @@ STORE {*A, *(A + 4) } = {X, Y};
 \begin{minipage}[t]{\columnwidth}
 \scriptsize
 \begin{verbatim}
-STORE *A = X; STORE *A = Y;
-STORE *A = Y;
+STORE *A = X, STORE *A = Y
+STORE *A = Y
 \end{verbatim}
 \end{minipage}
 
@@ -2722,8 +2744,8 @@ Section~\ref{sec:advsync:Device Operations}).
 	\begin{minipage}[t]{\columnwidth}
 	\small
 	\begin{verbatim}
-	a = 1;
-	b = 1;
+	STORE a = 1
+	STORE b = 1
 	<write barrier>
 	\end{verbatim}
 	\end{minipage}
@@ -2813,7 +2835,8 @@ of the confines of a given architecture:
 
 The usage requirements of data dependency barriers are a little subtle, and
 it's not always obvious that they're needed.  To illustrate, consider the
-following sequence of events, with initial values
+following sequence of events (in pseudo asm), with initial values of shared
+variables
 {\tt \{A~=~1, B~=~2, C~=~3, P~=~\&A, Q~=~\&C\}}:
 \fi
 
@@ -2822,13 +2845,13 @@ following sequence of events, with initial values
 \tt
 \scriptsize
 \begin{tabular}{l|l}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	B = 4; & \\
-	<write barrier> & \\
-	P = \&B; &	\\
-		&	Q = P; \\
-		&	D = *Q; \\
+	STORE B = 4	& \\
+	<write barrier>	& \\
+	STORE P = \&B	& \\
+			& Q = LOAD P \\
+			& D = LOAD *Q \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -2895,14 +2918,14 @@ address load and the data load (again with initial values of
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	B = 4; & \\
-	<write barrier> & \\
-	P = \&B; &	\\
-		&	Q = P; \\
-		&	<data dependency barrier> \\
-		&	D = *Q; \\
+	STORE B = 4	& \\
+	<write barrier>	& \\
+	STORE P = \&B	& \\
+			& Q = LOAD P \\
+			& <data dependency barrier> \\
+			& D = LOAD *Q \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3431,14 +3454,14 @@ write barrier, though, again, a general barrier is viable:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	A = 1; & \\
-	<write barrier> & \\
-	B = 2;	&	\\
-		&	X = B; \\
-		&	<read barrier> \\
-		&	Y = A; \\
+	STORE A = 1	& \\
+	<write barrier>	& \\
+	STORE B = 2	& \\
+			& X = LOAD B \\
+			& <read barrier> \\
+			& Y = LOAD A \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3450,14 +3473,14 @@ Or:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	A = 1; & \\
-	<write barrier> & \\
-	B = \&A; &	\\
-		&	X = B; \\
-		&	<data dependency barrier> \\
-		&	Y = *X; \\
+	STORE A = 1	& \\
+	<write barrier>	& \\
+	STORE B = \&A	& \\
+			& X = LOAD B \\
+			& <data dependency barrier> \\
+			& Y = LOAD *X \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3552,14 +3575,14 @@ loads.  Consider the following sequence of events with initial values
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	A = 1; & \\
-	B = 2; & \\
-	<write barrier> & \\
-	C = \&B; & 	LOAD X\\
-	D = 4;	&	LOAD C \nf{(gets \tco{&B})} \\
-		&	LOAD *C \nf{(reads \tco{B})} \\
+	STORE A = 1	& \\
+	STORE B = 2	& \\
+	<write barrier>	& \\
+	STORE C = \&B	& LOAD X\\
+	STORE D = 4	& LOAD C \nf{(gets \tco{&B})} \\
+			& LOAD *C \nf{(reads \tco{B})} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3604,15 +3627,15 @@ values of {\tt \{B~=~7, X~=~9, Y~=~8, C~=~\&Y\}}:
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	A = 1; & \\
-	B = 2; & \\
-	<write barrier> & \\
-	C = \&B; & 	LOAD X\\
-	D = 4;	&	LOAD C \nf{(gets \tco{&B})} \\
-		&	<data dependency barrier> \\
-		&	LOAD *C \nf{(reads \tco{B})} \\
+	STORE A = 1	& \\
+	STORE B = 2	& \\
+	<write barrier>	& \\
+	STORE C = \&B	& LOAD X\\
+	STORE D = 4	& LOAD C \nf{(gets \tco{&B})} \\
+			& <data dependency barrier> \\
+			& LOAD *C \nf{(reads \tco{B})} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3647,13 +3670,13 @@ following sequence of events, with initial values
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	A = 1; & \\
-	<write barrier> & \\
-	B = 2; & \\
-		&	LOAD B \\
-		&	LOAD A \\
+	STORE A = 1	& \\
+	<write barrier>	& \\
+	STORE B = 2	& \\
+			& LOAD B \\
+			& LOAD A \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3689,14 +3712,14 @@ and the load of~\co{A} on CPU~2, again with initial values of
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	A = 1; & \\
-	<write barrier> & \\
-	B = 2; & \\
-		&	LOAD B \\
-		&	<read barrier> \\
-		&	LOAD A \\
+	STORE A = 1	& \\
+	<write barrier>	& \\
+	STORE B = 2	& \\
+			& LOAD B \\
+			& <read barrier> \\
+			& LOAD A \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
@@ -3733,15 +3756,15 @@ with the same initial values of
 \tt
 \scriptsize
 \begin{tabular}{l|p{1.5in}}
-	\nf{CPU 1} &	\nf{CPU 2} \\
+	\nf{CPU 1}	& \nf{CPU 2} \\
 	\hline
-	A = 1; & \\
-	<write barrier> & \\
-	B = 2; & \\
-		&	LOAD B \\
-		&	LOAD A \nf{(1\textsuperscript{st})} \\
-		&	<read barrier> \\
-		&	LOAD A \nf{(2\textsuperscript{nd})} \\
+	STORE A = 1	& \\
+	<write barrier>	& \\
+	STORE B = 2	& \\
+			& LOAD B \\
+			& LOAD A \nf{(1\textsuperscript{st})} \\
+			& <read barrier> \\
+			& LOAD A \nf{(2\textsuperscript{nd})} \\
 \end{tabular}
 \end{minipage}
 \vspace{5pt}
