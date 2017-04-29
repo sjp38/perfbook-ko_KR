@@ -3937,6 +3937,17 @@ field.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}
+는 새로운 grace period 를 시작하고, 호출자에 의해 획득되어져 있어야만 하는 root
+\co{rcu_node} 구조체의 락을 해제하는 \co{rcu_start_gp()} 함수를 보입니다.
+
+Line~3 는 \co{sparse} 도구를 위한 주석으로, \co{rcu_start_gp()} 가 root
+\co{rcu_node} 구조체의 락을 해제한다는 것을 알립니다.
+지역변수 \co{rdp} 는 수행중인 CPU 의 \co{rcu_data} 구조체를 가리키고, \co{rnp}
+는 root \co{rcu_node} 구조체를 가리키며, \co{rnp_cur} 와 \co{rnp_end} 는
+\co{rcu_node} 계층을 횡단하느데에 커서로 사용됩니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}
 shows \co{rcu_start_gp()}, which starts a new grace period,
 also releasing the root \co{rcu_node} structure's lock, which
 must be acquired by the caller.
@@ -3948,6 +3959,19 @@ Local variable \co{rdp} references the running CPU's \co{rcu_data}
 structure, \co{rnp} references the root \co{rcu_node} structure,
 and \co{rnp_cur} and \co{rnp_end} are used as cursors in traversing
 the \co{rcu_node} hierarchy.
+\fi
+
+Line~10 은 이 CPU 가 정말로 또다른 grace period 를 시작할 필요가 있는지
+알아보고, 만약 그렇지 않다면 line~11 에서 root \co{rcu_node} 구조체의 락을
+해제하고 line~12 에서 리턴합니다.
+이 코드 경로는 여러 CPU 들이 동시에 grace period 를 시작하려 시도해서 실행될
+수도 있습니다.
+이 경우에, 승리자인 하나의 CPU 만이 grace period 를 시작하고, 나머지들은 이
+코드 경로를 통해 빠져나갑니다.
+
+그렇지 않다면, line~14 에서 명시된 \co{rcu_state} 구조체의 \co{->gpnum} 필드의
+값을 증가시켜서 새로운 grace period 의 시작을 공식적으로 표시합니다.
+\iffalse
 
 Line~10 invokes \co{cpu_needs_another_gp()} to see if this CPU really
 needs another grace period to be started, and if not, line~11
@@ -3960,14 +3984,33 @@ will exit out via this code path.
 Otherwise, line~14 increments the specified \co{rcu_state} structure's
 \co{->gpnum} field, officially marking the start of a new grace
 period.
+\fi
 
 \QuickQuiz{}
+	하지만
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}
+	의 line~15 까지는 초기화가 없었어요!
+	만약 CPU 가 새로운 grace period 를 알게 되었지만 곧바로 quiescent state
+	를 보고하려 하면 어떻게 되죠?
+	이러면 좀 혼란스러워지지 않을까요?
+	\iffalse
+
 	But there has been no initialization yet at line~15 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}!
 	What happens if a CPU notices the new grace period and
 	immediately attempts to report a quiescent state?
 	Won't it get confused?
+	\fi
 \QuickQuizAnswer{
+	두가지 흥미로운 경우가 있습니다.
+
+	첫번째 경우는, 계층상에 하나의 \co{rcu_node} 구조체만 있는 경우입니다.
+	\co{rcu_start_gp()} 에서 수행중인 CPU 는 현재 \co{rcu_node} 구조체의
+	락을 잡고 있으므로, quiescent state 를 보고하려 하는 CPU 는 초기화가
+	완료되기 전까지는 이 락을 잡지 못할 것이어서 평범한 시점에 quiescent
+	state 를 보고하게 될 겁니다.
+	\iffalse
+
 	There are two cases of interest.
 
 	In the first case, there is only a single \co{rcu_node}
@@ -3978,6 +4021,15 @@ period.
 	to acquire this lock until initialization is complete,
 	at which point the quiescent state will be reported
 	normally.
+	\fi
+
+	두번째 경우는 여러개의 \co{rcu_node} 구조체가 존재하고 quiescent state
+	를 보고하려고 하는 CPU 에 연관된 leaf \co{rcu_node} 구조체는 이미 해당
+	CPU 의 \co{->qsmask} bit 의 값이 0으로 설정되어 있는 경우입니다.
+	따라서, 이 quiescent state 를 보고하려 하는 CPU 는 포기를 할 것이고,
+	해당 CPU 의 나중의 quiescent state 가 새로운 grace period 에 적용될
+	겁니다.
+	\iffalse
 
 	In the second case, there are multiple \co{rcu_node} structures,
 	and the leaf \co{rcu_node} structure corresponding to the
@@ -3986,7 +4038,23 @@ period.
 	Therefore, the CPU attempting to report the quiescent state
 	will give up, and some later quiescent state for that CPU
 	will be applied to the new grace period.
+	\fi
 } \QuickQuizEnd
+
+Line~15 는 다른 CPU 가 이 새로운 grace period 에 그 초기화가 완료되기 전에
+종룔르 강제하는 것을 막기 위해 \co{->signaled} 필드를 \co{RCU_GP_INIT} 으로
+설정합니다.
+Line~16-18 은 이 새로운 grace period 에 종료를 강제할 다음 시도를 위한 스케쥴을
+잡는데, 첫번째는 jiffies 단위로 그리고 두번째는 \co{rcu_pending} 호출의 횟수
+단위로 입니다.
+물론, 만약 그 시간 전에 이 grace period 가 자연스럽게 종료된다면, 그런 종료를
+강제할 시도를 할 필요가 없어집니다.
+Line~20 은 더 긴 단위의 진행 체크를 위한 스케쥴을 위해
+\co{record_gp_stall_check_time()} 을 호출합니다---만약 이 grace period 가 이
+시간 뒤로까지 연장된다면, 이는 에러로 취급될 겁니다.
+Line~22 는 이 CPU 의 \co{rcu_data} 구조체가 새로운 grace period 를 관리하도록
+초기화 하기 위해 \co{note_new_gpnum()} 을 호출합니다.
+\iffalse
 
 Line~15 sets the \co{->signaled} field to \co{RCU_GP_INIT} in order
 to prevent any other CPU from attempting to force an end to the new
@@ -4001,6 +4069,19 @@ longer-term progress check---if the grace period extends beyond this
 time, it should be considered to be an error.
 Line~22 invokes \co{note_new_gpnum()} in order to initialize this
 CPU's \co{rcu_data} structure to account for the new grace period.
+\fi
+
+Line~23-26 은 이 CPU 의 모든 콜백들을 진행시켜서 이 새로운 grace period 의 종료
+시에 모두 호출될 수 있게 만듭니다.
+이는 콜백들의 가속화를 표시하는데, 다른 CPU 들은 \co{RCU_NEXT_READY_TAIL}
+배치만을 옮겨서 현재 grace period 에 의해 처리될 수 있게 합니다;
+\co{RCU_NEXT_TAIL} 은 그대신에 \co{RCU_NEXT_READY_TAIL} 배치로 진척되어야 할
+필요가 있을 겁니다.
+이 CPU 가 \co{RCU_NEXT_TAIL} 배치를 진척시킬 수 있는 이유는 이 CPU 가 정확히
+언제 이 새로운 grace period 가 시작되는지 알기 때문입니다.
+반면에, 다른 CPU 들은 새로운 grace period 의 시작과 새로운 RCU z콜백의 도착
+사이의 race 를 올바르게 해결할 수 없을 겁니다.
+\iffalse
 
 Lines~23-26 advance all of this CPU's callbacks so that they will
 be eligible to be invoked at the end of this new grace period.
@@ -4013,6 +4094,22 @@ is that it knows exactly when this new grace period started.
 In contrast, other CPUs would be unable to correctly resolve the
 race between the start of a new grace period and the arrival of
 a new RCU callback.
+\fi
+
+Line~27 은 계층 상에 하나의 \co{rcu_node} 구조체만이 존재하는지 체크해보고,
+만약 그렇다면 line~28 에서 \co{->qsmask} bit 들을 연관된 모든 online CPU 들,
+달리 말하자면 새로운 grace period 가 종료되기 위해서는 quiescent state 를
+지나야 하는 모든 CPU 들로 설정합니다.
+Line~29 는 root \co{rcu_node} 구조체의 락을 해제하고 line~30 에서 리턴합니다.
+이 경우, gcc 의 dead-code elimination 이 line~32-46 에 제공될 것입니다.
+
+그렇지 않다면, \co{rcu_node} 계층은 여러 구조체를 가지고 있어서 더 관여된
+초기화 계획을 필요로 합니다.
+Line~32 는 root \co{rcu_node} 구조체의 락을 해제하지만, 인터럽트가 비활성화
+된채로 유지하고, 이어서 line~33 에서 명시된 \co{rcu_state} 구조체의
+\co{->onofflock} 을 획득하여서 다른 동시에 수행중인 CPU-hotplug 오퍼레이션들이
+RCU 에 관계된 state 를 조정하는 것을 막습니다.
+\iffalse
 
 Line~27 checks to see if there is but one \co{rcu_node} structure in
 the hierarchy, and if so, line~28 sets the \co{->qsmask}
@@ -4030,6 +4127,18 @@ Line~32 releases the root \co{rcu_node} structure's lock, but keeps
 interrupts disabled, and then line~33 acquires the specified
 \co{rcu_state} structure's \co{->onofflock}, preventing any
 concurrent CPU-hotplug operations from manipulating RCU-specific state.
+\fi
+
+Line~34 는 \co{rnp_end} 지역변수가 첫번째 leaf \co{rcu_node} 구조체를
+가리키도록 설정하는데, 이 구조체는 \co{->node} 배열에서 마지막 non-leaf
+\co{rcu_node} 구조체를 곧바로 뒤따르는 \co{rcu_node} 구조체가 될수도 있습니다.
+Line~35 는 \co{rnp_cur} 지역 변수가 root \co{rcu_node} 구조체를 가리키도록
+만드는데, 이 구조체는 \co{->node} 배열의 첫번째 구조체가 될수도 있습니다.
+Line~36 과 37 d은 이어서 모든 non-leaf \co{rcu_node} 구조체들을 횡단하며, 이
+새로운 grace period 가 종료되기 위해서는 quiescent state 들을 지나가야만 하는
+CPU 들을 갖는 더 낮은 단계의 \co{rcu_node} 구조체들에 연관된 bit 들을
+설정합니다.
+\iffalse
 
 Line~34 sets the \co{rnp_end} local variable to reference the first
 leaf \co{rcu_node} structure, which also happens to be the
@@ -4042,16 +4151,47 @@ Lines~36 and 37 then traverse all of the non-leaf \co{rcu_node} structures,
 setting the bits corresponding to lower-level \co{rcu_node} structures
 that have CPUs that must pass through quiescent states in order for
 the new grace period to end.
+\fi
 
 \QuickQuiz{}
+	이봐요!
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}
+	의 line~37 의 non-leaf \co{rcu_node} 구조체의 상태 분배 시에 그 락들을
+	잡아야 하지 않나요???
+	\iffalse
+
 	Hey!
 	Shouldn't we hold the non-leaf \co{rcu_node} structures'
 	locks when munging their state in line~37 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}???
+	\fi
 \QuickQuizAnswer{
+	그 락들을 잡을 필요가 없습니다.
+	그 이유는 다음과 같습니다:
+	\iffalse
+
 	There is no need to hold their locks.
 	The reasoning is as follows:
+	\fi
 	\begin{enumerate}
+	\item	이 새로운 grace period 는 끝날 수 없는데, 이 수행중인 CPU
+		(초기화를 하고 있는) 는 quiescent state 를 지나지 않을 것이기
+		때문입니다.
+		따라서, 또다른 \co{rcu_start_gp()} 호출과의 race 는 없습니다.
+	\item	이 수행중인 CPU 는 \co{->onofflock} 을 잡으므로, CPU-hotplug
+		오퍼레이션과의 race 는 없습니다.
+	\item	이 leaf \co{rcu_node} 구조체들은 아직 초기화 되지 않았고,
+		따라서 이것들은 각자의 \co{->qsmask} bit 들이 값 해제되어
+		있습니다.
+		이 말은 quiescent state 를 보고하려 하는 모든 다른 CPU 들은
+		leaf 단계에서 멈춰서 있게 될 것이고, 따라서 현재의 CPU 와
+		non-leaf \co{rcu_node} 구조체들에서 race 를 겪지 않게 될것을
+		의미합니다.
+	\item	\co{rcu_node} 구조체들에 RCU tracing 함수들이 접근하긴 하지만,
+		수정하진 않습니다.
+		이 함수들과의 race 들은 따라서 무해합니다.
+	\iffalse
+
 	\item	The new grace period cannot end, because the running CPU
 		(which is initializing it) won't pass through a
 		quiescent state.
@@ -4068,8 +4208,19 @@ the new grace period to end.
 	\item	The RCU tracing functions access, but do not modify,
 		the \co{rcu_node} structures' fields.
 		Races with these functions is therefore harmless.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
+
+Line~38 은 지역 변수 \co{rnp_end} 를 마지막 leaf \co{rcu_node} 구조체로
+설정하고, line~39 는 지역 변수 \co{rnp_cur} 가 첫번째 leaf \co{rcu_node}
+구조체를 가리키도록 해서 line~40-44 의 루프가 \co{rcu_node} 계층의 모든 leaf
+들을 횡단하도록 만듭니다.
+이 루프의 각 단계마다 line~41 은 현재 leaf \co{rcu_node} 구조체의 락을 잡고,
+line~42 는 (이 새로운 grace period 가 종료될 수 있기 전에 quiescent state 를
+지나가야 만 하는) online CPU 들에 연관된 bit 들을 설정하고, line~43 에서 이
+락을 놓습니다.
+\iffalse
 
 Line~38 sets local variable \co{rnp_end} to one past the last leaf
 \co{rcu_node} structure, and line~39 sets local variable \co{rnp_cur}
@@ -4079,12 +4230,28 @@ During each pass through this loop, line~41 acquires the current
 leaf \co{rcu_node} structure's lock, line~42 sets the bits corresponding
 to online CPUs (each of which must pass through a quiescent state
 before the new grace period can end), and line~43 releases the lock.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}
+	의 line~36-37 의 루프를 line~40-44 에 합치는 건 어떤가요?
+	\iffalse
+
 	Why can't we merge the loop spanning lines~36-37 with
 	the loop spanning lines~40-44 in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Starting a Grace Period}?
+	\fi
 \QuickQuizAnswer{
+	그렇게 할 거였다면, non-leaf \co{rcu_node} 구조체의 락을 불필요하게
+	잡게 되거나 이 루프의 매 패스마다 leaf node 인지에 대한 보기 싫은
+	체크를 해야 할 겁니다.
+	(Quiescent state 를 보고하려 시도할 CPU 들과의 race 때문에 leaf
+	\co{rcu_node} 구조체들의 락을 잡아야만 했음을 다시 말합니다.)
+
+	그러나, 매우 큰 시스템에서의 경험은 그런 병합 작업이 실제로는 하는게
+	나은 것으로 드러나게 할수도 있습니다.
+	\iffalse
+
 	If we were to do so, we would either be needlessly acquiring locks
 	for the non-leaf \co{rcu_node} structures or would need
 	ugly checks for a given node being a leaf node on each pass
@@ -4096,12 +4263,20 @@ before the new grace period can end), and line~43 releases the lock.
 	Nevertheless, it is quite possible that experience on very large
 	systems will show that such merging is in fact the right thing
 	to do.
+	\fi
 } \QuickQuizEnd
+
+이어서 line~45 는 명시된 \co{rcu_state} 구조체의 \co{->signaled} 필드를
+quiescent state 강제를 허용할 수 있도록 설정하고, line~46 에서 CPU-hotplug
+오퍼레이션들이 RCU 상태를 조정할 수 있도록 하기 위해 \co{->onofflock} 을
+해제합니다.
+\iffalse
 
 Line~45 then sets the specified \co{rcu_state} structure's \co{->signaled}
 field to permit forcing of quiescent states, and
 line~46 releases the \co{->onofflock} to permit CPU-hotplug
 operations to manipulate RCU state.
+\fi
 
 \subsubsection{Reporting Quiescent States}
 \label{app:rcuimpl:rcutreewt:Reporting Quiescent States}
