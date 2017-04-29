@@ -3807,6 +3807,27 @@ started, and zero otherwise.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Noting End of Old Grace Periods}
+는 CPU 가 하나의 grace period 가 끝났을 거라 의심할 때에 (해당 CPU 가 실제로
+grace period 를 끝냈거나 해서) 호출되는 \co{rcu_process_gp_end()} 함수가 보여져
+있습니다.
+만약 하나의 grace period 가 정말로 끝났다면, 이 함수는 현재 CPU 의 RCU 콜백들을
+진행시키는데, 이 콜백들은
+Figure~\ref{fig:app:rcuimpl:rcutree:RCU Callback List} 에 보여진 것처럼
+여러개의 tail 포인터들을 가진 singly linked list 로 관리되어집니다.
+이 여러개의 tail pointer 형태는 Lai Jiangshan 에 의해 이루어졌으며 리스트
+관리를 단순화 시킵니다~\cite{LaiJiangshan2008NewClassicAlgorithm}.
+이 그림에서, 파란 네모는 한 CPU 의 \co{rcu_data} 구조체를 나타내며, 다이어그램
+바닥의 여섯개의 하얀 네모는 여섯개의 RCU 콜백들 (\co{rcu_head} 구조체) 의
+리스트를 나타냅니다.
+이 리스트에서, 앞의 세개의 콜백들은 각자의 grace period 를 이미 지났고 따라서
+수행되어지길 기다리고 있으며, 네번째 콜백 (두번째 줄의 첫번째 것) 은 현재 grace
+period 가 완료되길 기다리고 있으며, 마지막 두개의 콜백은 다음 grace period 를
+기다리고 있습니다.
+마지막 두개의 tail pointer 들은 마지막 원소를 가리키며, 따라서 아직 특정 grace
+period 에 관계되지 않은 콜백들을 가지고 있는 마지막 sublist 는 비어있습니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Noting End of Old Grace Periods}
 shows \co{rcu_process_gp_end()}, which is invoked when a CPU suspects
 that a grace period might have ended (possibly because the CPU in question
 in fact ended the grace period).
@@ -3828,6 +3849,18 @@ next grace period.
 The last two tail pointers reference the last element, so that the
 final sublist, which would comprise callbacks that had not yet been
 associated with a specific grace period, is empty.
+\fi
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Noting End of Old Grace Periods}
+의 line~8 과 19 는 각각 인터럽트를 비활성화 / 재활성화 시킵니다.
+Line~9 는 \co{rcu_state} 구조체의 \co{->completed} 필드를 가져오고, 그걸 로컬
+변수 \co{completed_snap} 에 저장해 둡니다.
+Line~10 은 현재 CPU 가 grace period 의 끝을 알고 있지 못한지 체크해보고, 만약
+알고 있지 못하다면, line~11-16 은 이 CPU 의 RCU 콜백들을 tail 포인터들을
+조정해서 진행시킵니다.
+이어서 Line~17 은 가장 최근에 완료된 grace period 의 숫자를 \co{->completed}
+필드의 이 CPU 의 \co{rcu_data} 구조체에 기록합니다.
+\iffalse
 
 Lines~8 and 19 of
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Noting End of Old Grace Periods}
@@ -3842,6 +3875,7 @@ tail pointers.
 Line~17 then records the most recently completed grace period number
 in this CPU's \co{rcu_data} structure in the \co{->completed}
 field.
+\fi
 
 \subsubsection{Starting a Grace Period}
 \label{app:rcuimpl:rcutreewt:Starting a Grace Period}
