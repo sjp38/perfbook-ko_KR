@@ -4281,9 +4281,22 @@ operations to manipulate RCU state.
 \subsubsection{Reporting Quiescent States}
 \label{app:rcuimpl:rcutreewt:Reporting Quiescent States}
 
+이 계층적 RCU 구현은 quiescent state 들을 보고하는데에 다음의 함수들을 사용해서
+계층화된 방법을 구현합니다:
+\iffalse
+
 This hierarchical RCU implementation implements a layered approach
 to reporting quiescent states, using the following functions:
+\fi
 \begin{enumerate}
+\item	특정 CPU 가 quiescent state 를 지날 때마다 ``rcu'' 와 ``rcu\_bh'' 를
+	위해 각각 \co{rcu_qsctr_inc()} 와 \co{rcu_bh_qsctr_inc()} 가
+	호출됩니다.
+	Dynticks-idle 과 CPU-offline quiescent state 는 특별하게 처리되는데,
+	그런 CPU 는 수행 중이지 않고, 따라서 스스로가 quiescent state 에 있다고
+	보고할 수 없기 때문이란 걸 알아두시기 바랍니다.
+\iffalse
+
 \item	\co{rcu_qsctr_inc()} and \co{rcu_bh_qsctr_inc()}
 	are invoked when a given CPU passes through a
 	quiescent state for ``rcu'' and ``rcu\_bh'', respectively.
@@ -4291,6 +4304,17 @@ to reporting quiescent states, using the following functions:
 	are handled specially, due to the fact that such a CPU
 	is not executing, and thus is unable to report itself as
 	being in a quiescent state.
+\fi
+\item	\co{rcu_check_quiescent_state()} 는 현재의 CPU 가 quiescent state 를
+	지났는지 알아보고, 만약 그렇다면 \co{cpu_quiet()} 를 호출합니다.
+\item	\co{cpu_quiet()} 는 명시된 CPU 가 quiescent state 를 지났음을 보고하기
+	위해 \co{cpu_quiet_msk()} 를 호출합니다.
+	이 명시된 CPU 는 현재의 CPU 이거나 offline CPU 여야만 합니다.
+\item	\co{cpu_quiet_msk()} 는 명시된 CPU 들이 quiescent state 를 지났음을
+	보고합니다.  이 CPU 들은 현재의 CPU 여야만 하지도, offline 이어야만
+	하지도 않습니다.
+\iffalse
+
 \item	\co{rcu_check_quiescent_state()} checks to see if the current
 	CPU has passed through a quiescent state, invoking \co{cpu_quiet()}
 	if so.
@@ -4300,9 +4324,14 @@ to reporting quiescent states, using the following functions:
 \item	\co{cpu_quiet_msk()} reports the specified vector of CPUs as
 	having passed through a quiescent state.  The CPUs in the
 	vector need not be the current CPU, nor must they be offline.
+\fi
 \end{enumerate}
 
+이 함수들은 아래에 설명됩니다.
+\iffalse
+
 Each of these functions is described below.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
