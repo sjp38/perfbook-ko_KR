@@ -4417,6 +4417,25 @@ the \co{rcu_data} per-CPU variable.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-check-quiescent-state}
+는 언제 다른 CPU 들이 새로운 grace period 를 시작했는지 파악하고 RCU 에게 이
+CPU 를 위한 최근의 quiescent state 들을 알리기 위해
+(Section~\ref{app:rcuimpl:rcutreewt:rcu-process-callbacks} 에서 설명된)
+\co{rcu_process_callbacks()} 에서 호출되는 \co{rcu_check_quiescent_state()}
+함수의 코드를 보이고 있습니다.
+
+Line~5 는 새로운 grace period 가 어떤 다른 CPU 에 의해 시작된 것을 체크하기
+위해 \co{check_for_new_grace_period()} 를 호출하고, 또한 이 CPU 의 지역 상태를
+그 새로운 grace period 를 처리할 수 있도록 업데이트 합니다.
+만약 새로운 grace period 가 막 시작되었다면, line~6 는 리턴합니다.
+Line~7 은 RCU rk duwjsgl guswo CPU 로부터의 queiscent state 를 기대하고 있는지
+검사하고, 만약 그렇지 않다면 line~8 에서 리턴합니다.
+Line~9 는 이 CPU 가 현재 grace period 의 시작 이래로 quiescent state 를
+지났는지 (달리 말하면, \co{rcu_qsctr_inc()} 또는 \co{rcu_bh_qsctr_inc()} 가
+각각 ``rcu'' 와 ``rcu\_bh'' 를 위해 호출되었는지) 체크하고, 만약 그렇지 않다면
+line~10 에서 리턴합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-check-quiescent-state}
 shows the code for \co{rcu_check_quiescent_state()}, which is invoked
 from \co{rcu_process_callbacks()}
 (described in Section~\ref{app:rcuimpl:rcutreewt:rcu-process-callbacks})
@@ -4433,6 +4452,14 @@ Line~9 checks to see if this CPU has passed through a quiescent state
 since the start of the current grace period (in other words, if
 \co{rcu_qsctr_inc()} or \co{rcu_bh_qsctr_inc()} have been invoked
 for ``rcu'' and ``rcu\_bh'', respectively), and line~10 returns if not.
+\fi
+
+따라서, 앞서 알려진 grace period 가 여전히 효과를 발휘하고 있고, 이 CPU 가 이
+grace period 를 끝나게 하기 위해서는 quiescent state 를 지나야 하며, 이 CPU 가
+그런 quiescent state 를 지났을 경우에만 line~11 로 실행 흐름이 넘어옵니다.
+이 경우, line~11-12 는 이 quiescent state 를 RCU 에 보고하기 위해
+\co{cpu_quiet()} 를 호출합니다.
+\iffalse
 
 Therefore, execution reaches line~11 only if a previously noted grace
 period is still in effect, if this CPU needs to pass through a
@@ -4440,24 +4467,67 @@ quiescent state in order to allow this grace period to end, and
 if this CPU has passed through such a quiescent state.
 In this case, lines~11-12 invoke \co{cpu_quiet()} in order to report
 this quiescent state to RCU.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-check-quiescent-state}
+	의 line~11-12 가 앞의 grace period 로부터의 quiescent state 를 현재의
+	grace period 에게 보고하는 것을 방지하는 건 무엇인가요?
+	\iffalse
+
 	What prevents lines~11-12 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-check-quiescent-state}
 	from reporting a quiescent state from a prior
 	grace period against the current grace period?
+	\fi
 \QuickQuizAnswer{
+	만약 그런 일이 일어날 수 있다면, 그건 심각한 버그인데, 해당 CPU 는 현재
+	grace period 의 시작보다 먼저 시작한 RCU read-side 크리티컬 섹션에 있을
+	수 있기 때문입니다.
+
+	이런 경우를 위해 CPU 에 대해 신경써야 할 경우들이 몇가지 있습니다:
+	\iffalse
+
 	If this could occur, it would be a serious bug, since the
 	CPU in question might be in an RCU read-side critical section
 	that started before the beginning of the current grace period.
 
 	There are several cases to consider for the CPU in question:
+	\fi
 	\begin{enumerate}
+	\item	Online 으로 남아있고 계속해서 활성 상태.
+	\item	최소한 현재 grace period 의 한 부분동안은 dynticks-idle 모드에
+		있었음.
+	\item	최소한 현재 grace period 의 한 부분동안은 offline 이었음.
+	\iffalse
+
 	\item	It remained online and active throughout.
 	\item	It was in dynticks-idle mode for at least part of the current
 		grace period.
 	\item	It was offline for at least part of the current grace period.
+	\fi
 	\end{enumerate}
+
+	첫번째 경우에는, 앞의 grace period 는 이 CPU 가 명시적으로 quiescent
+	state 를 보고하지 않았다면, 즉 \co{->qs_pending} 이 0이 아니라면 종료될
+	수가 없습니다.
+	이는 다시 말해 line~7-8 이 리턴할 것을 의미하며, 따라서 제어 흐름은
+	\co{check_for_new_grace_period()} 가 새로운 grace period 를 알리지
+	않았다면 \co{cpu_quiet()} 까지 도달하지 않음을 의미합니다.
+	하지만, 만약 현재 grace period 가 알려졌다면, \co{->passed_quiesc} 를 0
+	으로 만들었을 것이고, 이 경우 line~9-10 이 리턴하게 되므로, 이 경우에도
+	\co{cpu_quiet()} 는 호출되지 않습니다.
+	마지막으로, \co{->passed_quiesc} 가 호출될 수 있는 유일한 방법은
+	\co{rcu_check_callbacks()} 가
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-check-quiescent-state}
+	의 \co{rcu_check_quiescent_state()} 의 line~5 와 9 사이에서
+	scheduling-clock 인터럽트가 발생해서 \co{rcu_check_callbacks()} 가
+	호출된 경우일 겁니다.
+	하지만, 이는 \emph{현재의} grace period 중에 quiescent state 가
+	발생하는 경우가 될 것으로, 이 경우는 현재 grace period 에 대해
+	보고되는게 완전히 합법적입니다.
+	따라서 이 경우는 완전히 해결됩니다.
+	\iffalse
 
 	In the first case, the prior grace period could not have
 	ended without this CPU explicitly reporting a quiescent
@@ -4479,6 +4549,21 @@ this quiescent state to RCU.
 	in the \emph{current} grace period, which would be totally
 	legitimate to report against the current grace period.
 	So this case is correctly covered.
+	\fi
+
+	문제시 되는 CPU 가 새로운 quiescent state 의 일부를 dynticks-idle
+	모드로 보낸 경우인 두번째 경우에 있어서는, dynticks-idle 모드는
+	extended quiescent state 이며, 따라서 이 quiescent state 를 현재의
+	grace period 에게 보고하는 것은 허용 가능한 일임을 알아두시기 바랍니다.
+	
+	문제의 CPU 가 새로운 quiescent state 의 일부를 offline 으로 보낸 경우인
+	세번째 경우에 대해서는, offline CPU 들은 extended quiescent state 에
+	있는 것이어서 이번에도 현재의 grace period 에게 보고되는 것은 허용
+	가능하 일입니다.
+
+	따라서 앞의 grace period 로부터의 quiescent state 는 현재의 grace
+	period 에게 보고되지 않습니다.
+	\iffalse
 
 	In the second case, where the CPU in question spent part of
 	the new quiescent state in dynticks-idle mode, note that
@@ -4493,6 +4578,7 @@ this quiescent state to RCU.
 
 	So quiescent states from prior grace periods are never reported
 	against the current grace period.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
