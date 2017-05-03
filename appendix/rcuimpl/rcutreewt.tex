@@ -4753,29 +4753,57 @@ Note that \co{cpu_quiet()} releases the lock and re-enables interrupts.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for cpu-quiet-msk}
+는 CPU 들의 quiescent state 동안의, 인자 \co{mask} 에 의해 알려지는 통과를
+\co{rcu_node} 계층에 반영시키는 \co{cpu_quiet_msk()} 를 보이고 있습니다.
+인자 \co{rnp} 는 명시된 CPU 들에 연관된 leaf \co{rcu_node} 구조체 임을 알아
+두시기 바랍니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for cpu-quiet-msk}
 shows \co{cpu_quiet_msk()}, which updates the \co{rcu_node}
 hierarchy to reflect the passage of the CPUs indicated by
 argument \co{mask} through their respective quiescent states.
 Note that argument \co{rnp} is the leaf \co{rcu_node} structure
 corresponding to the specified CPUs.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for cpu-quiet-msk}
+	의 line~2 의 인자 \co{mask} 는 unisgned long 인데, 이게 어떻게 64 개
+	이상의 CPU 들을 갖는 시스템들을 다룰 수 있겠습니까?
+	\iffalse
+
 	Given that argument \co{mask} on line~2 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for cpu-quiet-msk}
 	is an unsigned long, how can it possibly deal with systems
 	with more than 64 CPUs?
+	\fi
 \QuickQuizAnswer{
+	\co{mask} 는 명시된 leaf \co{rcu_node} 구조체에만 상관있으므로, 해당
+	\co{rcu_node} 구조체에 연관된 CPU 들을 표현할 수 있을만큼만 크면
+	충분합니다.
+	최대 64 개의 CPU 들이 (32-bit 시스템이라면 32 CPU 들) 하나의
+	\co{rcu_node} 구조체에 연관될 수 있으므로, unsigned long \co{mask}
+	인자로도 충분합니다.
+	\iffalse
+
 	Because \co{mask} is specific to the specified leaf \co{rcu_node}
 	structure, it need only be large enough to represent the
 	CPUs corresponding to that particular \co{rcu_node} structure.
 	Since at most 64 CPUs may be associated with a given
 	\co{rcu_node} structure (32 CPUs on 32-bit systems),
 	the unsigned long \co{mask} argument suffices.
+	\fi
 } \QuickQuizEnd
+
+Line~4 는 \co{sparse} 를 위한 주석으로, \co{cpu_quiet_msk()} 가 leaf
+\co{rcu_node} 구조체의 락을 해제함을 알립니다.
+\iffalse
 
 Line~4 is annotation for the \co{sparse} utility, indicating
 that \co{cpu_quiet_msk()} releases the leaf \co{rcu_node}
 structure's lock.
+\fi
 
 \begin{figure*}[tb]
 \centering
@@ -4783,6 +4811,20 @@ structure's lock.
 \caption{Scanning {\tt rcu\_node} Structures When Applying Quiescent States}
 \label{fig:app:rcuimpl:rcutree:Scanning rcu-node Structures When Applying Quiescent States}
 \end{figure*}
+
+Line~6-23 의 루프의 각 단계는 \co{rcu_node} 계층의 한 단계씩을 처리하는데,
+Figure~\ref{fig:app:rcuimpl:rcutree:Scanning rcu-node Structures When Applying Quiescent States}
+의 파란 화살표로 보여진 것처럼 데이터 구조체들을 횡단합니다.
+
+Line~7 은 \co{mask} 의 모든 bit 들이 현재 \co{rcu_node} 구조체의 \co{->qsmask}
+필드에 지워져 있는지 확인하고, 만약 그렇다면, line~8 에서 이 락을 해제하고
+인터럽트를 재활성화 시킨 후, line~9 에서 호출자에게 리턴합니다.
+만약 그렇지 않다면, line~11 은 \co{mask} 로 명시된 bit 들을 현재의
+\co{rcu_node} 구조체의 \co{qsmask} 필드로부터 지웁니다.
+Line~12 는 이어서 \co{->qsmask} 에 더 남아 있는 bit 이 있는지 보고, 만약
+그렇다면 line~13 에서 그 락을 해제하고 인터럽트를 재활성화 한 후, line~14 에서
+호출자에게 리턴합니다.
+\iffalse
 
 Each pass through the loop spanning lines~6-23 does the required
 processing for one level of the \co{rcu_node} hierarchy, traversing
@@ -4798,6 +4840,18 @@ If not, line~11 clears the bits specified by \co{mask} from the current
 Line~12 then checks to see if there are more bits remaining
 in \co{->qsmask}, and, if so, line~13 releases the lock and re-enables
 interrupts, and line~14 returns to the caller.
+\fi
+
+그렇지 않다면, \co{rcu_node} 계층의 다음 단계로 넘어갈 필요가 있습니다.
+이 다음 단계로 가기 위한 준비 단계로, line~16 에서는 현재의 \co{rcu_node}
+구조체에 그 부모로부터 연관되는 하나의 bit 을 설정한 mask 를 준비합니다.
+Line~17 은 실제로 현재 \co{rcu_node} 구조체의 부모가 존재하는지 알아보고, 만약
+그렇지 않다면, line~18 은 이 루프를 깨고 나갑니다.
+반대로, 부모 \co{rcu_node} 구조체가 존재한다면 line~20 에서는 현재
+\co{rcu_node} 구조체의 락을 해제하고 line~21 에서 \co{rnp} 지역 변수를 부모로
+진행시키고, line~22 에서 부모의 락을 잡습니다.
+실행 흐름은 이어서 line~7 의 루프의 시작점으로 돌아갑니다.
+\iffalse
 
 Otherwise, it is necessary to advance up to the next level of the
 \co{rcu_node} hierarchy.
@@ -4812,6 +4866,18 @@ line~20 releases the current \co{rcu_node} structure's lock,
 line~21 advances the \co{rnp} local variable to the parent,
 and line~22 acquires the parent's lock.
 Execution then continues at the beginning of the loop on line~7.
+\fi
+
+Line~18 이 루프를 깬다면, 우린 현재의 grace period 가 끝났음을 알게 되는데,
+root \co{rcu_node} 구조체의 모든 bit 들이 지워질 수 있는 유일한 방법은 모든 CPU
+들이 quiescent state 를 지났을 때이기 때문입니다.
+이 경우에, line~24 는 \co{rcu_state} 구조체의 \co{->complted} 필드를 새로이
+끝난 grace period 의 숫자에 맞도록 업데이트 해서, 해당 grace period 가 실제로
+끝났음을 알립니다.
+Line~24 는 이어서 수행중인 CPU 의 RCU 콜백들을 진행시키기 위해
+\co{rcu_process_gp_end()} 를 실행하고, 마지막으로 line~26 은 새로운 grace
+period 를 시작하기 위해 \co{rcu_start_gp()} 를 실행합니다.
+\iffalse
 
 If line~18 breaks from the loop, we know that the current grace period
 has ended, as the only way that all bits can be cleared in the
@@ -4825,6 +4891,7 @@ running CPU's RCU callbacks,
 and, finally, line~26 invokes \co{rcu_start_gp()} in order to
 start a new grace period should any remaining callbacks on the currently
 running CPU require one.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
