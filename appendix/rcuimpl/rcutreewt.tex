@@ -4947,15 +4947,37 @@ running CPU require one.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-do-batch}
+는 grace period 가 끝난 RCU 콜백들을 호출하는 \co{rcu_do_batch()} 함수를
+보입니다.
+수행중인 CPU 위에서의 콜백들만이 호출됩니다---다른 CPU 들은 각자의 콜백들을
+호출해야만 합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-do-batch}
 shows \co{rcu_do_batch()}, which invokes RCU callbacks
 whose grace periods have ended.
 Only callbacks on the running CPU will be invoked---other CPUs must
 invoke their own callbacks.
+\fi
 
 \QuickQuiz{}
+	Dynticks-idle 이나 offline CPU 들에 있는 RCU 콜백들은 어떻게
+	호출되나요?
+	\iffalse
+
 	How do RCU callbacks on dynticks-idle or offline CPUs
 	get invoked?
+	\fi
 \QuickQuizAnswer{
+	그것들은 호출되지 않습니다.
+	RCU 콜백들을 가진 CPU 들은 dynticks-idle 모드에 들어갈 수 없게
+	되어있으므로, dynticks-idle CPU 들은 RCU 콜백을 가질 수 없습니다.
+	CPU 가 offline 이 될 때에는, 이것들의 RCU 콜백들은 online CPU 로
+	넘어가고, 따라서 offline CPU 는 역시 RCU 콜백을 가질 수 없습니다.
+	따라서, dynticks-idle 이나 offline CPU 에서의 콜백들은 호출될 필요가
+	없습니다.
+	\iffalse
+
 	They don't.
 	CPUs with RCU callbacks are not permitted to enter dynticks-idle
 	mode, so dynticks-idle CPUs never have RCU callbacks.
@@ -4963,7 +4985,16 @@ invoke their own callbacks.
 	an online CPU, so offline CPUs never have RCU callbacks, either.
 	Thus, there is no need to invoke callbacks on dynticks-idle
 	or offline CPUs.
+	\fi
 } \QuickQuizEnd
+
+Line~7 은 이 CPU 가 grace period 가 종료된 RCU 콜백들을 가지고 있는지 보기 위해
+\co{cpu_has_callbacks_ready_to_invoke()} 을 호출하고, 만약 그렇지 않다면 line~8
+에서 리턴합니다.
+Line~9 와 18 은 인터럽트를 각각 비활성화시키고 재활성화 시킵니다.
+Line~11-13 은 호출될 준비가 된 콜백들을 \co{->nxtlist} 에서 제거하고,
+line~14-17 은 tail 포인터에 모든 필요한 조정을 가합니다.
+\iffalse
 
 Line~7 invokes \co{cpu_has_callbacks_ready_to_invoke()} to see if
 this CPU has any RCU callbacks whose grace period has completed,
@@ -4971,18 +5002,41 @@ and, if not, line~8 returns.
 Lines~9 and 18 disable and re-enable interrupts, respectively.
 Lines~11-13 remove the ready-to-invoke callbacks from \co{->nxtlist},
 and lines~14-17 make any needed adjustments to the tail pointers.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-do-batch}
+	의 line~14-17 은 왜 tail 포인터를 조정하는 거죠?
+	\iffalse
+
 	Why would lines~14-17 in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-do-batch}
 	need to adjust the tail pointers?
+	\fi
 \QuickQuizAnswer{
+	어떤 tail 포인터라도 호출될 준비가 된 sublist 의 마지막 콜백을 가리키고
+	있었다면, 그것들은 \co{->nxtlist} 포인터를 가리키도록 바뀌어야만
+	합니다.
+	이 상황은 호출될 준비가 된 sublist 를 따르는 sublist 가 텅 비었을 경우
+	발생합니다.
+	\iffalse
+
 	If any of the tail pointers reference the last callback
 	in the sublist that was ready to invoke, they must be
 	changed to instead reference the \co{->nxtlist} pointer.
 	This situation occurs when the sublists
 	immediately following the ready-to-invoke sublist are empty.
+	\fi
 } \QuickQuizEnd
+
+Line~19 는 실제로 호출될 콜백의 수를 셀 준비를 위해 \co{count} 로컬 변수를
+0으로 초기화 합니다.
+Line~20-27 의 루프의 각 단계는 콜백을 수행하고 그 수를 세는데, line~25-26 은
+너무 많은 콜백들이 한번에 호출될 예정이면 이 루프를 빠져나갑니다 (이렇게
+함으로써 반응성을 지킵니다).
+이 함수의 나머지 부분은 이 한계로 인해 실행될 수 없는 모든 콜백들을 대기열에
+다시 집어넣습니다.
+\iffalse
 
 Line~19 initializes local variable \co{count} to zero in preparation
 for counting the number of callbacks that will actually be invoked.
@@ -4991,6 +5045,19 @@ a callback, with lines~25-26 exiting the loop if too many callbacks
 are to be invoked at a time (thus preserving responsiveness).
 The remainder of the function then requeues any callbacks that could
 not be invoked due to this limit.
+\fi
+
+Line~28 과 41 은 각각 인터럽트를 비활성화시키고 재활성화 시킵니다.
+Line~29 는 이 CPU 의 RCU 콜백들의 전체 갯수를 갖는 \co{->qlen} 필드를 업데이트
+합니다.
+Line~30 은 원래 수행될 수 있었으나 그때에 수행될 수 있는 콜백 갯수의 제한
+문제로 수행되지 못한, 호출될 준비가 된 콜백들의 갯수를 체크합니다.
+만약 그런 콜백들이 있다면, line~30-38 은 그것들을 다시 대기열에 넣고, 다시 tail
+포인터들을 필요한대로 조정합니다.
+Line~39-40 은 만약 한번에 수행할 콜백 개숫의 한계가 지나친 콜백 backlog 로
+증가했다면 다시 복구하고, line~42-43 은 남아있는 호출될 준비가 된 콜백들이
+존재한다면 스케쥴 될 추가적인 RCU 처리를 행합니다.
+\iffalse
 
 Lines~28 and 41 disable and re-enable interrupts, respectively.
 Line~29 updates the \co{->qlen} field, which maintains a count
@@ -5004,6 +5071,7 @@ Lines~39-40 restore the batch limit if it was increased due to
 excessive callback backlog, and lines~42-43 cause additional RCU
 processing to be scheduled if there are any ready-to-invoke
 callbacks remaining.
+\fi
 
 \subsection{Dyntick-Idle Functions}
 \label{app:rcuimpl:rcutreewt:Dyntick-Idle Functions}
