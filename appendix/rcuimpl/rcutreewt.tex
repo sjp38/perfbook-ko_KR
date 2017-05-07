@@ -5171,12 +5171,33 @@ dynticks-idle mode.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Entering and Exiting Dyntick-Idle Mode}
+는 스케쥴러가 dynticks-idle 모드로 들어가고 그로부터 나오는 걸 가능하게 하는
+\co{rcu_enter_nohz()} 와 \co{rcu_exit_nohz()} 함수들을 보입니다.
+따라서, \co{rcu_enter_nohz()} 함수가 호출된 뒤에는, RCU 는 적어도 다음
+\co{rcu_exit_nohz()}, 다음 인터럽트, 또는 다음 NMI 전까지는 이 CPU 를 무시할
+겁니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Entering and Exiting Dyntick-Idle Mode}
 shows the \co{rcu_enter_nohz()} and \co{rcu_exit_nohz()} functions
 that allow the scheduler to transition to and from dynticks-idle
 mode.
 Therefore, after \co{rcu_enter_nohz()} has been call, RCU will ignore
 it, at least until the next \co{rcu_exit_nohz()}, the next interrupt,
 or the next NMI.
+\fi
+
+\co{rcu_enter_nohz()} 의 line~6 는 모든 앞의 RCU read-side 크리티컬 섹션들은
+RCU 이게 이 CPU 를 무시하라고 말하는, 뒤따르는 코드 전에 일어난 것으로 보이도록
+보장하기 위해 메모리 배리어를 실행합니다.
+Line~7 과 11 은 상태 변경과의 간섭을 막기 위해 인터럽트를 비활성화하고 재활성화
+합니다.
+Line~8 은 수행중인 CPU 의 \co{rcu_dynticks} 구조체로의 포인터를 가져오고,
+line~9 는 (이제는 이 CPU 가 무시될 수 있다는 걸 알리는 짝수여야 하는)
+\co{->dynticks} 필드의 값을 증가시키고, 마지막으로 line~10 에서는 (이 CPU 에
+관심을 줄 필요가 없다는 걸 알리는 값 0을 가져야 하는) \co{->dynticks_nesting}
+필드의 값을 감소시킵니다.
+\iffalse
 
 Line~6 of \co{rcu_enter_nohz()} executes a memory barrier to ensure
 that any preceding RCU read-side critical sections are seen to have
@@ -5188,6 +5209,16 @@ structure, line~9 increments the \co{->dynticks} field (which now
 must be even to indicate that this CPU may be ignored), and finally line~10
 decrements the \co{->dynticks_nesting} field (which now must be
 zero to indicate that there is no reason to pay attention to this CPU).
+\fi
+
+\co{rcu_exit_nohz()} 의 line~19 와 23 은 역시 간섭을 막기 위해 인터럽트를
+비활성화 하고 재활성화 합니다.
+Line~20 은 이 CPU 의 \co{rcu_dynticks} 구조체로의 포인터를 가져오고, line~21 은
+(이제 RCU 에게 이 CPU 에 다시 관심을 기울여야 함을 알리기 위해 홀수 값을 가져야
+하는) \co{->dynticks} 필드의 값을 증가시키고, line~22 는 (이제 이 CPU 에 관심을
+기울여야 할 하나의 이유가 있음을 알리도록 값 1을 가져야 하는)
+\co{->dynticks_nesting} 필드의 값을 증가시킵니다.
+\iffalse
 
 Lines~19 and 23 of \co{rcu_exit_nohz()} disable and re-enable interrupts,
 again to avoid interference.
@@ -5197,6 +5228,7 @@ in order to indicate that RCU must once again pay attention to this
 CPU), and line~22 increments the \co{->dynticks_nesting} field
 (which now must have the value 1 to indicate that there is one
 reason to pay attention to this CPU).
+\fi
 
 \subsubsection{NMIs from Dyntick-Idle Mode}
 \label{app:rcuimpl:rcutreewt:NMIs from Dyntick-Idle Mode}
