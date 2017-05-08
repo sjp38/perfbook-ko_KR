@@ -5379,11 +5379,32 @@ The new value of this field must now be even.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Interrupts from Dyntick-Idle Mode}
+는 각각 인터럽트에 들어가는 것과 그로부터 나오는 걸 처리하는
+\co{rcu_irq_enter()} 와 \co{rcu_irq_exit()} 를 보입니다.
+NMI 에서와 같이, 인터럽트 핸들러에 들어가는 것은 dyntick-idle 모드를 빠져나오는
+것이 되고 그 반대도 마찬가지인데, 인터럽트 핸들러 안에 RCU read-side 크리티컬
+섹션이 있을 수 있다는 사실 때문입니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Interrupts from Dyntick-Idle Mode}
 shows \co{rcu_irq_enter()} and \co{rcu_irq_exit()}, which handle
 interrupt entry and exit, respectively.
 As with NMIs, it is important to note that entering an interrupt
 handler exits dyntick-idle mode and vice versa, due to the fact
 that RCU read-side critical sections can appear in interrupt handlers.
+\fi
+
+\co{rcu_irq_enter()} 의 line~5 는 현재 CPU 의 \co{rcu_dynticks} 구조체로의
+레퍼런스를 얻어옵니다.
+Line~6 는 \co{->dynticks_nesting} 필드의 값을 증가시키고, 만약 그 원래 값이
+이미 0이 아니었다면 (달리 말해서, RCU 가 이미 이 CPU 에 관심을 기울이고
+있었다면), line~7 에서 조용히 리턴합니다.
+그렇지 않다면, line~8 에서 \co{->dynticks} 필드의 ㄱ밧을 증가시키는데, 이 값은
+이제 홀수 값을 가져야만 합니다.
+마지막으로, line~9 는 이 값 증가가 모든 CPU 들에게 인터럽트 핸들러 안에 있을 수
+있는 모든 RCU read-side 크리티컬 섹션들보다 먼저 일어난 것으로 보일 수 있도록
+메모리 배리어를 실행합니다.
+\iffalse
 
 Line~5 of \co{rcu_irq_enter()} once again acquires a reference to
 the current CPU's \co{rcu_dynticks} structure.
@@ -5395,6 +5416,23 @@ then must have an odd-numbered value.
 Finally, line~9 executes a memory barrier so that this increment
 is seen by all CPUs as happening before any RCU read-side critical
 sections that might be in the interrupt handler.
+\fi
+
+\co{rcu_irq_exit()} 의 line~16 은 이제는 전통적인 현재 수행중인 CPU 의
+\co{rcu_dynticks} 구조체로의 레퍼런스 얻어오기를 수행합니다.
+Line~17 은 \co{->dynticks_nesting} 필드의 값을 감소시키고, 만약 그 결과가 0이
+아니라면 (달리 말해서, RCU 가 이 인터럽트 핸들러를 빠져나감에도 불구하고 이 CPU
+에 관심을 기울여야만 한다면), line~18 에서 조용히 리턴합니다.
+그렇지 않다면, line~19 에서 이 인터럽트 핸들러 안에 있을 수 있는 모든 RCU
+read-side 크리티컬 섹션들이 모든 CPU 들에 lin~20 에서의 \co{->dynticks} 필드의
+값 증가 (이제는 짝수의 값을 가져야만 합니다) 보다 먼저 일어난 것으로 보일 수
+있게끔 메모리 배리어를 실행합니다.
+Line~21 과 22 는 이 인터럽트 핸들러가 어떤 ``rcu'' 나 ``rcu\_bh'' 콜백들을
+신청했는지 확인해보고, 만약 그렇다면 line~23 에서 이 CPU 가 dynticks-idle
+모드로부터 강제로 나가게 되는 side-effect 를 가진,  schedule 재실행을
+강제하는데, 이는 RCU 가 이 콜백들에 의해 필요시 되는 grace period 를 처리할 수
+있도록 하는데 필요한 대로입니다.
+\iffalse
 
 Line~16 of \co{rcu_irq_exit()} does the by-now traditional acquisition
 of a reference to the currently running CPU's \co{rcu_dynticks} structure.
@@ -5412,6 +5450,7 @@ Lines~21 and 22 check to see if the interrupt handler posted any
 CPU to reschedule, which has the side-effect of forcing it out of
 dynticks-idle mode, as is required to allow RCU to handle the
 grace period required by these callbacks.
+\fi
 
 \subsubsection{Checking for Dyntick-Idle Mode}
 \label{app:rcuimpl:rcutreewt:Checking for Dyntick-Idle Mode}
