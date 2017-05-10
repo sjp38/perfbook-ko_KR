@@ -5455,6 +5455,21 @@ grace period required by these callbacks.
 \subsubsection{Checking for Dyntick-Idle Mode}
 \label{app:rcuimpl:rcutreewt:Checking for Dyntick-Idle Mode}
 
+CPU 가 dynticks-idle 모드에 있는지를 체크하는데
+\co{dyntick_save_progress_counter()} 와 \co{rcu_implicit_dynticks_qs()}
+함수들이 사용됩니다.
+\co{dyntick_save_progress_counter()} 함수가 먼저 호출되고, 해당 CPU 가 현재
+dynticks-idle 모드에 있다면 0이 아닌 값을 리턴합니다.
+만약 해당 CPU 가 예를 들어 현재 인터럽트나 NMI 를 처리하고 있거나 해서
+dynticks-idle 모드에 있지 않다면, 몇 jiffy 후에 \co{rcu_implicit_dynticks_qs()}
+함수가 호출됩니다.
+이 함수는 앞의 \co{dyntick_save_progress_counter()} 호출로 저장되어 있는 상태와
+함께 현재 상태를 살펴보고, 해당 CPU 가 dynticks-idle 모드에 있거나 그 사이에
+dynticks-idle 모드에 있었던 적이 있다면 0이 아닌 값을 리턴합니다.
+\co{rcu_implicit_dynticks_qs()} 함수는 필요하다면 true 를 리턴할 때까지
+반복적으로 호출될 수 있습니다.
+\iffalse
+
 The \co{dyntick_save_progress_counter()} and
 \co{rcu_implicit_dynticks_qs()} functions are used to check
 whether a CPU is in dynticks-idle mode.
@@ -5469,6 +5484,7 @@ again returning non-zero if the CPU either is in dynticks-idle mode or
 was in dynticks-idle mode during the intervening time.
 The \co{rcu_implicit_dynticks_qs()} function may be invoked repeatedly,
 if need be, until it returns true.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
