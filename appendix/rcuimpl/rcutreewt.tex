@@ -5513,6 +5513,27 @@ if need be, until it returns true.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for dyntick-save-progress-counter}
+는 특정 CPU-\co{rcu_state} 짝의 \co{rcu_data} 구조체를 전달받는
+\co{dyntick_save_progress_counter()} 의 코드를 보입니다.
+Line~8 과 9 는 해당 CPU 의 \co{rcu_dynticks} 구조체의 \co{->dynticks} 와
+\co{->dynticks_nmi} 필드의 값을 얻어오고, 이어서 line~10 에서는 이 얻어온 값이
+모든 CPU 들에게 이 값에 의존적으로 행해지는 모든 처리들보다 먼저 보여진 것으로
+보이게끔 메모리 배리어를 실행합니다.
+이 메모리 배리어는 \co{rcu_enter_nohz()}, \co{rcu_exit_nohz()},
+\co{rcu_nmi_enter()}, \co{rcu_nmi_exit()}, \co{rcu_irq_enter()}, 그리고
+\co{rcu_irq_exit()} 의 것들과 짝을 이룹니다.
+Line~11 과 12 는 이 두개의 값들을 저장해 두어서 이것들이 나중의
+\co{rcu_implicit_dynticks_qs()} 호출에서 접근할 수 있도록 만듭니다.
+Line~13 은 두개의 값들이 모두 짝수 값을 가져서 이 CPU 가 non-idle process
+상태에도, 인터럽트 핸들러에도, NMI 핸들러에도 있지 않았음을 알리는지
+체크합니다.
+만약 그렇다면, line~14 와 15 에서 tracing 에만 사용되는 통계적 카운터인
+\co{->dynticks_fqs} 의 값을 증가시킵니다.
+어느 쪽이든, line~16 은 해당 CPU 가 dynticks-idle 모드에 있었는지 여부를 알리는
+리턴을 합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for dyntick-save-progress-counter}
 shows the code for \co{dyntick_save_progress_counter()}, which
 is passed a given CPU-\co{rcu_state} pair's \co{rcu_data} structure.
 Lines~8 and 9 take snapshots of the CPU's \co{rcu_dynticks} structure's
@@ -5532,14 +5553,38 @@ If so, lines~14 and 15 increment the statistical counter
 \co{->dynticks_fqs}, which is used only for tracing.
 Either way, line~16 returns the indication of whether the CPU was
 in dynticks-idle mode.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for dyntick-save-progress-counter}
+	의 line~8 과 9 사이에는 왜 메모리 배리어가 없죠?
+	이는 \co{->dynticks} 와 \co{->dynticks_nmi} 필드의 두 값이 동시에
+	0이었던 적이 없는데도 짝수 값들을 가져오도록 할 수 있지 않나요?
+	\iffalse
+
 	Why isn't there a memory barrier between lines~8 and 9 of
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for dyntick-save-progress-counter}?
 	Couldn't this cause the code to fetch even-numbered values
 	from both the \co{->dynticks} and \co{->dynticks_nmi} fields,
 	even though these two fields never were zero at the same time?
+	\fi
 \QuickQuizAnswer{
+	먼저,
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Entering and Exiting Dyntick-Idle Mode},
+	\ref{fig:app:rcuimpl:rcutreewt:NMIs from Dyntick-Idle Mode}, 그리고
+	\ref{fig:app:rcuimpl:rcutreewt:Interrupts from Dyntick-Idle Mode} 를
+	다시 한번 보시고 \co{dynticks} 와 \co{dynticks_nmi} 는 결코 동시에 홀수
+	값을 가질 수 없음을 알아두시기 바랍니다 (특히
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:NMIs from Dyntick-Idle Mode}
+	의 line~6 과 17 을 잘 보시고, NMI 에서 인터럽트는 일어날 수 없음을 다시
+	상기하세요).
+
+	물론, 이 함수들의 메모리 배리어의 위치를 놓고 보면, 다른 CPU 에겐 두
+	카운터들이 동시에 홀수인 것으로 \emph{보일} 수도 있습니다만, 논리적으로
+	이는 일어날 수 없고, 해당 CPU 가 실제로는 dynticks-idle 모드를 지났음을
+	알리게 될 겁니다.
+	\iffalse
+
 	First, review the code in
 	Figures~\ref{fig:app:rcuimpl:rcutreewt:Entering and Exiting Dyntick-Idle Mode},
 	\ref{fig:app:rcuimpl:rcutreewt:NMIs from Dyntick-Idle Mode}, and
@@ -5554,6 +5599,22 @@ in dynticks-idle mode.
 	counters were odd at the same time, but logically this cannot
 	happen, and would indicate that the CPU had in fact passed
 	through dynticks-idle mode.
+	\fi
+
+	이제, line~8 이 \co{->dynticks} 의 값을 얻어오는 시점에서
+	\co{->dynticks_nmi} 가 홀수 값을 가지고 있었고, line~9 가
+	\co{->dynticks_nmi} 의 값을 얻어온느 시점에서 \co{->dynticks} 값은 홀수
+	값이었다고 생각해 봅시다.
+	두개의 카운터들은 동시에 홀수일 수 없다는 점을 놓고 보면, 이 두개의 값
+	가져오기 동작 사이에 두개의 카운터가 모두 짝수 값을 갖는 시점, 즉 해당
+	CPU 가 dynticks-idle 모드였던 시간이 있었다는 이야기가 되는데, 이는 곧
+	필요시되는대로, quiescent state 입니다.
+
+	그런데, 왜
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for dyntick-save-progress-counter}
+	의 line~13 의 \co{&&} 는 \co{==} 로 바뀔 수 없을까요?
+	음, 그럴 수도 있지만, 이는 도움이 되기보다는 헷갈리기만 할 수 있습니다.
+	\iffalse
 
 	Now, let's suppose that at the time line~8 fetches \co{->dynticks},
 	the value of \co{->dynticks_nmi} was at odd number, and that at the
@@ -5569,6 +5630,7 @@ in dynticks-idle mode.
 	be replaced with an \co{==}?
 	Well, it could be, but this would likely be more confusing
 	than helpful.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
