@@ -5663,6 +5663,30 @@ in dynticks-idle mode.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-implicit-dynticks-qs}
+는 \co{rcu_implicit_dynticks_qs()} 의 코드를 보입니다.
+Line~9-12 는 해당 CPU 의 \co{rcu_dynticks} 구조체의 \co{->dynticks} 와
+\co{->dynticks_nmi} 필드의 새 값들을 가져오고, 또한 최근의
+\co{dyntick_save_progress_counter()} 호출로부터 얻어온 스냅샷도 얻어옵니다.
+Line~13 은 이어서 이 값들이 다른 CPU 들에 뒤따르는 RCU 처리보다 먼저 얻어온
+것으로 보이게끔 메모리 배리어를 실행합니다.
+\co{dyntick_save_progress_counter()} 에서와 같이, 이 메모리 배리어는
+\co{rcu_enter_nohz()}, \co{rcu_exit_nohz()}, \co{rcu_nmi_enter()},
+\co{rcu_nmi_exit()}, \co{rcu_irq_enter()}, 그리고 \co{rcu_irq_exit()} 의 것들과
+짝을 이룹니다.
+이어서 line~14-15 는 이 CPU 가 dynticks_idle 모드 (\co{(curr & 0x1) == 0} 이고
+\co{curr_nmi & 0x1) == 0}) 이거나 지난번의 \co{dyntick_save_progress_counter()}
+호출 후에 dynticks-idle 모드를 지났거나 (\co{curr != snap} 이고 \co{curr_nmi !=
+snap_nmi}) 인지를 체크합니다.
+만약 그렇다면, line~16 에서 \co{->dynticks_fqs} 통계적 카운터 (이번에도,
+tracing 을 위해서만 사용됩니다) 를 증가시키고 line~17 에서 0이 아닌 값을 리턴해
+해당 CPU 가 quiescent state 를 지났음을 알립니다.
+그렇지 않다면, line~19 에서
+(Section~\ref{app:rcuimpl:rcutreewt:Forcing Quiescent States} 에서 설명된)
+\co{rcu_implicit_offline_qs()} 를 호출해서 해당 CPU 가 현재 offline 인지
+체크합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcu-implicit-dynticks-qs}
 shows the code for \co{rcu_implicit_dynticks_qs()}.
 Lines~9-12 pick up both new values for the CPU's \co{rcu_dynticks}
 structure's \co{->dynticks} and \co{->dynticks_nmi} fields, as well
@@ -5685,6 +5709,7 @@ to indicate that the specified CPU has passed through a quiescent state.
 Otherwise, line~19 invokes \co{rcu_implicit_offline_qs()}
 (described in Section~\ref{app:rcuimpl:rcutreewt:Forcing Quiescent States})
 to check whether the specified CPU is currently offline.
+\fi
 
 \subsection{Forcing Quiescent States}
 \label{app:rcuimpl:rcutreewt:Forcing Quiescent States}
