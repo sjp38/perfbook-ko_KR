@@ -5812,6 +5812,18 @@ holdout CPUs.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Recording and Recalling Dynticks-Idle Grace Period}
+는 \co{dyntick_record_completed()} 와 \co{dyntick_recall_completed()} 의 코드를
+보입니다.
+이 함수들은 dynticks 가 활성화된 경우 (달리 말해서, \co{CONFIG_NO_HZ} 커널
+패러미터가 선택된 경우) 에만 보여진대로 정의되고, 그렇지 않은 경우에는 no-op
+뿐입니다.
+이 함수들의 목표는 dynticks-idle 모드에 있는 특정 CPU 의 발견이 이
+dynticks-idle 모드의 CPU 의 보고와 이 CPU 가 dynticks-idle 모드로부터 나가는
+것과 그 스스로의 quiescent state 를 보고하는 것 사이의 race condition 에도
+불구하고 올바른 grace period 에 조합되도록 보장하는 것입니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Recording and Recalling Dynticks-Idle Grace Period}
 shows the code for \co{dyntick_record_completed()} and
 \co{dyntick_recall_completed()}.
 These functions are defined as shown only if dynticks
@@ -5822,6 +5834,15 @@ of a CPU in dynticks-idle mode is associated with the correct
 grace period in face of races between reporting this CPU in
 dynticks-idle mode and this CPU coming out of dynticks-idle mode
 and reporting a quiescent state on its own.
+\fi
+
+Line~1-6 은 \co{dyntick_record_completed()} 함수로, \co{comp} 인자로 명시된
+값을 명시된 \co{rcu_state} 구조체의 \co{->dynticks_completed} 필드에
+저장합니다.
+Line~8-12 는 \co{dyntick_recall_completed()} 함수로, 가장 최근의
+\co{dyntick_record_compledted()} 호출로 이 CPU 와 \co{rcu_state} 구조체의
+조합으로 저장된 값을 리턴합니다.
+\iffalse
 
 Lines~1-6 show \co{dyntick_record_completed()}, which stores the
 value specified by its \co{comp} argument into the specified
@@ -5830,6 +5851,7 @@ Lines~8-12 show \co{dyntick_recall_completed()}, which returns
 the value stored by the most recent call to
 \co{dyntick_record_completed()} for this combination of CPU and
 \co{rcu_state} structure.
+\fi
 
 \subsubsection{Handling Offline and Holdout CPUs}
 \label{app:rcuimpl:rcutreewt:Handling Offline and Holdout CPUs}
