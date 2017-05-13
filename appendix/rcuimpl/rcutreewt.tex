@@ -5714,12 +5714,31 @@ to check whether the specified CPU is currently offline.
 \subsection{Forcing Quiescent States}
 \label{app:rcuimpl:rcutreewt:Forcing Quiescent States}
 
+일반적으로, CPU 들은 적절히 기록되는 quiescent state 들을 지나감으로써 grace
+period 들이 시간에 맞춰 끝날 수 있게 합니다.
+하지만, 다음의 세가지 조건은 모두 CPU 들이 quiescent state 를 지나는 것을
+방지할 수 있습니다:
+\iffalse
+
 Normally, CPUs pass through quiescent states which are duly recorded,
 so that grace periods end in a timely manner.
 However, any of the following three conditions can prevent CPUs from
 passing through quiescent states:
+\fi
 
 \begin{enumerate}
+\item	CPU 가 dyntick-idle 상태에 있고, 저전력 모드에서 잠들어 있는 경우.
+	그런 CPU 는 공식적으로 extended quiescent state 에 있는 것이긴 하지만,
+	명령어를 수행하고 있지 않기 때문에, 스스로는 어떤일도 할 수 없습니다.
+\item	CPU 가 online 이 되는 과정 중에 있고, RCU 는 해당 CPU 가 online 이라고
+	알림을 받았지만, 이 CPU 는 아직 실제로 코드를 수행하고 있지는 않을
+	뿐더러, \co{cpu_online_map} 에 online 이라고 표시되지 않은 경우.
+	따라서 현재의 grace period 는 이 CPU 를 기다리게 되지만, 이 CPU 는
+	스스로는 quiescent state 를 지나지 못합니다.
+\item	CPU 가 유저 레벨 코드를 수행하고 있지만, 긴 시간 동안 스케쥴러에
+	들어가는 것을 막아놓은 경우.
+\iffalse
+
 \item	The CPU is in dyntick-idle state, and is sleeping in a low-power
 	mode.
 	Although such a CPU is officially in an extended quiescent state,
@@ -5732,7 +5751,24 @@ passing through quiescent states:
 	yet pass through quiescent states on its own.
 \item	The CPU is running user-level code, but has avoided
 	entering the scheduler for an extended time period.
+\fi
 \end{enumerate}
+
+이 각각의 경우에 대해, RCU 는 이 응답 없는 CPU 에 대해 뭔가 행동을 취해야
+합니다.
+다음의 섹션들은 그런 행동을 취하는 함수들을 설명합니다.
+Section~\ref{app:rcuimpl:rcutreewt:Recording and Recalling Dynticks-Idle Grace Period}
+은 dynticks-idle grace-period 수를 (올바르지 않게 dynticks-idle quiescent state
+를 잘못된 grace period 에 적용하는 것을 막기 위해) 기록하고 회수하는 함수들을
+설명하고,
+Section~\ref{app:rcuimpl:rcutreewt:Handling Offline and Holdout CPUs}
+은 offline 과 holdout CPU 들을 탐지하는 함수들을 설명하며,
+Section~\ref{app:rcuimpl:rcutreewt:Scanning for Holdout CPUs}
+에서는 holdout CPU 들을 스캔하는 \co{rcu_process_dyntick()} 을 다루고,
+Section~\ref{app:rcuimpl:rcutreewt:Code for force-quiescent-state}
+에서는 extended quiescent state 를 파악하고 holdout CPU 들에 quiescent state 를
+강제하는 프로세스가 동작하게 하는 \co{force_quiescent_state()} 를 설명합니다.
+\iffalse
 
 In each of these cases, RCU needs to take action on behalf of the
 non-responding CPU.
@@ -5749,6 +5785,7 @@ Section~\ref{app:rcuimpl:rcutreewt:Code for force-quiescent-state}
 describes \co{force_quiescent_state()}, which drives the process of
 detecting extended quiescent states and forcing quiescent states on
 holdout CPUs.
+\fi
 
 \subsubsection{Recording and Recalling Dynticks-Idle Grace Period}
 \label{app:rcuimpl:rcutreewt:Recording and Recalling Dynticks-Idle Grace Period}
