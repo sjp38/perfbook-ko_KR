@@ -5987,6 +5987,21 @@ still refusing to pass through a quiescent state.
 \end{figure*}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Scanning for Holdout CPUs}
+는
+Figure~\ref{fig:app:rcuimpl:rcutree:Scanning Leaf rcu-node Structures}
+에 파란 화살표로 그려진대로 holdout CPU 들을 탐색하기 위해 leaf \co{rcu_node}
+구조체들을 스캔하는 \co{rcu_process_dyntick()} 의 코드를 보입니다.
+이 함수는 각각의 CPU 의 \co{rcu_data} 구조체에 대해 인자로 받은 함수 \co{f} 를
+실행하고, \co{lastcomp} 인자로 명시된 grace period 가 종료되었다면 0이 아닌
+값을 리턴합니다.
+
+Line~13 과 14 는 첫번째와 마지막 leaf \co{rcu_node} 구조체로의 레퍼런스를 각각
+얻어옵니다.
+Line~15-38 의 루프의 각 단계는 leaf \co{rcu_node} 구조체들 중 하나를
+처리합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Scanning for Holdout CPUs}
 shows the code for \co{rcu_process_dyntick()}, which scans the
 leaf \co{rcu_node} structures in search of holdout CPUs,
 as illustrated by the blue arrow in
@@ -5999,6 +6014,32 @@ Lines~13 and 14 acquire references to the first and the last leaf
 \co{rcu_node} structures, respectively.
 Each pass through the loop spanning lines~15-38 processes one of
 the leaf \co{rcu_node} structures.
+\fi
+
+Line~16 은 지역 변수 \co{mask} 를 0 으로 값 설정합니다.
+이 변수는 현재 leaf \co{rcu_node} 구조체의 extended quiescent state 에 있는 CPU
+들을 모으는데 사용됩니다.
+Line~17 은 현재 leaf \co{rcu_node} 구조체의 락을 얻어오고, line~18 은 현재의
+grace period 가 완료되었는지 확인하며, 만약 그렇다면 line~19 에서 이 락을
+해제하고 line~20 에서 0이 아닌 값을 리턴합니다.
+그렇지 않다면, line~22 에서 이 \co{rcu_node} 구조체에 연관된 holdout CPU 들을
+체크하고, 그런게 하나도 없다면, line~23 에서 이 락을 해제하고 line~24 에서
+루프를 다음 leaf \co{rcu_node} 구조체부터 시작하도록 재시작 시킵니다.
+
+이 \co{rcu_node} 구조체에 연관된 holdout CPU 가 최소 하나라도 있다면 실행은
+line~26 에 도달합니다.
+Line~26 과 27 은 지역 변수 \co{cpu} 와 \co{bit} 을 이 \co{rcu_node} 구조체에
+연관된 가장 낮은 숫자의 CPU 를 가리키도록 설정합니다.
+Line~28-32 의 루프의 각 단계는 현재의 \co{rcu_node} 구조체에 연관된 CPU 들 중
+하나씩을 체크합니다.
+Line~29 는 이 CPU 가 여전히 유지되고 있는지 아니면 이미 quiescent state 를
+지나갔는지 확인합니다.
+만약 여전히 유지되고 있다면, line~30 에서 명시된 함수 (호출자에 의해 명시되는,
+\co{dyntick_save_progress_counter()} 또는 \co{rcu_implicit_dynticks_qs()}) 를
+호출하고, 그 함수가 0이 아닌 값을 리턴한다면 (현재 CPU 가 extended quiescent
+state 에 있음을 의미함), line~31 에서 \co{mask} 내의 현재 CPU 의 bit 의 값을
+1로 세팅합니다.
+\iffalse
 
 Line~16 sets the local variable \co{mask} to zero.
 This variable will be used to accumulate the CPUs within the current
@@ -6026,6 +6067,23 @@ If it is still a holdout, line~30 invokes the specified function
 if that function returns non-zero (indicating that the current CPU
 is in an extended quiescent state), then line~31 sets the current
 CPU's bit in \co{mask}.
+\fi
+
+이어서 Line~33 은 어떤 CPU 가 extended quiescent state 에 있었던 걸로
+구분되었는지 그리고 현재의 grace period 가 여전히 강제되어 있는지 체크하고,
+만약 그렇다면 line~34 에서 이 grace period 는 더이상 그런 CPU 들을 기다릴
+필요가 없단 걸 알리기 위해 \co{cpu_quiet_msk()} 를 호출하고 line~35 에서 다음
+\co{rcu_node} 구조체를 가지로 루프를 재시작합니다.
+(\co{cpu_quiet_msk()} 는 현재 \co{rcu_node} 구조체의 락을 해제하며, 현재 grace
+period 를 끝낼 수도 있음을 알아두시기 바랍니다.)
+그렇지 않다면, 만약 모든 holdout CPU 들이 여전히 진짜로 holdout 상태라면,
+line~37 에서 현재 \co{rcu_node} 구조체의 락을 해제합니다.
+
+일단 모든 leaf \co{rcu_node} 구조체들이 처리되었다면, 루프를 빠져나가고 line~39
+에서 현재의 grace period 는 여전히 진행되어야 함을 알리기 위해 0을 리턴합니다.
+(line~20 은 현재 grace period 가 끝났음을 알리기 위해 0이 아닌 값을 리턴함을
+다시 말해둡니다.)
+\iffalse
 
 Line 33 then checks to see if any CPUs were identified as being
 in extended quiescent states and if the current grace period is
@@ -6043,6 +6101,7 @@ the loop exits, and line~39 returns zero to indicate that the current
 grace period is still in full force.
 (Recall that line~20 returns non-zero should the current grace period
 come to an end.)
+\fi
 
 \subsubsection{Code for {\tt force\_quiescent\_state()}}
 \label{app:rcuimpl:rcutreewt:Code for force-quiescent-state}
