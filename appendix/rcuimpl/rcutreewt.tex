@@ -6178,6 +6178,23 @@ come to an end.)
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree force-quiescent-state}
+는 \co{CONFIG_SMP} 를 위한 \co{force_quiescent_state()} 의 코드를
+보이는데\footnote{
+	non-\co{CONFIG_SMP} 에서는 \co{force_quiescent_state()} 는
+	\co{set_need_resched()} 의 wrapper 일 뿐입니다.}, 이 함수는 RCU 가 현재
+grace period 를 CPU 들을 quiescent state 너머로 진척시키고자 하는 필요를 느낄
+때 호출됩니다.
+RCU 는 다음 중 한 상태일 때 이 필요를 느낍니다:
+\begin{enumerate}
+\item	현재의 grace period 가 3 jiffy (또는 compile-time 의
+	\co{RCU_JIFFIES_TILL_FORCE_QS} 값으로 명시된 만큼) 이상 진행되었거나,
+\item	\co{call_rcu()} 또는 \co{call_rcu_bh()} 를 통해 RCU 콜백을 집어넣는 CPU
+	가 10,000 개 (또는 boot-time 패러미터인 \co{qhimark} 로 명시된 양)
+	이상의 콜백이 넣어져 있음을 보았을 때.
+\end{enumerate}
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for rcutree force-quiescent-state}
 shows the code for \co{force_quiescent_state()} for
 \co{CONFIG_SMP},\footnote{
 	For non-\co{CONFIG_SMP}, \co{force_quiescent_state} is a
@@ -6193,6 +6210,22 @@ RCU feels this need when either:
 	or \co{call_rcu_bh()} sees more than 10,000 callbacks enqueued
 	(or as specified by the boot-time parameter \co{qhimark}).
 \end{enumerate}
+\fi
+
+Line~10-12 는 진행중인 grace period 가 존재하는지 보고, 존재하지 않는다면 그냥
+조용히 종료합니다.
+Line~13-16 은 하나의 grace period 를 진척시키려는 동시적 시도를 방지해주는
+\co{->fqslock} 을 획득하려 시도합니다.
+\co{->n_force_qs_lh} 카운터는 이 락이 이미 잡혀 있을 때 그 값이 증가되며,
+\co{CONFIG_RCU_TRACE} 커널 패러미터가 활성화 되어 있으면 \co{rcuhier} debugfs
+파일의 \co{fqlh=} 필드로 그 값을 볼 수 있습니다.
+Line~17-21 은 현재의 grace period 가 정말로 진척될 필요가 있는지 확인해 보는데,
+달리 말하자면 (1) 현재의 CPU 가 10,000 개의 대기중인 RCU 콜백들을 가지고
+있는지, 또는 (2) 현재 grace peiod 의 시작으로부터 또는 현재 grace period 를
+진척시키려는 마지막 시도로부터 \co{jiffies} 카운터 또는 \co{rcu_pending} 호출
+횟수로 측정해서 3 jiffy 이상이 지났는지를 봅니다.
+Line~22 는 이어서 grace period 들을 진척시키려 시도한 횟수를 셉니다.
+\iffalse
 
 Lines~10-12 check to see if there is a grace period in progress,
 silently exiting if not.
@@ -6210,6 +6243,27 @@ last attempt to expedite the current grace period, measured either
 by the \co{jiffies} counter or by the number of calls to
 \co{rcu_pending}.
 Line~22 then counts the number of attempts to expedite grace periods.
+\fi
+
+Line~23-36 은 현재의 grace period 가 그것을 진척시키려 시도하자마자 종료되었을
+때의 혼란을 막기 위해 root \co{rcu_node} 구조체의 락을 잡은 채로 실행됩니다.
+Line~24 와 25 는 \co{->completed} 와 \co{->signaled} 필드의 스냅샷을 뜨고,
+line~26-30 에서는 뒤따르는 non-relaced \co{force_quiescent_state()} 가 실제로
+어떤 진척을 행할 수 있게 되기까지의 가장 빠른 시간을 설정하고, line~31-35 는 이
+grace period 가 우리가 이 \co{rcu_node} 구조체의 락을 잡는 사이에 종료되었는지
+확인하고, 만약 그렇다면 이 락을 해제하고 리턴합니다.
+
+Line~37-59 는 \co{force_quiescent_state()} 의 state machine 을 이끕니다.
+해당 grace period 가 아직 초기화 중이라면, line~41 과 42 dptj rmsid flxjsgotj
+\co{force_quiescent_state()} 가 아마도 초기화가 끝난 나중에 다시 호출될 수 있게
+합니다.
+만약 dynticks 가 (\co{CONFIG_NO_HZ} 커널 패러미터를 통해) 활성화 되어 있다면,
+해당 grace period 의 초기화 뒤의 첫번째 \co{force_quiescent_state()} 호출은
+line~40-52 를 실행하고, 두번째와 그 이후의 호출들은 line~53-59 를 실행하게
+됩니다.
+반면에, dynticks 가 활성화 되어 있지 않다면, 모든 초기화 뒤의
+\co{force_quiescent_state()} 호출은 line~53-59 를 실행하게 될겁니다.
+\iffalse
 
 Lines~23-36 are executed with the root \co{rcu_node} structure's lock
 held in order to prevent confusion should the current grace period
@@ -6233,6 +6287,29 @@ execute lines~40-52, and the second and subsequent calls will
 execute lines~53-59.
 On the other hand, if dynticks is not enabled, then all post-initialization
 calls to \co{force_quiescent_state()} will execute lines~53-59.
+\fi
+
+Line~40-52 의 목적은 아직 quiescent state 를 지나지 않은 모든 CPU 들의 현재
+dynticks-idle state 를 기록하고, 현재 dynticks-idle 상태에 있는 (하지만 irq 나
+NMI 핸들러에 있지 않은) 모든 quiesent state 를 기록하는 것입니다.
+Line~41-42 는 gcc 에게 이 switch 문의 branch 가 non-\co{CONFIG_NO_HZ}
+커널에서는 사용되지 않는 코드임을 알리는 역할을 합니다.
+Line~43-45 는 현재의 grace period 를 위한 quiescent state 를 아직 지나지 않은
+각각의 CPU 를 위해 \co{dyntick_save_progress_counter()} 를 호출하고 (아직
+quiescent state 를 지나지 않은 모든 CPU 들이 dyntick-idle 모드에서 잠들어
+있었음을 발견하거나 함으로써) 이 grace period 가 그 사이 종료되었다면
+\co{force_quiescent_state()} 를 빠져나가기 위해 \co{rcu_process_dyntick()} 을
+호출합니다.
+Line~46 과 51 은 현재 grace period 의 동시적 종료와의 혼란을 막기 위해 root
+\co{rcu_node} 구조체의 락을 잡고 해제합니다.
+Line~47 은 현재의 grace period 가 여전히 진행 중인지 체크하고, 만약 그렇다면
+line~48 에서 이 상태를 \co{RCU_FORCE_QS} 상태로 진척시키고 line~49 에서 현재의
+grace -period 숫자를 다음 \co{force_quiescent_state()} 호출 때를 위해 저장해
+둡니다.
+현재 grace-peirod 숫자를 저장하는 이유는 현재의 grace period 가 다음의
+\co{force_quiescent_state()} 의 호출과 동시에 종료되는 경우의 race condition 을
+올바르게 처리하기 위함입니다.
+\iffalse
 
 The purpose of lines~40-52 is to record the current dynticks-idle state
 of all CPUs that have not yet passed through a quiescent state, and
@@ -6257,6 +6334,18 @@ the next invocation of \co{force_quiescent_state()}.
 The reason for saving the current grace-period number is to correctly
 handle race conditions involving the current grace period ending
 concurrently with the next invocation of \co{force_quiescent_state()}.
+\fi
+
+앞에서 이야기했듯, line~53-58 은 \co{CONFIG_NO_HZ} 커널에서의 두번째 이후
+\co{force_quiescent_state()} 호출, 그리고 non-\co{CONFIG_NO_HZ} 커널에서의
+\emph{모든} 호출에 대해서 수행됩니다.
+Line~54 와 58 은 아직 quiescent state 를 지나지 않은 CPU 들 사이를 지나며
+그것들에 대해 (\co{CONFIG_NO_HZ} 가 활성화 되어 있다면) 이 CPU 들 중 하나라도
+dyntick-idle state 를 지났는지 체크하고, offline CPU 들을 기다리고 있진 않은지
+확인하고, 마지막으로 앞의 두 그룹에 속하지 않은 모든 CPU 들에 대해선 reschedule
+IPI 를 날려주는 \co{rcu_implicit_dynticks_qs()} 를 호출하는
+\co{rcu_process_dyntick()} 을 호출합니다.
+\iffalse
 
 As noted earlier, lines~53-58 handle the second and subsequent invocations
 of \co{force_quiescent_state()} in \co{CONFIG_NO_HZ} kernels, and \emph{all}
@@ -6268,6 +6357,7 @@ if any of these CPUs have passed through dyntick-idle state (if
 \co{CONFIG_NO_HZ} is enabled), checks to see if we are waiting on
 any offline CPUs, and finally sends a reschedule IPI to any remaining
 CPUs not in the first two groups.
+\fi
 
 \subsection{CPU-Stall Detection}
 \label{app:rcuimpl:rcutreewt:CPU-Stall Detection}
