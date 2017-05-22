@@ -6440,6 +6440,24 @@ be checked for, should the grace period run on that long.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for check-cpu-stall}
+는 grace period 가 너무 길게 늘어졌는지 체크하고, 그럴 경우 CPU-stall 경고
+메세지를 출력하기 위해 \co{print_cpu_stall()} 이나 \co{print_other_cpu_stall()}
+을 호출하는 \co{check_cpu_stall()} 의 코드를 보입니다.
+
+Line~8 은 stall 경고가 출력되어야 하는 시간으로부터의 jiffy 의 수를 계산하는데,
+이는 아직 warning 을 출력할 시간이 아니라면 음수가 됩니다.
+Line~9 는 현재의 CPU 에 연관된 leaf \co{rcu_node} 구조체로의 포인터를 가져오고,
+line~10 은 현재의 CPU 가 아직 quiescent state 를 지나지 않았는지, 그리고 이
+grace period 가 너무 길게 연장되지 않았는지 (달리 말해서, 현재 CPU 가 stall
+되었는지) 검사하고, 만약 그렇다면 line~11 에서 \co{print_cpu_stall()} 을
+호출합니다.
+
+그렇지 않다면, line~12-13 에서 이 grace period 가 아직 효력을 발휘하고 있는지,
+그리고 이게 CPU-stall 경고 기간을 지나 두 jiffy 만큼 연자오디었는지 검사하고,
+만약 그렇다면 line~14 에서 \co{print_other_cpu_stall()} 을 호출합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for check-cpu-stall}
 shows the code for \co{check_cpu_stall}, which checks to see
 if the grace period has stretched on too long, invoking either
 \co{print_cpu_stall()} or \co{print_other_cpu_stall()} in order
@@ -6458,17 +6476,31 @@ with line~11 invoking \co{print_cpu_stall()} if so.
 Otherwise, lines~12-13 check to see if the grace period is still in effect
 and if it has extended a couple of jiffies past the CPU-stall warning
 duration, with line~14 invoking \co{print_other_cpu_stall()} if so.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for check-cpu-stall}
+	의 line~12-13 에서는 왜 두 jiffy 를 더 기다리는 거죠?
+	\iffalse
+
 	Why wait the extra couple jiffies on lines~12-13 in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for check-cpu-stall}?
+	\fi
 \QuickQuizAnswer{
+	이 추가된 딜레이는 이 CPU 에게 스스로를 보고할 기회를 주어서, stall 된
+	코드의 더 나은 스택 트레이스를 얻을 수 있게 합니다.
+	물론, 이 CPU 가 인터럽트가 불능화 된 채 spin 하고 있다면 스스로를
+	보고하지 않을 것이어서, 다른 CPU 들은 더 짧은 딜레이 만에 이 일을 해야
+	할 겁니다.
+	\iffalse
+
 	This added delay gives the offending CPU a better chance of
 	reporting on itself, thus getting a decent stack trace of
 	the stalled code.
 	Of course, if the offending CPU is spinning with interrupts
 	disabled, it will never report on itself, so other CPUs
 	do so after a short delay.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
