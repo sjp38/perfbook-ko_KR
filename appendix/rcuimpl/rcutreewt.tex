@@ -6614,6 +6614,21 @@ the grace period stretch on that much additional time.
 \end{figure}
 
 Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for print-other-cpu-stall}
+는 현재 수행중인 CPU 외의 CPU 들을 위한 stall 경고를 출력하는
+\co{print_other_cpu_stall()} 의 코드를 보입니다.
+
+Line~10 과 11 은 첫번째 leaf \co{rcu_node} 구조체와 마지막 leaf \co{rcu_node}
+구조체 다음 것의 레퍼런스를 가져옵니다.
+Line~12 는 root \co{rcu_node} 구조체의 락을 잡고, 또한 인터럽트를 불능화
+시킵니다.
+Line~13 은 얼마나 오래 전에 CPU-stall 경고 시간 (아직 있지 않았다면 음수가
+됩니다) 이 있었는지 계산하고, line~14 와 15 는 이 CPU-stall 경고 시간이
+지났는지 보고 이 grace period 가 아직 끝나지 않았는지 검사하며, 만약 그렇다면
+line~16 에서 이 락을 해제하고 (또 인터럽트를 재활성화 시키고) line~17 에서
+리턴합니다.
+\iffalse
+
+Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for print-other-cpu-stall}
 shows the code for \co{print_other_cpu_stall()}, which prints out
 stall warnings for CPUs other than the currently running CPU.
 
@@ -6628,16 +6643,37 @@ check to see if the CPU-stall warning time has passed and if the
 grace period has not yet ended,
 with line~16 releasing the lock (and re-enabling interrupts) and
 line~17 returning if so.
+\fi
 
 \QuickQuiz{}
+	\co{print_cpu_stall()} 은 안그러는데
+	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for print-other-cpu-stall}
+	의 \co{print_other_cpu_stall()} 은 왜 grace period 의 종료를 검사해야
+	하나요?
+	\iffalse
+
 	Why does \co{print_other_cpu_stall()} in
 	Figure~\ref{fig:app:rcuimpl:rcutreewt:Code for print-other-cpu-stall}
 	need to check for the grace period ending when
 	\co{print_cpu_stall()} did not?
+	\fi
 \QuickQuizAnswer{
+	다른 CPU 들은 언제든 quiescent state 를 지날 수 있고, 따라서 이 grace
+	period 는 중간에 끝났을 수 있습니다.
+	\iffalse
+
 	The other CPUs might pass through a quiescent state at any time,
 	so the grace period might well have ended in the meantime.
+	\fi
 } \QuickQuizEnd
+
+그렇지 않다면, line~19 와 20 은 (그만큼 grace period 가 길어진다면) CPU stall
+경고가 출력되어야 할 다음 시간을 계산하고 line~21 에서 락을 해제하고 인터럽트를
+재활성화 시킵니다.
+Line~23-33 은 stall 된 CPU 들의 목록을 출력하고, 마지막으로 line~34 에서 문제의
+CPU 들을 quiescent state 를 지날 수 있도록 살짝 찔러주기 위해
+\co{force_quiescent_state()} 를 호출합니다.
+\iffalse
 
 Otherwise, lines~19 and 20 compute the next time that CPU stall warnings
 should be printed (if the grace period extends that long) and
@@ -6645,6 +6681,7 @@ line~21 releases the lock and re-enables interrupts.
 Lines~23-33 print a list of the stalled CPUs, and, finally,
 line~34 invokes \co{force_quiescent_state()} in order to nudge the
 offending CPUs into passing through a quiescent state.
+\fi
 
 \subsection{Possible Flaws and Changes}
 \label{app:rcuimpl:rcutreewt:Possible Flaws and Changes}
