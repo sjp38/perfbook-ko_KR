@@ -6686,6 +6686,23 @@ offending CPUs into passing through a quiescent state.
 \subsection{Possible Flaws and Changes}
 \label{app:rcuimpl:rcutreewt:Possible Flaws and Changes}
 
+이 글을 쓰는 시점까지에 있어
+Hierarchical RCU 의 있을 수 있는 가장 큰 문제는 \co{force_quiescent_state()} 는
+잠재적으로 모든 CPU 의 \co{rcu_data} 구조체들을 돌아봐야 할 수 있다는 겁니다.
+이 스캔 작업이 인터럽트가 불능화 된채 이루어지기 때문에 수천개의 CPU 들을 가진
+기계에서는, 이는 잠재적으로 스케쥴링 반응시간에 큰 영향을 끼칠 수 있습니다.
+
+이게 실제로 문제가 될 수 있는데, 한가지 해결책은 현재의 per-\co{rcu_state}
+\co{->signaled} 상태 변수처럼 per-leaf-\co{rcu_node} 기반으로
+\co{force_quiescent_state()} 시퀀스를 분리시켜 유지하는 겁니다.
+이는 per-leaf-\co{rcu_node} 기반으로 quiescent state 진행을 가능하게 할
+것이어서 최악의 경우의 스케쥴링 응답시간의 최악의 경우의 문제를 크게 줄일
+겁니다.
+
+그런 수정이 가해지기 전까지는 스케쥴링 응답시간에 민감한 분들은 시스템의 CPU
+갯수를 제한하거나 preemptible RCU 구현을 사용하시기 바랍니다.
+\iffalse
+
 The biggest possible issue with Hierarchical RCU put forward as of this
 writing is the fact that \co{force_quiescent_state()} involves a
 potential walk through all CPUs' \co{rcu_data} structures.
@@ -6704,3 +6721,4 @@ of scheduling latency.
 In the meantime, those caring deeply about scheduling latency can
 limit the number of CPUs in the system or use the preemptible RCU
 implementation.
+\fi
