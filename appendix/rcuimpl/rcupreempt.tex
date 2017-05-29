@@ -4,6 +4,23 @@
 \label{app:rcuimpl:Preemptible RCU}
 \OriginallyPublished{Appendix}{app:rcuimpl:Preemptible RCU}{Preemptible RCU}{Linux Weekly News}{PaulEMcKenney2007PreemptibleRCU}
 
+Preemptible RCU 구현은 read-side 크리티컬 섹션이 preemption 당하고 락들을
+오래도록 기다리게 만들 수 있다는 점에서 일반적이지 않습니다.
+하지만, 이 구현은 (예를 들어, \co{wait_event()} 기능을 통해) 일반적인 블록킹을
+처리하지 않습니다:
+여러분이 이게 필요하다면, 여러분은
+Appendix~\ref{app:rcuimpl:Sleepable RCU Implementation}
+에서 소개한 SRCU 를 대신 사용해야 합니다.
+SRCU 와 대조적으로, preemptible RCU 는 non-\co{CONFIG_PREEMPT} 커널에서
+우선순위 상속과 non-blocking 에 모두 해당하는 기능들 안에서만 블록킹을
+허용합니다.
+블락되어 있는 락을 획득하고 RCU read-side 크리티컬 섹션 내에서 preemption 당할
+수 있는 능력은 Ingo Molnar 의 -rt 패치셋에서 제공된 강한 real-time 기능성을
+위해 필요합니다.
+하지만, 최초의 preemptible RCU 구현~\cite{PaulMcKenney2005d} 은 일부 한계가
+있는데, 다음과 같습니다:
+\iffalse
+
 The preemptible RCU implementation is unusual in that
 it permits read-side critical
 sections to be preempted and to be blocked waiting for locks.
@@ -20,8 +37,17 @@ RCU read-side critical sections is required for the aggressive real-time
 capabilities provided by Ingo Molnar's -rt patchset.
 However, the initial preemptible RCU implementation~\cite{PaulMcKenney2005d}
 had some limitations, including:
+\fi
 
 \begin{enumerate}
+\item	Read-side 기능들은 non-maskable 인터럽트 (NMI) 나 system 관리 인터럽트
+	핸들러 내에서 호출될 수 없습니다.
+\item	Read-side 기능들은 어토믹 인스트럭션들과 메모리 배리어를 모두
+	사용하는데, 이것들은 모두 상당한 오버헤드를 갖습니다.
+\item	RCU read-side 크리티컬 섹션의 priority
+	boosting~\cite{PaulEMcKenney2007BoostRCU} 을 하지 않습니다.
+\iffalse
+
 \item	Its read-side primitives cannot be called from within
 	non-maskable interrupt (NMI) or systems-management interrupt
 	handlers.
@@ -29,7 +55,17 @@ had some limitations, including:
 	memory barriers, both of which have excessive overhead.
 \item	It does no priority boosting of RCU read-side critical
 	sections~\cite{PaulEMcKenney2007BoostRCU}.
+\fi
 \end{enumerate}
+
+2.6.26 리눅스 커널에 받아들여진 새로운 preemptible RCU 구현은 이 한계점들을
+제거했고, 이 부록은 그 설계에 대한 LWN
+기사~\cite{PaulEMcKenney2007PreemptibleRCU} 에 대한 업데이트 역할을 합니다.
+하지만, 이 구현은 더 빠르고 간단한 2.6.32 리눅스 커널에서의 구현으로
+교체되었다는 점을 알아두시기 바랍니다.
+이 설명은 다만 기존에 고안되었던 RCU 구현들 중 가장 복잡한 것에 대한 증언일
+뿐입니다.
+\iffalse
 
 The new preemptible RCU implementation that accepted into the 2.6.26
 Linux kernel
@@ -39,12 +75,36 @@ However, please note that this implementation was replaced with a faster
 and simpler implementation in the 2.6.32 Linux kernel.
 This description nevertheless remains to bear witness to the most complex
 RCU implementation ever devised.
+\fi
 
 \QuickQuiz{}
+	Preemptible-RCU read-side 크리티컬 섹션 내에서 호출되는 블록킹 기능들이
+	우선순위 상속에 걸리기 쉬워야 한다는 점이 중요한 이유가 뭐죠?
+	\iffalse
+
 	Why is it important that blocking primitives
 	called from within a preemptible-RCU read-side critical section be
 	subject to priority inheritance?
+	\fi
 \QuickQuizAnswer{
+	블록당한 읽기 쓰레드들은 RCU grace period 를 멈추게 만들어서 OOM 을
+	일으킬 수 있기 때문입니다.
+	예를 들어, 한 읽기 쓰레드가 RCU read-side 크리티컬 섹션 내에서
+	\co{wait_event()} 를 호출했고, 그 이벤트가 절대 일어나지 않는다면, RCU
+	grace period 는 비결정적으로 지속될 것이고, 이는 이 시스템이 금방이든
+	나중이든 OOM 을 일으킬 것을 보장합니다.
+	따라서, 그런 OOM 을 막기 위해 이런 읽기 쓰레드들이 read-side 크리티컬
+	섹션에 대해 진행을 할 수 있도록 하는 어떤 방법이 있어야만 합니다.
+	Priority boosting 은 그런 진행을 강제하기 위핸한가지 방법입니다만, 읽기
+	쓰레드들이 priority boosting 을 통해 깨어날 수 있다던지 하는 제한된
+	블록킹에 있을 때에만 가능합니다.
+
+	물론, 우선순위 상속 외에도 우선순위 역전 문제를 해결하는 priority
+	ceiling, preemption disabling 등의 다른 방법들이 존재합니다.
+	하지만, 리눅스 커널에서 우선순위 상속이 사용되는 좋은 이유가 존재하고,
+	그런 이유로 RCU 에서 사용하기로 했습니다.
+	\iffalse
+
 	Because blocked readers stall RCU grace periods,
 	which can result in OOM.
 	For example, if a reader did a \co{wait_event()} within
@@ -62,19 +122,33 @@ RCU implementation ever devised.
 	preemption disabling, and so on.
 	However, there are good reasons why priority inheritance is the approach
 	used in the Linux kernel, so this is what is used for RCU.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Non-\co{CONFIG_PREEMPT} 커널 내에서 블록될 수 있는 기능들을 사용할 수
+	있게 하는 게 가능할까요, 그리고 만약 그렇다면, 어떤 조건 하에서
+	가능할까요?
+	\iffalse
+
 	Could the prohibition against using primitives
 	that would block in a non-\co{CONFIG_PREEMPT} kernel be lifted,
 	and if so, under what conditions?
+	\fi
 \QuickQuizAnswer{
+	테스트와 벤치마크가 preemptible RCU 가 classic RCU 가 완전히 사라질 수
+	있을 정도로 잘 동작한다는 것을 보인다면, 그리고 우선순위 상속이
+	\co{semaphore} 들과 같은 블록킹 동기화 기능들을 위해서도 구현된다면,
+	그런 기능들은 RCU read-side 크리티컬 섹션에서 사용될 수 있을 겁니다.
+	\iffalse
+
 	If testing and benchmarking demonstrated that the
 	preemptible RCU worked well enough that classic RCU could be dispensed
 	with entirely, and if priority inheritance was implemented for blocking
 	synchronization primitives
 	such as \co{semaphore}s, then those primitives could be
 	used in RCU read-side critical sections.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Conceptual RCU}
