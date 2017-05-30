@@ -154,6 +154,18 @@ RCU implementation ever devised.
 \subsection{Conceptual RCU}
 \label{app:rcuimpl:Conceptual RCU}
 
+가장 낮은 단계에서의 RCU 에 대한 이해를 놓고 보면 RCU 구현에 대한 이해와 검증은
+훨씬 쉬워집니다.
+이 섹션은 RCU 구현이 반드시 지원해야 하는 가장 기본적인 동시성에 대한
+요구사항에 대한 간단한 개요를 제공합니다.
+더 자세한 내용을 위해선,
+Section~\ref{sec:defer:RCU Fundamentals} 을 보세요.
+
+RCU 구현은 다음 규칙을 준수해야만 합니다: 특정 RCU read-side 크리티컬 섹션의
+명령이 어떤 grace period 를 앞선다면, 해당 RCU read-side 크리티컬 섹션의 모든
+명령은 해당 grace period 가 끝나기 전에 완료되어야만 합니다.
+\iffalse
+
 Understanding and validating an RCU implementation is much easier given
 a view of RCU at the lowest possible level.
 This section gives a very brief overview of the
@@ -166,6 +178,7 @@ RCU implementations must obey the following rule: if any
 statement in a given RCU read-side critical section precedes a
 grace period, then all statements in that RCU read-side critical
 section must complete before that grace period ends.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -173,6 +186,24 @@ section must complete before that grace period ends.
 \caption{Buggy Grace Period From Broken RCU}
 \label{app:rcuimpl:Buggy Grace Period From Broken RCU}
 \end{figure}
+
+Figure~\ref{app:rcuimpl:Buggy Grace Period From Broken RCU} 에 시간축을
+왼쪽에서 오른쪽으로 표현하면서 이를 표현했습니다.
+빨간색 ``Removal'' 박스는 RCU 로 보호되는 데이터 구조를 예를 들면
+\co{list_del_rcu()} 를 사용하는 식으로 수정하는 update-side 크르티컬 섹션을
+표현합니다; 커다란 노란색의 ``Grace Period'' 박스는 \co{synchronize_rcu()} 를
+통해 호출될 수 있는 grace period 를 의미하며, 초록색의 ``Reclamation'' 박스는
+\co{kfree()} 등을 통한, 영향 받은 데이터 원소의 해제를 의미합니다.
+파란색의 ``Reader'' 박스들은 각각 RCU read-side 크리티컬 섹션을 표현하는데,
+예를 들면 \co{rcu_read_lock()} 으로 시작되고 \co{rcu_read_unlock()} 으로
+종료됩니다.
+빨간색으로 테두리 쳐진 ``Reader'' 박스는 비합법적인 상황에 대한 예입니다:
+Read-side 크리티컬 섹션이 grace period 에 겹칠 수 있도록 하는 RCU 구현이라
+불리는 것들은 버그가 존재하는 것으로, update 쓰레드가 이 읽기 쓰레드가 여전히
+사용하고 있는 메모리 영역을 해제해 버릴 수 있기 때문입니다.
+
+그럼, 이 상황에서 RCU 구현이 해야 할 건 무엇일까요?
+\iffalse
 
 This is illustrated by
 Figure~\ref{app:rcuimpl:Buggy Grace Period From Broken RCU},
@@ -193,6 +224,7 @@ to completely overlap a grace period is buggy, since the updater might
 free up memory that this reader is still using.
 
 So, what is the poor RCU implementation to do in this situation?
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -200,6 +232,18 @@ So, what is the poor RCU implementation to do in this situation?
 \caption{Good Grace Period From Correct RCU}
 \label{app:rcuimpl:Good Grace Period From Correct RCU}
 \end{figure}
+
+RCU 구현은 이 grace period 를 연장해야 하는데,
+Figure~\ref{app:rcuimpl:Good Grace Period From Correct RCU} 에 보여진 것과 같은
+형태가 될 수 있겠습니다.
+짧게 말해서, 이 RCU 구현은 특정 grace period 의 시작 시점에서 진행 중이던 모든
+RCU read-side 크리티컬 섹션은 해당 grace period 가 완료되기 전에 메모리
+오퍼레이션들 등의 모든 것이 완전히 종료되었음을 보장해야 합니다.
+이 점은 RCU 검증이 집중될 수 있게 해줍니다: 컴파일러나 CPU 가 RCU 구현이 한
+일을 무효화 시키는 것을 막도록 충분히 배리어를 써서 하나의 grace period 의 시작
+시점에 진행 중이던 RCU read-side 크리티컬 섹션은 모두 해당 grace period 가
+종료되기 전에 끝나는 것을  보이는 겁니다.
+\iffalse
 
 It must extend the grace period, perhaps as shown in
 Figure~\ref{app:rcuimpl:Good Grace Period From Correct RCU}.
@@ -212,6 +256,7 @@ that any RCU read-side critical section in progress at the beginning of
 a grace period must terminate before that grace period ends, along with
 sufficient barriers to prevent either the compiler or the CPU from undoing
 the RCU implementation's work.
+\fi
 
 \subsection{Overview of Preemptible RCU Algorithm}
 \label{app:rcuimpl:Overview of Preemptible RCU Algorithm}
