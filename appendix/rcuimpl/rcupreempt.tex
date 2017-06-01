@@ -286,6 +286,24 @@ the grace-period state machine, and a walk through the read-side primitives.
 \label{app:rcuimpl:Classic vs. Preemptible RCU Callback Processing}
 \end{figure}
 
+이 preemptible RCU 구현은 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 에
+메모리 배리어를 필요로 하지 않기 때문에, 다단계 grace-period 탐지 알고리즘이
+필요합니다.
+콜백들을 위한 (기존의 RCU 구현들을 위해선 충분했던) 하나의 \co{wait} queue 를
+사용하는 대신에, 이 구현은 \co{wait} 큐들의 배열을 사용해서 RCU 콜백들이 이
+배열의 각 원소에 차례차례 enqueue 될 수 있게 합니다.
+콜백의 흐름에 있어서의 이 차이가
+Figure~\ref{app:rcuimpl:Classic vs. Preemptible RCU Callback Processing}
+에 grace period 당 두개의 waitlist stage 들을 갖는 (반면, 2007년 9월 10일의 -rt
+로의 패치~\cite{PaulEMcKenney2007PreemptibleRCUPatch} 는 네개의 waitlist stage
+를 사용합니다) preemptible RCU 구현에 대해 그려져 있습니다.
+
+Grace period 당 두개의 stage 를 갖기 때문에, 한쌍의 stage 들은 하나의 완전한
+grace period 를 구성합니다.
+비삿하게, grace period 당 네개의 stage 를 갖는 구현에서는 네개의 stage 의
+연속이 하나의 완전한 grace period 를 구성합니다.
+\iffalse
+
 Because this implementation of preemptible RCU does not require memory
 barriers in \co{rcu_read_lock()} and \co{rcu_read_unlock()},
 a multi-stage grace-period detection algorithm is required.
@@ -304,6 +322,7 @@ Given two stages per grace period, any pair of
 stages forms a full grace period.
 Similarly, in an implementation with four stages per grace period,
 any sequence of four stages would form a full grace period.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -311,6 +330,20 @@ any sequence of four stages would form a full grace period.
 \caption{Preemptible RCU Counter Flip Operation}
 \label{app:rcuimpl:Preemptible RCU Counter Flip Operation}
 \end{figure}
+
+언제 하나의 grace-period stage 가 끝날 수 있는지 판단하기 위해, preemptible RCU
+는 진행중인 RCU read-side 크리티컬 섹션들을 추적하는 두개의 원소로 구성된
+per-CPU \co{rcu_flipctr} 배열을 사용합니다.
+특정 CPU 의 \co{rcu_flipctr} 배열의 하나의 원소는 오래된 RCU read-side 크리티컬
+섹션들, 달리 말하자면 현재의 grace-period stage 보다 먼저 시작된 크리티컬
+섹션들을 추적합니다.
+다른 원소는 새로운 RCU read-side 크리티컬 섹션들을 추적하는데, 이것들은 현재
+grace-period stage 중간에 시작된 것들입니다.
+이 배열의 원소들은 새로운 grace-period stage 각각의 시작 때마다 그 역할을
+바꾸는데,
+Figure~\ref{app:rcuimpl:Preemptible RCU Counter Flip Operation} 에 그 모습이
+그려져 있습니다.
+\iffalse
 
 To determine when a grace-period stage can end,
 preemptible RCU uses a per-CPU two-element \co{rcu_flipctr} array
@@ -323,6 +356,15 @@ sections, namely those starting during the current grace-period stage.
 The array elements switch roles at the beginning of each new grace-period
 stage, as shown in
 Figure~\ref{app:rcuimpl:Preemptible RCU Counter Flip Operation}.
+\fi
+
+앞의 그림의 왼쪽의 첫번째 stage 동안, \co{rcu_flipctr[0]} 는 새로운 RCU
+read-side 크리티컬 섹션들을 추적하고, 따라서 \co{rcu_read_lock()} 에 의해 그
+값이 증가하고 \co{rcu_read_unlock()} 에 의해 그 값이 감소합니다.
+비슷하게, \co{rcu_flipctr[1]} 은 오래된 (앞의 stage 동안 시작된) RCU read-side
+크리티컬 섹션들을 추적하고, 따라서 \co{rcu_read_unlock()} 에 의해 그 값이
+감소되고 결코 그 값이 증가하지 않습니다.
+\iffalse
 
 During the first stage on the left-hand side of the above figure,
 \co{rcu_flipctr[0]} tracks the new
@@ -332,6 +374,20 @@ Similarly, \co{rcu_flipctr[1]} tracks the old RCU read-side
 critical sections (those that started during earlier stages), and
 is therefore decremented by \co{rcu_read_unlock()} and never
 incremented at all.
+\fi
+
+각 CPU 의 \co{rcu_flipctr[1]} 원소는 결코 그 값이 증가되지 않기 때문에, 모든
+CPU 들의 그 원소의 값의 합은 결국은 0이 됩니다, RCU read-side 크리티컬 섹션
+중간의 preemption 은 개별적 카운터가 0이 아니게 놔두거나 심지어 음수를 만들
+수도 있겠지만 말입니다.
+예를 들어, 하나의 task 가 한 CPU 위에서 \co{rcu_read_lock()} 을 호출했고,
+preemption 당한 후, 다른 CPU 에서 다시 시작되어서 \co{rcu_read_unlock()} 을
+호출했다고 생각해 보세요.
+첫번째 CPU 의 카운터는 +1 될것이고 두번째 CPU 의 카운터는 -1 됩니다만, 그 합은
+0이 됩니다.
+Preemption 의 가능성에 관계 없이, 이 카운터 원소들의 합이 0이 된다면, 앞의
+그림의 오른쪽에 보여진 것처럼 다음 grace-period stage 로 넘어가도 안전합니다.
+\iffalse
 
 Because each CPU's old \co{rcu_flipctr[1]} elements are never
 incremented, their sum across all CPUs must eventually go to zero,
@@ -345,6 +401,22 @@ will be -1, however, they will still sum to zero.
 Regardless of possible preemption, when the sum of the old counter
 elements does go to zero, it is safe to move to the next grace-period
 stage, as shown on the right-hand side of the above figure.
+\fi
+
+이 두번째 stage 에서, 각 CPU 의 \co{rcu_flipctr} 카운터 배열의 원소들은 그
+역할을 서로 바꿉니다.
+\co{rcu_flipctr[0]} 카운터는 이제 오래된 RCU read-side 크리티컬 섹션, 달리 말해
+grace period stage 0 동안 시작된 것들을 추적합니다.
+비슷하게, \co{rcu_flipctr[1]} 카운터는 이제 grace period stage 1 안에서 시작된
+새로운 RCU read-side 크리티컬 섹션들을 추적합니다.
+따라서, \co{rcu_read_lock()} 은 이제 \co{rcu_flipctr[1]} 의 값을 증가시키며,
+\co{rcu_read_unlock()} 은 여전히 각 카운터의 값을 감소시킵니다.
+특히, \co{rcu_read_lock()} 이 grace-period stage 0 (이 시점에선 과거의 stage)
+동안 수행되었다면, \co{rcu_read_unlock()} 은 \co{rcu_flipctr[0]} 의 값을
+감소시키지만, \co{rcu_read_lock()} 이 grace-period stage 1 (새로운 stage) 동안
+수행되었다면, \co{rcu_read_unlock()} 은 \co{rcu_flipctr[1]} 의 값을 감소시켜야
+합니다.
+\iffalse
 
 In this second stage, the elements of each CPU's \co{rcu_flipctr}
 counter array switch roles.
@@ -362,6 +434,23 @@ during grace-period stage 0 (the old stage at this point), then
 but if the matching \co{rcu_read_lock()} executed during
 grace-period stage 1 (the new stage), then \co{rcu_read_unlock()}
 must instead decrement \co{rcu_flipctr[1]}.
+\fi
+
+여기서의 핵심은 과거의 RCU read-side 크리티컬 섹션들을 추적하는 모든
+\co{rcu_flipctr} 원소들이 확실히 감소되어야 한다는 겁니다.
+따라서, 일단 이 과거의 것들에 대한 카운터의 합이 0이 된다면, 이는 바뀔 수
+없습니다.
+
+\co{rcu_read_lock()} 기능은 \co{rcu_flipctr} 배열을 인덱스 하기 위해 현재
+grace-period 카운터의 가장 바닥 bit (\co{rcu_ctrlblk.completed & 0x1}) 을
+사용하고, 이 인덱스를 task 구조체 안에 기록해 둡니다.
+여기 짝을 맞추는 \co{rcu_read_unlock()} 은 이 기록된 값을 \co{rcu_read_lock()}
+이 값 증가시킨 것에 걸맞는 카운터의 값을 감소시킨다는 것을 보장하기 위해
+사용합니다.
+물론, 이 RCU read-side 크리팈러 섹션이 preemption 당했다면,
+\co{rcu_read_unlock()} 은 짝이 맞는 \co{rcu_read_lock()} 이 값을 증가시킨
+카운터가 아니라, 다른 CPU 에 속한 카운터의 값을 감소시킬 수도 있습니다.
+\iffalse
 
 The critical point is that all \co{rcu_flipctr} elements
 tracking the old RCU read-side critical sections must strictly decrease.
@@ -380,6 +469,18 @@ Of course, if the RCU read-side critical section has been preempted,
 \co{rcu_read_unlock()} might be decrementing the counter
 belonging to a different CPU than the one whose counter was incremented
 by the matching \co{rcu_read_lock()}.
+\fi
+
+각각의 CPU 는 또한 \co{rcu_flip_flag} 와 \co{rcu_mb_flag} per-CPU 변수들을 갖고
+있습니다.
+\co{rcu_flip_flag} 변수는 각 grace-period stage 의 시작을 동기화 시키는 데에
+사용됩니다: 일단 특정 CPU 가 \co{rcu_flip_flag} 에 응답했다면, 이제 과거의
+grace-period stage 에 연관된 \co{rcu_flip} 배열의 원소의 값을 증가시키는걸
+중단해야 합니다.
+이 카운터의 값 (\co{rcu_ctrlblk.completed}) 을 증가시키는 CPU 는 각 CPU 의
+\co{rcu_mb_flag} 의 값을 \co{rcu_flipped} 로 바꿉니다만, 특정 \co{rcu_mb_flag}
+는 연관된 CPU 에 의해서만 \co{rcu_flip_seen} 으로 되바뀔 겁니다.
+\iffalse
 
 Each CPU also maintains \co{rcu_flip_flag} and
 \co{rcu_mb_flag} per-CPU variables.
@@ -393,6 +494,19 @@ changes the value of each CPU's \co{rcu_mb_flag} to
 \co{rcu_flipped}, but a given \co{rcu_mb_flag}
 may be changed back to \co{rcu_flip_seen} only by
 the corresponding CPU.
+\fi
+
+\co{rcu_mb_flag} 변수는 각 CPU 가 각 grace-period stage 의 끝에서 메몰
+비래이러르 실행하도록 강제하는데에 사용됩니다.
+이런 메모리 배리어들은 주어진 grace-period stage 에서 끝나는 RCU read-side
+크리티컬 섹션들로부터의 메모리 접근이 이 stage 의 종료 전으로 순서잡힐 것을
+보장하는데 필요합니다.
+이 방법은 RCU read-side 크리티컬 섹션의 시작과 끝에 비싼 메모리 배리어를 실제로
+수행하지 않고도 수행한 것과 같은 효과를 얻게 해줍니다.
+\co{rcu_mb_flag} 는 과거의 것들의 카운터의 합이 0이 되는 것을 파악하는 CPU 에
+의해 \co{rcu_mb_needed} 로 설정됩니다만, 해당 \co{rcu_mb_flag} 는 연관된 CPU 에
+의해서만, 메모리 배리어를 수행한 후에만 \co{rcu_mb_done} 으로 되돌려집니다.
+\iffalse
 
 The \co{rcu_mb_flag} variable is used to force each CPU to
 execute a memory barrier at the end of each grace-period stage.
@@ -407,6 +521,7 @@ the CPU that detects that the sum of the old counters is zero,
 but a given \co{rcu_mb_flag} is changed back to
 \co{rcu_mb_done} only by the corresponding CPU, and even
 then only after executing a memory barrier.
+\fi
 
 \subsubsection{Data Structures}
 \label{app:rcuimpl:Data Structures}
