@@ -67,6 +67,16 @@ of RCU and its uses.
 \subsubsection{RCU Uses}
 \label{sec:defer:RCU Uses}
 
+Portland State University (PSU) 의 Phil Howard 와 Jon Walpole 은 RCU 를
+소프트웨어 트랜잭셔널 메모리를 사용해 동기화된 업데이트와 조합해서 red-black
+tree 에 적용~\cite{PhilHowardPhD,PhilHoward2011RCUTMRBTree} 했습니다.
+Josh Priplett 과 Jon Walpole (역시 PSU) 은 RCU 를 resizable hash table 에
+적용했습니다~\cite{JoshTriplettPhD,Triplett:2011:RPHash,JonCorbet2014RCUhash1,JonCorbet2014RCUhash2}.
+또다른 RCU 로 보호되는 resizable hash table 들이 Herbert
+Xu~\cite{HerbertXu2010RCUResizeHash} 와 Mathieu
+Desnoyers~\cite{PaulMcKenney2013LWNURCUhash} 에 의해 만들어졌습니다.
+\iffalse
+
 Phil Howard and Jon Walpole of Portland State University (PSU) have
 applied RCU to red-black
 trees~\cite{PhilHowardPhD,PhilHoward2011RCUTMRBTree} combined with updates
@@ -76,6 +86,25 @@ hash tables~\cite{JoshTriplettPhD,Triplett:2011:RPHash,JonCorbet2014RCUhash1,Jon
 Other RCU-protected resizable hash tables have been created by
 Herbert Xu~\cite{HerbertXu2010RCUResizeHash} and by
 Mathieu Desnoyers~\cite{PaulMcKenney2013LWNURCUhash}.
+\fi
+
+MIT 의 Austic Clements, Frans Kaashoek, 그리고 Nickolai Zeldovich 는 RCU 에
+최적화된 balanced binary tree (Bosai)~\cite{AustinClements2012RCULinux:mmapsem}
+을 만들었고, 리눅스 커널의 \co{mmap_sem} 의 read-side contention 을 줄이기 위해
+이 트리를 리눅스 커널의 VM 에 적용했습니다.
+이 작업은 많은 수의 minor page fault 들로 구성된 microbenchmark 에서 최소 80
+개의 CPU 들까지는 열배 이상의 속도 향상과 확장성을 보였습니다.
+이는 앞서 Pter Zijlstra 에 의해 개발된
+패치~\cite{PeterZijlstra2014SpeculativePageFault} 와 비슷하며, 둘 다 파일시스템
+데이터 구조들은 RCU 읽기 쓰레드들에게 안전하지 않다는 한계점을 가지고 있습니다.
+Clements 등은 이 한계점을 page-fault 처리 경로를 anonymous page 들로만
+제한함으로써 피했습니다.
+더 최근에 들어서는 파일시스템 데이터 구조들도 RCU 읽기 쓰레드들에게 안전하게
+되었고~\cite{JonathanCorbet2010dcacheRCU,JonathanCorbet2011dcacheRCUbug},
+따라서 이 작업은 anonymous page 만이 아니라 모든 종류의 page 들에 대해 구현될
+수도 있을 겁니다---실제로, Peter Zijlstra 는 최근에 이에 대한 프로토타입을
+만들었습니다.
+\iffalse
 
 Austin Clements, Frans Kaashoek, and Nickolai Zeldovich
 of MIT created an RCU-optimized balanced binary tree
@@ -96,6 +125,27 @@ readers~\cite{JonathanCorbet2010dcacheRCU,JonathanCorbet2011dcacheRCUbug},
 so perhaps this work can be implemented for all page types, not just
 anonymous pages---Peter Zijlstra has, in fact, recently prototyped
 exactly this.
+\fi
+
+MIT 의 Yandong Mao 와 Robert Morris, 그리고 Haravard University 의 Eddie Kohler
+는 B+ tree 와 tries 의 아이디어를 조합한, Masstree 라는 이름의 또다른 RCU 로
+보호되는 트리를 만들었습니다~\cite{Mao:2012:CCF:2168836.2168855}.
+이 tree 는 RCU 로 보호되는 hash table 에 비해 2.5x 가량 느리지만 hash table 과
+달리 key range 에 대한 오퍼레이션들을 지원합니다.
+또한, Masstree 는 긴 shared key prefix 들에 대해 효율적인 오브젝트 저장소를
+지원하며, 더 나아가서 대용량 저장소로의 로깅을 통한 persistency 를 제공합니다.
+
+해당 페이퍼는 Masstree 의 성능이 memcached 의 것과 견주어질 수 있으며, 심지어
+Masstree 는 memcached 가 제공하지 않는 업데이트의 지속성을 제공합니다.
+이 논문은 또한 Masstree 의 성능을 지속성 있는 데이터베이스인 MongoDB, VoltDB,
+Redis 와 비교해서 어떤 경우에는 100배가 넘는 성능 이득을 보였습니다.
+MIT 의 Stephen Tu, Wenting Zheng, Barbara Liskov, 그리고 Samuel Madden 과
+Kohler 의 또다른 논문~\cite{Tu:2013:STM:2517349.2522713} 은 Masstree 를 Silo
+라는 이름의 in-memory 데이터베이스에 적용해서 잘 알려진 트랜잭션 처리
+벤치마크에서 초당 700K 트랜잭션 (분당 42M 트랜잭션) 을 달성했습니다.
+흥미롭게도, Silo 는 락을 잡으면서 grace period 의 오버헤드를 일으키지 않고도
+linearizability 를 보장합니다.
+\iffalse
 
 Yandong Mao and Robert Morris of MIT and Eddie Kohler of
 Harvard University created another RCU-protected tree named
@@ -119,6 +169,7 @@ transactions per second (42M transactions per minute) on a well-known
 transaction-processing benchmark.
 Interestingly enough, Silo guarantees linearizability without incurring
 the overhead of grace periods while holding locks.
+\fi
 
 \subsubsection{RCU Implementations}
 \label{sec:defer:RCU Implementations}
