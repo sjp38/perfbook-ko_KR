@@ -174,6 +174,32 @@ the overhead of grace periods while holding locks.
 \subsubsection{RCU Implementations}
 \label{sec:defer:RCU Implementations}
 
+Mathieu Desnoyers 는 tracing 에 사용하기 위해 user-space RCU 를
+만들었고~\cite{MathieuDesnoyersPhD,MathieuDesnoyers2012URCU} 이는 여러
+프로젝트들~\cite{MikeDay2013RCUqemu} 에 사용되었습니다.
+
+Technion 의 Maya Arbel 과 Hagit Attiya 는 Masstree 와 같이 동시의 업데이트를
+가능하게 해주는 더 정밀한 방법~\cite{MayaArbel2014RCUtree} 을 RCU 로 보호되는
+탐색 tree 에 적용했습니다.
+이 논문은 올바름의 증명과 이 tree 의 모든 오퍼레이션들이 linearizable 하다는
+증명을 포함합니다.
+불행히도, 이 구현은 lock 을 잡으면서 기다리는 동안 grace-period 전체 응답시간을
+필요로 함으로써 linearizability 를 얻는데, 이는 update 로만 이루어진 workload
+들에서는 확장성을 떨어뜨립니다.
+이 문제를 해결하는 한가지 방법은 linearizability 를 포기하는
+것~\cite{AndreasHaas2012FIFOisnt,PaulEMcKennneyAtomicTreeN4037} 입니다만, Arbel
+과 Attiya 는 그대신 low-end grace-period 응답시간을 줄인 RCU 변종을
+만들었습니다.
+물론, 어떤 것도 공짜로 얻어지지는 않고, 이 RCU 변종은 32개 CPU 에서 확장성의
+한계를 드러내는 결과를 나타냈습니다.
+Linearizability 를 포기해서 성능과 확장성을 모두 얻는 것에 대해서도 더 이야기
+할 부분이 많지만, 학계에서 대안적 RCU 구현들로 한 실험들을 보는 것도 좋을
+겁니다.
+프라하에 위치한 Charles University 의 연구원들 역시 RCU 구현들에 대한 연구를
+진행했는데, Andrej Podzimek 의 박사 학위 논문~\cite{AndreasHaas2012FIFOisnt} 과
+Adam Hraska 의 박사학위 논문~\cite{AdamHraska2013RCUHelenOS} 이 그것들입니다.
+\iffalse
+
 Mathieu Desnoyers created a user-space RCU for use in
 tracing~\cite{MathieuDesnoyersPhD,MathieuDesnoyers2012URCU},
 which has seen use in a number of projects~\cite{MikeDay2013RCUqemu}.
@@ -199,6 +225,24 @@ Researchers at Charles University in Prague have also been
 working on RCU implementations, including dissertations by
 Andrej Podzimek~\cite{AndrejPodzimek2010masters} and Adam
 Hraska~\cite{AdamHraska2013RCUHelenOS}.
+\fi
+
+RCU 같은 메커니즘들이 Java 에도 도입되고 있습니다.
+Sivaramakrishnan 등~\cite{Sivaramakrishnan:2012:ERB:2258996.2259005} 은 RCU
+같은 메커니즘을 사용해서 Java 의 가비지 콜렉터와 상호작용할 때 필요한 read
+barrier 를 제거하는데 사용해서 상당한 성능 향상을 냈습니다.
+
+Shanghai Jiao Tong University 의 Ran Liu, Heng Zhang, 그리고 Haibo Chen 은
+최적화된 ``passive reader-writer lock'' 에 사용하기 위한 특수화된 RCU
+변종~\cite{RanLiu2014PassiveRWLock} 을 만들었는데, 이는 Gautham
+Shenoy~\cite{GauthamShenoy2006RCUrwlock} 의 것과 Srivatsa
+Bhat~\cite{SrivatsaSBhat2014RCUrwlock} 의 것과 비슷합니다.
+Liu 등의 논문은 여러 측면에서 흥미롭습니다~\cite{PaulEMcKenney2014ReadMostly}.
+
+Geoff Romer 와 Andrew Hunter 는 싱글톤 데이터 구조의 RCU 보호의 cell 기반 API
+를 C++ 표준에 포함시킬 것을
+제안했습니다~\cite{GeoffRomer2017C++DeferredReclamation}.
+\iffalse
 
 RCU-like mechanisms are also finding their way into Java.
 Sivaramakrishnan et al.~\cite{Sivaramakrishnan:2012:ERB:2258996.2259005}
@@ -217,6 +261,7 @@ perspectives~\cite{PaulEMcKenney2014ReadMostly}.
 Geoff Romer and Andrew Hunter proposed a cell-based API for RCU
 protection of singleton data structures for inclusion in the
 C++ standard~\cite{GeoffRomer2017C++DeferredReclamation}.
+\fi
 
 \subsubsection{RCU Validation}
 \label{sec:defer:RCU Validation}
