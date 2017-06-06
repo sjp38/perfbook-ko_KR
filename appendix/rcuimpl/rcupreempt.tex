@@ -558,10 +558,31 @@ The least-significant bit of \co{completed} is used by
 \paragraph{{\tt rcu\_data}}
 \label{app:rcuimpl:rcu_data}
 
+\co{rcu_data} 구조체는 per-CPU 구조체로, 다음과 같은 필드들을 갖습니다:
+\iffalse
+
 The \co{rcu_data} structure is a per-CPU structure, and
 contains the following fields:
+\fi
 
 \begin{itemize}
+\item	\co{lock} 은 이 구조체의 나머지 필드들을 보호합니다.
+\item	\co{completed} 는 CPU-local 한 활동들을 \co{rcu_ctrlblk} 의 글로벌
+	카운터들과 동기화 시키는데에 사용됩니다.
+\item	\co{waitlistcount} 는 비어있지 않은 wait-list 의 수를 세는데에
+	사용됩니다.
+	이 필드는 이 CPU 가 처리해야할 RCU 에 관련된 일을 가지고 있는지
+	파악하는걸 돕는데에 \co{rcu_pending()} 에 의해 사용됩니다.
+\item	\co{nextlist}, \co{nextail}, \co{waitlist},
+	\co{waittail}, \co{donelist}, 그리고
+	\co{donetail} 은 grace period 의 종료 시점에 호출되기를 기다리고 있는
+	RCU 콜백들로 구성된 리스트들을 형성합니다.
+	각각의 리스트는 tail 포인터를 가지고 있어서, $O\left(1\right)$ 삽입을
+	허용합니다.
+	이 RCU 콜백들은 이 리스트들을 통해 아래에 보여진 것처럼 흘러갑니다.
+\item	\co{rcupreempt_trace} 는 통계를 누적합니다.
+\iffalse
+
 \item	\co{lock} guards the remaining fields in this structure.
 \item	\co{completed} is used to synchronize CPU-local
 	activity with the global counter in \co{rcu_ctrlblk}.
@@ -577,6 +598,7 @@ contains the following fields:
 	Each list has a tail pointer, allowing $O\left(1\right)$ appends.
 	The RCU callbacks flow through these lists as shown below.
 \item	\co{rcupreempt_trace} accumulates statistics.
+\fi
 \end{itemize}
 
 \begin{figure}[htb]
@@ -587,12 +609,21 @@ contains the following fields:
 \end{figure}
 
 Figure~\ref{app:rcuimpl:Preemptible RCU Callback Flow}
+는 RCU 콜백들이 \co{rcu_data} 구조체의 리스트들을 \co{call_rcu()} 를 통한
+생성부터 \co{rcu_process_callbacks()} 를 통한 호출까지 어떻게 흘러가는지
+보입니다.
+파란색 화살표는 각각 grace-period state machine 을 통한 이동을 나타내는데, 뒤의
+섹션에서 이에 대해 설명합니다.
+\iffalse
+
+Figure~\ref{app:rcuimpl:Preemptible RCU Callback Flow}
 shows how RCU callbacks flow through a given
 \co{rcu_data} structure's lists, from creation by
 \co{call_rcu()} through invocation by
 \co{rcu_process_callbacks()}.
 Each blue arrow represents one pass by the grace-period state machine,
 which is described in a later section.
+\fi
 
 
 
