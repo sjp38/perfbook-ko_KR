@@ -630,6 +630,14 @@ which is described in a later section.
 \paragraph{{\tt rcu\_flipctr}}
 \label{app:rcuimpl:rcu_flipctr}
 
+앞에서도 이야기했듯이, \co{rcu_flipctr} per-CPU 카운터 배열은 RCU read-side
+크리티컬 섹션들을 추적하는 카운터 쌍들을 담습니다.
+이 배열의 어떤 카운터든 음수가 될 수 있는데, 예를 들면 한 task 가 RCU read-side
+크리티컬 센션 내에서 다른 CPU 로 옮겨가거나 하는 경우입니다.
+하지만, 이 카운터들의 값의 합은 연관된 grace period 동안은 양수로 유지될
+것이며, 이 grace period 의 종료 시점에서는 0이 될겁니다.
+\iffalse
+
 As noted earlier, the \co{rcu_flipctr}
 per-CPU array of counters contains the
 counter pairs that track outstanding RCU read-side critical sections.
@@ -639,15 +647,29 @@ read-side critical section.
 However, the sum of the counters will
 still remain positive throughout the corresponding grace period, and will
 furthermore go to zero at the end of that grace period.
+\fi
 
 \paragraph{{\tt rcu\_try\_flip\_state}}
 \label{app:rcuimpl:rcu_try_flip_state}
 
+\co{rcu_try_flip_state} 변수는 다음 센션에서 설명하는대로 grace-period state
+machine 의 현재 상태를 추적합니다.
+\iffalse
+
 The \co{rcu_try_flip_state} variable tracks the current state of
 the grace-period state machine, as described in the next section.
+\fi
 
 \paragraph{{\tt rcu\_try\_flip\_flag}}
 \label{app:rcuimpl:rcu_try_flip_flag}
+
+\co{rcu_try_flip_flag} per-CPU 변수는 grace-period 캉누터가 최근에 그 값을
+증가시킨데 연관된 CPU 를 알리며 해당 CPU 의 확인을 기록하기도 합니다.
+일단 어떤 CPU 가 카운터 뒤집기를 확인하면, 해당 CPU 에서 \co{rcu_read_lock()}
+에 의해 취해지는 후속의 동작들은 해당 grace-period 카운터의 새로운 값을 가져야
+하는데, 특히 \co{rcu_read_lock()} 내에서 \co{rcu_flipctr} 의 값을 증가시킬 때가
+그렇습니다.
+\iffalse
 
 The \co{rcu_try_flip_flag} per-CPU variable alerts the corresponding
 CPU that the grace-period counter has recently been incremented, and
@@ -656,9 +678,17 @@ Once a given CPU has acknowledged the counter flip, all subsequent actions
 taken by \co{rcu_read_lock()} on that CPU must account for the
 new value of the grace-period counter, in particular, when incrementing
 \co{rcu_flipctr} in \co{rcu_read_lock()}.
+\fi
 
 \paragraph{{\tt rcu\_mb\_flag}}
 \label{app:rcuimpl:rcu_mb_flag}
+
+\co{rcu_mb_flag} per-CPU 변수는 grace-period state machine 이 진행될 수 있도록
+하기 위해 메모리 배리어를 반드시 수행해야 하는, 연관된 CPU 를 알리며, 또한 해당
+CPU 의 확인을 기록합니다.
+일단 어떤 CPU 가 메모리 배리어를 수행하면, RCU read-side 크리티컬 섹션 앞의
+모든 메모리 오퍼레이션들은 연관된 grace period 뒤의 코드에 보여질 겁니다.
+\iffalse
 
 The \co{rcu_mb_flag} per-CPU variable alerts the corresponding
 CPU that it must execute a memory barrier in order for the grace-period
@@ -666,6 +696,7 @@ state machine to proceed, and also records that CPU's acknowledgment.
 Once a given CPU has executed its memory barrier, the memory operations
 of all prior RCU read-side critical will be visible to any code sequenced
 after the corresponding grace period.
+\fi
 
 
 \subsubsection{Grace-Period State Machine}
