@@ -104,7 +104,7 @@ void *perftest_reader(void *arg)
 	/* Announce our presence and enter the test loop. */
 	atomic_inc(&nthreads_running);
 	for (;;) {
-		gf = ACCESS_ONCE(goflag);
+		gf = READ_ONCE(goflag);
 		if (gf != GOFLAG_RUN) {
 			if (gf == GOFLAG_STOP)
 				break;
@@ -149,7 +149,7 @@ void perftest(void)
 	pap = malloc(sizeof(*pap) * nreaders);
 	BUG_ON(pap == NULL);
 	atomic_set(&nthreads_running, 0);
-	goflag = GOFLAG_INIT;
+	WRITE_ONCE(goflag, GOFLAG_INIT);
 
 	/* Populate route table. */
 	for (i = 0; i < nelems; i++)
@@ -173,9 +173,9 @@ void perftest(void)
 
 	/* Run the test. */
 	starttime = get_microseconds();
-	ACCESS_ONCE(goflag) = GOFLAG_RUN;
+	WRITE_ONCE(goflag, GOFLAG_RUN);
 	poll(NULL, 0, duration);
-	ACCESS_ONCE(goflag) = GOFLAG_STOP;
+	WRITE_ONCE(goflag, GOFLAG_STOP);
 	starttime = get_microseconds() - starttime;
 	wait_all_threads();
 
@@ -225,7 +225,7 @@ void *stresstest_updater(void *arg)
 	/* Announce our presence and enter the test loop. */
 	atomic_inc(&nthreads_running);
 	for (;;) {
-		gf = ACCESS_ONCE(goflag);
+		gf = READ_ONCE(goflag);
 		if (gf != GOFLAG_RUN) {
 			if (gf == GOFLAG_STOP)
 				break;
@@ -286,7 +286,7 @@ void stresstest(void)
 	pap = malloc(sizeof(*pap) * nupdaters);
 	BUG_ON(pap == NULL);
 	atomic_set(&nthreads_running, 0);
-	goflag = GOFLAG_INIT;
+	WRITE_ONCE(goflag, GOFLAG_INIT);
 
 	for (i = 0; i < nupdaters; i++) {
 		pap[i].myid = i;
@@ -306,9 +306,9 @@ void stresstest(void)
 
 	/* Run the test. */
 	starttime = get_microseconds();
-	ACCESS_ONCE(goflag) = GOFLAG_RUN;
+	WRITE_ONCE(goflag, GOFLAG_RUN);
 	poll(NULL, 0, duration);
-	ACCESS_ONCE(goflag) = GOFLAG_STOP;
+	WRITE_ONCE(goflag, GOFLAG_STOP);
 	starttime = get_microseconds() - starttime;
 	wait_all_threads();
 
@@ -346,10 +346,10 @@ void usage(char *progname, const char *format, ...)
 	fprintf(stderr, "\t\tNumber of elements, defaults to 100.  Must be\n");
 	fprintf(stderr, "\t\t1 or greater.\n");
 	fprintf(stderr, "\t--nreaders\n");
-	fprintf(stderr, "\t\tNumber of readers, defaults to 1.  Must be 1\n");
+	fprintf(stderr, "\t\tNumber of readers, defaults to 7.  Must be 1\n");
 	fprintf(stderr, "\t\tor greater.\n");
 	fprintf(stderr, "\t--nupdaters\n");
-	fprintf(stderr, "\t\tNumber of updaters, defaults to 1.  Must be 1\n");
+	fprintf(stderr, "\t\tNumber of updaters, defaults to 7.  Must be 1\n");
 	fprintf(stderr, "\t\tor greater.\n");
 	fprintf(stderr, "\t--cpustride\n");
 	fprintf(stderr, "\t\tStride when spreading threads across CPUs,\n");
