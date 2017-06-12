@@ -713,10 +713,39 @@ state machine, and then walks through the relevant code.
 \paragraph{Grace-Period State Machine Overview}
 \label{app:rcuimpl:Grace-Period State Machine Overview}
 
+이 상태 (\co{rcu_try_flip_state} 에 기록되어짐) 는 다음과 같은 값들을 가질 수
+있습니다:
+\iffalse
+
 The state (recorded in \co{rcu_try_flip_state})
 can take on the following values:
+\fi
 
 \begin{itemize}
+\item	\co{rcu_try_flip_idle_state}:  어떤 RCU grace-period 활동도 없기에
+	Grace-period state machine 이 idle 상태에 있음.
+	\co{rcu_ctrlblk.completed} grace-period 카운터는 이 상태로부터 빠져나갈
+	때마다 값이 증가되고, 모든 per-CPU \co{rcu_flip_flag} 변수들은
+	\co{rcu_flipped} 로 설정됩니다.
+\item	\co{rcu_try_flip_waitack_state}:
+	모든 CPU 들이 각자의 \co{rcu_flip_fflag} 변수를 \co{rcu_flip_seen} 으로
+	설정함으로써 기존 state 의 증가를 보았음을 보고하기를 기다리는 상태.
+	일단 모든 CPU 들이 이렇게 보고를 하게 되면, 우린 과거의 카운터 집합은
+	더이상 값 증가할 수 없음을 알게 됩니다.
+\item	\co{rcu_try_flip_waitack_state}:
+	기존 카운터들의 값의 합이 0이 되길 기다리는 상태.
+	일단 카운터들의 값의 합이 0이 되면, 모든 per-CPU \co{rcu_mb_flag}
+	변수들은 \co{rcu_mb_needed} 로 설정됩니다.
+\item	\co{rcu_try_flip_waitmb_state}:
+	모든 CPU 들이 각자의 \co{rcu_mb_flag} 변수의 값을 \co{rcu_mb_done} 으로
+	설정함으로써 메모리 배리어 인스트럭션을 수행했음을 알리기를 기다리는
+	상태.
+	일단 모든 CPU 들이 메모리 배리어 인스트럭션을 수행하면, 연관된 grace
+	period 의 시작 전에 시작된 read-side 크리티컬 섹션에 의해 만들어진
+	변경사항은 모든 CPU 들이 볼 수 있을 것임이 완화된 순서규칙의 기계에서도
+	보장됩니다.
+\iffalse
+
 \item	\co{rcu_try_flip_idle_state}:  the grace-period state
 	machine is idle due to there being no RCU grace-period activity.
 	The \co{rcu_ctrlblk.completed} grace-period counter
@@ -742,6 +771,7 @@ can take on the following values:
 	the changes made by any RCU read-side critical section that
 	started before the beginning of the corresponding grace period,
 	even on weakly ordered machines.
+\fi
 \end{itemize}
 
 \begin{figure}[htb]
@@ -751,9 +781,15 @@ can take on the following values:
 \label{app:rcuimpl:Preemptible RCU State Machine}
 \end{figure}
 
+Grace period state machine 은
+Figure~\ref{app:rcuimpl:Preemptible RCU State Machine}
+에 보여진 것처럼 이 상태들을 순차적으로 돌아갑니다.
+\iffalse
+
 The grace period state machine cycles through these states sequentially,
 as shown in
 Figure~\ref{app:rcuimpl:Preemptible RCU State Machine}.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -763,6 +799,15 @@ Figure~\ref{app:rcuimpl:Preemptible RCU State Machine}.
 \end{figure}
 
 Figure~\ref{app:rcuimpl:Preemptible RCU State Machine Timeline}
+는 이 state machine 이 어떻게 시간의 흐름에 따라 동작하는지 보입니다.
+상태들은 이 그림의 왼쪽에 보여져 있고 연관된 이벤트들이 시간의 흐름에 따라
+보여져 있는데, 시간은 아래쪽으로 흐르고 있습니다.
+우리는 뒤의 섹션에서 이 알고리즘을 검증할 때에 이 그림을 상세히 설명할 겁니다.
+
+그 전까지는, 여기에 알아둘 중요한 사항들이 있으니 알아두시기 바랍니다:
+\iffalse
+
+Figure~\ref{app:rcuimpl:Preemptible RCU State Machine Timeline}
 shows how the state machine operates over time.
 The states are shown along the figure's left-hand side and the relevant events
 are shown along the timeline, with time proceeding in the downward direction.
@@ -770,8 +815,30 @@ We will elaborate on this figure when we validate the algorithm in
 a later section.
 
 In the meantime, here are some important things to note:
+\fi
 
 \begin{enumerate}
+\item	\co{rcu_ctrlblk.completed} 카운터의 값 증가는 파란 타원으로 표시된
+	것처럼 다른 시간에 다른 CPU 들에 의해 관측되어질 수 있습니다.  하지만,
+	해당 CPU 가 이 값 증가를 알아챈 다음에는, 새로운 카운터를 사용해야
+	합니다.
+	따라서, 일단 모든 CPU 들이 알아챘음을 알린다면, 과거의 카운터의 값은
+	감소만 될 수 있습니다.
+\item	특정 CPU 는 이 카운터의 값 증가를 알기 전까지만 콜백 리스트들을
+	진행시킬 수 있습니다.
+\item	파란 타원은 메모리 오퍼레이션 재배치가 다른 CPU 들이 값 증가를 다른
+	시간에 볼 수 있음을 알립니다.
+	이는 특정 CPU 는 어떤 다른 CPU 가 이 카운터의 새로운 값을 해당 카운터가
+	진짜로 증가하기 전에 사용해서 이 구간을 건너뛰었다고 믿을 수도 있음을
+	의미합니다.
+	실제로, 이론상으로는, 특정 CPU 는 \co{rcu_ctrlblk.completed} 카운터의
+	다음의 값 증가를 기존의 메모리 배리어가 쳐진 시점만큼 빠른 시간에
+	볼수도 있습니다.
+	(이 문장은 매우 부정확함을 알아두시기 바랍니다.
+	메모리 배리어에 대한 올바름의 증명을 하고자 한다면,
+	Appendix~\ref{app:rcuimpl:Formal Validation} 를 보기 바랍니다.
+\iffalse
+
 \item	The increment of the \co{rcu_ctrlblk.completed} counter
 	might be observed at different times by different CPUs, as
 	indicated by the blue oval.  However, after a given
@@ -793,6 +860,17 @@ In the meantime, here are some important things to note:
 	(Note well that this sentence is very imprecise.
 	If you intend to do correctness proofs involving memory barriers,
 	please see Appendix~\ref{app:rcuimpl:Formal Validation}.
+\fi
+\item	\co{rcu_read_lock()} 은 어떤 메모리 배리어도 포함하고 있지 않기 때문에,
+	연관된 RCU read-side 크리티컬 섹션들은 해당 CPU 에 의해
+	\co{rcu_read_unlock()} 을 뒤따르도록 재배치 될수도 있습니다.
+	따라서, 이 RCU read-side 크리티컬 섹션들의 행동들이 실제로 완료되었음을
+	보장하기 위해 메모리 배리어가 필요합니다.
+\item	이어서 보게 되겠지만, 서로 다른 CPU 들이 카운터의 flip 을 서로 다른
+	시간에 볼 수 있다는 사실은 state machine 을 통한 한번의 횡단은 grace
+	period 에 충분치 않음을 의미합니다: 여러번의 횡단이 필요합니다.
+\iffalse
+
 \item	Because \co{rcu_read_lock()} does not contain any
 	memory barriers, the corresponding RCU read-side critical
 	sections might be reordered by the CPU to follow the
@@ -804,6 +882,7 @@ In the meantime, here are some important things to note:
 	counter flip happening at different times means that a
 	single trip through the state machine is not sufficient
 	for a grace period: multiple trips are required.
+\fi
 \end{enumerate}
 
 \paragraph{Grace-Period State Machine Walkthrough}
