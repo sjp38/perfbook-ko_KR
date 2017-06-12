@@ -910,6 +910,23 @@ In the meantime, here are some important things to note:
 \label{fig:app:rcuimpl:rcu_check_callbacks() Implementation}
 \end{figure}
 
+이 섹션은 scheduling-clock 인터럽트에서 irq (그리고 preemption) 가 비활성화된
+채로 \co{rcu_check_callbacks()} 를 호출하는, RCU grace-period state machine 을
+구현하는 C 코드를 살펴봅니다.
+이 함수는
+Figure~\ref{fig:app:rcuimpl:rcu_check_callbacks() Implementation}
+에 보여지는 것처럼 구현되어 있습니다.
+Line~4 는 현재의 CPU 에 연관된 \co{rcu_data} 구조체를 골라내고 line~6 는 이 CPU
+가 state machine 을 \co{rcu_try_flip_waitmb_state} 상태에서 진행시키기 위해
+메모리 배리어를 실행해야 하는지를 체크합니다.
+Line~7 은 이 CPU 가 이미 현재 grace-period stage number 를 알고 있는지 보고,
+그렇다면 line~8 에서 이 state machine 을 진행시킵니다.
+Line~9 와 12 는 \co{rcu_data} 의 락을 잡고, line~11 에서는 적절하다면 콜백들을
+수행시킵니다.
+Line~10 에서는 \co{CONFIG_RCU_TRACE} 가 활성화 되어 있다면 RCU tracing 을 위한
+통계들을 업데이트합니다.
+\iffalse
+
 This section walks through the C code that implements the RCU
 grace-period state machine, which is invoked from the scheduling-clock
 interrupt, which invokes \co{rcu_check_callbacks()} with
@@ -927,6 +944,7 @@ Lines~9 and 12 hold the \co{rcu_data}'s lock, and
 line~11 advances callbacks if appropriate.
 Line~10 updates RCU tracing statistics, if enabled via
 \co{CONFIG_RCU_TRACE}.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -944,6 +962,16 @@ Line~10 updates RCU tracing statistics, if enabled via
 \label{fig:app:rcuimpl:rcu_check_mb() Implementation}
 \end{figure}
 
+\co{rcu_check_mb()} 함수는
+Figure~\ref{fig:app:rcuimpl:rcu_check_mb() Implementation}
+에 보여진 것처럼 필요하면 메모리 배리어를 수행합니다.
+Line~3 는 이 CPU 가 메모리 배리어를 수행해야 하는지 체크하고, 만약 그렇다면
+line~4 에서 메모리 배리어를 실행하고 line~5 에서 state machine 을 알립니다.
+이 메모리 배리어는 \co{rcu_mb_flag} 의 새로운 값을 보는 모든 CPU 는 이 CPU 에
+의해 앞의 RCU read-side 크리티컬 섹션 안에서 수행된 메모리 오퍼레이션들을 보게
+될 것을 보장함을 알아두시기 바랍니다.
+\iffalse
+
 The \co{rcu_check_mb()} function executes a memory barrier
 as needed as shown in
 Figure~\ref{fig:app:rcuimpl:rcu_check_mb() Implementation}.
@@ -953,6 +981,7 @@ machine.
 Note that this memory barrier ensures that any CPU that sees the new
 value of \co{rcu_mb_flag} will also see the memory operations
 executed by this CPU in any prior RCU read-side critical section.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -991,6 +1020,23 @@ executed by this CPU in any prior RCU read-side critical section.
 \label{fig:app:rcuimpl:rcu_try_flip() Implementation}
 \end{figure}
 
+\co{rcu_try_flip()} 함수는
+Figure~\ref{fig:app:rcuimpl:rcu_try_flip() Implementation}
+에 보인 것처럼 RCU grace-period state machine 의 최고단계 구현을 합니다.
+Line~6 는 global RCU state-machine lock 을 획득하려 시도하고, 실패하면
+리턴합니다.
+Line~5 와 7 은 (\co{CONFIG_RCU_TRACE} 가 활성화 되어 있다면) RCU-tracing 통계를
+조작합니다.
+Line~10 부터 26 은 state machine 을 수행하는데, 각각 해당 state 에 맞는 함수를
+수행시킵니다.
+그런 함수 각각은 해당 state 가 진행되야 한다면 1을, 그렇지 않다면 0을
+리턴합니다.
+원칙적으로, 다음 state 를 곧바로 수행될 수 있지만, 실제로는 응답시간을 줄이기
+위해 그렇게 하지 않습니다.
+마지막으로, line~27 에서는 line~6 에서 획득했던 global RCU state-machine lock
+을 해제합니다.
+\iffalse
+
 The \co{rcu_try_flip()} function implements the top level of
 the RCU grace-period state machine, as shown in
 Figure~\ref{fig:app:rcuimpl:rcu_try_flip() Implementation}.
@@ -1006,6 +1052,7 @@ In principle, the next state could be executed immediately,
 but in practice we choose not to do so in order to reduce latency.
 Finally, line~27 releases the global RCU state-machine lock
 that was acquired by line~6.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
