@@ -1079,6 +1079,23 @@ that was acquired by line~6.
 \label{fig:app:rcuimpl:rcu_try_flip_idle() Implementation}
 \end{figure}
 
+\co{rcu_try_flip_idle()} 함수는 RCU grace-period state machine 이 idle 상태일
+때 호출되며, 따라서 이 state machine 이 필요할 때 시작되도록 해줘야 하는 책임이
+있습니다.
+그 코드는
+Figure~\ref{fig:app:rcuimpl:rcu_try_flip_idle() Implementation}
+에 보여져 있습니다.
+Line~6 는 이 CPU 에 남아있는 RCU grace-period 작업이 있는지 체크하고, 그렇지
+않다면 top-level state machine 에게 idle 상태로 남아있으라고 이야기한채 line~8
+에서 빠져나옵니다.
+그렇지 않고 할 일이 있다면, line~11 에서 grace-period stage 카운터의 값을
+증가시키고, line~12 에서 CPU 들이 새로운 카운터를 보아달라는 요청을 받기 전에
+그 카운터를 봄을 보장하기 위해 메모리 배리어를 수행하고, line~13 과 14 에서
+모든 online CPU 의 \co{rcu_flip_flag} 를 설정합니다.
+마지막으로, line~15 에서 top-level state machine 에게 다음 state 로 넘어가라고
+이야기를 합니다.
+\iffalse
+
 The \co{rcu_try_flip_idle()} function is called when the
 RCU grace-period state machine is idle, and is thus responsible for
 getting it started when needed.
@@ -1094,6 +1111,7 @@ request to acknowledge it, and lines~13 and 14 set all of
 the online CPUs' \co{rcu_flip_flag}.
 Finally, line~15 tells the top-level state machine to
 advance to the next state.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1118,6 +1136,27 @@ advance to the next state.
 \label{fig:app:rcuimpl:rcu_try_flip_waitack() Implementation}
 \end{figure}
 
+Figure~\ref{fig:app:rcuimpl:rcu_try_flip_waitack() Implementation}
+에 보인 \co{rcu_try_flip_waitack()} 함수는 모든 online CPU 들이 카운터 뒤집기
+(``값 증가'' 라고도 말할 수 있지만 \co{rcu_read_lock()} 은 \co{rcu_flipctr}
+배열을 인덱스 하는데에 사용하는 아래쪽 bit 을 \emph{실제로} 뒤집기에 ``뒤집기''
+라고 불립니다) 를 보았는지 체크합니다.
+만약 그렇다면, top-level grace-period state machine 에게 다음 state 로
+넘어가라고 이야기합니다.
+
+Line~6 는 모든 online CPU 들을 보고, line~7 은 현재의 CPU 가 마지막 카운터
+뒤집기를 알아차렸는지 봅니다.
+그렇지 않다면, line~9 에서 top-level grace-period state machine 에게 이 state
+에 남아있으라고 이야기합니다.
+그렇지 않고, 모든 online CPU 들이 알아차렸다면, line~11 에서 마지막 CPU 가
+알아아차렸음을 이야기하기 전에 0을 체크하지 않을 것을 보장하기 위해 메모리
+배리어를 칩니다.
+이는 의심스럽게 보일 수 있습니다만, CPU 설계자들은 가끔 이상한 짓거리를 하기도
+합니다.
+마지막으로, line~13 은 top-level grace-period state machine 에게 다음 state 로
+넘어가라고 이야기합니다.
+\iffalse
+
 The \co{rcu_try_flip_waitack()} function, shown in
 Figure~\ref{fig:app:rcuimpl:rcu_try_flip_waitack() Implementation},
 checks to see
@@ -1139,6 +1178,7 @@ This may seem dubious, but CPU designers have sometimes done strange
 things.
 Finally, line~13 tells the top-level grace-period state machine
 to advance to the next state.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
