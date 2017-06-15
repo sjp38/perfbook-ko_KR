@@ -1208,6 +1208,22 @@ to advance to the next state.
 \label{fig:app:rcuimpl:rcu_try_flip_waitzero() Implementation}
 \end{figure}
 
+Figure~\ref{fig:app:rcuimpl:rcu_try_flip_waitzero() Implementation}
+에 보인 \co{rcu_try_flip_waitzero()} 함수는 모든 이전부터 존재한 RCU read-side
+크리티컬 섹션들이 완료되었는지 체크하고, 만약 그렇다면 state machine 에게
+진행하라고 이야기합니다.
+Line~8 과 9 는 카운터들의 값의 합을 구하고, line~10 은 그 결과가 0인지
+확인하고, 만약 그렇지 않다면 line~12 에서 state machine 에게 현재 상태 그대로
+유지하라고 이야기합니다.
+그렇지 않다면, line~14 에서 어떤 CPU 도 자신이 마지막 RCU read-side 크리티컬
+섹션을 빠져나오기 전에 뒤따르는 메모리 배리어 호출을 볼 수 없을 것을 보장하기
+위해 메모리 배리어를 호출합니다.
+그런 일이 있을 가능성이 희박해 보이겠지만, 다시 말하건대 CPU 설계자들은 좀
+이상한 짓을 해왔고, 사실 그것이 빠른 수행 방법입니다.
+Line~15 와 16 은 모든 online CPU 의 \co{rcu_mb_flag} 변수의 값을 설정하고,
+line~18 에서 state machine 에게 다음 상태로 진행하라고 이야기합니다.
+\iffalse
+
 The \co{rcu_try_flip_waitzero()} function, shown in
 Figure~\ref{fig:app:rcuimpl:rcu_try_flip_waitzero() Implementation},
 checks to see if
@@ -1224,6 +1240,7 @@ done stranger things, and besides, this is anything but a fastpath.
 Lines~15 and 16 set all online CPUs' \co{rcu_mb_flag}
 variables, and line~18 tells the state machine to advance to
 the next state.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1248,6 +1265,18 @@ the next state.
 \label{fig:app:rcuimpl:rcu_try_flip_waitmb() Implementation}
 \end{figure}
 
+Figure~\ref{fig:app:rcuimpl:rcu_try_flip_waitmb() Implementation}
+에 보인 \co{rcu_try_flip_waitmb()} 함수는 모든 online CPU 들이 요청된 메모리
+배리어를 수행했는지 체크하고, 만약 그렇다면 state machine 에게 진행하라고
+이야기합니다.
+Line~6 과 7 은 각각의 online CPU 에 대해 각각 필요한 메모리 배리어를 쳤는지
+확인하고, 만약 그렇지 않다면 line~9 에서 state machine 에게 진행하지 말라고
+이야기합니다.
+그렇지 않고, 모든 CPU 들이 메모리 배리어를 수행했다면, line~11 에서 모든 RCU
+콜백 호출이 모든 메모리 배리어들을 뒤따른다는 걸 보장하기 위해 메모리 배리어를
+실행하고, line~13 은 state machine 에게 진행하라고 이야기 합니다.
+\iffalse
+
 The \co{rcu_try_flip_waitmb()} function, shown in
 Figure~\ref{fig:app:rcuimpl:rcu_try_flip_waitmb() Implementation},
 checks to see
@@ -1260,6 +1289,7 @@ Otherwise, if all CPUs have executed a memory barrier, line~11
 executes a memory barrier to ensure that any RCU callback invocation
 follows all of the memory barriers, and line~13 tells the
 state machine to advance.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1314,6 +1344,17 @@ state machine to advance.
 \label{fig:app:rcuimpl:__rcu_advance_callbacks() Implementation}
 \end{figure}
 
+Figure~\ref{fig:app:rcuimpl:__rcu_advance_callbacks() Implementation}
+에 보인 \co{__rcu_advance_callbacks()} 함수는 콜백들을 진행하고 카운터 뒤집기를
+확인해줍니다.
+Line~7 은 글로벌한 \co{rcu_ctrlblk.completed} 카운터가 마지막의 현재 CPU 에
+의한 이 함수의 호출 이후로 값이 증가되었는지 체크합니다.
+그렇지 않다면, 콜백들은 진행될 수 (line~8-37) 없습니다.
+그렇다면, line~8 부터 37 은 리스트의 콜백들을 진행시킵니다 (비어있지 않은
+리스트의 갯수를 \co{wlc} 변수에 관리하면서).
+어떤 경우든, line~38 부터 43 은 필요한 경우 카운터 뒤집기를 확인해줍니다.
+\iffalse
+
 The \co{__rcu_advance_callbacks()} function, shown in
 Figure~\ref{fig:app:rcuimpl:__rcu_advance_callbacks() Implementation},
 advances callbacks and acknowledges the counter flip.
@@ -1326,16 +1367,41 @@ Otherwise, lines~8 through 37 advance callbacks through the lists
 \co{wlc} variable).
 In either case, lines~38 through 43 acknowledge the counter flip
 if needed.
+\fi
 
 \QuickQuiz{}
+	\co{__rcu_advance_callbacks()} 의 line~38-43 은 line~7-37 이 수행되지
+	않음에도 수행될 수가 있다는 거죠?
+	둘 다 카운터 뒤집기 직후에 수행되는데, 다른 시간이 아니지 않아요?
+	\iffalse
+
 	How is it possible for lines~38-43 of
 	\co{__rcu_advance_callbacks()} to be executed when
 	lines~7-37 have not?
 	Won't they both be executed just after a counter flip, and
 	never at any other time?
+	\fi
 \QuickQuizAnswer{
+	다음과 같은 이벤트들을 생각해 보세요:
+	\iffalse
+
 	Consider the following sequence of events:
+	\fi
 	\begin{enumerate}
+	\item	CPU 0 가 \co{rcu_try_flip_idle()} 의 line~5-12 를 수행합니다.
+	\item	CPU 1 이 \co{__rcu_advance_callbacks()} 를 수행합니다.
+		\co{rcu_ctrlblk.completed} 는 값이 증가되었으므로, line~7-37 이
+		수행됩니다.
+		하지만, \co{rcu_flip_flag} 변수들 중 어느것도 값이 설정되지
+		않았으므로, line~38-43 은 수행되지 \emph{않습니다}.
+	\item	CPU 0 가 \co{rcu_try_flip_idle()} 의 line~13-15 를 수행합니다.
+	\item	후에, CPU 1 이 다시 \co{__rcu_advance_callbacks()} 를
+		수행합니다.
+		카운터는 이제 마지막 수행 이후로 값이 증가했습니다만,
+		\co{rcu_flip_flag} 변수들은 모두 설정되어있으므로, line~38-43
+		만이 수행됩니다.
+	\iffalse
+
 	\item	CPU 0 executes lines~5-12 of
 		\co{rcu_try_flip_idle()}.
 	\item	CPU 1 executes \co{__rcu_advance_callbacks()}.
@@ -1349,6 +1415,7 @@ if needed.
 		The counter has not been incremented since the earlier
 		execution, but the \co{rcu_flip_flag} variables have
 		all been set, so only lines~38-43 are executed.
+	\fi
 	\end{enumerate}
 } \QuickQuizEnd
 
