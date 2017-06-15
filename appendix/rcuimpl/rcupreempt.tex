@@ -1466,6 +1466,32 @@ that these two primitives do not contain memory barriers.
 \label{fig:app:rcuimpl:__rcu_read_lock() Implementation}
 \end{figure}
 
+\co{rcu_read_lock()} 의 구현은
+Figure~\ref{fig:app:rcuimpl:__rcu_read_lock() Implementation}
+에 보여져 있습니다.
+Line~7 은 이 task 의 RCU read-side 크리티컬 섹션 중첩 카운터를 가져옵니다.
+Line~8 에서 이 카운터의 값이 0이 아니란 점이 밝혀지면, 우린 이미 바깥의
+\co{rcu_read_lock()} 으로 보호되고 있는 것으로, 이 경우에는 line~9 에서 그냥 이
+카운터의 값을 증가시킵니다.
+
+하지만, 이게 가장 바깥의 \co{rcu_read_lock()} 이라면, 더 많은 작업이
+필요합니다.
+Line~13 과 18 은 그 사이의 코드가 preemption 되지도 않고 (grace period state
+machine 을 수행시키는) scheduling-clock 인터럽트로 인터럽트 당하지도 않았다는
+것을 보장하기 위해 irq 들을 막고 다시 풀어줍니다.
+Line~14 는 grace-period 카운터를 얻어오고, line~15 에서 이 CPU 를 위한 현재
+카운터의 값을 증가시키고, line~16 에서 중첩 카운터의 값을 증가시킨 후, line~17
+에서 \co{rcu_read_unlock()} 이 연관된 카운터의 값을 감소시킬 수 있도록
+기존/새로운 카운터 인덱스를 기록합니다.
+
+\co{ACCESS_ONCE()} 매크로들은 컴파일러가 순서대로 액세스 코드를 만들어 내도록
+강제합니다.
+비록 이게 CPU 가 액세스들을 다른 CPU 의 관점으로부터 다르게 재배치 하는 것을
+막지는 못하지만, 이 CPU에서 수행되는 NMI 와 SMI 핸들러들은 이 액세스들을
+순서대로 볼 것을 보장해 줍니다.
+이는 상당히 중요합니다:
+\iffalse
+
 The implementation of \co{rcu_read_lock()} is as shown in
 Figure~\ref{fig:app:rcuimpl:__rcu_read_lock() Implementation}.
 Line~7 fetches this task's RCU read-side critical-section nesting
@@ -1493,8 +1519,23 @@ Although this does not prevent the CPU from reordering the accesses
 from the viewpoint of other CPUs, it does ensure that NMI and
 SMI handlers running on this CPU will see these accesses in order.
 This is critically important:
+\fi
 
 \begin{enumerate}
+\item	\co{idx} 로의 값 할당에 \co{ACCESS_ONCE()} 가 없다면, 컴파일러는: (a)
+	로컬 변수 \co{idx} 를 삭제하고 (b) line~16 에서의 값 증가를
+	fetch-increment-store 로 컴파일해서 \co{rcu_ctrlblk.completed} 에서
+	값을 읽어오고 다시 쓰는 두번의 별개의 액세스로 만들어버릴 수 있는
+	권리를 갖습니다.
+	만약 그 사이에 \co{rcu_ctrlblk.completed} 의 값이 바뀌었다면, 이는
+	\co{rcu_flipctr} 값을 잘못되게 만들 수 있습니다.
+\item	\co{rcu_read_lock_nesting} 으로의 값 할당 (line~17) 이 \co{rcu_flipctr}
+	의 값 할당 (line~16) 앞으로 재배치 된다면, 그리고 NMI 가 이 두 이벤트
+	사이에 발생했다면, 해당 NMI 핸들러 안에서의 \co{rcu_read_lock()} 은
+	자신이 이미 \co{rcu_read_lock()} 의 보호 아래 있다고 잘못된 결론을 내릴
+	겁니다.
+\iffalse
+
 \item	In absence of the \co{ACCESS_ONCE()} in the assignment
 	to \co{idx}, the compiler would be within its rights
 	to: (a) eliminate the local variable \co{idx} and
@@ -1512,6 +1553,17 @@ This is critically important:
 	\co{rcu_read_lock()} in that NMI's handler
 	would incorrectly conclude that it was already under the
 	protection of \co{rcu_read_lock()}.
+\fi
+\item	만약 \co{rcu_read_lock_nesting} 으로의 값 할당 (line~17) 이
+	\co{rcu_flipctr_idx} 에의 값 할당 (line~18) 뒤로 재배치된다면, 그리고
+	NMI 가 이 두 이벤트 사이에 발생한다면, 해당 NMI 핸들러 안에서의
+	\co{rcu_read_lock()} 은 \co{rcu_flipctr_idx} 를 망쳐버려서, 짝을 이루는
+	\co{rcu_read_unlock()} 이 잘못된 카운터의 값을 감소시키도록 만들 수
+	있습니다.
+	이는 결국 grace period 가 너무 빨리 끝나거나 grace period 를 무기한
+	연장시킬 수도, 두 사건이 모두 일어날 수도 있습니다.
+\iffalse
+
 \item	If the assignment to \co{rcu_read_lock_nesting}
         (line~17) were to be reordered to follow the assignment
 	to \co{rcu_flipctr_idx} (line~18), and if an
@@ -1523,7 +1575,16 @@ This is critically important:
 	This in turn could result in premature ending of a
 	grace period, indefinite extension of a grace period,
 	or even both.
+\fi
 \end{enumerate}
+
+\co{nesting} 에의 값 할당 (line~7) 에 \co{ACCESS_ONCE} 가 필요한가는 명확치
+않습니다.
+또한 \co{smp_read_barrier_depends()} (line~15) 이 필요한지도 명확치 않습니다:
+이것들은 인덱스와 값의 변경이 순서가 유지되도록 추가되었습니다.
+
+Line~13 부터 line~19 사이에 irq 가 비활성화 되어야 하는 이유는 다음과 같습니다:
+\iffalse
 
 It is not clear that the \co{ACCESS_ONCE} on the assignment to
 \co{nesting} (line~7) is required.
@@ -1533,8 +1594,22 @@ and value remain ordered.
 
 The reasons that irqs must be disabled from line~13 through
 line~19 are as follows:
+\fi
 
 \begin{enumerate}
+\item	한 CPU 가 \co{rcu_ctrlblk.completed} 를 읽어왔고 (line~14), 이어서
+	두번째 CPU 가 이 카운터의 값을 증가시켰으며, 이어서 첫번째 CPU 가
+	scheduling-clock 인터럽트를 받았다고 생각해 봅시다.
+	첫번째 CPU 는 이제 이 카운터 뒤집기를 확인해 줘야 함을 보게 되며,
+	그렇게 할겁니다.
+	이 확인 행위는 새로이 과거의 것이 되는 카운터의 값을 증가시키는 것을
+	막을 것이라는 약속인데, 이 CPU 는 이 약속을 깨게 될겁니다.
+	더 나쁜건, 이 CPU 가 scheduling-clock 인터럽트로부터의 리턴 직후에
+	preemption 당할 수 있고, 따라서 미래의 무작위한 어느 시점에 카운터의
+	값을 증가시킬 수 있다는 겁니다.
+	두 상황 모두 grace-period 탐지를 망칠 수 있습니다.
+\iffalse
+
 \item	Suppose one CPU loaded \co{rcu_ctrlblk.completed}
 	(line~14), then a second CPU incremented this counter,
 	and then the first CPU took a scheduling-clock interrupt.
@@ -1548,6 +1623,22 @@ line~19 are as follows:
 	end up incrementing the counter at some random point
 	in the future.
 	Either situation could disrupt grace-period detection.
+\fi
+\item	Irq 들을 비활성화 시키는 것은 preemption 을 비활성화 시키는 side effect
+	를 갖습니다.
+	만약 이 코드가 \co{rcu_ctrlblk.completed} 를 읽어들이는 것 (line~14) 과
+	\co{rcu_flipctr} 의 값을 증기시키는 것 (line~16) 사이에서 preemption 될
+	수 있다면, 다른 CPU 에서 동작을 재개할 수 있을 겁니다.
+	이는 이 카운터를 다른 CPU 로부터 가져와서는 atomic 하지 않게 값 증가를
+	시키는 결과를 낳을 수 있습니다.
+	이 CPU 가 바로 그 시점에서 \co{rcu_read_lock()} 또는
+	\co{rcu_read_unlock()} 을 수행 중이었다면 하나의 값 증가 또는 감소가
+	없던게 되어버려서, 역시 grace-period 탐지를 망칩니다.
+	RISC 머신에서는 값 증가 사이에  (기존 카운터의 값 읽기 후 새로이 증가된
+	값의 저장 전에) preemption 이 발생하면 같은 결과가 이뤄질 수 있을
+	겁니다.
+\iffalse
+
 \item	Disabling irqs has the side effect of disabling preemption.
 	If this code were to be preempted between fetching
 	\co{rcu_ctrlblk.completed} (line~14) and
@@ -1563,6 +1654,17 @@ line~19 are as follows:
 	occurred in the middle of the increment (after the fetch of
 	the old counter but before the store of the newly incremented
 	counter).
+\fi
+\item	line~16 의 중간에, 현재 CPU 의 \co{rcu_flipctr} 배열의 복사본을 고르는
+	것과 \co{rcu_flipctr_idx} 로 선택된 원소의 값을 증가시키는 사이에
+	preemption 을 허용하는 것은 비슷한 문제를 일으킬 수 있습니다.
+	실행은 이번에도 역시 다른 CPU 에서 재개될 수 있습니다.
+	이 실행 재개가 원래 CPU 에서 수행중인 \co{rcu_read_lock()} 또는
+	\co{rcu_read_unlock()} 과 동시적으로 발생한다면, 하나의 값 증가 또는 값
+	감소가 사라질 수 있어서 grace period 의 너무 빠른 종료 또는 무기한
+	연장, 또는, 심지어 둘 다를 일으킬 수 있습니다.
+\iffalse
+
 \item	Permitting preemption in the midst
 	of line~16, between selecting the current CPU's copy
 	of the \co{rcu_flipctr} array and the increment of
@@ -1575,6 +1677,21 @@ line~19 are as follows:
 	an increment or decrement might be lost, resulting in either
 	premature termination of a grace period, indefinite extension
 	of a grace period, or even both.
+\fi
+\item	Preemption 비활성화를 못하게 되는것 역시 특정 task 가 언제 RCU
+	read-side 크리티컬 섹션에 있는지 파악하는데 \co{rcu_read_lock_nesting}
+	을 사용하는 RCU priority boosting 을 망칠 수 있습니다.
+	따라서, 예를 들어, 어떤 task 가 \co{rcu_flipctr} 를 증가시킨 후,
+	\co{rcu_read_lock_nesting} 의 값을 업데이트 하기 전에 preemption
+	당한다면, preemption 당한 동안 RCU grace period 를 멈춰둘 수 있을
+	겁니다.
+	하지만, \co{rcu_read_lock_nesting} 은 아직 값이 증가되지 않았으므로,
+	RCU priority booster 는 이 boosting 이 필요하다고 말할 수 없습니다.
+	따라서, CPU-bound realtime thread 가 존재한다면 이 preemption 당한 task
+	는 무기한적으로 grace period 를 멈춰버릴 수 있어서 결국 OOM 이벤트를
+	일으킬 겁니다.
+\iffalse
+
 \item	Failing to disable preemption can also defeat RCU priority
 	boosting, which relies on \co{rcu_read_lock_nesting}
 	to determine when a given task is in an RCU read-side
@@ -1590,7 +1707,16 @@ line~19 are as follows:
 	Therefore, in the presence of CPU-bound realtime threads,
 	the preempted task might stall grace periods indefinitely,
 	eventually causing an OOM event.
+\fi
 \end{enumerate}
+
+마지막 세개의 이유는 물론 irq 를 비활성화 하는게 아니라 preemption 만 비활성화
+하는 것으로도 해결될 수 있습니다만, 첫번째 이유는 irq 를 비활성화 할 것을
+필요로 하기에, 굳이 구분해서 preemption 만 비활성화 할 이유는 없습니다.
+첫번째 이유는 추가적인 grace-period stage 를 두어서 해결하는 것도 확실히
+가능합니다만, 최근의 CPU 들에서 preemption 을 비활성화 하는 것이 인터럽트를
+비활성화 하는것보다 엄청 빠른가는 확실치 않습니다.
+\iffalse
 
 The last three reasons could of course be addressed by disabling
 preemption rather than disabling of irqs, but given that the first
@@ -1600,6 +1726,7 @@ It is entirely possible that the first reason might be tolerated
 by requiring an additional grace-period stage, however, it is not
 clear that disabling preemption is much faster than disabling
 interrupts on modern CPUs.
+\fi
 
 \paragraph{{\tt rcu\_read\_unlock()}}
 \label{app:rcuimpl:rcu_read_unlock()}
