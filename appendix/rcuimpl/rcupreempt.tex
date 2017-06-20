@@ -2418,16 +2418,39 @@ a full grace period, and hence it is safe to do:
 \subsubsection{Formal Validation}
 \label{app:rcuimpl:Formal Validation}
 
+이 알고리즘의 형식적 검증은 상당히 중요합니다만, 미래에 할 일로 남겨뒀습니다.
+이 검증을 하는 도구 가운데 하나는
+Chapter~\ref{chp:Formal Verification} 에 설명되어 있습니다.
+\iffalse
+
 Formal validation of this algorithm is quite important, but remains
 as future work.
 One tool for doing this validation is described in
 Chapter~\ref{chp:Formal Verification}.
+\fi
 
 \QuickQuiz{}
+	`CPU~0 는 CPU~1 의 값 증가를 CPU~1 의 앞선 마지막 메모리 배리어 만큼
+	빠른 시점에 볼 수도 있다'' 를 더 정확히 말하려면 어떻게 말해야 할까요?
+	\iffalse
+
 	What is a more precise way to say ``CPU~0
 	might see CPU~1's increment as early as CPU~1's last previous
 	memory barrier''?
+	\fi
 \QuickQuizAnswer{
+	첫째로, 부정확한 말의 문제는 그게 적어도 대중적인
+	마이크로프로세서들에서는 실제로는 존재하지 않는, 하나의 전역적인
+	시간대가 존재하는 것 같은 인상을 준다는 것임을 알아두는게 중요합니다.
+	둘째로, 메모리 배리어들은 인지의 순서에 대한 것이지, 시간에 대한 것이
+	아니라는 것을 알아두는게 중요합니다.
+	마지막으로, 앞의 말을 더 정확히 하려면 다음과 같을 겁니다: ``만약 CPU~0
+	가 CPU~1 의 값 증가로 만들어지는 값을 로드한다면, CPU~0 의 모든 이를
+	뒤따르는 로드 오퍼레이션은 CPU~1 의 연관된 스토어 오퍼레이션들이 CPU~1
+	의 앞의 마지막 메모리 배리어를 앞섰다면 해당 스토어 오퍼레이션들로 인한
+	값들을 읽게 됩니다.''
+	\iffalse
+
 	First, it is important to note that the problem with
 	the less-precise statement is that it gives the impression that there
 	might be a single global timeline, which there is not, at least not for
@@ -2439,6 +2462,22 @@ Chapter~\ref{chp:Formal Verification}.
 	increment, then any subsequent load by CPU~0 will see the
 	values from any relevant stores by CPU~1 if these stores
 	preceded CPU~1's last prior memory barrier.''
+	\fi
+
+	이 더 정확한 버전도 좀 움찔거리는 공간을 남겨두고 있습니다.
+	``뒤따르는'' 이란 단어는 명시적인 메모리배리어나 해당 CPU 의 메모리
+	순서규칙에 의해 ``뒤로 순서지어진'' 이라는 의미가 되어야만 합니다.
+	또한, 메모리 배리어들은 연관된 오퍼레이션들을 순서짓기 충분할 만큼
+	강력해야만 합니다.
+	예를 들어, CPU~1 의 기존의 마지막 메모리 배리어는 스토어 오퍼레이션들을
+	순서지어야 합니다 (예를 들어, \co{smp_wmb()} 나 \co{smp_mb()} 여야
+	합니다).
+	비슷하게, 만약 CPU~0 가 자신의 마지막 로드가 CPU~1 의 값 증가를 본
+	로드를 뒤따른다는 걸 보장하기 위해 명시적 메모리 배리어가 필요하다면,
+	이 메모리 배리어는 \co{smp_rmb()} 이거나 \co{smp_mb()} 여야 합니다.
+
+	일반적으로, 병렬 알고리즘을 제공할 땐 상당한 신경을 써야 합니다.
+	\iffalse
 
 	Even this more-precise version leaves some wiggle room.
 	The word ``subsequent'' must be understood to mean ``ordered after'',
@@ -2454,4 +2493,5 @@ Chapter~\ref{chp:Formal Verification}.
 	or \co{smp_mb()}.
 
 	In general, much care is required when proving parallel algorithms.
+	\fi
 } \QuickQuizEnd
