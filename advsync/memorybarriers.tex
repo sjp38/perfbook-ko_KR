@@ -22,19 +22,38 @@ use of standard mutual-exclusion mechanisms, such as locking and
 RCU.
 \fi
 
-\begin{table}
-\centering{\tt
-\begin{tabular}{l|l}
-	\nf{Thread 1} & \nf{Thread 2} \\
-	\hline
-	x = 1;  & y = 1; \\
-	r1 = y; & r2 = x; \\
-	\hline
-	\multicolumn{2}{l}{assert(r1 == 1 || r2 == 1);} \\
-\end{tabular}}
-\caption{Memory Misordering: Dekker}
-\label{tab:advsync:Memory Misordering: Dekker}
-\end{table}
+\begin{figure}
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-SB+o-o+o-o
+ 2 {
+ 3 }
+ 4
+ 5 P0(int *x0, int *x1)
+ 6 {
+ 7   int r2;
+ 8
+ 9   *x0 = 2;
+10   r2 = *x1;
+11 }
+12
+13
+14 P1(int *x0, int *x1)
+15 {
+16   int r2;
+17
+18   *x1 = 2;
+19   r2 = *x0;
+20 }
+21
+22 exists (1:r2=0 /\ 0:r2=0)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Memory Misordering: Store-Buffering Litmus Test}
+\label{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}
+\end{figure}
 
 불행히도, 이런 직관들은 공유메모리 안의 데이터 구조들을 위해 명시적 메모리
 배리어를 직접 사용하는 코드에서는 완전히 어긋납니다.
@@ -53,24 +72,44 @@ RCU.
 \iffalse
 
 Unfortunately, these intuitions break down completely in face of
-code that makes direct use of explicit memory barriers for data structures
-in shared memory.
-For example, the litmus test in
-Table~\ref{tab:advsync:Memory Misordering: Dekker}
-appears to guarantee that the assertion never fires.
-After all, if \nbco{r1 != 1}, we might hope that Thread~1's load from~\co{y}
-must have happened before Thread~2's store to~\co{y}, which might raise
-further hopes that Thread~2's load from~\co{x} must happen after
-Thread~1's store to~\co{x}, so that \nbco{r2 == 1}, as required by the
-assertion.
-The example is symmetric, so similar hopeful reasoning might lead
-us to hope that \nbco{r2 != 1} guarantees that \nbco{r1 == 1}.
-Unfortunately, the lack of memory barriers in
-Table~\ref{tab:advsync:Memory Misordering: Dekker}
-dashes these hopes.
+code that fails to use standard mechanisms.
+For example, the trivial-seeming litmus test in
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}
+appears to guarantee that the \co{exists} clause is never satisfied.
+After all, if \nbco{0:r2=0} as shown in the \co{exists} clause,\footnote{
+	That is, Thread~\co{P0()}'s instance of local variable \co{r2}
+	equals zero.
+	See Section~\ref{sec:formal:Anatomy of a Litmus Test}
+	for documention of litmus-test nomenclature.}
+we might hope that Thread~\co{P0()}'s
+load from~\co{x1} must have happened before Thread~\co{P1()}'s store to~\co{x1},
+which might raise
+further hopes that Thread~\co{P1()}'s load from~\co{x0} must happen after
+Thread~\co{P0()}'s store to~\co{x0}, so that \nbco{1:r2=2},
+thus not satisfying the \co{exists} clause.
+The example is symmetric, so similar reasoning might lead
+us to hope that \nbco{1:r2=0} guarantees that \nbco{0:r2=2}.
+Unfortunately, the lack of memory barriers dashes these hopes.
 Both the compiler and the CPU are within their rights to reorder
-the statements within both Thread~1 and Thread~2, even on relatively
-strongly ordered systems such as x86.
+the statements within both Thread~\co{P0()} and Thread~\co{P1()},
+even on relatively strongly ordered systems such as x86.
+
+This willingness to reorder can be confirmed using tools such as
+\co{litmus7}~\cite{Alglave:2014:HCM:2594291.2594347},
+which found that the counter-intuitive ordering happened
+314 times out of 100,000,000 trials on my x86 laptop.
+Oddly enough, the perfectly legal outcome where both loads return the
+value 2 occurred less frequently, in this case, only 167 times.
+The lesson here is clear: Increased counterintuitivity does not necessarily
+imply decreased probability!
+% Run on June 23, 2017:
+% litmus7 -r 1000 -carch X86 C-SB+o-o+o-o.litmus
+% Test C-SB+o-o+o-o Allowed
+% Histogram (4 states)
+% 314   *>0:r2=0; 1:r2=0;
+% 49999625:>0:r2=2; 1:r2=0;
+% 49999894:>0:r2=0; 1:r2=2;
+% 167   :>0:r2=2; 1:r2=2;
 \fi
 
 다음의 섹션들을 통해 정확히 어디서 이 직관들이 깨지는지 알아보고, 이런 문제들을
@@ -144,23 +183,46 @@ Isn't that why we have computers in the first place, to keep track of things?
 
 Many people do indeed expect their computers to keep track of things,
 but many also insist that they keep track of things quickly.
-One difficulty that modern computer-system vendors face is that
+However, as seen in Chapter~\ref{chp:Hardware and its Habits},
+one difficulty that modern computer-system vendors face is that
 the main memory cannot keep up with the CPU---modern CPUs can execute
 hundreds of instructions in the time required to fetch a single variable
 from memory.
-CPUs therefore sport increasingly large caches, as shown in
-Figure~\ref{fig:advsync:Modern Computer System Cache Structure}.
-Variables that are heavily used by a given CPU will tend to remain
-in that CPU's cache, allowing high-speed access to the corresponding
-data.
+CPUs therefore sport increasingly large caches, as seen back in
+Figure~\ref{fig:cpu:System Hardware Architecture}, which means that
+although the first load by a given CPU from a given variable will
+result in an expensive \emph{cache miss} as was discussed in
+Section~\ref{sec:cpu:Cache Misses}, subsequent
+repeated loads from that variable by that CPU can execute
+very quickly because the initial cache miss will have loaded that
+variable into that CPU's cache.
+
+However, it is also necessary to accommodate frequent concurrent stores
+from multiple CPUs to a set of shared variables.
+In cache-coherent systems, if the caches hold multiple copies of a given
+variable, all the copies of that variable must have the same value.
+This works extremely well for concurrent reads, but not so well for
+concurrent writes:  Each write must do something about all
+copies of the old value (another cache miss!), which, given the finite
+speed of light and the atomic nature of matter, will be slower
+than impatient software hackers would like.
 \fi
 
-\begin{figure}[htb]
+\begin{figure}[tb]
 \centering
-\resizebox{3in}{!}{\includegraphics{appendix/whymb/cacheSC}}
-\caption{Modern Computer System Cache Structure}
-\label{fig:advsync:Modern Computer System Cache Structure}
+\resizebox{2.5in}{!}{\includegraphics{advsync/SystemArchSB}}
+\caption{System Architecture With Store Buffers}
+\label{fig:advsync:System Architecture With Store Buffers}
 \end{figure}
+
+CPUs therefore come equipped with store buffers, as shown in
+Figure~\ref{fig:advsync:System Architecture With Store Buffers}.
+When a given CPU does a store to a given variable when that
+variable is not present in that CPU's cache, then the new value
+is instead placed in that CPU's store buffer.
+The CPU can then proceed immediately, without having to wait for the
+store to do something about all the old values of that variable
+residing in other CPUs' caches.
 
 한 CPU 가 자신의 캐시에 아직 존재하지 않는 데이터에 접근하는 경우엔, 불행히도
 데이터를 메모리로부터 가져와야 하는, 비싼 ``캐시 미스'' 를 초래하게 됩니다.
@@ -218,14 +280,232 @@ as they are on x86.
 Since the standard synchronization primitives preserve the illusion of
 ordering, your path of least resistance is to stop reading
 this section and simply use these primitives.
+\fi
+Although store buffers can greatly increase performance,
+they can cause instructions and memory references to execute out
+of order, which can in turn cause serious confusion, as illustrated in
+Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order}.
+In particular, these store buffers can cause the memory misordering
+shown in the store-buffering litmus test in
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
+
+\begin{table*}
+\small
+\centering
+\begin{tabular}{r||l|l|l||l|l|l}
+	& \multicolumn{3}{c||}{CPU 0} & \multicolumn{3}{c}{CPU 1} \\
+	\cline{2-7}
+	& Instruction & Store Buffer & Cache &
+		Instruction & Store Buffer & Cache \\
+	\hline
+	\hline
+	1 & (Initial state) & & \tco{x1==0} &
+		(Initial state) & & \tco{x0==0} \\
+	\hline
+	2 & \tco{*x0 = 2} & \tco{x0==2} & \tco{x1==0} &
+		\tco{*x1 = 2;} & \tco{x1==2} & \tco{x0==0} \\
+	\hline
+	3 & \tco{r2 = *x1;} (0) & \tco{x0==2} & \tco{x1==0} &
+		\tco{r2 = *x0;} (0) & \tco{x1==2} & \tco{x0==0} \\
+	\hline
+	4 & (Read-invalidate) & \tco{x0==2} & \tco{x0==0} &
+		(Read-invalidate) & \tco{x1==2} & \tco{x1==0} \\
+	\hline
+	5 & (Finish store) & & \tco{x0==2} &
+		(Finish store) & & \tco{x1==2} \\
+\end{tabular}
+\caption{Memory Misordering: Store-Buffering Sequence of Events}
+\label{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
+\end{table*}
+
+Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
+shows how this memory misordering can happen.
+Row~1 shows the initial state, where CPU~0 has \co{x1} in its cache
+and CPU~1 has \co{x0} in its cache, both variables having a value of zero.
+Row~2 shows the state change due to each CPU's store (lines~9 and~18 of
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}).
+Because neither CPU has the stored-to variable in its cache, both CPUs
+record their stores in their respective store buffers.
+
+\QuickQuiz{}
+	But wait!!!
+	On row~2 of
+	Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
+	both \co{x0} and \co{x1} each have two values at the same time,
+	namely zero and two.
+	How can that possibly work???
+\QuickQuizAnswer{
+	There is an underlying cache-coherence protocol that straightens
+	things out, which will be discussed later.
+	% @@@ Add forward reference.
+	But if you think that a given variable having two values at
+	the same time is surprising, just wait until you get to
+	Section~\ref{sec:advsync:Variables Can Have More Than One Value}!
+} \QuickQuizEnd
+
+Row~3 shows the two reads (lines~10 and~19 of
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}).
+Because the variable being read by each CPU is in that CPU's cache,
+each read immediately returns the cached value, which in both cases
+is zero.
+
+But the CPUs are not done yet: Sooner or later, they must empty their
+store buffers.
+Because caches move data around in relatively large blocks called
+\emph{cachelines}, and because each cacheline can hold several
+variables, each CPU must get the cacheline into its own cache so
+that it can update the portion of that cacheline corresponding
+to the variable in its store buffer, but without disturbing any
+other part of the cacheline.
+Each CPU must also ensure that the cacheline is not present in any other
+CPU's cache, for which a read-invalidate operation is used.
+As shown on row~4, after both read-invalidate operations complete,
+the two CPUs have traded cachelines, so that CPU~0's cache now contains
+\co{x0} and CPU~1's cache now contains \co{x1}.
+Once these two variables are in their new homes, each CPU can flush
+its store buffer into the corresponding cache line, leaving each
+variable with its final value as shown on row~5.
+
+\QuickQuiz{}
+	But don't the values also need to be flushed from the cache
+	to main memory?
+\QuickQuizAnswer{
+	Perhaps surprisingly, not necessarily!
+	On some systems,
+	if the two variables are being used heavily, they might
+	be bounced back and forth between the CPUs' caches and never
+	land in main memory.
+} \QuickQuizEnd
+
+In summary, store buffers are needed to allow CPUs to handle
+store instructions efficiently, but they can result in
+counter-intuitive memory misordering.
+
+But what do you do if your algorithm really needs its memory
+references to be ordered?
+It turns out that there are compiler directives and standard
+synchronization primitives (such as locking and RCU)
+that are responsible for maintaining the illusion of ordering through use of
+\emph{memory barriers} (for example, \co{smp_mb()} in the Linux kernel).
+These memory barriers can be explicit instructions, as they are on
+ARM, POWER, Itanium, and Alpha, or they can be implied by other instructions,
+as they often are on x86.
+Since these standard synchronization primitives preserve the illusion of
+ordering, your path of least resistance is to simply use these primitives,
+thus allowing you to stop reading this section.
+
+\begin{figure}
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-SB+o-mb-o+o-mb-o
+ 2 {
+ 3 }
+ 4
+ 5 P0(int *x0, int *x1)
+ 6 {
+ 7   int r2;
+ 8
+ 9   *x0 = 2;
+10   __atomic_thread_fence(__ATOMIC_SEQ_CST);
+11   r2 = *x1;
+12 }
+13
+14
+15 P1(int *x0, int *x1)
+16 {
+17   int r2;
+18
+19   *x1 = 2;
+20   __atomic_thread_fence(__ATOMIC_SEQ_CST);
+21   r2 = *x0;
+22 }
+23
+24 exists (1:r2=0 /\ 0:r2=0)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Memory Ordering: Store-Buffering Litmus Test}
+\label{fig:advsync:Memory Ordering: Store-Buffering Litmus Test}
+\end{figure}
 
 However, if you need to implement the synchronization primitives
 themselves, or if you are simply interested in understanding how memory
 ordering and memory barriers work, read on!
+The first stop is
+Figure~\ref{fig:advsync:Memory Ordering: Store-Buffering Litmus Test},
+which has \co{__atomic_thread_fence()} directives\footnote{
+	Similar to the Linux kernel's \co{smp_mb()} full memory barrier.}
+placed between
+the store and load in both \co{P0()} and \co{P1()}, but is otherwise
+identical to the code shown in
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
+% Test C-SB+o-mb-o+o-mb-o Allowed
+% Histogram (3 states)
+% 49553298:>0:r2=2; 1:r2=0;
+% 49636449:>0:r2=0; 1:r2=2;
+% 810253:>0:r2=2; 1:r2=2;
+% No
+These directives prevent the counter-intuitive outcome from happening
+on 100,000,000 trials on my x86 laptop.
+Interestingly enough, the overhead of these directives causes the
+legal outcome where both loads return the value two to happen more
+than 800,000 times, as opposed to only 167 times for the
+directive-free code in
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 
-The next sections present counter-intuitive scenarios that you might
-encounter when using explicit memory barriers.
-\fi
+\begin{table*}
+\small
+\centering
+\begin{tabular}{r||l|l|l||l|l|l}
+	& \multicolumn{3}{c||}{CPU 0} & \multicolumn{3}{c}{CPU 1} \\
+	\cline{2-7}
+	& Instruction & Store Buffer & Cache &
+		Instruction & Store Buffer & Cache \\
+	\hline
+	\hline
+	1 & (Initial state) & & \tco{x1==0} &
+		(Initial state) & & \tco{x0==0} \\
+	\hline
+	2 & \tco{*x0 = 2} & \tco{x0==2} & \tco{x1==0} &
+		\tco{*x1 = 2;} & \tco{x1==2} & \tco{x0==0} \\
+	\hline
+	3 & \tco{__atomic_thread_fence()} & \tco{x0==2} & \tco{x1==0} &
+		\tco{__atomic_thread_fence()} & \tco{x1==2} & \tco{x0==0} \\
+	\hline
+	4 & (Read-invalidate) & \tco{x0==2} & \tco{x0==0} &
+		(Read-invalidate) & \tco{x1==2} & \tco{x1==0} \\
+	\hline
+	5 & (Finish store) & & \tco{x0==2} &
+		(Finish store) & & \tco{x1==2} \\
+	\hline
+	6 & \tco{r2 = *x1;} (2) & \tco{x0==2} & \tco{x1==0} &
+		\tco{r2 = *x0;} (2) & \tco{x1==2} & \tco{x0==0} \\
+\end{tabular}
+\caption{Memory Ordering: Store-Buffering Sequence of Events}
+\label{tab:advsync:Memory Ordering: Store-Buffering Sequence of Events}
+\end{table*}
+
+These directives have a profound effect on ordering, as can be seen in
+Table~\ref{tab:advsync:Memory Ordering: Store-Buffering Sequence of Events}.
+Although the \co{__atomic_thread_fence()} directives on row~3
+do not change state
+in and of themselves, they do cause the stores to complete before the
+loads, which rules out the counter-intuitive outcome shown in
+Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}.
+Note that variables \co{x0} and \co{x1} each still have more than one
+value on row~2, however, as promised earlier, the directives straighten
+things out in the end.
+
+Please note that actual hardware tends to be much more complex, tricky,
+and subtle than is described here.
+After all, the point of this discussion is not to train you to be
+a hardware architect, but rather to help you correctly code
+low-level concurrent primitives.
+
+% @@@ multivalue variables next, actually...
+% The next sections present counter-intuitive scenarios that you might
+% encounter when using explicit memory barriers.
 
 \subsection{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
 \label{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
@@ -234,6 +514,8 @@ encounter when using explicit memory barriers.
 예를 들어, Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} 의 함수들이
 변수 A, B, C 가 초기값 0을 가진 채 병렬로 수행되는 경우를 생각해보세요:
 \iffalse
+% @@@ Replace this with WRC, RWC, or similar and move later.
+% @@@ Non-multicopy atomicity example as opposed to transitivity.
 
 Memory ordering and memory barriers can be extremely counter-intuitive.
 For example, consider the functions shown in
@@ -306,7 +588,7 @@ This line of reasoning, intuitively obvious though it may be, is completely
 and utterly incorrect.
 Please note that this is \emph{not} a theoretical assertion:
 actually running this code on real-world weakly-ordered hardware
-(a 1.5GHz 16-CPU POWER 5 system) resulted in the assertion firing
+(a 1.5\,GHz 16-CPU POWER 5 system) resulted in the assertion firing
 16~times out of 10~million runs.
 Clearly, anyone who produces code with explicit memory barriers
 should do some extreme testing---although a proof of correctness might
@@ -416,10 +698,13 @@ Line~1 은 공유된 변수 하나를 자신의 CPU 의 ID 로 값을 넣고, li
 
 It is natural to think of a variable as taking on a well-defined
 sequence of values in a well-defined, global order.
-Unfortunately, it is time to say ``goodbye'' to this sort of comforting
-fiction.
+Unfortunately, it is time to say ``goodbye'' to this comforting fiction.
+Hopefully, you already started to say ``goodbye'' in response to row~2 of
+Tables~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
+and~\ref{tab:advsync:Memory Ordering: Store-Buffering Sequence of Events},
+but either way, the purpose of this section is to drive this point home.
 
-To see this, consider the program fragment shown in
+To this end, consider the program fragment shown in
 Figure~\ref{fig:advsync:Software Logic Analyzer}.
 This code fragment is executed in parallel by several CPUs.
 Line~1 sets a shared variable to the current CPU's ID, line~2
@@ -497,10 +782,10 @@ if the shared variable had changed before entry into the loop.
 This allows us to plot each CPU's view of the value of \co{state.variable}
 over a 532-nanosecond time period, as shown in
 Figure~\ref{fig:advsync:A Variable With Multiple Simultaneous Values}.
-This data was collected in 2006 on 1.5GHz POWER5 system with 8 cores,
+This data was collected in 2006 on 1.5\,GHz POWER5 system with 8 cores,
 each containing a pair of hardware threads.
 CPUs~1, 2, 3, and~4 recorded the values, while CPU~0 controlled the test.
-The timebase counter period was about 5.32ns, sufficiently fine-grained
+The timebase counter period was about 5.32\,ns, sufficiently fine-grained
 to allow observations of intermediate cache states.
 \fi
 
@@ -523,13 +808,13 @@ to allow observations of intermediate cache states.
 Each horizontal bar represents the observations of a given CPU over time,
 with the black regions to the left indicating the time before the
 corresponding CPU's first measurement.
-During the first 5ns, only CPU~3 has an opinion about the value of the
+During the first 5\,ns, only CPU~3 has an opinion about the value of the
 variable.
-During the next 10ns, CPUs~2 and~3 disagree on the value of the variable,
+During the next 10\,ns, CPUs~2 and~3 disagree on the value of the variable,
 but thereafter agree that the value is~``2'', which is in fact
 the final agreed-upon value.
-However, CPU~1 believes that the value is~``1'' for almost 300ns, and
-CPU~4 believes that the value is~``4'' for almost 500ns.
+However, CPU~1 believes that the value is~``1'' for almost 300\,ns, and
+CPU~4 believes that the value is~``4'' for almost 500\,ns.
 \fi
 
 \QuickQuiz{}
@@ -3274,7 +3559,6 @@ In addition, control dependencies apply only to the then-clause and
 else-clause of the if-statement in question.
 In particular, it does
 not necessarily apply to code following the if-statement:
->>>>>>> paul/master
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
