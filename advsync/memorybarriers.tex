@@ -267,6 +267,13 @@ store to do something about all the old values of that variable
 residing in other CPUs' caches.
 \fi
 
+\begin{figure}[htb]
+\centering
+\resizebox{3in}{!}{\includegraphics{cartoons/r-2014-Out-of-order}}
+\caption{CPUs Can Do Things Out of Order}
+\ContributedBy{Figure}{fig:advsync:CPUs Can Do Things Out of Order}{Melissa Broussard}
+\end{figure}
+
 Store buffer 들이 성능을 상당히 향상시킬 수 있긴 하지만, 이것들은
 인스트럭션들과 메모리 레퍼런스들이 비순차적으로 실행될 수 있게 만들어서 결국
 Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order} 에 보인 것처럼 상당한
@@ -275,13 +282,6 @@ Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order} 에 보인 것처럼 �
 Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}
 에 보인 store-buffering litmus test 에 보인 메모리 순서 문제를 일으킬 수
 있습니다.
-
-컴파일러들과 (락킹과 RCU 같은) 동기화 도구들은 ``메모리 배리어들'' (예를 들어,
-리눅스 커널의 \co{smp_mb()}) 을 이용해 순서가 맞춰지는 듯한 환상을 유지할
-책임을 갖습니다.
-이런 메모리 배리어들은 ARM, POWER, Itanium, 그리고 Alpha 에서와 같이 명시적인
-인스트럭션들이 될 수도 있고, 또는 x86 에서처럼 다른 인스트럭션들에 의해
-묵시적으로 실행될 수도 있습니다.
 \iffalse
 
 Although store buffers can greatly increase performance,
@@ -291,45 +291,7 @@ Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order}.
 In particular, these store buffers can cause the memory misordering
 shown in the store-buffering litmus test in
 Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
-
-% @@@ More here.  Some sort of illustration of store-buffering misordering
-
-Compilers and synchronization primitives (such as locking and RCU)
-are responsible for maintaining the illusion of ordering through use of
-``memory barriers'' (for example, \co{smp_mb()} in the Linux kernel).
-These memory barriers can be explicit instructions, as they are on
-ARM, POWER, Itanium, and Alpha, or they can be implied by other instructions,
-as they are on x86.
 \fi
-
-\begin{figure}[htb]
-\centering
-\resizebox{3in}{!}{\includegraphics{cartoons/r-2014-Out-of-order}}
-\caption{CPUs Can Do Things Out of Order}
-\ContributedBy{Figure}{fig:advsync:CPUs Can Do Things Out of Order}{Melissa Broussard}
-\end{figure}
-
-표준 동기화 도구들은 순서의 환상을 지키므로, 이 섹션을 읽는 것을 멈추고 그냥 그
-도구들을 사용하는 것이 좋을 것입니다.
-
-하지만, 동기화 도구들 자체를 구현해야 한다면, 또는, 그저 메모리 접근 순서와
-메모리 배리어들이 어떻게 동작하는지에 흥미가 있다면, 계속 읽으세요!
-
-다음 섹션은 당신이 명시적으로 메모리 배리어를 사용한다면 마주할 수 있는, 직관에
-반하는 시나리오들을 이야기 합니다.
-\iffalse
-
-Since the standard synchronization primitives preserve the illusion of
-ordering, your path of least resistance is to stop reading
-this section and simply use these primitives.
-\fi
-Although store buffers can greatly increase performance,
-they can cause instructions and memory references to execute out
-of order, which can in turn cause serious confusion, as illustrated in
-Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order}.
-In particular, these store buffers can cause the memory misordering
-shown in the store-buffering litmus test in
-Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 
 \begin{table*}
 \small
@@ -361,6 +323,17 @@ Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 \end{table*}
 
 Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
+은 이 메모리 순서 문제가 어떻게 일어날 수 있는지 보입니다.
+Row~1 은 초기 상태를 보이는데, CPU~0 는 \co{x1} 을 자신의 캐시에 가지고 있고
+CPU~1 은 \co{x0} 를 자신의 캐시에 가지고 있으며, 두 변수들은 값 0을 갖습니다.
+Row~2 는 각 CPU 의 (
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test} line~9
+와~18 의) 스토어로 인한 상태 변화를 보입니다.
+두 CPU 모두 자신의 캐시의 변수에 스토어를 하지 않았으므로, 두 CPU 모두 각자의
+스토어를 각자의 store buffer 에 저장합니다.
+\iffalse
+
+Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
 shows how this memory misordering can happen.
 Row~1 shows the initial state, where CPU~0 has \co{x1} in its cache
 and CPU~1 has \co{x0} in its cache, both variables having a value of zero.
@@ -368,22 +341,62 @@ Row~2 shows the state change due to each CPU's store (lines~9 and~18 of
 Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}).
 Because neither CPU has the stored-to variable in its cache, both CPUs
 record their stores in their respective store buffers.
+\fi
 
 \QuickQuiz{}
+	잠깐만요!!!
+	Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
+	의 row~2 에서 \co{x0} 와 \co{x1} 모두 각각 동시에 두개의 값, 0과 2를
+	가지고 있어요.
+	이게 어떻게 동작할 수 있죠???
+	\iffalse
+
 	But wait!!!
 	On row~2 of
 	Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
 	both \co{x0} and \co{x1} each have two values at the same time,
 	namely zero and two.
 	How can that possibly work???
+	\fi
 \QuickQuizAnswer{
+	일을 돌아갈 수 있게 해주는 cache-coherence 프로토콜이 그 아래에 있는데,
+	이에 대해선 뒤에서 설명할 겁니다.
+	하지만 동시에 두개의 값을 갖는 변수가 있을 수 있다는게 놀랍다면,
+	Section~\ref{sec:advsync:Variables Can Have More Than One Value} 까지
+	잠깐 기다려 주세요!
+	\iffalse
+
 	There is an underlying cache-coherence protocol that straightens
 	things out, which will be discussed later.
 	% @@@ Add forward reference.
 	But if you think that a given variable having two values at
 	the same time is surprising, just wait until you get to
 	Section~\ref{sec:advsync:Variables Can Have More Than One Value}!
+	\fi
 } \QuickQuizEnd
+
+Row~3 는
+(Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}
+line~10 과~19 의) 두개의 읽기를 보입니다.
+각 CPU 에 의해 읽혀지는 이 변수는 해당 CPU 의 캐시에 존재하므로, 각각의 읽기는
+곧바로 캐시에 이쓴 값을 리턴하는데, 둘 다 0입니다.
+
+하지만 CPU 들은 아직 일이 다 끝나지 않았습니다: 금방이든 나중이든, CPU 들은
+각자의 store buffer 를 비워야만 합니다.
+캐시들은 데이터를 \emph{캐시라인} 이라 불리는, 상대적으로 더 큰 블록 단위로
+움직이기 때문에, 그리고 각각의 캐시라인은 여러 변수들을 담고 있을 수 있기에,
+각각의 CPU 는 해당 캐시라인을 각자의 캐시에 가져와서 자신의 store buffer 에
+있는 변수가 속한 캐시라인의 부분을 해당 캐시라인의 다른 부분을 망가뜨리지
+않은채 업데이트 할 수 있게 해야 합니다.
+각 CPU 는 또한 해당 캐시라인이 다른 CPU 의 캐시에는 없을 것을 보장해야 하는데,
+read-invalidate 오퍼레이션이 이를 위해 사용됩니다.
+Row~4 에 보인 것처럼, read-invalidate 오퍼레이션 두개가 모두 완료된 후에는, 두
+CPU 는 캐시라인들을 거래했고, 따라서 CPU~0 의 캐시는 이제 \co{x0} 를 가지고
+있고 CPU~1 의 캐시는 \co{x1} 을 가지고 있게 됩니다.
+일단 이 두 변수들이 새로운 위치로 위치하게 되면, 각 CPU 는 각자의 store buffer
+를 연관된 캐시라인으로 비울 수 있어서, 각 변수가 row~5 에 보인 것처럼 최종값을
+가지고 있게 해줄 수 있습니다.
+\iffalse
 
 Row~3 shows the two reads (lines~10 and~19 of
 Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}).
@@ -407,17 +420,45 @@ the two CPUs have traded cachelines, so that CPU~0's cache now contains
 Once these two variables are in their new homes, each CPU can flush
 its store buffer into the corresponding cache line, leaving each
 variable with its final value as shown on row~5.
+\fi
 
 \QuickQuiz{}
+	하지만 이 값은 또 캐시에서 메인 메모리로 비워져야 하지 않나요?
+	\iffalse
+
 	But don't the values also need to be flushed from the cache
 	to main memory?
+	\fi
 \QuickQuizAnswer{
+	놀라운 이야기일 수 있겠으나, 꼭 그래야 하지는 않습니다!
+	일부 시스템들에서는, 두 변수들이 많이 사용되면, 그 값은 CPU 의 캐시들
+	사이에서 반복적으로 왔다갔다 하게 되고 메인 메모리에는 절대 돌아오지
+	않습니다.
+	\iffalse
+
 	Perhaps surprisingly, not necessarily!
 	On some systems,
 	if the two variables are being used heavily, they might
 	be bounced back and forth between the CPUs' caches and never
 	land in main memory.
+	\fi
 } \QuickQuizEnd
+
+요약하자면, store buffer 들은 CPU 들이 store 인스트럭션들을 효율적으로 다룰 수
+있도록 하기 위해 필요하지만, 이것들은 반직관적인 메모리 순서 문제를 일으킬 수
+있습니다.
+
+하지만 여러분의 알고리즘이 정말로 순서를 지킨 메모리 레퍼런스를 필요로 한다면
+뭘 해야 할까요?
+결국은 \emph{메모리 배리어} (예를 들어, 리눅스 커널의 \co{smp_mb()}) 를
+사용해서 순서가 지켜지는 환상을 유지할 책임을 가진 컴파일러 지시어와 표준적
+동기화 도구들 (락킹과 RCU 같은) 이 있습니다.
+이 메모리 배리어들은 ARM, POWER, Itanium, 그리고 Alpha 에서와 같이 명시적
+인스트럭션일 수 있고, x86 에서와 같이 다른 인스트럭션들에 내포되어질 수
+있습니다.
+이런 표준 동기화 도구들은 순서규칙의 환상을 제공하기에, 여러분이 해야할 일은 이
+도구들을 사용하는 것이므로, 이 섹션을 더이상 읽지 마시기 바랍니다.
+\iffalse
 
 In summary, store buffers are needed to allow CPUs to handle
 store instructions efficiently, but they can result in
@@ -435,6 +476,7 @@ as they often are on x86.
 Since these standard synchronization primitives preserve the illusion of
 ordering, your path of least resistance is to simply use these primitives,
 thus allowing you to stop reading this section.
+\fi
 
 \begin{figure}
 { \scriptsize
