@@ -60,17 +60,23 @@ RCU.
 예를 들어,
 Table~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test} 의
 리트머스 테스트는 해당 단정문이 결코 실패하지 않을 거라 보장되는 듯 보입니다.
-일단, \co{r1 != 1} 이라면, 우린 쓰레드~1 의 \co{y} 로부터의 로드가 쓰레드~2 의
-\co{y} 로의 스토어 이전에 일어났다고 볼 것이고, 따라서 쓰레드~2 의 \co{x}
-로부터의 로드는 쓰레드~1 의 \co{x} 로의 스토어 이후에 일어났고, 따라서 해당
-단정문에서 필요로 하는 \co{r2 == 1} 조건이 참일 것이라 생각될 수 있습니다.
-예제는 대칭적이므로, 같은 원리로 \co{r2 != 1} 은 \co{r1 == 1} 을 보장한다고
-생각하게 될 것입니다.
-안타깝지만,
-Table~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test} 의
-메모리 배리어 부재로 인해 이런 생각은 깨져버립니다.
-컴파일러도 CPU 도 쓰레드~1 과 쓰레드~2 의 문장들을 재배열 할 권리가 있으며,
-이는 비교적 강한 순서 규칙을 제공하는 x86 같은 시스템에서도 마찬가지입니다.
+일단, \co{exists} 절에 보인 것처럼 \nbco{0:r2=0} 라면\footnote{
+	이 말은, Thread~\co{P0()} 의 로컬 변수 \co{r2} 의 인스턴스가 0이라는
+	뜻입니다.
+	리트머스 테스트의 명명법의 문서를 위해선
+	See Section~\ref{sec:formal:Anatomy of a Litmus Test}
+	를 참고하세요.}
+우린 Thread~\co{P0()} 의 \co{x1} 으로부터의 로드가 Thread~\co{P1()} 의 \co{x1}
+에의 스토어 전에 일어났어야만 한다고 바라게 되고, 따라서 Thread~\co{P1()} 의
+\co{x0} 로부터의 로드는 Thread~\co{P0()} 의 \co{x0} 로틔 스토어 뒤에
+일어났어야만 한다고, 그래서 \nbco{1:r2=2} 여야 한다고, 따라서 \co{exists} 절이
+만족될 수 없어야만 한다고 바라게 될 수 있습니다.
+이 예제는 대칭적이므로, 비슷한 이유로 \nbco{1:r2=0} 는 \nbco{0:r2=2} 를
+보장한다고 생각하게끔 만들 수 있습니다.
+불행히도, 메모리 배리어의 부족이 이런 바램을 깨부십니다.
+컴파일러도 CPU 도 Thread~\co{P0()} 와 Thread~\co{P1()} 의 명령문들을 재배치 할
+수 있으며, 이는 심지어 x86 과 같이 비교적 강화된 순서 규칙의 시스템들에서도
+마찬가지입니다.
 \iffalse
 
 Unfortunately, these intuitions break down completely in face of
@@ -95,6 +101,7 @@ Unfortunately, the lack of memory barriers dashes these hopes.
 Both the compiler and the CPU are within their rights to reorder
 the statements within both Thread~\co{P0()} and Thread~\co{P1()},
 even on relatively strongly ordered systems such as x86.
+\fi
 
 This willingness to reorder can be confirmed using tools such as
 \co{litmus7}~\cite{Alglave:2014:HCM:2594291.2594347},
@@ -112,7 +119,6 @@ imply decreased probability!
 % 49999625:>0:r2=2; 1:r2=0;
 % 49999894:>0:r2=0; 1:r2=2;
 % 167   :>0:r2=2; 1:r2=2;
-\fi
 
 다음의 섹션들을 통해 정확히 어디서 이 직관들이 깨지는지 알아보고, 이런 문제들을
 방지하도록 도움을 줄 수 있는 메모리 배리어의 개념적 모델을 알아봅니다.
