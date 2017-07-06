@@ -186,13 +186,16 @@ CPU 들이 알아서 순서를 맞출 수 없나요?
 
 많은 사람들이 실제로 컴퓨터들이 알아서 일을 할 거라고 예측합니다만, 또한 많은
 사람들이 일을 빨리 해야 한다고 주장합니다.
-근래의 컴퓨터 시스템 제조사들이 직면한 어려움 가운데 하나는 메인 메모리는 CPU
-의 속도를 따라갈 수 없다는 것입니다 -- 근래의 CPU 들은 메모리에서 변수 하나를
-가져오는데 필요한 시간동안 수백개의 인스트럭션들을 실행할 수 있습니다.
+하지만, Chapter~\ref{chp:Hardware and its Habits} 에서 보았듯이, 근대의 컴퓨터
+시스템 제조사들이 직면한 한가지 어려움은 메인 메모리가 CPU 를 따라가지 못한다는
+겁니다---근대의 CPU 들은 하나의 변수를 메모리로부터 읽어오는데 필요한 시간동안
+수백개의 명령어를 실행할 수 있습니다.
 따라서 CPU 들은 Figure~\ref{fig:cpu:System Hardware Architecture}
-에 그려진 것처럼, 계속해서 거대한 캐시들을 사용합니다.
-특정 CPU 에 의해 매우 자주 사용되는 변수들은 해당 CPU 의 캐시에 남아있는 경향을
-보일 것이고, 이로 인해 해당 데이터에 대한 고속의 액세스가 가능해집니다.
+에 그려진 것처럼, 계속해서 거대한 캐시들을 사용하는데, 이는 특정 CPU 의 특정
+변수에 대한 첫번째 읽기가 Section~\ref{sec:cpu:Cache Misses} 에서 이야기된
+것처럼 비싼 \emph{cache miss} 를 초래할지라도, 해당 CPU 의 해당 변수에 대한
+뒤따르는 반복적인 로드들은 최초의 캐시 미스가 해당 변수를 해당 CPU 의 캐시에
+읽어들여 놓았기 때문에 매우 빨리 수행될 겁니다.
 \iffalse
 
 But why are memory barriers needed in the first place?
@@ -214,6 +217,17 @@ Section~\ref{sec:cpu:Cache Misses}, subsequent
 repeated loads from that variable by that CPU can execute
 very quickly because the initial cache miss will have loaded that
 variable into that CPU's cache.
+\fi
+
+하지만, 여러 CPU 들로부터의 공유된 변수들의 집합에 행해지는 빈번한 동시적
+스토어들을 처리할 필요 또한 있습니다.
+Cache-coherent 시스템에서, 만약 캐시들이 특정 변수의 여러 복사본들을 가지고
+있다면, 해당 변수의 모든 복사본들은 같은 값을 가져야만 합니다.
+이는 동시적 읽기들에 대해서는 매우 잘 동작하지만, 동시적 쓰기들에 대해서는
+그렇지 못합니다: 각각의 쓰기는 오래된 값을 갖는 모든 복사본들에 행해져야만 하며
+(또다른 캐시 미스!), 이는 제한된 빛의 속도와 물질의 원자적 특성을 놓고 생각해
+보면, 성급한 소프트웨어 해커가 바라는 것보다 느릴 겁니다.
+\iffalse
 
 However, it is also necessary to accommodate frequent concurrent stores
 from multiple CPUs to a set of shared variables.
@@ -233,6 +247,16 @@ than impatient software hackers would like.
 \label{fig:advsync:System Architecture With Store Buffers}
 \end{figure}
 
+따라서 CPU 들은
+Figure~\ref{fig:advsync:System Architecture With Store Buffers} 에 보인 것처럼
+store buffer 를 장착합니다.
+특정 CPU 가 특정 변수에게 해당 변수가 해당 CPU 의 캐시에 존재하지 않을 때
+스토어를 행한다면, 이 새로운 값은 해당 CPU 의 store buffer 위에 위치하게
+됩니다.
+이 CPU 는 이제 해당 스토어가 다른 CPU 의 캐시들에 존재하는, 해당 변수의 기존
+값들에 적절한 조치를 취할 때까지 기다리지 않고 곧바로 동작을 할 수 있습니다.
+\iffalse
+
 CPUs therefore come equipped with store buffers, as shown in
 Figure~\ref{fig:advsync:System Architecture With Store Buffers}.
 When a given CPU does a store to a given variable when that
@@ -241,16 +265,17 @@ is instead placed in that CPU's store buffer.
 The CPU can then proceed immediately, without having to wait for the
 store to do something about all the old values of that variable
 residing in other CPUs' caches.
+\fi
 
-한 CPU 가 자신의 캐시에 아직 존재하지 않는 데이터에 접근하는 경우엔, 불행히도
-데이터를 메모리로부터 가져와야 하는, 비싼 ``캐시 미스'' 를 초래하게 됩니다.
-더 안타깝게도, 일반적인 코드의 수행은 상당한 캐시 미스를 초래합니다.
-이로 인한 성능 하락을 제한하기 위해, CPU 들은 메모리 참조가 캐시 미스로 인해
-메모리에서 데이터를 얻어오는 것을 기다리는 동안 다른 인스트럭션들을 실행할 수
-있도록 설계되었습니다.
-이는 분명히 인스트럭션들과 메모리 참조가 비순차적으로 실행되도록 해서
-Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order} 에 보여지는 것과 같이
-상당한 혼란을 가져올 수 있습니다.
+Store buffer 들이 성능을 상당히 향상시킬 수 있긴 하지만, 이것들은
+인스트럭션들과 메모리 레퍼런스들이 비순차적으로 실행될 수 있게 만들어서 결국
+Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order} 에 보인 것처럼 상당한
+혼란을 일으킬 수 있습니다.
+구체적으로, 이런 store buffer 들은
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}
+에 보인 store-buffering litmus test 에 보인 메모리 순서 문제를 일으킬 수
+있습니다.
+
 컴파일러들과 (락킹과 RCU 같은) 동기화 도구들은 ``메모리 배리어들'' (예를 들어,
 리눅스 커널의 \co{smp_mb()}) 을 이용해 순서가 맞춰지는 듯한 환상을 유지할
 책임을 갖습니다.
@@ -259,17 +284,16 @@ Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order} 에 보여지는 것과
 묵시적으로 실행될 수도 있습니다.
 \iffalse
 
-Unfortunately, when a CPU accesses data that is not yet in its cache
-will result in an expensive ``cache miss'', requiring the data to
-be fetched from main memory.
-Doubly unfortunately, running typical code results in a significant
-number of cache misses.
-To limit the resulting performance degradation, CPUs have been designed to
-execute other instructions and memory references while waiting for
-a cache miss to fetch data from memory.
-This clearly causes instructions and memory references to execute out
-of order, which could cause serious confusion, as illustrated in
+Although store buffers can greatly increase performance,
+they can cause instructions and memory references to execute out
+of order, which can in turn cause serious confusion, as illustrated in
 Figure~\ref{fig:advsync:CPUs Can Do Things Out of Order}.
+In particular, these store buffers can cause the memory misordering
+shown in the store-buffering litmus test in
+Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
+
+% @@@ More here.  Some sort of illustration of store-buffering misordering
+
 Compilers and synchronization primitives (such as locking and RCU)
 are responsible for maintaining the illusion of ordering through use of
 ``memory barriers'' (for example, \co{smp_mb()} in the Linux kernel).
