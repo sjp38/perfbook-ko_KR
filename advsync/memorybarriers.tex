@@ -33,8 +33,8 @@ RCU.
  6 {
  7   int r2;
  8
- 9   *x0 = 2;
-10   r2 = *x1;
+ 9   WRITE_ONCE(*x0, 2);
+10   r2 = READ_ONCE(*x1);
 11 }
 12
 13
@@ -42,8 +42,8 @@ RCU.
 15 {
 16   int r2;
 17
-18   *x1 = 2;
-19   r2 = *x0;
+18   WRITE_ONCE(*x1, 2);
+19   r2 = READ_ONCE(*x0);
 20 }
 21
 22 exists (1:r2=0 /\ 0:r2=0)
@@ -83,6 +83,7 @@ Unfortunately, these intuitions break down completely in face of
 code that fails to use standard mechanisms.
 For example, the trivial-seeming litmus test in
 Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}
+(\path{C-SB+o-o+o-o.litmux})
 appears to guarantee that the \co{exists} clause is never satisfied.
 After all, if \nbco{0:r2=0} as shown in the \co{exists} clause,\footnote{
 	That is, Thread~\co{P0()}'s instance of local variable \co{r2}
@@ -117,7 +118,10 @@ This willingness to reorder can be confirmed using tools such as
 which found that the counter-intuitive ordering happened
 314 times out of 100,000,000 trials on my x86 laptop.
 Oddly enough, the perfectly legal outcome where both loads return the
-value 2 occurred less frequently, in this case, only 167 times.
+value 2 occurred less frequently, in this case, only 167 times.\footnote{
+	Please note that results are sensitive to the exact hardware
+	configuration,
+	how heavily the system is loaded, and much else besides.}
 The lesson here is clear: Increased counterintuitivity does not necessarily
 imply decreased probability!
 \fi
@@ -162,12 +166,13 @@ gives a brief overview of memory ordering and memory barriers.
 Once this background is in place, the next step is to get you to admit
 that your intuition has a problem.
 This painful task is taken up by
-Section~\ref{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?},
-which shows an intuitively correct code fragment that fails miserably
-on real hardware, and by
 Section~\ref{sec:advsync:Variables Can Have More Than One Value},
 which presents some code demonstrating that scalar variables can
-take on multiple values simultaneously.
+take on multiple values simultaneously,
+and by
+Section~\ref{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?},
+which shows an intuitively correct code fragment that fails miserably
+on real hardware.
 Once your intuition has made it through the grieving process,
 Section~\ref{sec:advsync:What Can You Trust?}
 provides the basic rules that memory barriers follow, rules that we
@@ -295,7 +300,7 @@ Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 
 \begin{table*}
 \small
-\centering
+\centering\OneColumnHSpace{-.2in}
 \begin{tabular}{r||l|l|l||l|l|l}
 	& \multicolumn{3}{c||}{CPU 0} & \multicolumn{3}{c}{CPU 1} \\
 	\cline{2-7}
@@ -306,11 +311,11 @@ Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 	1 & (Initial state) & & \tco{x1==0} &
 		(Initial state) & & \tco{x0==0} \\
 	\hline
-	2 & \tco{*x0 = 2} & \tco{x0==2} & \tco{x1==0} &
-		\tco{*x1 = 2;} & \tco{x1==2} & \tco{x0==0} \\
+	2 & \tco{x0 = 2;} & \tco{x0==2} & \tco{x1==0} &
+		\tco{x1 = 2;} & \tco{x1==2} & \tco{x0==0} \\
 	\hline
-	3 & \tco{r2 = *x1;} (0) & \tco{x0==2} & \tco{x1==0} &
-		\tco{r2 = *x0;} (0) & \tco{x1==2} & \tco{x0==0} \\
+	3 & \tco{r2 = x1;} (0) & \tco{x0==2} & \tco{x1==0} &
+		\tco{r2 = x0;} (0) & \tco{x1==2} & \tco{x0==0} \\
 	\hline
 	4 & (Read-invalidate) & \tco{x0==2} & \tco{x0==0} &
 		(Read-invalidate) & \tco{x1==2} & \tco{x1==0} \\
@@ -489,9 +494,9 @@ thus allowing you to stop reading this section.
  6 {
  7   int r2;
  8
- 9   *x0 = 2;
-10   __atomic_thread_fence(__ATOMIC_SEQ_CST);
-11   r2 = *x1;
+ 9   WRITE_ONCE(*x0, 2);
+10   smp_mb();
+11   r2 = READ_ONCE(*x1);
 12 }
 13
 14
@@ -499,9 +504,9 @@ thus allowing you to stop reading this section.
 16 {
 17   int r2;
 18
-19   *x1 = 2;
-20   __atomic_thread_fence(__ATOMIC_SEQ_CST);
-21   r2 = *x0;
+19   WRITE_ONCE(*x1, 2);
+20   smp_mb();
+21   r2 = READ_ONCE(*x0);
 22 }
 23
 24 exists (1:r2=0 /\ 0:r2=0)
@@ -527,10 +532,9 @@ However, if you need to implement the synchronization primitives
 themselves, or if you are simply interested in understanding how memory
 ordering and memory barriers work, read on!
 The first stop is
-Figure~\ref{fig:advsync:Memory Ordering: Store-Buffering Litmus Test},
-which has \co{__atomic_thread_fence()} directives\footnote{
-	Similar to the Linux kernel's \co{smp_mb()} full memory barrier.}
-placed between
+Figure~\ref{fig:advsync:Memory Ordering: Store-Buffering Litmus Test}
+(\path{C-SB+o-mb-o+o-mb-o.litmux}),
+which the \co{smp_mb()} Linux-kernel full memory barrier placed between
 the store and load in both \co{P0()} and \co{P1()}, but is otherwise
 identical to the code shown in
 Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
@@ -560,7 +564,7 @@ Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 
 \begin{table*}
 \small
-\centering
+\centering\OneColumnHSpace{-0.2in}
 \begin{tabular}{r||l|l|l||l|l|l}
 	& \multicolumn{3}{c||}{CPU 0} & \multicolumn{3}{c}{CPU 1} \\
 	\cline{2-7}
@@ -571,11 +575,11 @@ Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 	1 & (Initial state) & & \tco{x1==0} &
 		(Initial state) & & \tco{x0==0} \\
 	\hline
-	2 & \tco{*x0 = 2} & \tco{x0==2} & \tco{x1==0} &
-		\tco{*x1 = 2;} & \tco{x1==2} & \tco{x0==0} \\
+	2 & \tco{x0 = 2;} & \tco{x0==2} & \tco{x1==0} &
+		\tco{x1 = 2;} & \tco{x1==2} & \tco{x0==0} \\
 	\hline
-	3 & \tco{__atomic_thread_fence()} & \tco{x0==2} & \tco{x1==0} &
-		\tco{__atomic_thread_fence()} & \tco{x1==2} & \tco{x0==0} \\
+	3 & \tco{smp_mb();} & \tco{x0==2} & \tco{x1==0} &
+		\tco{smp_mb();} & \tco{x1==2} & \tco{x0==0} \\
 	\hline
 	4 & (Read-invalidate) & \tco{x0==2} & \tco{x0==0} &
 		(Read-invalidate) & \tco{x1==2} & \tco{x1==0} \\
@@ -583,8 +587,8 @@ Figure~\ref{fig:advsync:Memory Misordering: Store-Buffering Litmus Test}.
 	5 & (Finish store) & & \tco{x0==2} &
 		(Finish store) & & \tco{x1==2} \\
 	\hline
-	6 & \tco{r2 = *x1;} (2) & \tco{x0==2} & \tco{x1==0} &
-		\tco{r2 = *x0;} (2) & \tco{x1==2} & \tco{x0==0} \\
+	6 & \tco{r2 = x1;} (2) & & \tco{x1==2} &
+		\tco{r2 = x0;} (2) & & \tco{x0==2} \\
 \end{tabular}
 \caption{Memory Ordering: Store-Buffering Sequence of Events}
 \label{tab:advsync:Memory Ordering: Store-Buffering Sequence of Events}
@@ -608,7 +612,7 @@ Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
 
 These directives have a profound effect on ordering, as can be seen in
 Table~\ref{tab:advsync:Memory Ordering: Store-Buffering Sequence of Events}.
-Although the \co{__atomic_thread_fence()} directives on row~3
+Although the \co{smp_mb()} instructions on row~3
 do not change state
 in and of themselves, they do cause the stores to complete before the
 loads, which rules out the counter-intuitive outcome shown in
@@ -622,14 +626,17 @@ and subtle than is described here.
 After all, the point of this discussion is not to train you to be
 a hardware architect, but rather to help you correctly code
 low-level concurrent primitives.
+But first, let's take a quick look at just how many values a single
+variable might have at a single moment of time.
 \fi
 
 % @@@ multivalue variables next, actually...
 % The next sections present counter-intuitive scenarios that you might
 % encounter when using explicit memory barriers.
 
-\subsection{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
-\label{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
+% TODO: Cleanup and reorganize this subsection
+%\subsection{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
+%\label{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
 
 메모리 순서 규칙과 메모리 배리어는 매우 비직관적일 수 있습니다.
 예를 들어, Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} 의 함수들이
@@ -867,7 +874,7 @@ the loop if not for the check on lines~6-7.
 	\fi
 } \QuickQuizEnd
 
-\begin{figure}[htbp]
+\begin{figure}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 state.variable = mycpu;
@@ -1086,7 +1093,10 @@ proper use of memory barriers for code that cares about memory ordering.
 이제 메모리 배리어가 필요해지는 체제입니다.
 \iffalse
 
-We have entered a regime where we must bid a fond farewell to
+How many values can a single variable take on at a single point in
+time?
+As many as one per store buffer in the system!
+We have therefore entered a regime where we must bid a fond farewell to
 comfortable intuitions about values of variables and the passage of time.
 This is the regime where memory barriers are needed.
 \fi
@@ -1106,6 +1116,523 @@ Having all CPUs write concurrently to the same variable
 is absolutely no way to design a parallel program, at least
 not if performance and scalability are at all important to you.
 \fi
+
+Unfortunately, memory ordering has many other ways of insulting your
+intuition, and not all of these ways conflict with performance and
+scalability.
+The next section will give an overview of a few of these insults.
+
+\subsection{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
+\label{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
+
+@@@ Roadmap
+
+\subsubsection{Memory-Reference Reordering}
+\label{sec:advsync:Memory-Reference Reordering}
+
+Section~\ref{sec:advsync:Memory Ordering and Memory Barriers}
+showed that even relatively strongly ordered systems like x86
+can reorder prior stores with later loads, at least when the
+store and load are to different variables.
+This section buids on that result, looking at the other combinations of
+loads and stores.
+
+% @@@ Rationale for further reordering.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-MP+o-wmb-o+o-o.litmus
+ 2
+ 3 {
+ 4 }
+ 5
+ 6
+ 7 P0(int* x0, int* x1) {
+ 8
+ 9   WRITE_ONCE(*x0, 2);
+10   smp_wmb();
+11   WRITE_ONCE(*x1, 2);
+12
+13 }
+14
+15 P1(int* x0, int* x1) {
+16
+17   int r2;
+18   int r3;
+19
+20   r2 = READ_ONCE(*x0);
+21   r3 = READ_ONCE(*x1);
+22
+23 }
+24
+25 exists (1:r2=2 /\ 1:r3=0)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Message-Passing Litmus Test}
+\label{fig:advsync:Message-Passing Litmus Test}
+\end{figure}
+
+\paragraph{Load Followed By Load:}
+Figure~\ref{fig:advsync:Message-Passing Litmus Test}
+shows the classic \emph{message-passing} litmus test, where \co{x0} is
+the message and \co{x1} is a flag indicating whether or not a message
+is available.
+In this test, the \co{smp_wmb()} forces \co{P0()} writes to be ordered,
+but there is no ordering specified for the reads.
+Relatively strongly ordered architectures, such as x86, do enforce ordering.
+However, weakly ordered archictures do not necessarily enforce
+this~\cite{JadeAlglave2011ppcmem}.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-MP+o-wmb-o+o-rmb-o.litmus
+ 2
+ 3 {
+ 4 }
+ 5
+ 6 P0(int* x0, int* x1) {
+ 7
+ 8   WRITE_ONCE(*x0, 2);
+ 9   smp_wmb();
+10   WRITE_ONCE(*x1, 2);
+11
+12 }
+13
+14 P1(int* x0, int* x1) {
+15
+16   int r2;
+17   int r3;
+18
+19   r2 = READ_ONCE(*x1);
+20   smp_rmb();
+21   r3 = READ_ONCE(*x0);
+22
+23 }
+24
+25 exists (1:r2=2 /\ 1:r3=0)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Enforcing Order of Message-Passing Litmus Test}
+\label{fig:advsync:Enforcing Order of Message-Passing Litmus Test}
+\end{figure}
+
+Therefore, portable code relying on ordering in this case should
+add explicit ordering, for example, the \co{smp_rmb()} shown on
+line~20 of
+Figure~\ref{fig:advsync:Enforcing Order of Message-Passing Litmus Test}.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-LB+o-o+o-o
+ 2 {
+ 3 }
+ 4
+ 5 P0(int *x0, int *x1)
+ 6 {
+ 7   int r2;
+ 8
+ 9   r2 = READ_ONCE(*x1);
+10   WRITE_ONCE(*x0, 2);
+11 }
+12
+13
+14 P1(int *x0, int *x1)
+15 {
+16   int r2;
+17
+18   r2 = READ_ONCE(*x0);
+19   WRITE_ONCE(*x1, 2);
+20 }
+21
+22 exists (1:r2=2 /\ 0:r2=2)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Load-Buffering Litmus Test}
+\label{fig:advsync:Load-Buffering Litmus Test}
+\end{figure}
+
+\paragraph{Load Followed By Store:}
+Figure~\ref{fig:advsync:Load-Buffering Litmus Test}
+shows the classic \emph{load-buffering} litmus test.
+Although relatively strongly ordered systems such as x86
+or the IBM Mainframe do not reorder prior loads with subsequent stores,
+more weakly ordered architectures really do allow such
+reordering~\cite{JadeAlglave2011ppcmem}.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-LB+o-r+a-o.litmus
+ 2 {
+ 3 }
+ 4
+ 5 P0(int *x0, int *x1)
+ 6 {
+ 7   int r2;
+ 8
+ 9   r2 = READ_ONCE(*x1);
+10   smp_store_release(x0, 2);
+11 }
+12
+13
+14 P1(int *x0, int *x1)
+15 {
+16   int r2;
+17
+18   r2 = smp_load_acquire(x0);
+19   WRITE_ONCE(*x1, 2);
+20 }
+21
+22 exists (1:r2=2 /\ 0:r2=2)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Enforcing Ordering of Load-Buffering Litmus Test}
+\label{fig:advsync:Enforcing Ordering of Load-Buffering Litmus Test}
+\end{figure}
+
+Interestingly enough, it is relatively rare for actual hardware to
+exhibit this reordering~\cite{LucMaranget2017aarch64}.
+Nevertheless, you should enforce any required ordering, for example,
+as shown in
+Figure~\ref{fig:advsync:Enforcing Ordering of Load-Buffering Litmus Test}.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-MP+o-o+o-rmb-o.litmus
+ 2
+ 3 {
+ 4 }
+ 5
+ 6 P0(int* x0, int* x1) {
+ 7
+ 8   WRITE_ONCE(*x0, 2);
+ 9   WRITE_ONCE(*x1, 2);
+10
+11 }
+12
+13 P1(int* x0, int* x1) {
+14
+15   int r2;
+16   int r3;
+17
+18   r2 = READ_ONCE(*x1);
+19   smp_rmb();
+20   r3 = READ_ONCE(*x0);
+21
+22 }
+23
+24 exists (1:r2=2 /\ 1:r3=0)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Message-Passing Litmus Test, No Writer Ordering}
+\label{fig:advsync:Message-Passing Litmus Test, No Writer Ordering}
+\end{figure}
+
+\paragraph{Store Followed By Store:}
+Figure~\ref{fig:advsync:Message-Passing Litmus Test, No Writer Ordering}
+once again shows the classic message-passing litmus test, but without
+explicit ordering for \co{P0()}'s writes and with the \co{smp_mb()}
+providing ordering for \co{P1()}'s reads.
+Again, the relatively strongly ordered architectures do enforce ordering,
+but weakly ordered architectures do not necessarily do
+so~\cite{JadeAlglave2011ppcmem}.
+Therefore, portable code should explicitly order the writes, for
+example, as shown in
+Figure~\ref{fig:advsync:Enforcing Order of Message-Passing Litmus Test}.
+
+\subsubsection{Address Dependencies}
+\label{sec:advsync:Address Dependencies}
+
+An address dependency occurs when the value returned by a load instruction
+is used to compute the address used by a later memory-reference
+instruction.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-MP+o-wmb-o+o-ad-o.litmus
+ 2
+ 3 {
+ 4 int y=1;
+ 5 int *x1 = &y;
+ 6 }
+ 7
+ 8 P0(int* x0, int** x1) {
+ 9
+10   WRITE_ONCE(*x0, 2);
+11   smp_wmb();
+12   WRITE_ONCE(*x1, x0);
+13
+14 }
+15
+16 P1(int** x1) {
+17
+18   int *r2;
+19   int r3;
+20
+21   r2 = READ_ONCE(*x1);
+22   r3 = READ_ONCE(*r2);
+23
+24 }
+25
+26 exists (1:r2=x0 /\ 1:r3=1)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Message-Passing Address-Dependency Litmus Test}
+\label{fig:advsync:Message-Passing Address-Dependency Litmus Test}
+\end{figure}
+
+Figure~\ref{fig:advsync:Message-Passing Address-Dependency Litmus Test}
+shows a linked variant of the message-passing pattern.
+The head pointer is \co{x1}, which initially
+references the \co{int} variable \co{y} (line~5), which is in turn 
+initialized to the value $1$ (line~4).
+
+\co{P0()} updates head pointer \co{x1} to reference \co{x0} (line~12),
+but only afer initializing it to $2$ (line~10) and forcing ordering
+(line~11).
+\co{P1()} picks up the head pointer \co{x1} (line~21), and then loads
+the referenced value (line~22).
+There is thus an address dependency from the load on line~21 to the
+load on line~22.
+In this case, the value return by the load on line~21 is exactly the address
+used by the load on line~22, but many variations are possible,
+including field access using the C-language \co{->} operator,
+addition, subtraction, and array indexing.
+
+One might hope that line~21's load from the head pointer would be ordered
+before line~22's dereference.
+However, this is not the case on DEC Alpha, which can in effect use
+a speculated value for the dependent read, as described in more detail in
+Section~\ref{sec:app:whymb:Alpha}.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-MP+o-wmb-o+ld-ad-o.litmus
+ 2
+ 3 {
+ 4 int y=1;
+ 5 int *x1 = &y;
+ 6 }
+ 7
+ 8 P0(int* x0, int** x1) {
+ 9
+10   WRITE_ONCE(*x0, 2);
+11   smp_wmb();
+12   WRITE_ONCE(*x1, x0);
+13
+14 }
+15
+16 P1(int** x1) {
+17
+18   int *r2;
+19   int r3;
+20
+21   r2 = lockless_dereference(*x1);
+22   r3 = READ_ONCE(*r2);
+23
+24 }
+25
+26 exists (1:r2=x0 /\ 1:r3=1)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+\label{fig:advsync:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+\end{figure}
+
+Figure~\ref{fig:advsync:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+shows how to make this work portably, even on DEC Alpha, by
+replacing line~21's \co{READ_ONCE()} with \co{lockless_dereference()},
+which acts like \co{READ_ONCE()} on all platforms other than DEC Alpha,
+where it acts like a \co{READ_ONCE()} followed by an \co{smp_mb()},
+thereby forcing the required ordering on all platforms.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 C C-S+o-wmb-o+o-ad-o.litmus
+ 2
+ 3 {
+ 4 int y=1;
+ 5 int *x1 = &y;
+ 6 }
+ 7
+ 8 P0(int* x0, int** x1) {
+ 9
+10   WRITE_ONCE(*x0, 2);
+11   smp_wmb();
+12   WRITE_ONCE(*x1, x0);
+13
+14 }
+15
+16 P1(int** x1) {
+17
+18   int *r2;
+19
+20   r2 = READ_ONCE(*x1);
+21   WRITE_ONCE(*r2, 3);
+22
+23 }
+24
+25 exists (1:r2=x0 /\ x0=2)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{S Address-Dependency Litmus Test}
+\label{fig:advsync:S Address-Dependency Litmus Test}
+\end{figure}
+
+But suppose that the dependent operation is a write rather than
+a read, for example, in the \emph{S}
+litmus test~\cite{JadeAlglave2011ppcmem} shown in
+Figure~\ref{fig:advsync:S Address-Dependency Litmus Test}?
+Because no production-quality architecture speculated writes,
+it is not possible for the \co{WRITE_ONCE()} on line~10 to overwrite
+the \co{WRITE_ONCE()} on line~21, meaning that the \co{exists}
+clause on line~25 cannot be satisfied, even on DEC Alpha, even
+without the \co{lockless_dereference()} that is required in the
+dependent-read case.
+
+However, it is important to note that address dependencies can
+be fragile and easily broken by compiler optimizations, as discussed in
+Section~\ref{sec:advsync:Address- and Data-Dependency Restrictions}.
+
+\subsubsection{Data Dependencies}
+\label{sec:advsync:Data Reordering}
+
+% @@@ More details on how hardware deals with address and data
+% @@@ dependencies
+% @@@ Explain hardware tagging of dependencies.
+
+\subsubsection{Control Dependencies}
+\label{sec:advsync:Control Dependencies}
+
+\subsubsection{Non-Multicopy Atomicity}
+\label{sec:advsync:Non-Multicopy Atomicity}
+
+\subsubsection{Non-Single-Copy Atomicity}
+\label{sec:advsync:Non-Single-Copy Atomicity}
+
+Memory ordering and memory barriers can be extremely counter-intuitive.
+For example, consider the functions shown in
+Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal}
+executing in parallel
+where variables~A, B, and~C are initially zero:
+
+% TODO: Translate this section
+\iffalse
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+  1 thread0(void)
+  2 {
+  3   A = 1;
+  4   smp_wmb();
+  5   B = 1;
+  6 }
+  7
+  8 thread1(void)
+  9 {
+ 10   while (B != 1)
+ 11     continue;
+ 12   barrier();
+ 13   C = 1;
+ 14 }
+ 15
+ 16 thread2(void)
+ 17 {
+ 18   while (C != 1)
+ 19     continue;
+ 20   barrier();
+ 21   assert(A != 0);
+ 22 }
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Parallel Hardware is Non-Causal}
+\label{fig:advsync:Parallel Hardware is Non-Causal}
+\end{figure}
+\fi
+
+Intuitively, \co{thread0()} assigns to~B after it assigns to~A,
+\co{thread1()} waits until \co{thread0()} has assigned to~B before
+assigning to~C, and \co{thread2()} waits until \co{thread1()} has
+assigned to~C before referencing~A.
+Therefore, again intuitively, the assertion on line~21 cannot possibly
+fire.
+
+This line of reasoning, intuitively obvious though it may be, is completely
+and utterly incorrect.
+Please note that this is \emph{not} a theoretical assertion:
+actually running this code on real-world weakly-ordered hardware
+(a 1.5\,GHz 16-CPU POWER 5 system) resulted in the assertion firing
+16~times out of 10~million runs.
+Clearly, anyone who produces code with explicit memory barriers
+should do some extreme testing---although a proof of correctness might
+be helpful, the strongly counter-intuitive nature of the behavior of
+memory barriers should in turn strongly limit one's trust in such proofs.
+The requirement for extreme testing should not be taken lightly, given
+that a number of dirty hardware-dependent tricks were used to
+greatly \emph{increase} the probability of failure in this run.
+
+\QuickQuiz{}
+	How on earth could the assertion on line~21 of the code in
+	Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} on
+	page~\pageref{fig:advsync:Parallel Hardware is Non-Causal}
+	\emph{possibly} fail?
+\QuickQuizAnswer{
+	The key point is that the intuitive analysis missed is that
+	there is nothing preventing the assignment to~C from overtaking
+	the assignment to~A as both race to reach \co{thread2()}.
+	This is explained in the remainder of this section.
+} \QuickQuizEnd
+
+\QuickQuiz{}
+	Great \ldots So how do I fix it?
+\QuickQuizAnswer{
+	The easiest fix is to replace each of the \co{barrier()}s on
+	line~12 and line~20 with an \co{smp_mb()}.
+
+	Of course, some hardware is more forgiving than other hardware.
+	For example, on x86 the assertion on line~21 of
+	Figure~\ref{fig:advsync:Parallel Hardware is Non-Causal} on
+	page~\pageref{fig:advsync:Parallel Hardware is Non-Causal}
+	cannot trigger.
+	On PowerPC, only the \co{barrier()} on line~20 need be
+	replaced with \co{smp_mb()} to prevent the assertion from
+	triggering.
+} \QuickQuizEnd
+
+So what should you do?
+Your best strategy, if possible, is to use existing primitives that
+incorporate any needed memory barriers, so that you can simply ignore
+the rest of this chapter.
+
+Of course, if you are implementing synchronization primitives,
+you don't have this luxury.
+The following discussion of memory ordering and memory barriers
+is for you.
 
 \subsection{What Can You Trust?}
 \label{sec:advsync:What Can You Trust?}
@@ -3001,7 +3528,7 @@ not a control dependency.  If the address for the second load is dependent
 on the first load, but the dependency is through a conditional rather than
 actually loading the address itself, then it's a \emph{control} dependency and
 a full read barrier or better is required.  See
-Section~\ref{sec:advsync:Control Dependencies} for more information.
+Section~\ref{sec:advsync:Control-Dependency Restrictions} for more information.
 
 Note that data dependency barriers should normally be paired with
 write barriers; see Section~\ref{sec:advsync:SMP Barrier Pairing}.
@@ -3413,8 +3940,235 @@ Section~\ref{sec:advsync:Cache Coherency}
 for a larger example.
 \fi
 
-\subsubsection{Control Dependencies}
-\label{sec:advsync:Control Dependencies}
+\subsubsection{Address- and Data-Dependency Restrictions}
+\label{sec:advsync:Address- and Data-Dependency Restrictions}
+
+Compilers do not understand either address or data dependencies,
+although there are efforts underway to teach them, or at the very
+least, standardize the process of teaching
+them~\cite{PaulEMcKennneyConsumeP0190R0,PaulEMcKenney2017markconsumeP0461R1}.
+In the meantime, it is necessary to be very careful in order to avoid
+giving your compiler the opportunity to break your dependencies.
+
+\paragraph{Give your dependency chain a good start.}
+The load that heads your dependency chain must use proper
+ordering, for example, \co{lockless_dereference()},
+\co{rcu_dereference()}, or
+a \co{READ_ONCE()} followed by \co{smp_read_barrier_depends()}.
+Failure to follow this rule can have serious side effects:
+
+\begin{enumerate}
+\item	On DEC Alpha, a dependent load might not be ordered with
+	the load heading the dependency chain, as described in
+	Section~\ref{sec:app:whymb:Alpha}.
+\item	If the load heading the dependency chain is a
+	C11 non-volatile \co{memory_order_relaxed} load,
+	the compiler could omit the load, for example, by using a value
+	that it loaded in the past.
+\item	If the load heading the dependency chain is a plain load,
+	the compiler can omit the load, again by using a value
+	that it loaded in the past.
+	Worse yet, it could load twice instead of once, so that
+	different parts of your code use different values---and
+	real compilers do this, especially when under register
+	pressure.
+\item	The value loaded by the head of the dependency chain must
+	be a pointer.
+	In theory, yes, you could load an integer, perhaps to use
+	it as an array index.
+	In practice, the compiler knows too much about integers,
+	and thus has way too many opportunities to break your
+	dependency chain.
+\end{enumerate}
+
+\paragraph{Avoid arithmetic dependency breakage.}
+Although it is just fine to do some arithmetic operations on a pointer in
+your dependency chain, you need to be careful to avoid giving the
+compiler too much information.
+After all, if the compiler learns enough to determine the exact value
+of the pointer, it can and sometimes will use that exact value instead
+of the pointer itself.
+As soon as the compiler does that, the dependency is broken and all
+ordering is lost.
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 int reserve_int;
+ 2 int *gp;
+ 3 int *p;
+ 4
+ 5 p = rcu_dereference(gp);
+ 6 if (p == &reserve_int)
+ 7   handle_reserve(p);
+ 8 do_something_with(*p); /* buggy! */
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Breakable Dependencies With Comparisons}
+\label{fig:advsync:Breakable Dependencies With Comparisons}
+\end{figure}
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 int reserve_int;
+ 2 int *gp;
+ 3 int *p;
+ 4
+ 5 p = rcu_dereference(gp);
+ 6 if (p == &reserve_int) {
+ 7   handle_reserve(&reserve_int);
+ 8   do_something_with(reserve_int); /* buggy! */
+ 9 } else {
+10   do_something_with(*p); /* OK! */
+11 }
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Broken Dependencies With Comparisons}
+\label{fig:advsync:Broken Dependencies With Comparisons}
+\end{figure}
+
+\begin{enumerate}
+\item	Although it is permissible to compute offsets from a
+	pointer, these offsets must not result in total cancellation.
+	For example, given a \co{char} pointer \co{cp},
+	\co{cp-(uintptr_t)cp)} will cancel and can allow the compiler
+	to break your dependency chain.
+	On the other hand, canceling offset values with each other
+	is perfectly safe and legal.
+	For example, if \co{a} and \co{b} are equal, \co{cp+a-b}
+	is an identity function, including preserving the dependency.
+\item	Comparisons can break dependencies.
+	Figure~\ref{fig:advsync:Breakable Dependencies With Comparisons}
+	shows how this can happen.
+	Here global pointer \co{gp} points to a dynamically allocated
+	integer, but if memory is low, it might instead point to
+	the \co{reserve_int} variable.
+	This \co{reserve_int} case might need special handling, as
+	shown on lines~6 and~7 of the figure.
+	But the compiler could reasonably transform this code into
+	the form shown in
+	Figure~\ref{fig:advsync:Broken Dependencies With Comparisons},
+	especially on systems where instructions with absolute
+	addresses run faster than instructions using addresses
+	supplied in registers.
+	However, there is clearly no ordering between the pointer
+	load on line~5 and the dereference on line~8.
+	Please note that this is simply an example: There are a great
+	many other ways to break dependency chains with comparisons.
+\end{enumerate}
+
+\QuickQuiz{}
+	Why can't you simply dereference the pointer before comparing it
+	to \co{&reserve_int} on line~6 of
+	Figure~\ref{fig:advsync:Breakable Dependencies With Comparisons}?
+\QuickQuizAnswer{
+	For first, it might be necessary to invoke
+	\co{handle_reserve()} before \co{do_something_with()}.
+
+	But more relevant to memory ordering, the compiler is often within
+	its rights to hoist the comparison ahead of the dereferences,
+	which would allow the compiler to use \co{&reserve_int} instead
+	of the varaiable \co{p} that the hardware has tagged with
+	a dependency.
+} \QuickQuizEnd
+
+\QuickQuiz{}
+	But it should be safe to compare two pointer variables,
+	right?  After all, the compiler doesn't know the value
+	of either, so how can it possibly learn anything from the
+	comparison?
+\QuickQuizAnswer{
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 int *gp1;
+ 2 int *gp2;
+ 3 int *p;
+ 4 int *q;
+ 5
+ 6 p = rcu_dereference(gp1);
+ 7 q = READ_ONCE(gp2);
+ 8 if (p == q)
+ 9   handle_equality(p);
+10 do_something_with(*p);
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Breakable Dependencies With Non-Constant Comparisons}
+\label{fig:advsync:Breakable Dependencies With Non-Constant Comparisons}
+\end{figure}
+
+\begin{figure}[tbp]
+{ \scriptsize
+\begin{verbbox}
+ 1 int *gp1;
+ 2 int *gp2;
+ 3 int *p;
+ 4 int *q;
+ 5
+ 6 p = rcu_dereference(gp1);
+ 7 q = READ_ONCE(gp2);
+ 8 if (p == q) {
+ 9   handle_equality(q);
+10   do_something_with(*q);
+11 } else {
+12   do_something_with(*p);
+13 }
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Broken Dependencies With Non-Constant Comparisons}
+\label{fig:advsync:Broken Dependencies With Non-Constant Comparisons}
+\end{figure}
+
+	Unfortunately, the compiler really can learn enough to
+	break your dependency chain, for example, as shown in
+	Figure~\ref{fig:advsync:Breakable Dependencies With Non-Constant Comparisons}.
+	The compiler is within its rights to transform this code
+	into that shown in
+	Figure~\ref{fig:advsync:Broken Dependencies With Non-Constant Comparisons},
+	and might well make this transformation due to register pressure
+	if \co{handle_equality()} was inlined and needed a lot of registers.
+	Line~10 of this transformed code uses \co{q}, which although
+	equal to \co{p}, is not necessarily tagged by the hardware as
+	carrying a dependency.
+	Therefore, this transformed code does not necessarily guarantee
+	that line~10 is ordered after line~6.\footnote{
+		Kudos to Linus Torvalds for providing this example.}
+} \QuickQuizEnd
+
+% @@@ Quick quiz showing other ways to break dependencies by comparison
+
+\paragraph{Safe comparison of dependent pointers.}
+It turns out that there are several safe ways to compare dependent
+pointers:
+
+\begin{enumerate}
+\item	Comparisons against the \co{NULL} pointer.
+	In this case, all the compiler can learn is that the pointer
+	is \co{NULL}, in which case you are not allowed to
+	dereference it in any case.
+\item	The dependent pointer is never dereferenced, whether before or
+	after the comparison.
+\item	The dependent pointer is compared to a pointer that references
+	objects that were last modified a very long time ago, where
+	the safest value of ``a very long time ago'' is at compile time.
+\end{enumerate}
+
+@@@ convert to \co{uintptr_t} to set/clear bits and convert back.
+
+% @@@ More here
+
+\subsubsection{Control-Dependency Restrictions}
+\label{sec:advsync:Control-Dependency Restrictions}
 
 컨트롤 의존성은 특히나 까다로운데 현재의 컴파일러들은 이를 이해하고 있지 않기
 때문입니다.
@@ -3427,7 +4181,7 @@ Load-load 컨트롤 의존성은 단순한 데이터 의존성 배리어가 아�
 \iffalse
 
 Control dependencies are especially tricky because current compilers
-do not understand them.
+do not understand them and can easily break them.
 The rules and examples in this section are intended to help you
 prevent your compiler's ignorance from breaking your code.
 
