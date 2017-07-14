@@ -610,6 +610,8 @@ Table~\ref{tab:advsync:Memory Misordering: Store-Buffering Sequence of Events}
 바랍니다.
 무엇보다도, 이 이야기의 핵심은 여러분에게 하드웨어 구조를 가르치려는게 아니라,
 여러분이 저수준 동시적 기능들을 올바르게 사용하도록 돕는 겁니다.
+하지만 먼저, 하나의 변수가 한 순간에 얼마나 많은 값들을 가질 수 있는지 간단히
+봅시다.
 \iffalse
 
 These directives have a profound effect on ordering, as can be seen in
@@ -631,10 +633,6 @@ low-level concurrent primitives.
 But first, let's take a quick look at just how many values a single
 variable might have at a single moment of time.
 \fi
-
-% @@@ multivalue variables next, actually...
-% The next sections present counter-intuitive scenarios that you might
-% encounter when using explicit memory barriers.
 
 
 \subsection{Variables Can Have More Than One Value}
@@ -920,8 +918,10 @@ proper use of memory barriers for code that cares about memory ordering.
 \label{fig:advsync:Possible Global Orders With More Simultaneous Values}
 \end{figure}
 
-이제 우리는 변수의 값과 시간의 흐름에 대한 편안한 직관에 작별을 고해야 하는
-정권에 들어왔습니다.
+시간상의 한 순간에 하나의 변수는 얼마나 많은 값들을 가질 수 있을까요?
+시스템에 있는 store buffer 당 하나씩입니다!
+따라서 우리는 변수의 값과 시간의 흐름에 대한 편안한 직관에 작별을 고해야 하는
+정권에 들어온 것입니다.
 이제 메모리 배리어가 필요해지는 체제입니다.
 \iffalse
 
@@ -939,6 +939,10 @@ This is the regime where memory barriers are needed.
 모든 CPU 들이 같은 변수에 동시적으로 값을 쓰게 하는 것은 결코 병렬 프로그램을
 설계하는 방식이 아닙니다, 적어도 성능과 확장성이 전혀 중요하지 않은게 아니라면
 말입니다.
+
+불행히도, 메모리 순서규칙은 여러분의 직관을 깨트릴 수 있는 많은 방법들을 가지고
+있고, 이런 방법들 모두가 성능과 확장성과 충돌하지는 않습니다.
+다음 섹션은 이런 직관을 깨트리는 것들 중 일부에 대한 개관을 제공합니다.
 \iffalse
 
 All that aside, it is important to remember the lessons from
@@ -947,12 +951,12 @@ and~\ref{cha:Partitioning and Synchronization Design}.
 Having all CPUs write concurrently to the same variable
 is absolutely no way to design a parallel program, at least
 not if performance and scalability are at all important to you.
-\fi
 
 Unfortunately, memory ordering has many other ways of insulting your
 intuition, and not all of these ways conflict with performance and
 scalability.
 The next section will give an overview of a few of these insults.
+\fi
 
 \subsection{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
 \label{sec:advsync:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
