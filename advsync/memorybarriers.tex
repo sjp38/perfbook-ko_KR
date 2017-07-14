@@ -1292,6 +1292,30 @@ instruction.
 \end{figure}
 
 Figure~\ref{fig:advsync:Message-Passing Address-Dependency Litmus Test}
+는 message-passing 패턴의 link 를 사용한 변종을 보입니다.
+여기서 head pointer 는 \co{x1} 으로, 초기에 \co{int} 변수 \co{y} 를 레퍼런스
+(line~5) 하며, 이 변수는 초기에 값 $1$ 로 초기화 됩니다 (line~4).
+
+\co{P0()} 는 head pointer \co{x1} 이 \co{x0} 를 레퍼런스 하도록 업데이트
+(line~12) 하지만 이는 \co{x0} 를 $2$ 로 초기화 (line~10) 하고 순서를 강제
+(line~11) 한 후입니다.
+\co{P1()} 은 head pointer \co{x1} 을 읽어오고 (line~21), 이어서 이 포인터가
+레퍼런스 하는 값을 읽어옵니다 (line~22).
+따라서 line~21 의 로드에서 line~22 의 로드로의 address dependency 가
+존재합니다.
+이 경우에는 line~21 의 로드에 의해 리턴되는 값이 곧바로 line~22 의 로드에
+사용되는 주소인데, C-언어의 \co{->} 오퍼레이터, 더하기, 빼기, 배열 인덱싱 등을
+사용한 필드 접근 등의 여러 다른 형태가 존재할 수 있습니다.
+
+Line~21 의 head pointer 로부터의 로드가 line~22 의 dereference 앞으로 순서가
+지켜지기를 바랄 수 있습니다.
+하지만, DEC Alpha 의 경우에는
+Section~\ref{sec:app:whymb:Alpha}
+에서 더 자세히 설명하는대로 여기서의 종속성 있는 읽기에 예측된 값을 사용할 수도
+있기에 그렇지 않습니다.
+\iffalse
+
+Figure~\ref{fig:advsync:Message-Passing Address-Dependency Litmus Test}
 shows a linked variant of the message-passing pattern.
 The head pointer is \co{x1}, which initially
 references the \co{int} variable \co{y} (line~5), which is in turn 
@@ -1314,6 +1338,7 @@ before line~22's dereference.
 However, this is not the case on DEC Alpha, which can in effect use
 a speculated value for the dependent read, as described in more detail in
 Section~\ref{sec:app:whymb:Alpha}.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1353,11 +1378,21 @@ Section~\ref{sec:app:whymb:Alpha}.
 \end{figure}
 
 Figure~\ref{fig:advsync:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+는 line~21 의 \co{READ_ONCE()} 를 \co{lockless_dereference()} 로 교체함으로써
+DEC Alpha 조차 포함해서 제대로 동작하고 이식성 있는 코드를 어떻게 만들 수
+있는지 보이는데, \co{lockless_dereference()} 는 DEC Alpha 외의 모든
+플랫폼에서는 \co{READ_ONCE()} 처럼 동작하고, DEC Alpha 에서는 \co{READ_ONCE()}
+에 이어 \co{smp_mb()} 가 이어지는 것처럼 동작해서 모든 플랫폼에서 필요한
+순서규칙을 강제합니다.
+\iffalse
+
+Figure~\ref{fig:advsync:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
 shows how to make this work portably, even on DEC Alpha, by
 replacing line~21's \co{READ_ONCE()} with \co{lockless_dereference()},
 which acts like \co{READ_ONCE()} on all platforms other than DEC Alpha,
 where it acts like a \co{READ_ONCE()} followed by an \co{smp_mb()},
 thereby forcing the required ordering on all platforms.
+\fi
 
 \begin{figure}[tbp]
 { \scriptsize
@@ -1395,6 +1430,17 @@ thereby forcing the required ordering on all platforms.
 \label{fig:advsync:S Address-Dependency Litmus Test}
 \end{figure}
 
+하지만
+Figure~\ref{fig:advsync:S Address-Dependency Litmus Test}
+에 보인 \emph{S} 리트머스 테스트~\cite{JadeAlglave2011ppcmem} 처럼
+이 종속적 오퍼레이션이 읽기가 아니라 쓰기라 가정해 봅시다.
+어떤 제품 품질의 아키텍쳐도 쓰기를 예측적으로 하진 않기에 line~10 의
+\co{WRITE_ONCE()} 가 line~21 의 \co{WRITE_ONCE()} 를 덮어쓰지는 않을 것이어서
+line~25 의 \co{exists} 절은 종속적 읽기의 경우에 필요했던
+\co{lockless_dereference()} 없이도 DEC Alpha 에서조차도 만족될 수 없을
+것입니다.
+\iffalse
+
 But suppose that the dependent operation is a write rather than
 a read, for example, in the \emph{S}
 litmus test~\cite{JadeAlglave2011ppcmem} shown in
@@ -1405,6 +1451,7 @@ the \co{WRITE_ONCE()} on line~21, meaning that the \co{exists}
 clause on line~25 cannot be satisfied, even on DEC Alpha, even
 without the \co{lockless_dereference()} that is required in the
 dependent-read case.
+\fi
 
 However, it is important to note that address dependencies can
 be fragile and easily broken by compiler optimizations, as discussed in
