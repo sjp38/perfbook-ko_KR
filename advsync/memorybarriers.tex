@@ -4917,9 +4917,25 @@ The two-CPU example is known as LB (load buffering) and the three-CPU
 example as WWC~\cite{Maranget2012TutorialARMPower}.
 \fi
 
+다음 규칙들은 이 섹션의 교훈들을 요약합니다:
+\iffalse
+
 The following list of rules summarizes the lessons of this section:
+\fi
 
 \begin{enumerate}
+\item	컴파일러는 control dependency 를 이해하지 못하며, 따라서 컴파일러가
+	여러분의 코드를 깨부시는걸 막는건 여러분의 일입니다.
+
+\item	Control dependency 는 앞의 load 들이 뒤의 store 들 앞으로 순서
+	지켜지도록 해줍니다.
+	하지만, 이는 그 외의 어떤 종류의 순서도 보장하지 \emph{않습니다}:
+	뒤따르는 load 앞의 load 들도, 뒤의 무엇이든간에 대해 앞서는 store 도요.
+	여러분이 이런 다른 형태의 순서 규칙이 필요하다면, \co{smp_rmb()},
+	\co{smp_wmb()}, 또는, 앞의 store 와 뒤의 load 사이의 순서를 위해서라면
+	\co{smp_mb()} 를 사용해야 합니다.
+\iffalse
+
 \item	Compilers do not understand control dependencies, so it is
 	your job to make sure that the compiler cannot break your code.
 
@@ -4930,6 +4946,25 @@ The following list of rules summarizes the lessons of this section:
 	If you need these other forms of ordering, use \co{smp_rmb()},
 	\co{smp_wmb()}, or, in the case of prior stores and later loads,
 	\co{smp_mb()}.
+\fi
+
+\item	만약 ``\co{if}'' 문의 양 분기가 똑같은 변수에 대한 똑같은 store 로
+	시작한다면, 이 store 들은 순서를 맞춰져야만 하는데, 그것들 앞에
+	\co{smp_mb()} 를 놓거나 이 store 를 행하는데 \co{smp_store_release()}
+	를 사용하거나 하는 식이어야 합니다.
+	앞의 예에서 보여졌듯이, 컴파일러의 최적화는 \co{barrier()} 의 규칙을
+	지키면서도 control dependency 를 깰 수 있기에, ``\co{if}'' 문의 양
+	분기의 시작에 \co{barrier()} 를 놓는 것만으로는 충분치 \emph{않다는}
+	것을 알아두시기 바랍니다.
+
+\item	Control dependency 는 앞의 load 와 뒤따르는 store 사이에 최소 하나의
+	실행시간의 조건이 존재할 것을 필요로 하며, 이 조건은 앞의 load 에
+	관여되어야만 합니다.
+	만약 컴파일러가 이 조건을 최적화해서 없애버릴 수 있다면, 컴파일러는
+	순서 규칙도 최적화로 없애버릴 수 있을 겁니다.
+	\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 의 주의 깊은 사실이 이 필요한
+	조건을 유지하도록 도울 수 있습니다.
+\iffalse
 
 \item	If both legs of the ``\co{if}'' statement begin with identical stores
 	to the same variable, then those stores must be ordered,
@@ -4947,6 +4982,26 @@ The following list of rules summarizes the lessons of this section:
 	will have also optimized away the ordering.
 	Careful use of \co{READ_ONCE()} and \co{WRITE_ONCE()} can help
 	to preserve the needed conditional.
+\fi
+
+\item	Control dependency 는 컴파일러가 의존성을 부재하도록 재배치 하는 것을
+	막을 것을 필요로 합니다.
+	조심스러운 \co{READ_ONCE()}, \co{atomic_read()}, 또는
+	\co{atomic64_read()} 의 사용이 여러분의 control dependency 를 지키는 걸
+	도울 수 있습니다.
+
+\item	Control dependency 는 control dependency 를 퐇마하는 ``\co{if}'' 문의
+	``\co{then}'' 과 ``\co{else}'' 절과 이 두 절이 호출하는 함수들에만
+	적용됩니다.
+	Control dependency 는 control dependency 를 포함하는 ``\co{if}'' 문을
+	뒤따르는 코드에는 적용되지 \emph{않습니다}.
+
+\item	Control dependency 는 일반적으로 다른 종류의 barrier 들과 짝을
+	짓습니다.
+
+\item	Control dependency 는 transitivity 를 제공하지 \emph{않습니다}.
+	여러분이 transitivity 를 필요로 한다면, \co{smp_mb()} 를 사용하세요.
+\iffalse
 
 \item	Control dependencies require that the compiler avoid reordering
 	the dependency into nonexistence.
@@ -4964,6 +5019,7 @@ The following list of rules summarizes the lessons of this section:
 
 \item	Control dependencies do \emph{not} provide transitivity.
 	If you need transitivity, use \co{smp_mb()}.
+\fi
 \end{enumerate}
 
 \subsubsection{SMP Barrier Pairing}
