@@ -55,7 +55,7 @@ Address of the group is as below:
 - https://groups.google.com/d/forum/perfbook-ko_kr
 
 To understand discussion process of Linux in detail, refer to documents below:
-- https://www.kernel.org/doc/Documentation/SubmittingPatches
+- https://www.kernel.org/doc/html/latest/process/submitting-patches.html
 - http://dry-kiss.blogspot.kr/2012/10/blog-post.html
 
 
