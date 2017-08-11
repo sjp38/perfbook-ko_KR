@@ -1763,8 +1763,8 @@ each of which is covered in the following sections.
 순차적 수행이 일어납니다~\cite{GeneAmdahl1967AmdahlsLaw}.
 덜 극단적인 경우에는 하드웨어를 모두 사용하고 성능과 확장성을 올리기 위해 로드
 밸런싱이 사용될 수 있습니다.
-
 \iffalse
+
 Work partitioning is absolutely required for parallel execution:
 if there is but one ``glob'' of work, then it can be executed by at
 most one CPU at a time, which is by definition sequential execution.
@@ -1779,15 +1779,15 @@ available hardware and restore performance and scalabilty.
 있습니다.
 예를 들어, 파티셔닝은 글로벌한 에러와 이벤트의 처리를 복잡하게 만들 수
 있습니다:
-병렬 프로그램은 그런 글로벌한 이벤트를 안전하게 처리하기 위해 사소하지 않은
-동기화를 해야만 할 수 있습니다.
+병렬 프로그램은 그런 글로벌한 이벤트를 안전하게 처리하기 위해 복잡한 동기화를
+해야만 할 수 있습니다.
 좀 더 일반적으로 말해, 각각의 조각은 커뮤니케이션을 필요로 합니다:
 무엇보다, 한 쓰레드가 전혀 커뮤니케이션을 하지 않는다면, 그건 어떤 효과도
-일으키지 못할테고 애초에 수행될 필요가 없는거죠.
+일으키지 못할테고, 따라서 애초에 수행될 필요가 없는거죠.
 하지만, 커뮤니케이션은 오버헤드를 일으키기 때문에, 생각없는 파티셔닝은 커다란
 성능 하락을 가져올 수 있습니다.
-
 \iffalse
+
 Although partitioning can greatly improve performance and scalability,
 it can also increase complexity.
 For example, partitioning can complicate handling of global
@@ -1804,12 +1804,12 @@ can result in severe performance degradation.
 
 더구나, 동시에 수행되는 쓰레드들은 종종 CPU 캐시 공간과 같은 공유 자원을 모조리
 사용해 버릴 수 있기 때문에 그 갯수는 자주 조정되어야 합니다.
-너무 많은 쓰레드들이 동시에 수행되도록 된다면 CPU 캐시는 넘쳐날거고, 이는 높은
-캐시 미스 레이트를 가져와 성능을 떨어뜨릴 겁니다.
+너무 많은 쓰레드들이 동시에 수행되도록 된다면 CPU 캐시는 부족해질 것이고, 이는
+높은 캐시 미스 비율을 초래해 성능을 떨어뜨릴 겁니다.
 반대로, I/O 기기들을 모두 활용하기 위해서는 컴퓨테이션과 I/O 를 겹치게 하기
-위해 많은 수의 쓰레드가 필요합니다.
-
+위해 많은 수의 쓰레드가 필요한 경우가 많습니다.
 \iffalse
+
 Furthermore, the number of concurrent threads must often be controlled,
 as each such thread occupies common resources, for example,
 space in CPU caches.
@@ -1821,9 +1821,10 @@ overlap computation and I/O so as to fully utilize I/O devices.
 \fi
 
 \QuickQuiz{}
-	CPU 캐시 용량 외에, 뭐가 동시에 수행되는 쓰레드들의 갯수를 제한해야
-	하게 할 수 있을까요?
+	CPU 캐시 용량 외에, 동시에 수행되는 쓰레드들의 갯수를 제한해야
+	하는 요인이 또 뭐가 있을 수 있을까요?
 \iffalse
+
 	Other than CPU cache capacity, what might require limiting the
 	number of concurrent threads?
 \fi
@@ -1832,22 +1833,23 @@ overlap computation and I/O so as to fully utilize I/O devices.
 	\begin{enumerate}
 	\item	메인 메모리. 각 쓰레드는 (최소한 스택을 위해) 메모리를 일부
 		사용하므로, 너무 많은 쓰레드는 메모리를 모조리 사용해버려서
-		엄청나게 과도한 페이징이나 메모리 할당 실패를 일으킬 수
-		있습니다.
-	\item	I/O 밴드위쓰. 각 쓰레드가 많은 스토리지 I/O 나 네트워크
+		과도한 페이징이나 메모리 할당 실패를 일으킬 수 있습니다.
+	\item	I/O 대역폭.  각 쓰레드가 많은 스토리지 I/O 나 네트워크
 		트래픽을 만든다면 너무 많은 수의 쓰레드는 과도한 I/O 큐잉
-		딜레이를 일으키고, 결국 성능이 또 저하될 것입니다.
-		일부 네트워킹 프로토콜은 너무 많은 쓰레드가 네트워킹 이벤트를
-		만들어 시간 내에 그 응답을 받지 못할 경우 타임아웃이나 다른
+		딜레이를 일으키고, 결국 성능이 저하될 겁니다.
+		일부 네트워킹 프로토콜은 너무 많은 쓰레드가 존재해 네트워킹
+		이벤트에 대한 응답을 시간 내에 받지 못할 경우 타임아웃이나 다른
 		문제상황을 낼 수 있습니다.
 	\item	동기화 오버헤드.
-		많은 동기화 프로토콜에서 과도한 수의 쓰레드는 지나친 스피닝,
-		블락킹, 또는 롤백을 일으켜서 성능을 떨어뜨릴 수 있습니다.
+		많은 동기화 프로토콜에서 과도한 수의 쓰레드는 지나친 스피닝
+		(spinning), 블락킹 (blocking), 또는 롤백을 일으켜서 성능을
+		떨어뜨릴 수 있습니다.
 	\end{enumerate}
 
 	특정한 어플리케이션이나 플랫폼에 따라서는 이외에도 추가적인 요소가
 	얼마든지 있을 수 있습니다.
 \iffalse
+
 	There are any number of potential limits on the number of
 	threads:
 	\begin{enumerate}
@@ -1880,15 +1882,15 @@ overlap computation and I/O so as to fully utilize I/O devices.
 다른것들은 똑같다 해도, 더 정규적인 구조를 갖는 더 작은 상태 공간은 이해하기
 쉽습니다만, 이건 기술적 또는 수학적 표현만큼이나 인간공학적 표현입니다.
 나쁜 병렬 설계는 비교적 작은 상태 공간을 갖더라도 이해하기 어렵겠지만 좋은 병렬
-설계는 엄청나게 큰 상태 공간을 가지더라도 정규적 구조 덕분에 불필요하게
+설계는 엄청나게 큰 상태 공간을 가지더라도 정규적 구조 덕분에 불필요할 정도로
 이해하기 어렵지는 않을 겁니다.
-최고의 설계는 당황스러운 병렬성을 노출하거나 문제를 댕황스럽게 병렬적인
+최고의 설계는 당황스러운 병렬성을 노출하거나 문제 자체를 당황스럽게 병렬적인
 해결책으로 바꿔버립니다.
 어떤 경우든, ``당황스럽도록 병렬적임'' 은 사실 부자들의 골칫거리입니다.
 현존하는 최고의 기술은 좋은 설계들을 나열합니다; 상태공간 크기와 구조에 대해 더
-일반적 평가를 하기 위해선 더 많은 일이 필요합니다.
-
+일반적 평가를 하기 위해선 더 많은 노력이 필요합니다.
 \iffalse
+
 Finally, permitting threads to execute concurrently greatly increases
 the program's state space, which can make the program difficult to
 understand and debug, degrading productivity.
