@@ -154,7 +154,7 @@ storage.
 \label{sec:future:I/O Operations}
 
 누군가는 I/O 오퍼레이션을 락 기반의 크리티컬 섹션 안에서 할수도, 적어도
-원칙적으로는, RCU read-side 크리티컬 섹션 안에서 할수도 있습니다.
+원칙적으로는, userspace-RCU read-side 크리티컬 섹션 안에서 할수도 있습니다.
 트랜잭션 안에서 I/O 오퍼레이션을 수행하려 하면 어떻게 될까요?
 \iffalse
 
@@ -311,8 +311,8 @@ produce additional progress.
 \subsubsection{RPC Operations}
 \label{sec:future:RPC Operations}
 
-누군가는 RPC 들을 락 기반의 크리티컬 섹션에서도, RCU read-side 크리티컬 섹션
-내에서도 수행할 수 있습니다.
+누군가는 RPC 들을 락 기반의 크리티컬 섹션에서도, userspace-RCU read-side
+크리티컬 섹션 내에서도 수행할 수 있습니다.
 여러분이 RPC 를 트랜잭션 내에서 수행하려 하면 어떻게 될까요?
 
 RPC 요청과 그에 대한 응답이 해당 트랜잭션 내에 포함된다면, 그리고 트랜잭션의
@@ -698,8 +698,8 @@ ever-changing execution environment.
 \subsubsection{Multithreaded Transactions}
 \label{sec:future:Multithreaded Transactions}
 
-락을 쥔채, 또는, 필요하다면 RCU read-side 크리티컬 섹션 내에서 프로세스나
-쓰레드를 생성하는 것은 완전히 합법적인 일입니다.
+락을 쥔채, 또는, 필요하다면 userspace-RCU read-side 크리티컬 섹션 내에서
+프로세스나 쓰레드를 생성하는 것은 완전히 합법적인 일입니다.
 이건 합법적일 뿐만 아니라, 다음 코드 조각에서 볼 수 있듯이 상당히 간단하기도
 합니다.
 \iffalse
@@ -837,8 +837,8 @@ soon be addressed more thoroughly.
 그 호출의 정확한 의미는 기능의 타입에 따라 정해집니다.
 
 지속성 없는 기능들 (\co{pthread_mutex_lock()}, \co{pthread_rwlock_rdlock()},
-그리고 RCU 등) 의 경우에는, \co{exec()} 가 성공한다면, 모든 잡혀 있던 락들을
-포함해서 전체 주소 공간이 사라집니다.
+그리고 userspace-RCU 등) 의 경우에는, \co{exec()} 가 성공한다면, 모든 잡혀 있던
+락들을 포함해서 전체 주소 공간이 사라집니다.
 물론, \co{exec()} 가 실패한다면, 이 주소 공간은 여전히 살아있게 되어서, 모든
 연관된 락들 역시 여전히 살아 있게 됩니다.
 약간 이상할 수 있겠지만, 합리적으로 잘 정의된 의미입니다.
@@ -987,7 +987,7 @@ Similar issues surround the \co{exit()} and \co{kill()} system calls.
 \subsubsection{Dynamic Linking and Loading}
 \label{sec:future:Dynamic Linking and Loading}
 
-락 기반의 크리티컬 섹션과 RCU read-side 크리티컬 섹션 모두 C/C++ 공유
+락 기반의 크리티컬 섹션과 userspace-RCU read-side 크리티컬 섹션 모두 C/C++ 공유
 라이브러리나 Java 클래스 라이브러리와 같은, 동적으로 링크되고 로드되는 함수들을
 수행시키는 코드를 합법적으로 담고 있을 수 있습니다.
 물론, 이 라이브러리에 들어있는 코드에 대해서는 그 정의에 따라, 컴파일 타임에는
@@ -997,11 +997,11 @@ Similar issues surround the \co{exit()} and \co{kill()} system calls.
 이 질문은 두개의 부분으로 구성됩니다: (1)~트랜잭션 안에서 어떻게 함수를
 동적으로 링크하고 로드하는지와 (b)~이 함수 안의 알 수 없는 코드에 대해서 무엇을
 해야 할까요?
-공정해지기 위해, 항목 (b) 는 적어도 이론 상으로는 락킹과 RCU 모두에게 일부
-도전적 과제를 갖게 합니다.
+공정해지기 위해, 항목 (b) 는 적어도 이론 상으로는 락킹과 userspace-RCU 모두에게
+일부 도전적 과제를 갖게 합니다.
 예를 들어서, 동적으로 링크된 함수는 락킹에 있어 데드락을 가져올 수도 있고
-(에러에 의해) RCU read-side 크리티컬 섹션 안에 quiescent state 를 가져올 수도
-있습니다.
+(에러에 의해) userspace-RCU read-side 크리티컬 섹션 안에 quiescent state 를
+가져올 수도 있습니다.
 차이점은, 락킹과 RCU 크리티컬 섹션 안에서 허용되는 오퍼레이션들의 클래스는
 여전히 잘 이해되어 있지만, TM 의 경우에 대해서는 상당한 불확실성이 존재한다는
 점입니다.
@@ -1143,8 +1143,8 @@ to a world containing more than just TM.)
 
 락 기반의 크리티컬 섹션 내에서 (\co{mmap()}, \co{shmat()}, 그리고
 \co{munmap()}~\cite{TheOpenGroup1997SUS} 과 같은) 메모리 매핑 오퍼레이션들을
-사용하는건 완전히 합법적이고, 적어도 원칙적으로는, RCU read-side 크리티컬 섹션
-내에서의 사용도 드렇습니다.
+사용하는건 완전히 합법적이고, 적어도 원칙적으로는, userspace-RCU read-side
+크리티컬 섹션 내에서의 사용도 드렇습니다.
 그런 오퍼레이션을 트랜잭션 내에서 수행하려 시도하면 무슨 일이 벌어질까요?
 더 나아가서, 다시 매핑된 메모리 영역이 현재 쓰레드의 트랜잭션에 사용되는 변수를
 담고 있다면 어떻게 될까요?
@@ -1237,7 +1237,7 @@ implications.\footnote{
 \label{sec:future:Debugging}
 
 브레이크포인트와 같은 일반적인 디버깅 오퍼레이션들은 락 기반의 크리티컬 섹션과
-RCU read-side 크리티컬 섹션 안에서는 평범하게 동작합니다.
+userspace-RCU read-side 크리티컬 섹션 안에서는 평범하게 동작합니다.
 하지만, 초기의 트랜잭셔널 메모리 하드웨어 구현~\cite{DaveDice2009ASPLOSRockHTM}
 에서는 트랜잭션 안에서의 exception 은 그 트랜잭션을 abort 시켰는데, 이는
 브레이크포인트는 그를 둘러싼 트랜잭션들을 abort 시켰음을 의미합니다.
@@ -1797,7 +1797,7 @@ given the advent of user-level RCU implementations.\footnote{
 관심을 받은 것은 놀랄만한 일이 아닌데, 완화된, 그리고 강화된
 원자성~\cite{Blundell2006TMdeadlock} 이 이런 의미에서의 하나의 케이스입니다.
 
-여기 TM 에 사용 가능한 extra-transactional 선택 사항들이 몇가지 있습니다:
+여기 extra-transactional 선택 사항들이 몇가지 있습니다:
 \iffalse
 
 Within a lock-based critical section, it is perfectly legal to manipulate
