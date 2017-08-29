@@ -389,6 +389,18 @@ Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}.
 \end{table*}
 
 Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+은 이런 잘못된 메모리 접근 순서가 어떻게 일어날 수 있는지 보입니다.
+Row~1 은 최초의 상태를 보이는데, 이 때 CPU~0 는 \co{x1} 을 자신의 캐시에 가지고
+있고 CPU~1 은 \co{x0} 를 자기의 캐시에 가지고 있으며, 두 변수 모두 값 0을
+가지고 있습니다.
+Row~2 는 각 CPU 의 스토어 (
+Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 의
+line~9 와~18) 로 인한 상태 변화를 보입니다.
+두 CPU 모두 스토어가 향한 변수를 자신의 캐시에 가지고 있지 않았기에, 두 CPU 는
+모두 각자의 스토어들을 자신의 스토어 버퍼들에서 처리합니다.
+\iffalse
+
+Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
 shows how this memory misordering can happen.
 Row~1 shows the initial state, where CPU~0 has \co{x1} in its cache
 and CPU~1 has \co{x0} in its cache, both variables having a value of zero.
@@ -396,22 +408,63 @@ Row~2 shows the state change due to each CPU's store (lines~9 and~18 of
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}).
 Because neither CPU has the stored-to variable in its cache, both CPUs
 record their stores in their respective store buffers.
+\fi
 
 \QuickQuiz{}
+	하지만 잠시만요!!!
+	Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+	의 row~2 에서 \co{x0} 와 \co{x1} 모두 동시에 두개의 값, 0 과 1 을
+	가지고 있어요.
+	어떻게 이게 가능한거죠???
+	\iffalse
+
 	But wait!!!
 	On row~2 of
 	Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
 	both \co{x0} and \co{x1} each have two values at the same time,
 	namely zero and two.
 	How can that possibly work???
+	\fi
 \QuickQuizAnswer{
+	나중에 이야기 하겠지만, 아래쪽에 좀 더 일을 빠듯하게 처리되도록 하는
+	cache-coherence 프로토콜이 존재합니다.
+	하지만 어떤 변수가 동시에 두개의 값을 갖는다는게 신기하다고
+	생각하신다면,
+	Section~\ref{sec:memorder:Variables Can Have More Than One Value} 까지
+	잠깐 기다려 주시기 바랍니다.
+	\iffalse
+
 	There is an underlying cache-coherence protocol that straightens
 	things out, which will be discussed later.
 	% @@@ Add forward reference.
 	But if you think that a given variable having two values at
 	the same time is surprising, just wait until you get to
 	Section~\ref{sec:memorder:Variables Can Have More Than One Value}!
+	\fi
 } \QuickQuizEnd
+
+Row~3 는 두개의 읽기
+(Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 의
+line~10 과~19) 를 보입니다.
+각 CPU 에 의해 읽혀지는 변수들은 각 CPU 의 캐시에 있기 때문에, 각각의 읽기는
+곧바로 캐시의 값을 반환하는데, 이 경우 모두 0의 값입니다.
+
+하지만 이 CPU 들은 일이 다 끝나지 않았습니다: 금방이든 나중이든, 각자의 스토어
+버퍼를 비워야만 합니다.
+캐시는 \emph{캐시라인 (cacheline)} 이라 불리는 상대적으로 커다란 블록 단위로
+데이터를 옮기기 때문에, 그리고 각각의 캐시라인은 여러 변수들을 담고 있을 수
+있기 때문에, 각 CPU 는 자신의 스토어 버퍼 안의 변수에 해당하는 캐시라인의 해당
+변수에 해당하지 않는 부분은 만지지 않으면서 해당 변수에 해당하는 부분만을
+업데이트 할 수 있도록 해당 캐시라인을 자신의 캐시로 가져와야만 합니다.
+각 CPU 는 또한 해당 캐시라인이 어떤 다른 CPU 의 캐시에도 존재하지 않는다는 점을
+보장해야만 하는데, 이를 위해 read-invalidate 오퍼레이션이 사용됩니다.
+Row~4 에서 보인 것처럼, 두개의 read-invalidate 오퍼레이션이 완료된 후, 이 두
+CPU 는 서로 넘겨받은 캐시라인들을 가지고 있게 되어서, CPU~0 의 캐시는 이제
+\co{x0} 를 담고 있고 CPU~1 의 캐시는 \co{x1} 을 담고 있게 됩니다.
+일단 이 두 변수들이 각자의 새로운 안식처에 위치하게 되면, 각 CPU 는 자신의
+스토어 버퍼를 연관된 캐시 라인으로 비워낼 수 있게 되어서, 각 변수의 값을 row~5
+에 보인 대로 마지막 값으로 설정합니다.
+\iffalse
 
 Row~3 shows the two reads (lines~10 and~19 of
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}).
@@ -435,17 +488,47 @@ the two CPUs have traded cachelines, so that CPU~0's cache now contains
 Once these two variables are in their new homes, each CPU can flush
 its store buffer into the corresponding cache line, leaving each
 variable with its final value as shown on row~5.
+\fi
 
 \QuickQuiz{}
+	하지만 이 값들은 또다시 캐시에서 메인 메모리로 비워져야 하는거
+	아닌가요?
+	\iffalse
+
 	But don't the values also need to be flushed from the cache
 	to main memory?
+	\fi
 \QuickQuizAnswer{
+	놀라울 수 있겠지만, 꼭 그럴 필요는 없습니다!
+	어떤 시스템들에서는, 두개의 변수들이 빈번하게 사용된다면, 이 변수들은
+	CPU 의 캐시들 사이에서 움직이게 되고 메인 메모리에는 위치하지 않게
+	됩니다.
+	\iffalse
+
 	Perhaps surprisingly, not necessarily!
 	On some systems,
 	if the two variables are being used heavily, they might
 	be bounced back and forth between the CPUs' caches and never
 	land in main memory.
+	\fi
 } \QuickQuizEnd
+
+요약하자면, 스토어 버퍼들은 CPUe 들이 스토어 명령을 효과적으로 처리할 수 있도록
+하기 위해 필요합니다만, 이게 반 직관적인, 잘못된 메모리 접근 순서를 야기할 수
+있습니다.
+
+하지만 여러분의 알고리즘이 정말로 메모리 참조의 순서를 맞춰야 한다면 어떻게
+해야할까요?
+\emph{메모리 배리어} (예를 들어, 리눅스 커널의 \co{smp_mb()}) 를 사용해 순서
+규칙의 환상을 지키는데 필요한 표준적 동기화 도구들 (락킹과 RCU 같은) 과
+컴파일러 지시어들이 존재합니다.
+이런 메모리 배리어들은 ARM, POWER, Itanium, 그리고 Alpha 에서처럼 명시적
+인스트럭션이 될 수 있고, x86 에서 종종 그런 것처럼 다른 인스트럭션들에 의해
+내포될 수도 있습니다.
+이런 표준적 동기화 도구들은 순서가 지켜진다는 환상을 지키기 때문에, 여러분이
+가장 쉽게 적용할 수 있는 방법은 그냥 이 도구들을 사용해서, 이 섹션을 그만 읽는
+겁니다.
+\iffalse
 
 In summary, store buffers are needed to allow CPUs to handle
 store instructions efficiently, but they can result in
@@ -463,6 +546,7 @@ as they often are on x86.
 Since these standard synchronization primitives preserve the illusion of
 ordering, your path of least resistance is to simply use these primitives,
 thus allowing you to stop reading this section.
+\fi
 
 \begin{listing}
 { \scriptsize
@@ -499,6 +583,24 @@ exists (1:r2=0 /\ 0:r2=0)
 \label{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
 \end{listing}
 
+하지만, 여러분 스스로 그런 동기화 도구들을 구현해야 한다면, 또는 그런 메모리
+순서 규칙과 메모리 배리어가 어떻게 동작하는지에 그저 흥미가 있는 거라면, 계속
+읽어주세요!
+이 여정에서의 첫번째 정류장은
+Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
+(\path{C-SB+o-mb-o+o-mb-o.litmus}) 으로, \co{smp_mb()} 리눅스 커널 메모리
+배리어가 \co{P0()} 와 \co{P1()} 의 스토어와 로드 사이에 위치했다는 점을
+제외하고는
+Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 에
+보인 것과 동일한 코드입니다.
+이 지시어들은 제 x86 랩탑에서의 100,000,000 번의 시도에도 반 직관적인 결과가
+일어나는 것을 막았습니다.
+흥미롭게도, 이 지시어들로 인해 추가된 오버헤드는 두 로드가 모두 값 2 를
+반환하는 경우가 800,000 번이 넘게 일어나게 만들었는데, 이는 이 지시어가 없는
+Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 의
+코드에서는 167 번밖에 일어나지 않았던 것과 대조적입니다.
+\iffalse
+
 However, if you need to implement the synchronization primitives
 themselves, or if you are simply interested in understanding how memory
 ordering and memory barriers work, read on!
@@ -522,6 +624,7 @@ legal outcome where both loads return the value two to happen more
 than 800,000 times, as opposed to only 167 times for the
 directive-free code in
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}.
+\fi
 
 \begin{table*}
 \small
@@ -555,6 +658,20 @@ Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}.
 \label{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events}
 \end{table*}
 
+이 지시어들은
+Table~\ref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events} 에
+보인 것과 같이 순서규칙에 깊은 영향을 끼칩니다.
+앞의 두 행은
+Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+에 보인 것과 같고 row~3 의 \co{smp_mb()} 인스트럭션들은 직접적으로 상태를
+바꾸지 않지만, 이 인스트럭션들은 스토어들이 (row~4 와~5) 로드 (row~6) 전에
+완료되도록 만들어서,
+Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+에서 보인 반 직관적인 결과가 나타나지 못하게 합니다.
+변수 \co{x0} 와 \co{x1} 은 row~2 에서 여전히 두개의 값을 갖지만, 앞서
+약속한대로, 이 지시어들은 최종적으로는 일을 더 깐깐하게 처리했습니다.
+\iffalse
+
 These directives have a profound effect on ordering, as can be seen in
 Table~\ref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events}.
 Although the first two rows are the same as in
@@ -568,6 +685,15 @@ Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}.
 Note that variables \co{x0} and \co{x1} each still have more than one
 value on row~2, however, as promised earlier, the directives straighten
 things out in the end.
+\fi
+
+실제 하드웨어는 훨씬 더 복잡하고 교묘하며 여기서 설명된 것보다 더 미묘하다는 걸
+부디 알아두시기 바랍니다.
+무엇보다도, 이 논의의 핵심은 여러분을 하드웨어 설계자로 훈련시키려는 게 아니라,
+여러분이 올바르게 낮은 단계의 동시성 도구들을 짤 수 있게 돕는 겁니다.
+하지만 먼저, 하나의 변수가 한 순간에 얼마나 많은 값들을 가지고 있을 수 있는지
+빠르게 보겠습니다.
+\iffalse
 
 Please note that actual hardware tends to be much more complex, tricky,
 and subtle than is described here.
@@ -576,6 +702,7 @@ a hardware architect, but rather to help you correctly code
 low-level concurrent primitives.
 But first, let's take a quick look at just how many values a single
 variable might have at a single moment of time.
+\fi
 
 \section{Variables Can Have More Than One Value}
 \label{sec:memorder:Variables Can Have More Than One Value}
