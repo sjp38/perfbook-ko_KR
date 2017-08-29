@@ -242,9 +242,32 @@ through~\ref{sec:memorder:Where Are Memory Barriers Needed?}.
 \section{Memory Ordering and Memory Barriers}
 \label{sec:memorder:Memory Ordering and Memory Barriers}
 
+하지만 대체 왜 메모리 배리어가 필요한거죠?
+CPU 는 스스로 순서를 기록하고 있을 수 없는 건가요?
+일단 그게 바로 우리가 어떤 것들을 기록하고 있기 위해 컴퓨터를 갖는 이유이지
+않던가요?
+\iffalse
+
 But why are memory barriers needed in the first place?
 Can't CPUs keep track of ordering on their own?
 Isn't that why we have computers in the first place, to keep track of things?
+\fi
+
+많은 사람들이 실제로 자신의 컴퓨터가 사물에 대해 기록을 가지고 있을 것이라
+기대합니다만, 많은 사람들은 또한 그 기록을 빠르게 관리할 것을 요구합니다.
+하지만, Chapter~\ref{chp:Hardware and its Habits} 에서 보였듯이, 근래의 컴퓨터
+시스템 제조사들이 직면한 어려움 중 한가지는 메인 메모리가 CPU 의 속도 향상을
+따라가지 못한다는 것입니다---근래의 CPU 들은 메모리로부터 변수 하나의 값을
+읽어오는데 필요한 시간 동안 수백개의 명령어를 실행할 수 있습니다.
+따라서 CPU 들은
+Figure~\ref{fig:cpu:System Hardware Architecture} 에서 보인 것과 같이
+갈수록 커다란 캐시들을 갖추는데, 이는 특정 CPU 의 특정 변수로부터의 첫번째
+로드가
+Section~\ref{sec:cpu:Cache Misses} 에서 이야기한 값비싼 \emph{캐시 미스} 를
+낸다 하더라도, 최초의 캐시 미스는 해당 변수가 해당 CPU 의 캐시에 올라오게 하기
+때문에 해당 CPU 로부터 해당 변수로의 뒤이은 반복된 로드들은 매우 빠르게
+수행됨을 의미합니다.
+\iffalse
 
 Many people do indeed expect their computers to keep track of things,
 but many also insist that they keep track of things quickly.
@@ -261,6 +284,17 @@ Section~\ref{sec:cpu:Cache Misses}, subsequent
 repeated loads from that variable by that CPU can execute
 very quickly because the initial cache miss will have loaded that
 variable into that CPU's cache.
+\fi
+
+하지만, 여러 CPU 들로부터 공유된 변수들 집합으로 이루어지는 빈번한 동시적
+스토어들을 잘 처리할 필요 또한 있습니다.
+Cache-coherent 시스템에서, 캐시들이 특정 변수의 여러 복사본들을 가지고 있다면,
+이 모든 복사본들은 같은 값을 가져야만 합니다.
+이는 동시의 읽기들에 대해서는 매우 잘 동작하지만, 동시의 쓰기들에 대해서는
+그렇지 못합니다:  각각의 쓰기는 기존 값의 복사본들 모두에 대해서 어떤 일을
+해줘야 하는데 (또다른 캐시 미스!), 이는 빛의 제한된 속도와 원자적 물질의 원리를
+놓고 보면, 성급한 소프트웨어 해커들이 좋아하지 않을 만큼 느릴 겁니다.
+\iffalse
 
 However, it is also necessary to accommodate frequent concurrent stores
 from multiple CPUs to a set of shared variables.
@@ -271,6 +305,7 @@ concurrent writes:  Each write must do something about all
 copies of the old value (another cache miss!), which, given the finite
 speed of light and the atomic nature of matter, will be slower
 than impatient software hackers would like.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -278,6 +313,15 @@ than impatient software hackers would like.
 \caption{System Architecture With Store Buffers}
 \label{fig:memorder:System Architecture With Store Buffers}
 \end{figure}
+
+따라서 CPU 들은
+Figure~\ref{fig:memorder:System Architecture With Store Buffers} 에 보인 것처럼
+스토어 버퍼를 장착합니다.
+특정 CPU 가 특정 변수에 스토어를 수행하는데 해당 변수가 해당 CPU 의 캐시에
+존재하지 않는다면, 이 새로운 값은 해당 CPU 의 스토어 버퍼에 저장됩니다.
+이 CPU 는 이제 이 스토어가 다른 CPU 들의 캐시들에 있을 수 있는 이 변수의 기존
+값에 뭔가 작업을 수행할동안 기다리지 않고 곧바로 작업을 진행할 수 있습니다.
+\iffalse
 
 CPUs therefore come equipped with store buffers, as shown in
 Figure~\ref{fig:memorder:System Architecture With Store Buffers}.
@@ -287,6 +331,7 @@ is instead placed in that CPU's store buffer.
 The CPU can then proceed immediately, without having to wait for the
 store to do something about all the old values of that variable
 residing in other CPUs' caches.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -295,6 +340,16 @@ residing in other CPUs' caches.
 \ContributedBy{Figure}{fig:memorder:CPUs Can Do Things Out of Order}{Melissa Broussard}
 \end{figure}
 
+스토어 버퍼들이 성능을 상당히 향상시킬 수 있지만, 이것들은 인스트럭션들과
+메모리 참조들이 비순차적으로 수행되게 만들 수 있는데, 이는 곧 심각한 혼란을
+가져오게 되는데, 이 상황이
+Figure~\ref{fig:memorder:CPUs Can Do Things Out of Order} 에 그려져 있습니다.
+구체적으로는, 이런 스토어 버퍼들이
+Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 에
+보인 스토어 버퍼 리트머스 테스트에 보인 잘못된 메모리 순서를 가능하게 할 수
+있습니다.
+\iffalse
+
 Although store buffers can greatly increase performance,
 they can cause instructions and memory references to execute out
 of order, which can in turn cause serious confusion, as illustrated in
@@ -302,6 +357,7 @@ Figure~\ref{fig:memorder:CPUs Can Do Things Out of Order}.
 In particular, these store buffers can cause the memory misordering
 shown in the store-buffering litmus test in
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}.
+\fi
 
 \begin{table*}
 \small
