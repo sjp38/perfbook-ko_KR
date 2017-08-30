@@ -707,6 +707,16 @@ variable might have at a single moment of time.
 \section{Variables Can Have More Than One Value}
 \label{sec:memorder:Variables Can Have More Than One Value}
 
+하나의 변수는 잘 정의된 전역적 순서로 값들의 연속을 갖게 될 거라 생각하는건
+자연스럽습니다.
+불행히도, 이 여정의 다음 정류장은 이 편안한 거짓에 ``작별''을 고하라 합니다.
+바라건대, 여러분은 이미
+Tables~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+와~\ref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events} 의
+row~2 를 통해 ``작별'' 을 고하기 시작했을 것이고 만약 그렇다면 이 섹션의 목적은
+이 요점을 제대로 이끌어내는 것입니다.
+\iffalse
+
 It is natural to think of a variable as taking on a well-defined
 sequence of values in a well-defined, global order.
 Unfortunately, the next stop on the journey says ``goodbye'' to this comforting fiction.
@@ -714,6 +724,20 @@ Hopefully, you already started to say ``goodbye'' in response to row~2 of
 Tables~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
 and~\ref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events},
 and if so, the purpose of this section is to drive this point home.
+\fi
+
+그러기 위해,
+Listing~\ref{lst:memorder:Software Logic Analyzer} 에 보인 프로그램의 한 부분을
+고려해 봅시다.
+이 코드 조각은 여러 CPU 들에서 병렬적으로 수행됩니다.
+Line~1 은 하나의 공유 변수를 현재 CPU 의 ID 로 값을 할당하고, line~2 에서는
+모든 CPU 들 가운데 동기화 되는 (불행히도, 모든 CPU 구조에서 가능한 일은
+아닙니다!) 하드웨어 ``timebase'' 카운터의 값을 가져오는 \co{gettb()} 함수를
+사용해 일부 변수들을 초기화 시키고, line~3-8 의 루프에서는 이 CPU 가 할당한
+값이 유지된 시간의 길이를 기록합니다.
+물론, 이 CPU 들 가운데 하나는 ``승리'' 할 것이고, 따라서 line~6-7 의 검사가
+아니라면 이 루프를 절대 빠져나오지 않을 겁니다.
+\iffalse
 
 To this end, consider the program fragment shown in
 Listing~\ref{lst:memorder:Software Logic Analyzer}.
@@ -726,12 +750,26 @@ unfortunately!), and the loop from lines~3-8 records the length of
 time that the variable retains the value that this CPU assigned to it.
 Of course, one of the CPUs will ``win'', and would thus never exit
 the loop if not for the check on lines~6-7.
+\fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:memorder:Software Logic Analyzer}
+	의 코드에서의 어떤 가정이 실제 하드웨어에서는 성립하지 않을까요?
+	\iffalse
+
 	What assumption is the code fragment
 	in Listing~\ref{lst:memorder:Software Logic Analyzer}
 	making that might not be valid on real hardware?
+	\fi
 \QuickQuizAnswer{
+	이 코드는 특정 CPU 가 자신의 값을 보는 것을 멈추자마자, 곧바로
+	마지막으로 동의된 값을 보게 될 것이라 가정삽니다.
+	실제 하드웨어에서, 어떤 CPU 들은 이 마지막 값을 보게 되기 전에 중간의
+	결과를 일부 보게 될수도 있습니다.
+	따라서 이 섹션의 뒤에서 이야기될 그림들의 데이터를 만드는데 사용된 실제
+	코드는 좀 더 복잡합니다.
+	\iffalse
+
 	The code assumes that as soon as a given CPU stops
 	seeing its own value, it will immediately see the
 	final agreed-upon value.
@@ -740,6 +778,7 @@ the loop if not for the check on lines~6-7.
 	The actual code used to produce the data in the figures
 	discussed later in this section was therefore somewhat more
 	complex.
+	\fi
 } \QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -761,6 +800,22 @@ the loop if not for the check on lines~6-7.
 \label{lst:memorder:Software Logic Analyzer}
 \end{listing}
 
+루프를 빠져나오기 전, \co{firsttb} 는 앞의 공유 변수에의 값 할당 후 곧바로
+가져온 timestamp 를 가지고 있을 것이고 \co{lasttb} 는 여전히 할당된 값을 가지고
+있을, 이 공유 변수의 마지막 샘플링 전에 가져온 timestamp 를 가지고 있을 수도
+있고, 만약 이 공유 변수가 루프에 들어오기 전에 바뀌었다면 \co{firsttb} 와 같은
+값을 가지고 있을 수도 있습니다.
+이는 우리가 532-나노세컨드의 시간 간격 동안의 각 CPU 의 \co{state.variable} 의
+값에 대한 관찰을 그려볼 수 있게 해주는데,
+Figure~\ref{fig:memorder:A Variable With Multiple Simultaneous Values} 에
+보여져 있습니다.
+이 데이터는 2006년에 각각 두개의 하드웨어 쓰레드를 갖는 8개의 코어를 장착한
+1.5\,GHz POWER5 시스템에서 수집되었습니다.
+CPU~1, 2, 3, 그리고~4 는 이 값들을 기록했고, CPU~0 는 이 테스트를 제어했습니다.
+Timebase 카운터의 시간 간격은 5.32\,ns 정도였는데, 이는 중간의 캐시 상태들을
+관찰하기에 충분히 작은 간격입니다.
+\iffalse
+
 Upon exit from the loop, \co{firsttb} will hold a timestamp
 taken shortly after the assignment and \co{lasttb} will hold
 a timestamp taken before the last sampling of the shared variable
@@ -774,6 +829,7 @@ each containing a pair of hardware threads.
 CPUs~1, 2, 3, and~4 recorded the values, while CPU~0 controlled the test.
 The timebase counter period was about 5.32\,ns, sufficiently fine-grained
 to allow observations of intermediate cache states.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -781,6 +837,15 @@ to allow observations of intermediate cache states.
 \caption{A Variable With Multiple Simultaneous Values}
 \label{fig:memorder:A Variable With Multiple Simultaneous Values}
 \end{figure}
+
+각각의 수평의 막대는 해당 CPU 의 관찰 결과를 시간대별로 보여주는데, 왼쪽 검은
+영역은 해당 CPU 의 첫번째 관측 전까지의 시간을 나타냅니다.
+처음 5\,ns 동안, CPU~3 만이 이 변수의 값을 읽었습니다.
+그 다음 10\,ns 동안, CPU~2 와~3 은 이 변수의 값을 서로 다르게 이야기했는데, 그
+후에는 최종적으로 동의된 값인 ``2'' 라는 값에 합의했습니다.
+하지만, CPU~1 은 이 값이 ``1'' 이라고 거의 300\,ns 동안 믿었고, CPU~4 는 거의
+500\,ns 동안이나 이 값이 ``4'' 라고 믿었습니다.
+\iffalse
 
 Each horizontal bar represents the observations of a given CPU over time,
 with the black regions to the left indicating the time before the
@@ -792,11 +857,28 @@ but thereafter agree that the value is~``2'', which is in fact
 the final agreed-upon value.
 However, CPU~1 believes that the value is~``1'' for almost 300\,ns, and
 CPU~4 believes that the value is~``4'' for almost 500\,ns.
+\fi
 
 \QuickQuiz{}
+	어떻게 CPU 들이 하나의 변수를 \emph{동시에} 서로 다르게 볼 수가
+	있는거죠?
+	\iffalse
+
 	How could CPUs possibly have different views of the
 	value of a single variable \emph{at the same time?}
+	\fi
 \QuickQuizAnswer{
+	Section~\ref{sec:memorder:Memory Ordering and Memory Barriers}
+	에서 논의된 대로, 많은 CPU 들이 최근의 쓰기 값을 기록하는 쓰기 버퍼를
+	가지고 있으며, 이 값은 연관된 캐시 라인이 해당 CPU 로 올라왔을 때에
+	적용됩니다.
+	따라서, 각 CPU 가 하나의 시점에 특정 변수에 대해 서로 다른 값을 보고
+	있는 것이---그리고 메인 메모리는 또 다른 값을 가지고 있는 것이
+	가능합니다.
+	메모리 배리어가 발명된 이유들 중 하나는 소프트웨어가 이런 종류의 상황을
+	우아하게 처리할 수 있도록 해주기 위함이었습니다.
+	\iffalse
+
 	As discussed in
 	Section~\ref{sec:memorder:Memory Ordering and Memory Barriers},
 	many CPUs have write buffers that record the values of
@@ -808,12 +890,31 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	One of the reasons that memory barriers were invented was
 	to allow software to deal gracefully with situations like
 	this one.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	CPU~1 과~4 는 값을 동의하는데에 그렇게 오랜 시간이 걸렸는데, CPU~2 와~3
+	은 어떻게 그렇게 빨리 값에 동의하는 건가요?
+	\iffalse
+
 	Why do CPUs~2 and~3 come to agreement so quickly, when it
 	takes so long for CPUs~1 and~4 to come to the party?
+	\fi
 \QuickQuizAnswer{
+	CPU~2 와~3 은 같은 코어의 하드웨어 쓰레드들이어서 같은 캐시 계층을
+	공유하며, 따라서 매우 낮은 통신 응답시간을 갖습니다.
+	이게 NUMA, 또는, 보다 정확히는, NUCA 효과입니다.
+
+	이는 CPU~2 와~3 가 왜 값에 대해 동의하지 않는 순간이 존재하긴 하는가에
+	대한 질문을 떠올리게 합니다.
+	가능한 한가지 이유는 이들이 커다란 공유된 캐시 외에 작은 개별 캐시를
+	갖고 있을 수 있다는 것입니다.
+	여기서의 짧은 10-나노세컨드 동안의 비동의된 시간과 해당 코드에 메모리
+	배리어가 아예 없었다는 것을 놓고 보면, 또다른 가능할 법한 이유는
+	인스트럭션 재배치입니다.
+	\iffalse
+
 	CPUs~2 and~3 are a pair of hardware threads on the same
 	core, sharing the same cache hierarchy, and therefore have
 	very low communications latencies.
@@ -826,7 +927,26 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	Another possible reason is instruction reordering, given the
 	short 10-nanosecond duration of the disagreement and the
 	total lack of memory barriers in the code fragment.
+	\fi
 } \QuickQuizEnd
+
+그리고 네개의 CPU 에서의 상황이 재밌다고 생각한다면, 같은 상황을 15~CPU 들이
+각각 시간 $t=0$ 에 하나의 공유 변수에 각자의 숫자를 할당하는 경우를 보인
+Figure~\ref{fig:memorder:A Variable With More Simultaneous Values} 를 고려해
+보세요.
+해당 그림의 두 다이어그램은 모두
+Figure~\ref{fig:memorder:A Variable With Multiple Simultaneous Values} 와 같은
+방식으로 그려졌습니다.
+유일한 차이점은 가로축의 단위가 timebase tick 으로, 각 tick 은 약
+5.3~나노세컨드를 의미합니다.
+따라서 여기서의 전체 연속된 값의 변화는 CPU 의 수의 증가에 일관되게
+Figure~\ref{fig:memorder:A Variable With Multiple Simultaneous Values} 에서보다
+긴 시간동안 유지되었습니다.
+위의 다이어그램은 전체 그림을 보이며, 아래쪽의 것은 첫 50~timebase tick 만을
+확대해서 보입니다.
+
+여기서도, CPU~0 는 테스트를 제어했고, 따라서 어떤 값도 기록하지 않았습니다.
+\iffalse
 
 And if you think that the situation with four CPUs was intriguing, consider
 Figure~\ref{fig:memorder:A Variable With More Simultaneous Values},
@@ -843,6 +963,7 @@ The upper diagram shows the overall picture, while the lower one shows
 the zoom-up of first 50~timebase ticks.
 
 Again, CPU~0 coordinates the test, so does not record any values.
+\fi
 
 \begin{figure*}
 \centering
@@ -850,6 +971,17 @@ Again, CPU~0 coordinates the test, so does not record any values.
 \caption{A Variable With More Simultaneous Values}
 \ContributedBy{Figure}{fig:memorder:A Variable With More Simultaneous Values}{Akira Yokosawa}
 \end{figure*}
+
+모든 CPU 들이 결국은 마지막 값~9 에 동의를 합니다만, 값~15 와 값~12 가 먼저
+상황을 이끈 후입니다.
+아래쪽 다이어그램의 수직선으로 나타내어진 time~21 시점에 변수의 값에 대한
+14개의 서로 다른 의견들이 존재했음을 알아두시기 바랍니다.
+또한 모든 CPU 들이 값들의 순서에 대해
+Figure~\ref{fig:memorder:Possible Global Orders With More Simultaneous Values}
+에 보인 방향성 있는 그래프의 순서와 일관된 순서를 보았음을 알아두시기 바랍니다.
+더도 아니고 덜도 아니고, 두 그림은 메모리 접근 순서에 신경 쓰는 코드에서의
+메모리 배리어의 올바른 사용의 중요성을 강조합니다.
+\iffalse
 
 All CPUs eventually agree on the final value of~9, but not before
 the values~15 and~12 take early leads.
@@ -860,6 +992,7 @@ the directed graph shown in
 Figure~\ref{fig:memorder:Possible Global Orders With More Simultaneous Values}.
 Nevertheless, both figures underscore the importance of
 proper use of memory barriers for code that cares about memory ordering.
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -867,6 +1000,25 @@ proper use of memory barriers for code that cares about memory ordering.
 \caption{Possible Global Orders With More Simultaneous Values}
 \label{fig:memorder:Possible Global Orders With More Simultaneous Values}
 \end{figure}
+
+하나의 변수는 한 시점에 얼마나 많은 값들을 가질 수 있을까요?
+시스템에 존재하는 스토어 버퍼 하나당 하나씩입니다!
+따라서 우리는 변수들의 값들과 시간의 흐름에 대한 편안한 직관에게 작별을
+고해야만 하는 체제에 들어섰습니다.
+이는 메모리 배리어들이 필요한 체제입니다.
+
+이와 함께,
+Chapter~\ref{chp:Hardware and its Habits}
+와~\ref{cha:Partitioning and Synchronization Design} 에서 배웠던 교훈들을
+기억할 필요가 있습니다.
+모든 CPU 들이 같은 변수에게 동시에 쓰기를 하도록 하는 것은 병렬 프로그램을
+설계하는 방법이 아닌데, 적어도 성능과 확장성이 여러분에게 전혀 중요하지 않은 게
+아니라면 그렇습니다.
+
+불행히도, 메모리 순서 규칙은 여러분의 직관을 망칠 수 있는 방법들을 이외에도
+많이 가지고 있으며, 이런 방법들 모두가 성능과 확장성을 훼손하는 건 아닙니다.
+다음 섹션은 이런 문제들 중 일부를 간단히 알아봅니다.
+\iffalse
 
 How many values can a single variable take on at a single point in
 time?
@@ -886,6 +1038,7 @@ Unfortunately, memory ordering has many other ways of insulting your
 intuition, and not all of these ways conflict with performance and
 scalability.
 The next section will give an overview of a few of these insults.
+\fi
 
 \section{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
 \label{sec:memorder:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
