@@ -218,29 +218,15 @@ Sections~\ref{sec:memorder:Review of Locking Implementations}
 설명됩니다.
 \iffalse
 
-Section~\ref{sec:memorder:Memory Ordering and Memory Barriers}
-gives a brief overview of memory ordering and memory barriers.
-Once this background is in place, the next step is to get you to admit
-that your intuition has a problem.
-This painful task is taken up by
-Section~\ref{sec:memorder:Variables Can Have More Than One Value},
-which presents some code demonstrating that scalar variables can
-take on multiple values simultaneously,
-and by
-Section~\ref{sec:memorder:If B Follows A, and C Follows B, Why Doesn't C Follow A?},
-which shows an intuitively correct code fragment that fails miserably
-on real hardware.
-Once your intuition has made it through the grieving process,
-Section~\ref{sec:memorder:What Can You Trust?}
-provides the basic rules that memory barriers follow, rules that we
-will build upon.
-These rules are further refined in
-Sections~\ref{sec:memorder:Review of Locking Implementations}
-through~\ref{sec:memorder:Where Are Memory Barriers Needed?}.
+Section~\ref{sec:memorder:Why Hardware Misordering?}
+gives a brief overview of why hardware misorders memory accesses, and then
+Section~\ref{sec:memorder:How to Force Ordering?}
+gives an equally brief overview of how you can thwart evil hardware
+misordering schemes.
 \fi
 
-\section{Memory Ordering and Memory Barriers}
-\label{sec:memorder:Memory Ordering and Memory Barriers}
+\subsection{Why Hardware Misordering?}
+\label{sec:memorder:Why Hardware Misordering?}
 
 하지만 대체 왜 메모리 배리어가 필요한거죠?
 CPU 는 스스로 순서를 기록하고 있을 수 없는 건가요?
@@ -439,7 +425,7 @@ record their stores in their respective store buffers.
 	% @@@ Add forward reference.
 	But if you think that a given variable having two values at
 	the same time is surprising, just wait until you get to
-	Section~\ref{sec:memorder:Variables Can Have More Than One Value}!
+	Section~\ref{sec:memorder:Variables With Multiple Values}!
 	\fi
 } \QuickQuizEnd
 
@@ -536,6 +522,22 @@ counter-intuitive memory misordering.
 
 But what do you do if your algorithm really needs its memory
 references to be ordered?
+For example, suppose that you are communicating with a driver using
+a pair of flags, one that says whether or not the driver is running
+and the other that says whether there is a request pending for that
+driver.
+The requester needs to set the request-pending flag, then check
+the driver-running flag, and if false, wake it up.
+Once the driver has serviced all the pending requests that it knows about,
+it needs to clear its driver-running flag, then check the request-pending
+flag to see if it needs to restart.
+This very reasonable approach cannot work unless there is some way
+to make sure that the hardware processes the stores and loads in order.
+This is the subject of the next section.
+
+\subsection{How to Force Ordering?}
+\label{sec:memorder:How to Force Ordering?}
+
 It turns out that there are compiler directives and standard
 synchronization primitives (such as locking and RCU)
 that are responsible for maintaining the illusion of ordering through use of
@@ -548,7 +550,7 @@ ordering, your path of least resistance is to simply use these primitives,
 thus allowing you to stop reading this section.
 \fi
 
-\begin{listing}
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}[\LstLineNo]
 C C-SB+o-mb-o+o-mb-o
@@ -695,17 +697,334 @@ things out in the end.
 빠르게 보겠습니다.
 \iffalse
 
-Please note that actual hardware tends to be much more complex, tricky,
-and subtle than is described here.
-After all, the point of this discussion is not to train you to be
-a hardware architect, but rather to help you correctly code
-low-level concurrent primitives.
+\begin{table*}
+\small
+\centering\OneColumnHSpace{-0.7in}
+\begin{tabular}{l||c||c|c|c|c||c|c|c|c|c|c}
+	& & \multicolumn{4}{c||}{Prior Ordered Operation} &
+		\multicolumn{6}{c}{Subsequent Ordered Operation} \\
+	\cline{3-6} \cline{7-12}
+	Operation Providing Ordering & C &
+		Self & R & W & RMW & Self & R & W & DR & DW & RMW \\
+	\hline
+	\hline
+	\tco{READ_ONCE()} &  &
+		   Y &   &   &     &      &   &   &    &  Y &     \\
+	\hline
+	\tco{smp_read_barrier_depends()} &  &
+		     & Y &   &     &      &   &   &  Y &  Y &     \\
+	\hline
+	Successful \tco{*_acquire()} &   &
+		   R &   &   &     &      & Y & Y &  Y &  Y &   Y \\
+	\hline
+	Successful \tco{*_release()} & C &
+		     & Y & Y &   Y &    W &   &   &    &    &     \\
+	\hline
+	\tco{smp_rmb()} &   &
+		     & Y &   &   R &      & Y &   &  Y &    &   R \\
+	\hline
+	\tco{smp_wmb()} &   &
+		     &   & Y &   W &      &   & Y &    &  Y &   W \\
+	\hline
+	\tco{smp_mb()} & CP &
+		     & Y & Y &   Y &      & Y & Y &  Y &  Y &   Y \\
+	\hline
+	Successful Non-Relaxed Non-\tco{void} RMW & CP &
+		   Y & Y & Y &   Y &    Y & Y & Y &  Y &  Y &   Y \\
+	\hline
+	\tco{smp_mb__before_atomic()} & CP &
+		     & Y & Y &   Y &      & a & a & a  & a  &   Y \\
+	\hline
+	\tco{smp_mb__after_atomic()} & CP &
+		     & a & a &   Y &      & Y & Y &  Y &  Y &     \\
+	\multicolumn{12}{c}{~} \\
+	\multicolumn{1}{r}{Key:} &
+		\multicolumn{11}{l}{C: Ordering is cumulative} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{P: Ordering propagates} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{R: Read, or read portion of RMW} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{W: Write, or write portion of RMW} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{Y: Provides the specified ordering} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{a: Provides specified ordering given intervening RMW atomic operation} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{DR: Dependent read (address dependency)} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{DW: Dependent write (address, data, or control dependency)} \\
+	\multicolumn{1}{r}{} &
+		\multicolumn{11}{l}{RMW: Atomic read-modify-write operation} \\
+\end{tabular}
+\caption{Linux-Kernel Memory-Ordering Cheat Sheet}
+\label{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+\end{table*}
+
+Although \co{smp_mb()} has extremely strong ordering guarantees, its strength
+comes at a high price.
+A great many situations can be handled with much weaker ordering guarantees
+that use much cheaper memory-barrier instructions, or, in some case, no
+memory-barrier instructions at all.
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+provides a cheatsheet of the Linux kernel's ordering primitives and their
+guarantees.
+Each row corresponds to a primitive or category of primitives that might
+or might not provide ordering, with the columns labeled
+``Prior Ordered Operation'' and ``Subsequent Ordered Operation''
+being the operations that might (or might not) be ordered against.
+Cells containing ``Y''indicate that ordering is supplied unconditionally,
+while other characters indicate that ordering is supplied only partially or
+conditionally.
+Blank cells indicate that no ordering is supplied.
+
+The \co{*_acquire} row covers \co{smp_load_acquire()},
+\co{cmpxchg_acquire()}, \co{xchg_release()}, and so on;
+the \co{*_release} row covers \co{smp_store_release()},
+\co{cmpxchg_release()}, \co{xchg_release()}, and so on; and
+the value-returning RMW row covers \co{atomic_add_return()},
+\co{atomic_add_unless()},
+\co{atomic_dec_and_test()}, \co{cmpxchg()}, \co{xchg()}, and so on.
+The ``Successful'' qualifiers apply to primitives such as
+\co{atomic_add_unless()}, \co{cmpxchg_acquire()}, and \co{cmpxchg_release()},
+which have no effect on either memory or on ordering when they indicate
+failure.
+
+Column ``C'' indicates cumulativity and propagation, as explained in
+Sections~\ref{sec:memorder:Cumulativity}
+and~\ref{sec:memorder:Propagation}.
+In the meantime, this column can always be ignored when there
+are at most two threads involved.
+
+\QuickQuiz{}
+	The rows in
+	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+	seem quite random and confused.
+	Whatever is the conceptual basis of this table???
+\QuickQuizAnswer{
+	The rows correspond roughly to hardware mechanisms of increasing
+	power and overhead.
+
+	The \co{READ_ONCE()} row captures the fact that (as of 2017) compilers
+	and CPUs do not indulge in user-visible speculative stores, so that
+	any write whose address, data, or execution depends on a prior load
+	will happen after that load completes.
+	At least assuming that these dependencies have been constructed
+	carefully as described in
+	Sections~\ref{sec:memorder:Address- and Data-Dependency Restrictions}
+	and~\ref{sec:memorder:Control-Dependency Restrictions}.
+
+	The \co{smp_read_barrier_depends()} row captures the fact that, with the
+	notable exception of DEC Alpha, compilers and CPUs do not indulge
+	in user-visible breakage of address dependencies, again assuming
+	that these dependencies have been constructed carefully as described in
+	Section~\ref{sec:memorder:Address- and Data-Dependency Restrictions}.
+
+	The ``Successful \co{*_acquire()}'' row captures the fact that many
+	CPUs have special ``acquire'' forms of loads and of atomic RMW
+	instructions,
+	and that many other CPUs have light-weight memory-barrier
+	instructions that order prior loads against subsequent loads
+	and stores.
+
+	The ``Successful \co{*_release()}'' row captures the fact that many
+	CPUs have special ``release'' forms of stores and of atomic RMW
+	instructions, and that many other CPUs have light-weight memory-barrier
+	instructions that order prior loads and stores against
+	subsequent stores.
+
+	The \co{smp_rmb()} row captures the fact that many CPUs have
+	light-weight memory-barrier instructions that order prior loads against
+	subsequent loads.
+	Similarly,
+	the \co{smp_wmb()} row captures the fact that many CPUs have
+	light-weight memory-barrier instructions that order prior stores against
+	subsequent stores.
+
+	None of the ordering operations thus far require prior stores to be
+	ordered against subsequent loads, which means that these operations
+	need not interfere with store buffers, whose main purpose in life
+	is in fact to reorder prior stores against subsequent loads.
+	The light-weight nature of these operations is precisely due to
+	their policy of store-buffer non-interference.
+	However, as noted earlier, it is sometimes necessary to interfere
+	with the store buffer in order to prevent prior stores from being
+	reordered against later stores, which brings us to the remaining
+	rows in this table.
+
+	The \co{smp_mb())} row corresponds to the full memory barrier
+	available on most platforms, with Itanium being the exception
+	that proves the rule.
+
+	The ``Successful Non-Relaxed Non-\co{void} RMW'' row captures
+	the fact that on some platforms (such as x86) atomic RMW instructions
+	provide full ordering both before and after.
+	The Linux kernel therefore requires that non-relaxed non-\co{void}
+	atomic RMW operations provide full ordering in cases where these
+	operations succeed.
+
+	However, the Linux kernel does not require that \co{void} atomic
+	RMW operations provide any ordering whatsoever.
+	Therefore, these operations, along with failing non-\co{void}
+	atomic RMW operations may be preceded by \co{smp_mb__before_atomic()}
+	and followed by \co{smp_mb__after_atomic()} to provide full
+	ordering for any accesses preceding or following both.
+	No ordering need be provided for accesses between the
+	\co{smp_mb__before_atomic()} (or, similarly, the
+	\co{smp_mb__after_atomic()} and the atomic RMW operation, as
+	indicated by the ``a'' entries on the \co{smp_mb__before_atomic()}
+	and \co{smp_mb__after_atomic()} rows of the table.
+
+	In short, any randomness in the table is due to the properties
+	of the underlying hardware, which are constrained by nothing other
+	than the laws of physics, as was explained back in
+	Chapter~\ref{chp:Hardware and its Habits}.
+	% forward reference to rf co fr section
+} \QuickQuizEnd
+
+It is important to note that this table is just a cheat sheet,
+and is therefore in no way a replacement for a good understanding
+of memory ordering.
+To begin building such an understanding, the next section will
+present some basic rules of thumb.
+
+\subsection{Basic Rules of Thumb}
+\label{sec:memorder:Basic Rules of Thumb}
+
+This section presents some basic rules of thumb that are ``good and
+sufficient'' for a great many situations.
+In fact, you could write a great deal of concurrent code having
+excellent performance and scalability without needing anything more
+than these rules of thumb.
+
+\QuickQuiz{}
+	But how can I know that a given project can be designed
+	and coded within the confines of these rules of thumb?
+\QuickQuizAnswer{
+	Much of the purpose of the remainder of this chapter is
+	to answer exactly that question!
+} \QuickQuizEnd
+
+\paragraph{A given thread sees its own accesses in order.}
+This rule assumes that reads and writes from/to shared variables use
+\co{READ_ONCE()} and \co{WRITE_ONCE()}, respectively.
+Otherwise, the compiler can profoundly scramble\footnote{
+	Many compiler writers prefer the word ``optimize'' instead of
+	``scramble'', but we all have our preferences.}
+your code, and sometimes the CPU can do a bit of scrambling as well.
+% @@@ Itanium forward reference?
+
+\begin{figure}[htb]
+\centering
+\resizebox{3in}{!}{\includegraphics{memorder/memorybarrier}}
+\caption{Memory Barriers Provide Conditional If-Then Ordering}
+\label{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
+\end{figure}
+
+\paragraph{Ordering has conditional if-then semantics.}
+Figure~\ref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
+illustrates this for memory barriers.
+Assuming that both memory barriers are strong enough (and when in doubt, you
+can always use \co{smp_mb()}), if CPU~1's access Y1 happens after CPU~0's
+access Y0, then CPU~1's access X1 is guaranteed to happen after CPU~0's
+access X1.
+
+\QuickQuiz{}
+	How can you tell which memory barriers are strong enough for
+	a given use case?
+\QuickQuizAnswer{
+	Ah, that is a deep question whose answer requires most of the
+	rest of this chapter.
+} \QuickQuizEnd
+
+Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
+is a case in point.
+The \co{smp_mb()} on line~10 and~20 serve as the barriers,
+the write to \co{x0} on line~9 as X0, the read from \co{x1} on line~11
+as Y0, the write to \co{x1} on line~19 as Y1, and the read from
+\co{x0} and X1.
+Applying the if-then rule step by step, we know that the write to
+\co{x1} on line~19 happens after the read from \co{x1} on line~11 if
+\co{P0()}'s local variable \co{r2} is set to the value zero.
+The if-then rule would then state that the read from \co{x1} on
+line~21 happens after the write to \co{x1} on line~9.
+In other words,
+\co{P1()}'s local variable \co{r2} is guaranteed
+to end up with the value two \emph{only if}
+\co{P0()}'s local variable \co{r2} ends up with the value zero.
+Again, memory ordering guarantees are conditional, not absolute.
+
+Although
+Figure~\ref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
+specifically mentions memory barriers, the same rule applies to the
+rest of the Linux kernel's ordering operations.
+
+\paragraph{Ordering operations must be paired.}
+If you carefully order the operations in one thread, but then fail to do
+so in another thread, then there is no ordering.
+Both threads must provide ordering for the if-then rule to apply.
+% @@@ forward reference to cycles.
+
+\paragraph{Ordering operations almost never speed things up.}
+If you find yourself tempted to add a memory barrier in an attempt
+to force a prior write to be flushed to memory faster, resist!
+Adding ordering usually slows things down.
+Of course, there are situations where adding instructions speeds things
+up, but careful benchmarking is required in such cases.
+And even then, it is quite possible that although you sped things up
+a little bit on \emph{your} system, you might well have slowed things
+down significantly on your users' systems.
+Or on your future system.
+
+\paragraph{Ordering operations are not magic.}
+When your program is failing due to some race condition, it is often
+tempting to toss in a few memory-ordering operations in an attempt
+to barrier your bug out of existence.
+A far better reaction is to use higher-level primitives in a carefully
+designed manner.
+With concurrent programming, it is almost always easier to design
+your bugs out of existence than to hack them out of existence!
+
+\paragraph{These are only rules of thumb.}
+Although these rules of thumb cover the vast majority of situations
+seen in actual practice, as with any set of rules of thumb, they
+do have their limits.
+The next section will demonstrate some of these limits by introducing
+trick-and-trap litmus tests that will hopefully both insult your
+intuition and increase your understanding.
+These litmus tests will also illuminate many of the concepts
+represented by
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+
+\section{Tricks and Traps}
+\label{sec:memorder:Tricks and Traps}
+
+Now that you know that hardware can reorder memory accesses and that you
+can prevent it from doing so, the next step is to get you to admit
+that your intuition has a problem.
+This painful task is taken up by
+Section~\ref{sec:memorder:Variables With Multiple Values},
+which presents some code demonstrating that scalar variables can
+take on multiple values simultaneously,
+and by
+Sections~\ref{sec:memorder:Memory-Reference Reordering} through
+\ref{sec:memorder:Multicopy Atomicity},
+which show a series of intuitively correct code fragments that fail miserably
+on real hardware.
+Once your intuition has made it through the grieving process,
+Section~\ref{sec:memorder:What Can You Trust?}
+provides the basic rules that memory barriers follow, rules that we
+will build upon.
+These rules are further refined in
+Sections~\ref{sec:memorder:Review of Locking Implementations}
+through~\ref{sec:memorder:Where Are Memory Barriers Needed?}.
+
 But first, let's take a quick look at just how many values a single
 variable might have at a single moment of time.
 \fi
 
-\section{Variables Can Have More Than One Value}
-\label{sec:memorder:Variables Can Have More Than One Value}
+\subsection{Variables With Multiple Values}
+\label{sec:memorder:Variables With Multiple Values}
 
 하나의 변수는 잘 정의된 전역적 순서로 값들의 연속을 갖게 될 거라 생각하는건
 자연스럽습니다.
@@ -880,7 +1199,7 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	\iffalse
 
 	As discussed in
-	Section~\ref{sec:memorder:Memory Ordering and Memory Barriers},
+	Section~\ref{sec:memorder:Why Hardware Misordering?},
 	many CPUs have write buffers that record the values of
 	recent writes, which are applied once the corresponding
 	cache line makes its way to the CPU.
@@ -1037,20 +1356,14 @@ not if performance and scalability are at all important to you.
 Unfortunately, memory ordering has many other ways of insulting your
 intuition, and not all of these ways conflict with performance and
 scalability.
-The next section will give an overview of a few of these insults.
+The next section will give an overview of reordering of unrelated
+memory reference.
 \fi
-
-\section{If B Follows A, and C Follows B, Why Doesn't C Follow A?}
-\label{sec:memorder:If B Follows A, and C Follows B, Why Doesn't C Follow A?}
-
-Why indeed?
-This stop on the journey will help answer this question, in part by looking
-more closely at what ``follows'' might mean.
 
 \subsection{Memory-Reference Reordering}
 \label{sec:memorder:Memory-Reference Reordering}
 
-Section~\ref{sec:memorder:Memory Ordering and Memory Barriers}
+Section~\ref{sec:memorder:Why Hardware Misordering?}
 showed that even relatively strongly ordered systems like x86
 can reorder prior stores with later loads, at least when the
 store and load are to different variables.
@@ -1713,8 +2026,102 @@ maintenance.
 You should therefore use them only when performance considerations
 permit no other solution.
 
-\subsection{Non-Multicopy Atomicity \& Cumulativity}
-\label{sec:memorder:Non-Multicopy Atomicity and Cumulativity}
+\subsection{Cache Coherence}
+\label{sec:memorder:Cache Coherence}
+
+On cache-coherent platforms, all CPUs agree on the order of loads and
+stores to a given variable.
+Fortunately, when \co{READ_ONCE()} and \co{WRITE_ONCE()} are used,
+almost all platforms are cache-coherent.
+Unfortunately, this property is so popular that it has been named
+multiple times, with ``single-variable SC'',\footnote{
+	Recall that SC stands for sequentially consistent.}
+``single-copy atomic''~\cite{Stone:1995:SP:623262.623912},
+and just plain ``coherence''~\cite{JadeAlglave2011ppcmem}
+having seen use.
+Rather than further compound the confusion by inventing yet another term
+for this concept, this book uses ``cache coherence'' and ``coherence''
+interchangeably.
+
+\begin{listing}[tbp]
+{ \scriptsize
+\begin{verbbox}[\LstLineNo]
+C C-CCIRIW+o+o+o-o+o-o
+
+{
+int x = 0;
+}
+
+P0(int *x)
+{
+  WRITE_ONCE(*x, 1);
+}
+
+P1(int *x)
+{
+  WRITE_ONCE(*x, 2);
+}
+
+P2(int *x)
+{
+  int r1;
+  int r2;
+
+  r1 = READ_ONCE(*x);
+  r2 = READ_ONCE(*x);
+}
+
+P3(int *x)
+{
+  int r3;
+  int r4;
+
+  r3 = READ_ONCE(*x);
+  r4 = READ_ONCE(*x);
+}
+
+exists(2:r1=1 /\ 2:r2=2 /\ 3:r3=2 /\ 3:r4=1)
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Cache-Coherent IRIW Litmus Test}
+\label{lst:memorder:Cache-Coherent IRIW Litmus Test}
+\end{listing}
+
+Listing~\ref{lst:memorder:Cache-Coherent IRIW Litmus Test}
+shows a litmus test that tests for cache coherence
+(\path{C-CCIRIW+o+o+o-o+o-o.litmus}), where ``IRIW'' stands
+for ``independent reads of independent writes''.
+Because this litmus test uses only one variable,
+\co{P2()} and \co{P3()} must agree
+on the order of \co{P0()}'s and \co{P()}'s stores.
+In other words, if \co{P2()} believes that \co{P0()}'s store
+came first, then \co{P3()} had better not believe that
+\co{P1()}'s store came first.
+And in fact the \co{exists} clause on line~35 will trigger if this
+situation arises.
+
+It is tempting to speculate that different-sized overlapping loads 
+and stores to a single region of memory (as might be set up using
+the C-language \co{union} keyword) would provide similar ordering
+guarantees.
+However, Flur et al.~discovered some surprisingly simple
+litmus tests that demonstrate that these guarantees can be violated on
+real hardware~\cite{Flur:2017:MCA:3093333.3009839}.
+It is therefore necessary to restrict code to non-overlapping
+same-sized aligned accesses to a given variable, at least if portability
+is a consideration.\footnote{
+	There is reason to believe that using atomic RMW operations
+	(for example, \co{xchg()}) for all the stores will
+	provide sequentially consistent ordering, but this has not
+	yet been proven either way.}
+
+Adding more variables and threads increases the scope for reordering
+and other counterintuitive behavior, as discussed in the next section.
+
+\subsection{Multicopy Atomicity}
+\label{sec:memorder:Multicopy Atomicity}
 
 \begin{figure}[tb]
 \centering
@@ -1723,7 +2130,8 @@ permit no other solution.
 \label{fig:memorder:Global System Bus And Multi-Copy Atomicity}
 \end{figure}
 
-Threads running on a \emph{multicopy atomic} platform are guaranteed
+Threads running on a \emph{multicopy atomic}~\cite{Stone:1995:SP:623262.623912}
+platform are guaranteed
 to agree on the order of writes, even to different variables.
 A useful mental model of such a system is the single-bus architecture
 shown in
@@ -1733,17 +2141,16 @@ accommodate only one write at a time, then any pair of CPUs would
 agree on the order of all writes that they observed.
 Unfortunately, building a computer system as shown in the figure,
 without store buffers or even caches, would result in glacial computation.
-CPU vendors have therefore taken one of two approaches:
+CPU vendors have therefore taken one of three approaches:
 (1)~Provide store buffers, caches, and the rest and abandon
-multicopy atomicity (weakly ordered platforms), or
+multicopy atomicity (weakly ordered platforms),
 (2)~Provide all those hardware optimizations, and invest many transistors
-into preserving multicopy atomicity (TSO platforms).
-
-However, the weakly ordered ARMv8 architecture recently changed its
-memory model to preserve multicopy atomicity~\cite{ARMv8A:2017},
-and perhaps there will come a day when all platforms provide multi-copy
-atomicity.
-In the meantime, non-multicopy-atomic platforms do exist, and so software
+into preserving multicopy atomicity (TSO platforms), or
+(3)~Define a slightly weaker \emph{other-multicopy atomicity} that allows
+a given CPU to observe its own stores out of order~\cite{ARMv8A:2017}.
+Perhaps there will come a day when all platforms provide some flavor
+of multi-copy atomicity, but
+in the meantime, non-multicopy-atomic platforms do exist, and so software
 does need to deal with them.
 
 \begin{listing}[tbp]
@@ -1834,9 +2241,9 @@ line to carry this new value to them.
 
 \begin{table*}
 \small
-\centering\OneColumnHSpace{-0.1in}
+\centering\OneColumnHSpace{-0.8in}
 \begin{tabular}{r||l|l|l|l||l|l|l}
-	& P0 & \multicolumn{2}{c|}{P0 \& P1} & P1 & \multicolumn{3}{c}{P2} \\
+	& \tco{P0()} & \multicolumn{2}{c|}{\tco{P0()} \& \tco{P1()}} & \tco{P1()} & \multicolumn{3}{c}{\tco{P2()}} \\
 	\cline{2-8}
 	& Instruction & Store Buffer & Cache & Instruction &
 			Instruction & Store Buffer & Cache \\
@@ -1855,29 +2262,29 @@ line to carry this new value to them.
 	4 &  & \tco{x==&x} \tco{y==&x} & \tco{y==&b} & \tco{y = r1}
 		 & \tco{r2 = y} & & \tco{x==&a} \\
 	\hline
-	5 & (Finish store) & \tco{x==&x} & \tco{y==&x} &
+	5 &  & \tco{x==&x} & \tco{y==&x} & (Finish store)
 		 & (Read \tco{y}) & & \tco{x==&a} \\
 	\hline
 	6 & & \tco{x==&x} & \tco{y==&x} &
 		 & (\tco{r2==&x}) & & \tco{x==&a} \tco{y==&x} \\
 	\hline
 	7 & & \tco{x==&x} & \tco{y==&x} &
-		 & \tco{*r2 = &a} & \tco{y==&a} & \tco{x==&a} \tco{y==&x} \\
+		 & \tco{*r2 = &c} & \tco{y==&c} & \tco{x==&a} \tco{y==&x} \\
 	\hline
 	8 & & \tco{x==&x} & \tco{y==&x} &
-		 & (Read Invalidate \tco{y}) & \tco{y==&a} & \tco{x==&a} \tco{y==&x} \\
+		 & (Read Invalidate \tco{y}) & \tco{y==&c} & \tco{x==&a} \tco{y==&x} \\
 	\hline
 	9 & & \tco{x==&x} &  &
-		 &  & \tco{y==&a} & \tco{x==&a} \tco{y==&x} \\
+		 &  & \tco{y==&c} & \tco{x==&a} \tco{y==&x} \\
 	\hline
 	10 & & \tco{x==&x} &  &
-		 & (Finish store) & & \tco{x==&a} \tco{y==&a} \\
+		 & (Finish store) & & \tco{x==&a} \tco{y==&c} \\
 	\hline
 	11 & & \tco{x==&x} & \tco{x==&a} &
-		 & (Respond \co{x}) & & \tco{y==&a} \\
+		 & (Respond \co{x}) & & \tco{y==&c} \\
 	\hline
-	11 & (Finish store) & & \tco{x==&x} &
-		 &  & & \tco{y==&a} \\
+	12 & (Finish store) & & \tco{x==&x} &
+		 &  & & \tco{y==&c} \\
 \end{tabular}
 \caption{Memory Ordering: WWC Sequence of Events}
 \label{tab:memorder:Memory Ordering: WWC Sequence of Events}
@@ -1887,30 +2294,135 @@ Table~\ref{tab:memorder:Memory Ordering: WWC Sequence of Events}
 shows one sequence of events that can result in the \co{exists} clause in
 Listing~\ref{lst:memorder:WWC Litmus Test With Dependencies (No Ordering)}
 triggering.
-Row~1 shows the initial state, with the initial value of \co{y} in
-P0's and P1's shared cache, and the initial value of \co{x} in
-P2's cache.
+This sequence of events will depend critically on \co{P0()} and
+\co{P1()} sharing both cache and a store buffer in the manner shown in
+Figure~\ref{fig:memorder:Shared Store Buffers And Multi-Copy Atomicity}.
 
 \QuickQuiz{}
-	Just how is it fair that P0 and P1 must share a store buffer
+	But just how is it fair that P0 and P1 must share a store buffer
 	and a cache, but P2 gets one each of its very own???
 \QuickQuizAnswer{
-	Presumably there is a P3, not used by this litmus test, that
-	shares P2's store buffer and cache.
+	Presumably there is a P3, as is in fact shown in
+	Figure~\ref{fig:memorder:Shared Store Buffers And Multi-Copy Atomicity},
+	that shares P2's store buffer and cache.
 	But not necessarily.
 	Some platforms allow different cores to disable different numbers
 	of threads, allowing the hardware to adjust to the needs of the
 	workload at hand.
 	For example, a single-threaded critical-path portion of the workload
 	might be assigned to a core with only one thread enabled, thus
-	allowing that portion of the workload to use the entire capabilities
-	of that core.
+	allowing the single thread running that portion of the workload
+	to use the entire capabilities of that core.
 	Other more highly parallel but cache-miss-prone portions of the
 	workload might be assigned to cores with all hardware threads
-	enabled to provide better throughput.
+	enabled to provide improved throughput.
+	This improved throughput could be due to the fact that while one
+	hardware thread is stalled on a cache miss, the other hardware
+	threads can make forward progress.
 
-	In such cases, performance overrides human notions of fairness.
+	In such cases, performance requirements override quaint human
+	notions of fairness.
 } \QuickQuizEnd
+
+Row~1 shows the initial state, with the initial value of \co{y} in
+P0's and P1's shared cache, and the initial value of \co{x} in
+P2's cache.
+
+Row~2 shows the immediate effect of \co{P0()} executing its write on line~13.
+Because the cacheline containing \co{x} is not in \co{P0()}'s and \co{P1()}'s
+shared cache, the new value (\co{&x})is stored in the shared store buffer.
+
+Row~3 shows two transitions.
+First, \co{P0()} issues a read-invalidate operation to fetch the cacheline
+containing \co{x} so that it can flush the new value for \co{x} out of
+the shared store buffer.
+Second, \co{P1()} reads from \co{x} (line~20), an operation that completes
+immediately because the new value of \co{x} is immediately available
+from the shared store buffer.
+
+Row~4 also shows two transitions.
+First, it shows the immediate effect of \co{P1()} executing its write to
+\co{y} (line~21), placing the new value into the shared store buffer.
+Second, it shows the start of \co{P2()}'s read from \co{y} (line~28).
+
+Row~5 continues the tradition of showing two transitions.
+First, it shows \co{P1()} complete its store to \co{y}, flushing
+from the shared store buffer to the cache.
+Second, it shows \co{P2()} request the cacheline containing \co{x}.
+
+Row~6 shows \co{P2()} receive the cacheline containing \co{y}, allowing
+it to finish its load into \co{r2}, which takes on the value \co{&x}.
+
+Row~7 shows \co{P2()} start executing its store to \co{y} (line~29), placing the
+new value in is store buffer.
+
+Row~8 shows \co{P2()} requesting exclusive ownership (``Read Invalidate'')
+for the cacheline containing \co{y} in order to finish its store.
+
+Row~9 shows the cacheline containing \co{y} removed from the shared cache,
+so that \co{P2()} now has exclusive ownership.
+
+Row~10 shows \co{P2()} completing its store to \co{y}, flushing the value
+from its store buffer to its cache.
+
+Row~11 shows \co{P2()} \emph{finally} responding to \co{P0()}'s request for
+the cacheline containing \co{x}, which was made way back up on row~3.
+
+Finally, row~12 shows \co{P0()} finish its store, flushing its value of
+\co{x} from the shared store buffer to the shared cache.
+
+Note well that the \co{exists} clause on line~32 has triggered.
+The values of \co{r1} and \co{r2} are both the address of \co{x}, and
+the final value of \co{x} is also the address of \co{x}.
+This strange result occurred because \co{P0()}'s new value of \co{x} was
+communicated to \co{P1()} long before it was communicated to \co{P2()}.
+
+\QuickQuiz{}
+	Referring to
+	Table~\ref{tab:memorder:Memory Ordering: WWC Sequence of Events},
+	why on earth would \co{P0()}'s store take so long to complete when
+	\co{P1()}'s and \co{P2()}'s stores complete so quickly?
+	In other words, does the \co{exists} clause on line~32 of
+	Listing~\ref{lst:memorder:WWC Litmus Test With Dependencies (No Ordering)}
+	really trigger on real systems?
+\QuickQuizAnswer{
+	You need to face the fact that it really can trigger.
+	Akira Yokosawa used the \co{litmus7} tool to run this litmus test
+	on a Power8 system.
+	Out of 100,000,000,000 runs, 1,119 triggered the \co{exists}
+	clause.
+	Thus, triggering the \co{exists} clause is not merely a one-in-a-million
+	occurrence, but rather a one-in-a-hundred-million occurrence.
+	But it nevertheless really does trigger on real systems.
+} \QuickQuizEnd
+
+This counter-intuitive result happens because although dependencies
+do provide ordering, they provide it only within the confines of their
+own thread.
+This three-thread example requires stronger ordering, which
+is the subject of
+Sections~\ref{sec:memorder:Cumulativity}
+and~\ref{sec:memorder:Propagation}.
+
+\subsubsection{Cumulativity}
+\label{sec:memorder:Cumulativity}
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{memorder/memorybarriercum}
+\caption{Cumulativity}
+\label{fig:memorder:Cumulativity}
+\end{figure*}
+
+The three-thread example shown in
+Listing~\ref{lst:memorder:WWC Litmus Test With Dependencies (No Ordering)}
+requires \emph{cumulative} ordering, or \emph{cumulativity}.
+As illustrated in
+Figure~\ref{fig:memorder:Cumulativity}
+given a cumulative ordering, any stores
+from other threads whose values are returned by loads qualifying as
+prior ordered operations will be seen as preceding any subsequent
+ordered operations.
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -1952,11 +2464,48 @@ exists(1:r1=x /\ 2:r2=x /\ x=x)
 \centering
 \theverbbox
 \caption{WWC Litmus Test With Release}
-\label{lst:memorder:WWC Litmus With Release}
+\label{lst:memorder:WWC Litmus Test With Release}
 \end{listing}
 
-\subsection{Non-Single-Copy Atomicity}
-\label{sec:memorder:Non-Single-Copy Atomicity}
+Dependencies do not provide cumulativity,
+which is why the ``C'' column is blank for
+both the \co{READ_ONCE()} and the \co{smp_read_barrier_depends()} rows
+of Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+However, as indicated by the ``C'' in their ``C'' column,
+release operations do provide cumulativity.
+Therefore,
+Listing~\ref{lst:memorder:WWC Litmus Test With Release}
+substitutes a release operation for
+Listing~\ref{lst:memorder:WWC Litmus Test With Dependencies (No Ordering)}'s
+data dependency.
+Because the release operation is cumulative, its ordering applies not only to
+Listing~\ref{lst:memorder:WWC Litmus Test With Release}'s
+load from \co{x} by \co{P1()} on line~20, but also to its store to \co{x}
+by \co{P0()} on line~13---but only if that load returns the value stored,
+which in this case is the address of \co{x}, which matches the \co{1:r1=x}
+in the \co{exists} clause on line~32.
+This means that \co{P2()}'s address dependency suffices to force the
+write to \co{x} on line~29 to happen after the write on line~13, so
+that the final value of \co{x} is the address of \co{c}, which
+in turn prevents the \co{exists} clause from triggering.
+
+In short, cumulativity can force non-multicopy-atomic platforms to
+behave in a multi-copy-atomic manner in some situations.
+Cumulativity nevertheless has limits, which are examined in the next section.
+
+\subsubsection{Propagation}
+\label{sec:memorder:Propagation}
+
+% cumulativity not sufficient, sometimes also need propagation.
+
+% @@@ write, release -> acquire, write -> read, smp_mb(), read
+
+\subsubsection{Happens-Before}
+\label{sec:memorder:Happens-Before}
+
+% @@@ time as an implicit memory-ordering operation
+
+@@@
 
 Memory ordering and memory barriers can be extremely counter-intuitive.
 For example, consider the functions shown in
