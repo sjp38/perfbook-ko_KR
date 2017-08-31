@@ -198,7 +198,7 @@ and then puts forward a mental model of memory barriers that can help
 you avoid these pitfalls.
 \fi
 
-Section~\ref{sec:memorder:Memory Ordering and Memory Barriers}
+Section~\ref{sec:memorder:Why Hardware Misordering?}
 은 메모리 순서규칙과 메모리 배리어들에 대한 짧은 소개를 제공합니다.
 일단 이 배경지식이 자리잡으면, 다음 단계는 여러분이 여러분의 직관에 문제가
 있음을 인정할 차례입니다.
@@ -505,15 +505,11 @@ variable with its final value as shown on row~5.
 
 하지만 여러분의 알고리즘이 정말로 메모리 참조의 순서를 맞춰야 한다면 어떻게
 해야할까요?
-\emph{메모리 배리어} (예를 들어, 리눅스 커널의 \co{smp_mb()}) 를 사용해 순서
-규칙의 환상을 지키는데 필요한 표준적 동기화 도구들 (락킹과 RCU 같은) 과
-컴파일러 지시어들이 존재합니다.
-이런 메모리 배리어들은 ARM, POWER, Itanium, 그리고 Alpha 에서처럼 명시적
-인스트럭션이 될 수 있고, x86 에서 종종 그런 것처럼 다른 인스트럭션들에 의해
-내포될 수도 있습니다.
-이런 표준적 동기화 도구들은 순서가 지켜진다는 환상을 지키기 때문에, 여러분이
-가장 쉽게 적용할 수 있는 방법은 그냥 이 도구들을 사용해서, 이 섹션을 그만 읽는
-겁니다.
+예를 들어, 여러분이 어떤 드라이버와 하나는 이 드라이버가 동작 중인지 여부를 말하고 (driver-running flag) 하나는 이 드라이버에 처리되기를 기다리는 중인 요청이 있는지 여부를 말하는 (request-pending flag) 한쌍의 플래그를 사용해 통신하고 있다고 생각해 봅시다.
+요청을 보내는 쪽은 request-pending flag 의 bit 을 채우고, driver-running flag 의 bit 을 검사한 후, 비어있다면 드라이버를 깨웁니다.
+드라이버가 자신이 아는 모든 대기중인 요청들을 처리했다면, 드라이버는 자신의 driver-running flag 의 bit 을 없애고, 다시 일을 시작해야 하는지 여부를 보기 위해 request-pending flag 를 체크해야 합니다.
+이 매우 합리적인 접근법도 하드웨어가 여기서의 스토어들과 로드들을 순서대로 처리한다고 보장할 수 있는 방법이 없다면 제대로 동작하지 않을 겁니다.
+이게 다음 섹션의 주제입니다.
 \iffalse
 
 In summary, store buffers are needed to allow CPUs to handle
@@ -534,9 +530,21 @@ flag to see if it needs to restart.
 This very reasonable approach cannot work unless there is some way
 to make sure that the hardware processes the stores and loads in order.
 This is the subject of the next section.
+\fi
 
 \subsection{How to Force Ordering?}
 \label{sec:memorder:How to Force Ordering?}
+
+\emph{메모리 배리어} (예를 들어, 리눅스 커널의 \co{smp_mb()}) 를 사용해 순서
+규칙의 환상을 지키는데 필요한 표준적 동기화 도구들 (락킹과 RCU 같은) 과
+컴파일러 지시어들이 존재합니다.
+이런 메모리 배리어들은 ARM, POWER, Itanium, 그리고 Alpha 에서처럼 명시적
+인스트럭션이 될 수 있고, x86 에서 종종 그런 것처럼 다른 인스트럭션들에 의해
+내포될 수도 있습니다.
+이런 표준적 동기화 도구들은 순서가 지켜진다는 환상을 지키기 때문에, 여러분이
+가장 쉽게 적용할 수 있는 방법은 그냥 이 도구들을 사용해서, 이 섹션을 그만 읽는
+겁니다.
+\iffalse
 
 It turns out that there are compiler directives and standard
 synchronization primitives (such as locking and RCU)
@@ -688,14 +696,6 @@ Note that variables \co{x0} and \co{x1} each still have more than one
 value on row~2, however, as promised earlier, the directives straighten
 things out in the end.
 \fi
-
-실제 하드웨어는 훨씬 더 복잡하고 교묘하며 여기서 설명된 것보다 더 미묘하다는 걸
-부디 알아두시기 바랍니다.
-무엇보다도, 이 논의의 핵심은 여러분을 하드웨어 설계자로 훈련시키려는 게 아니라,
-여러분이 올바르게 낮은 단계의 동시성 도구들을 짤 수 있게 돕는 겁니다.
-하지만 먼저, 하나의 변수가 한 순간에 얼마나 많은 값들을 가지고 있을 수 있는지
-빠르게 보겠습니다.
-\iffalse
 
 \begin{table*}
 \small
@@ -1021,7 +1021,6 @@ through~\ref{sec:memorder:Where Are Memory Barriers Needed?}.
 
 But first, let's take a quick look at just how many values a single
 variable might have at a single moment of time.
-\fi
 
 \subsection{Variables With Multiple Values}
 \label{sec:memorder:Variables With Multiple Values}
@@ -1187,7 +1186,7 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	value of a single variable \emph{at the same time?}
 	\fi
 \QuickQuizAnswer{
-	Section~\ref{sec:memorder:Memory Ordering and Memory Barriers}
+	Section~\ref{sec:memorder:Why Hardware Misordering?}
 	에서 논의된 대로, 많은 CPU 들이 최근의 쓰기 값을 기록하는 쓰기 버퍼를
 	가지고 있으며, 이 값은 연관된 캐시 라인이 해당 CPU 로 올라왔을 때에
 	적용됩니다.
