@@ -1042,12 +1042,21 @@ than these rules of thumb.
 } \QuickQuizEnd
 
 \paragraph{A given thread sees its own accesses in order.}
+이 규칙은 공유된 변수에 대한 읽기와 쓰기가 각각 \co{READ_ONCE()} 와
+\co{WRITE_ONCE()} 를 사용한다는 것을 가정합니다.
+그러지 않는다면, 컴파일러가 여러분의 코드를 바닥부터 휘저을 수 있고\footnote{
+	많은 컴파일러 개발자들이 ``휘젓는다'' 대신 ``최적화'' 라는 단어를
+	선호합니다만, 우리 모두 각자의 선호하는 것이 있지요.}, 가끔은 CPU 역시
+조금은 코드를 휘저을 수 있습니다.
+\iffalse
+
 This rule assumes that reads and writes from/to shared variables use
 \co{READ_ONCE()} and \co{WRITE_ONCE()}, respectively.
 Otherwise, the compiler can profoundly scramble\footnote{
 	Many compiler writers prefer the word ``optimize'' instead of
 	``scramble'', but we all have our preferences.}
 your code, and sometimes the CPU can do a bit of scrambling as well.
+\fi
 % @@@ Itanium forward reference?
 
 \begin{figure}[htb]
@@ -1059,19 +1068,54 @@ your code, and sometimes the CPU can do a bit of scrambling as well.
 
 \paragraph{Ordering has conditional if-then semantics.}
 Figure~\ref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
+는 메모리 배리어들을 위한 이 규칙을 보입니다.
+두 메모리 배리어가 모두 충분히 강력하다 가정하고 (확신이 서지 않는다면, 언제든
+\co{smp_mb()} 를 사용하세요), 만약 CPU~1 의 액세스 Y1 이 CPU~0 의 액세스 Y0
+뒤에 일어났다면, CPU~1 의 액세스 X1 은 CPU~0 의 액세스 X1 뒤에 일어날 것이
+보장됩니다.
+\iffalse
+
+Figure~\ref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
 illustrates this for memory barriers.
 Assuming that both memory barriers are strong enough (and when in doubt, you
 can always use \co{smp_mb()}), if CPU~1's access Y1 happens after CPU~0's
 access Y0, then CPU~1's access X1 is guaranteed to happen after CPU~0's
 access X1.
+\fi
 
 \QuickQuiz{}
+	특정 상황에서 어떤 메모리 배리어들이 충분히 강력한지 어떻게 이야기 할
+	수 있나요?
+	\iffalse
+
 	How can you tell which memory barriers are strong enough for
 	a given use case?
+	\fi
 \QuickQuizAnswer{
+	아, 그건 답변하는데 이 챕터의 나머지 부분의 대부분을 필요로 할 만큼
+	깊은 질문입니다.
+	\iffalse
+
 	Ah, that is a deep question whose answer requires most of the
 	rest of this chapter.
+	\fi
 } \QuickQuizEnd
+
+Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
+은 이 점에서의 한 예입니다.
+Line~10 과~20 에서의 \co{smp_mb()} 는 배리어들의 역할을, line~9 에서의 \co{x0}
+쓰기는 X0 역할을, line~11 에서의 \co{x1} 으로부터의 읽기는 Y0 를, line~19
+에서의 \co{x1} 쓰기는 Y1, 그리고 \co{x0} 로부터의 읽기는 X1 역할을 합니다.
+이 if-then 규칙을 단계별로 적용해 보면, 만약 \co{P0()} 의 로컬 변수 \co{r2} 가
+값 0으로 설정되어 있다면 line~19 에서의 \co{x1} 쓰기는 line~11 에서의 \co{x1}
+읽기 뒤에 일어났음을 알 수 있습니다.
+그렇다면 이 if-then 규칙은 line~21 에서의 \co{x0} 으로부터의 읽기가 line~9 의
+\co{x0} 으로의 쓰기 뒤에 일어났음을 이야기할 것입니다.
+달리 말하자면,
+\emph{만약} \co{P0()} 의 로컬 변수 \co{r2} 가 값 0으로 끝난다면 \co{P1()} 의
+로컬 변수 \co{r2} 는 값 2로 끝날 것이 보장됩니다.
+다시 말하지만, 메모리 순서 보장은 조건적이지, 절대적이지 않습니다.
+\iffalse
 
 Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
 is a case in point.
@@ -1089,19 +1133,44 @@ In other words,
 to end up with the value two \emph{only if}
 \co{P0()}'s local variable \co{r2} ends up with the value zero.
 Again, memory ordering guarantees are conditional, not absolute.
+\fi
+
+비록
+Figure~\ref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
+가 구체적으로 메모리 배리어들을 언급하지만, 리눅스 커널의 나머지 순서 보장
+오퍼레이셔들에도 같은 규칙이 적용됩니다.
+\iffalse
 
 Although
 Figure~\ref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
 specifically mentions memory barriers, the same rule applies to the
 rest of the Linux kernel's ordering operations.
+\fi
 
 \paragraph{Ordering operations must be paired.}
+여러분이 한 쓰레드에서의 오퍼레이션들의 순서는 주의깊게 맞췄지만, 다른
+쓰레드에서는 그렇게 하는데 실패했다면, 순서가 없게 됩니다.
+두 쓰레드 모두 앞의 if-then 규칙이 적용될 수 있도록 순서를 제공해야만 합니다.
+\iffalse
+
 If you carefully order the operations in one thread, but then fail to do
 so in another thread, then there is no ordering.
 Both threads must provide ordering for the if-then rule to apply.
 % @@@ forward reference to cycles.
+\fi
 
 \paragraph{Ordering operations almost never speed things up.}
+앞의 쓰기가 메모리에 더 빨리 적용될 수 있도록 강제하기 위해 메모리 배리어를
+추가하려 하고 있다면, 참으세요!
+순서 보장을 추가하는건 일반적으로 일을 느려지게 만듭니다.
+물론, 인스트럭션들을 추가하는 것이 일을 더 빨리 처리되게 만드는 경우도
+있습니다만, 그런 경우에는 주의깊은 벤치마킹이 필요합니다.
+그리고 설령 그렇다 하더라도, 여러분이 \emph{여러분의} 시스템에서 조금 속도를
+높일 수 있었다 할지라도, 여러분의 사용자들의 시스템들에서는 상당히 속도가
+떨어지는 경우가 있을 가능성도 있습니다.
+또는 여러분의 미래의 시스템에서요.
+\iffalse
+
 If you find yourself tempted to add a memory barrier in an attempt
 to force a prior write to be flushed to memory faster, resist!
 Adding ordering usually slows things down.
@@ -1111,8 +1180,18 @@ And even then, it is quite possible that although you sped things up
 a little bit on \emph{your} system, you might well have slowed things
 down significantly on your users' systems.
 Or on your future system.
+\fi
 
 \paragraph{Ordering operations are not magic.}
+여러분의 프로그램이 어떤 레이스 컨디션으로 문제가 발생한다면, 여러분의 버그가
+존재하지 않도록 하기 위해 몇가지 메모리 순서 보장 오퍼레이션들을 추가하고
+싶어지는 경우가 많을 겁니다.
+이보다 훨씬 나은 반응은 주의깊게 설계된 형태로 더 높은 단계의 기능들을 사용하는
+것입니다.
+동시성 프로그래밍에서, 여러분의 버그들을 존재하지 않게 설계하는게 존재하지
+않도록 꼼수를 부리는 것보다 거의 항상 쉽습니다!
+\iffalse
+
 When your program is failing due to some race condition, it is often
 tempting to toss in a few memory-ordering operations in an attempt
 to barrier your bug out of existence.
@@ -1120,8 +1199,19 @@ A far better reaction is to use higher-level primitives in a carefully
 designed manner.
 With concurrent programming, it is almost always easier to design
 your bugs out of existence than to hack them out of existence!
+\fi
 
 \paragraph{These are only rules of thumb.}
+비록 이 경험으로부터의 규칙들이 실제 현업에서 보여지는 대부분의 상황들을 다룰
+수 있긴 하지만, 모든 경험으로부터의 규칙들이 그러하듯이 이 규칙들 역시 한계가
+있습니다.
+다음 섹션은 여러분의 직관을 깨부수고 여러분의 이해를 높여줄 trick-and-trap
+리트머스 테스트들을 소개함으로써 이 한계들을 일부 보이겠습니다.
+이 리트머시 테스트들은 또한
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+로 보여진 많은 개념들을 명확하게 할겁니다.
+\iffalse
+
 Although these rules of thumb cover the vast majority of situations
 seen in actual practice, as with any set of rules of thumb, they
 do have their limits.
@@ -1131,6 +1221,7 @@ intuition and increase your understanding.
 These litmus tests will also illuminate many of the concepts
 represented by
 Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+\fi
 
 \section{Tricks and Traps}
 \label{sec:memorder:Tricks and Traps}
