@@ -269,8 +269,8 @@ variable into that CPU's cache.
 스토어들을 잘 처리할 필요 또한 있습니다.
 Cache-coherent 시스템에서, 캐시들이 특정 변수의 여러 복사본들을 가지고 있다면,
 이 모든 복사본들은 같은 값을 가져야만 합니다.
-이는 동시의 읽기들에 대해서는 매우 잘 동작하지만, 동시의 쓰기들에 대해서는
-그렇지 못합니다:  각각의 쓰기는 기존 값의 복사본들 모두에 대해서 어떤 일을
+이는 동시의 로드들에 대해서는 매우 잘 동작하지만, 동시의 스토어들에 대해서는
+그렇지 못합니다:  각각의 스토어는 기존 값의 복사본들 모두에 대해서 어떤 일을
 해줘야 하는데 (또다른 캐시 미스!), 이는 빛의 제한된 속도와 원자적 물질의 원리를
 놓고 보면, 성급한 소프트웨어 해커들이 좋아하지 않을 만큼 느릴 겁니다.
 \iffalse
@@ -422,10 +422,10 @@ record their stores in their respective store buffers.
 	\fi
 } \QuickQuizEnd
 
-Row~3 는 두개의 읽기
+Row~3 는 두개의 로드
 (Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 의
 line~10 과~19) 를 보입니다.
-각 CPU 에 의해 읽혀지는 변수들은 각 CPU 의 캐시에 있기 때문에, 각각의 읽기는
+각 CPU 에 의해 읽혀지는 변수들은 각 CPU 의 캐시에 있기 때문에, 각각의 로드는
 곧바로 캐시의 값을 반환하는데, 이 경우 모두 0의 값입니다.
 
 하지만 이 CPU 들은 일이 다 끝나지 않았습니다: 금방이든 나중이든, 각자의 스토어
@@ -445,7 +445,6 @@ CPU 는 서로 넘겨받은 캐시라인들을 가지고 있게 되어서, CPU~0
 에 보인 대로 마지막 값으로 설정합니다.
 \iffalse
 
-% TODO: Apply to translation
 Row~3 shows the two loads (lines~10 and~19 of
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}).
 Because the variable being loaded by each CPU is in that CPU's cache,
@@ -860,7 +859,7 @@ are at most two threads involved.
 
 	\co{READ_ONCE()} 열은 (2017 년에 있어) 컴파일러들과 CPU 들은 사용자가
 	볼 수 있는 예측적 스토어를 탐닉하지 않아서, 주소, 데이터, 또는 수행이
-	앞의 로드에 의존적인 모든 쓰기는 해당 로드가 완료된 후에 행해진다는
+	앞의 로드에 의존적인 모든 스토어는 해당 로드가 완료된 후에 행해진다는
 	사실을 사용합니다.
 	최소한 이런 의존성들이
 	Sections~\ref{sec:memorder:Address- and Data-Dependency Restrictions}
@@ -1083,7 +1082,7 @@ than these rules of thumb.
 } \QuickQuizEnd
 
 \paragraph{A given thread sees its own accesses in order.}
-이 규칙은 공유된 변수에 대한 읽기와 쓰기가 각각 \co{READ_ONCE()} 와
+이 규칙은 공유된 변수에 대한 로드와 스토어가 각각 \co{READ_ONCE()} 와
 \co{WRITE_ONCE()} 를 사용한다는 것을 가정합니다.
 그러지 않는다면, 컴파일러가 여러분의 코드를 바닥부터 휘저을 수 있고\footnote{
 	많은 컴파일러 개발자들이 ``휘젓는다'' 대신 ``최적화'' 라는 단어를
@@ -1091,7 +1090,6 @@ than these rules of thumb.
 조금은 코드를 휘저을 수 있습니다.
 \iffalse
 
-% TODO: Apply to translation
 This rule assumes that loads and stores from/to shared variables use
 \co{READ_ONCE()} and \co{WRITE_ONCE()}, respectively.
 Otherwise, the compiler can profoundly scramble\footnote{
@@ -1146,13 +1144,13 @@ access X1.
 Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
 은 이 점에서의 한 예입니다.
 Line~10 과~20 에서의 \co{smp_mb()} 는 배리어들의 역할을, line~9 에서의 \co{x0}
-쓰기는 X0 역할을, line~11 에서의 \co{x1} 으로부터의 읽기는 Y0 를, line~19
-에서의 \co{x1} 쓰기는 Y1, 그리고 \co{x0} 로부터의 읽기는 X1 역할을 합니다.
+스토어는 X0 역할을, line~11 에서의 \co{x1} 으로부터의 로드는 Y0 를, line~19
+에서의 \co{x1} 스토어는 Y1, 그리고 \co{x0} 로부터의 로드는 X1 역할을 합니다.
 이 if-then 규칙을 단계별로 적용해 보면, 만약 \co{P0()} 의 로컬 변수 \co{r2} 가
-값 0으로 설정되어 있다면 line~19 에서의 \co{x1} 쓰기는 line~11 에서의 \co{x1}
-읽기 뒤에 일어났음을 알 수 있습니다.
-그렇다면 이 if-then 규칙은 line~21 에서의 \co{x0} 으로부터의 읽기가 line~9 의
-\co{x0} 으로의 쓰기 뒤에 일어났음을 이야기할 것입니다.
+값 0으로 설정되어 있다면 line~19 에서의 \co{x1} 스토어는 line~11 에서의 \co{x1}
+로드 뒤에 일어났음을 알 수 있습니다.
+그렇다면 이 if-then 규칙은 line~21 에서의 \co{x0} 으로부터의 로드가 line~9 의
+\co{x0} 으로의 스토어 뒤에 일어났음을 이야기할 것입니다.
 달리 말하자면,
 \emph{만약} \co{P0()} 의 로컬 변수 \co{r2} 가 값 0으로 끝난다면 \co{P1()} 의
 로컬 변수 \co{r2} 는 값 2로 끝날 것이 보장됩니다.
@@ -1168,7 +1166,6 @@ as Y0, the store to \co{x1} on line~19 as Y1, and the load from
 Applying the if-then rule step by step, we know that the store to
 \co{x1} on line~19 happens after the load from \co{x1} on line~11 if
 \co{P0()}'s local variable \co{r2} is set to the value zero.
-% TODO: Apply to translation
 The if-then rule would then state that the load from \co{x1} on
 line~21 happens after the store to \co{x1} on line~9.
 In other words,
@@ -1205,7 +1202,7 @@ Both threads must provide ordering for the if-then rule to apply.\footnote{
 \fi
 
 \paragraph{Ordering operations almost never speed things up.}
-앞의 쓰기가 메모리에 더 빨리 적용될 수 있도록 강제하기 위해 메모리 배리어를
+앞의 스토어가 메모리에 더 빨리 적용될 수 있도록 강제하기 위해 메모리 배리어를
 추가하려 하고 있다면, 참으세요!
 순서 보장을 추가하는건 일반적으로 일을 느려지게 만듭니다.
 물론, 인스트럭션들을 추가하는 것이 일을 더 빨리 처리되게 만드는 경우도
@@ -1478,9 +1475,9 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	\fi
 \QuickQuizAnswer{
 	Section~\ref{sec:memorder:Why Hardware Misordering?}
-	에서 논의된 대로, 많은 CPU 들이 최근의 쓰기 값을 기록하는 쓰기 버퍼를
-	가지고 있으며, 이 값은 연관된 캐시 라인이 해당 CPU 로 올라왔을 때에
-	적용됩니다.
+	에서 논의된 대로, 많은 CPU 들이 최근의 스토어 값을 기록하는 스토어
+	버퍼를 가지고 있으며, 이 값은 연관된 캐시 라인이 해당 CPU 로 올라왔을
+	때에 적용됩니다.
 	따라서, 각 CPU 가 하나의 시점에 특정 변수에 대해 서로 다른 값을 보고
 	있는 것이---그리고 메인 메모리는 또 다른 값을 가지고 있는 것이
 	가능합니다.
@@ -1620,7 +1617,7 @@ proper use of memory barriers for code that cares about memory ordering.
 Chapter~\ref{chp:Hardware and its Habits}
 와~\ref{cha:Partitioning and Synchronization Design} 에서 배웠던 교훈들을
 기억할 필요가 있습니다.
-모든 CPU 들이 같은 변수에게 동시에 쓰기를 하도록 하는 것은 병렬 프로그램을
+모든 CPU 들이 같은 변수에게 동시에 스토어를 하도록 하는 것은 병렬 프로그램을
 설계하는 방법이 아닌데, 적어도 성능과 확장성이 여러분에게 전혀 중요하지 않은 게
 아니라면 그렇습니다.
 
@@ -1711,8 +1708,8 @@ Listing~\ref{lst:memorder:Message-Passing Litmus Test (No Ordering)}
 (\path{C-MP+o-wmb-o+o-o.litmus})
 는 고전적 \emph{message-passing} 리트머스 테스트를 보이는데, 여기서 \co{x0} 는
 메세지이고 \co{x1} 은 메세지가 존재하는지 여부를 알리는 플래그입니다.
-이 테스트에서, \co{smp_wmb()} 는 \co{P0()} 의 쓰기들이 순서대로 행해지게
-강제하지만, 읽기들에 대해서는 어떤 순서도 강제하지 않습니다.
+이 테스트에서, \co{smp_wmb()} 는 \co{P0()} 의 스토어들이 순서대로 행해지게
+강제하지만, 로드들에 대해서는 어떤 순서도 강제하지 않습니다.
 x86 과 같이 상대적으로 강력한 순서 규칙의 아키텍쳐들에서는 순서를 강제합니다.
 하지만, 완화된 순서 규칙의 아키텍쳐들은 그렇지 않은 경우가
 많습니다~\cite{JadeAlglave2011ppcmem}.
@@ -1931,15 +1928,15 @@ exists (1:r2=2 /\ 1:r3=0)
 Listing~\ref{lst:memorder:Message-Passing Litmus Test, No Writer Ordering (No Ordering)}
 (\path{C-MP+o-o+o-rmb-o.litmus})
 은 다시 한번 고전적 메세지 패싱 리트머스 테스트를 보이는데, 이번에는 \co{P0()}
-로의 쓰기들에 대한 명시적 순서가 없고 \co{P1()} 의 읽기들에 대한 순서가
+로의 스토어들에 대한 명시적 순서가 없고 \co{P1()} 의 로드들에 대한 순서가
 \co{smp_rmb()} 로 제공되어진 버전입니다.
 다시 한번 말하지만, 상대적으로 강력한 순서 규칙의 아키텍쳐들은 순서를
 지켜주지만, 완화된 순서 규칙의 아키텍쳐들은 그러지 않기
 때문에~\cite{JadeAlglave2011ppcmem}, \co{exists} 절은 발동될 수 있습니다.
 따라서, 이식성 있는 코드는
 Listing~\ref{lst:memorder:Enforcing Order of Message-Passing Litmus Test} 에서
-보인 것과 같이 쓰기들에도 명시적 순서를 부여해서 \co{exists} 절이 발동되지 않게
-해야 합니다.
+보인 것과 같이 스토어들에도 명시적 순서를 부여해서 \co{exists} 절이 발동되지
+않게 해야 합니다.
 \iffalse
 
 Listing~\ref{lst:memorder:Message-Passing Litmus Test, No Writer Ordering (No Ordering)}
