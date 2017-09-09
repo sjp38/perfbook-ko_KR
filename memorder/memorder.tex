@@ -37,13 +37,11 @@ performance-critical code.
 \section{Ordering: Why and How?}
 \label{sec:memorder:Ordering: Why and How?}
 
-메모리 순서규칙의 필요성은
+메모리 순서규칙의 필요성이 첫눈에 보면 \co{exists} 절이 절대 발동되지 않을 것을
+보장하는 것처럼 보일 수 있는,
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}
 (\path{C-SB+o-o+o-o.litmus})
-에 보인,
-사소해 보이기도 하는 리트머스 테스트로부터 얻을 수 있는데, 이 테스트에서는
-\co{exists} 절이 절대 trigger 되지 않을 것을 보장한다 생각할 수
-있습니다.\footnote{
+으로 보이고 있있습니다.\footnote{
 	순수주의자들은 이 \co{exists} 절이 절대 \emph{만족}되지 않는다고
 	표현하겠는데, 여기선 assertion 비유를 위해 ``trigger'' 라는 표현을
 	사용하겠습니다.}
@@ -205,6 +203,8 @@ Section~\ref{sec:memorder:Why Hardware Misordering?}
 Section~\ref{sec:memorder:How to Force Ordering?}
 에서는 어떻게 여러분이 악의 사악한 하드웨어의 순서를 잘못잡는 계획을 좌절시킬
 수 있는지에 대해 마찬가지로 짧은 소개를 제공합니다.
+마지막으로, Section~\ref{sec:memorder:Basic Rules of Thumb} 은 뒤의 섹션들에서
+더 잘 다듬어질 경험으로부터의 법칙들을 보입니다.
 \iffalse
 
 Section~\ref{sec:memorder:Why Hardware Misordering?}
@@ -212,11 +212,10 @@ gives a brief overview of why hardware misorders memory accesses, and then
 Section~\ref{sec:memorder:How to Force Ordering?}
 gives an equally brief overview of how you can thwart evil hardware
 misordering schemes.
-\fi
-% TODO: Apply to translation
 Finally, Section~\ref{sec:memorder:Basic Rules of Thumb}
 lists some basic rules of thum, which will be further refined in
 later sections.
+\fi
 
 \subsection{Why Hardware Misordering?}
 \label{sec:memorder:Why Hardware Misordering?}
@@ -245,7 +244,7 @@ Figure~\ref{fig:cpu:System Hardware Architecture} 에서 보인 것과 같이
 Section~\ref{sec:cpu:Cache Misses} 에서 이야기한 값비싼 \emph{캐시 미스} 를
 낸다 하더라도, 최초의 캐시 미스는 해당 변수가 해당 CPU 의 캐시에 올라오게 하기
 때문에 해당 CPU 로부터 해당 변수로의 뒤이은 반복된 로드들은 매우 빠르게
-수행됨을 의미합니다.
+수행될 수도 있음을 의미합니다.
 \iffalse
 
 Many people do indeed expect their computers to keep track of things,
@@ -594,12 +593,12 @@ Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
 (\path{C-SB+o-mb-o+o-mb-o.litmus}) 으로, \co{smp_mb()} 리눅스 커널 메모리
 배리어가 \co{P0()} 와 \co{P1()} 의 스토어와 로드 사이에 위치했다는 점을
 제외하고는
-Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 에
-보인 것과 동일한 코드입니다.
-이 지시어들은 제 x86 랩탑에서의 100,000,000 번의 시도에도 반 직관적인 결과가
+Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}
+와 동일합니다.
+이 배리어들은 제 x86 랩탑에서의 100,000,000 번의 시도에도 반 직관적인 결과가
 일어나는 것을 막았습니다.
-흥미롭게도, 이 지시어들로 인해 추가된 오버헤드는 두 로드가 모두 값 2 를
-반환하는 경우가 800,000 번이 넘게 일어나게 만들었는데, 이는 이 지시어가 없는
+흥미롭게도, 이 배리어들로 인해 추가된 오버헤드는 두 로드가 모두 값 2 를
+반환하는 경우가 800,000 번이 넘게 일어나게 만들었는데, 이는 이 배리어가 없는
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 의
 코드에서는 167 번밖에 일어나지 않았던 것과 대조적입니다.
 \iffalse
@@ -661,7 +660,7 @@ Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}.
 \label{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events}
 \end{table*}
 
-이 지시어들은
+이 배리어들은
 Table~\ref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events} 에
 보인 것과 같이 순서규칙에 깊은 영향을 끼칩니다.
 앞의 두 행은
@@ -672,10 +671,10 @@ Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
 Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
 에서 보인 반 직관적인 결과가 나타나지 못하게 합니다.
 변수 \co{x0} 와 \co{x1} 은 row~2 에서 여전히 두개의 값을 갖지만, 앞서
-약속한대로, 이 지시어들은 최종적으로는 일을 더 깐깐하게 처리했습니다.
+약속한대로, 이 \co{smp_mb()} 인스턴스들은 최종적으로는 일을 더 깐깐하게
+처리했음을 알아두시기 바랍니다.
 \iffalse
 
-% TODO: Apply to translation
 These barriers have a profound effect on ordering, as can be seen in
 Table~\ref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events}.
 Although the first two rows are the same as in
@@ -687,7 +686,6 @@ in and of themselves, they do cause the stores to complete
 loads (row~6), which rules out the counter-intuitive outcome shown in
 Table~\ref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}.
 Note that variables \co{x0} and \co{x1} each still have more than one
-% TODO: Apply to translation
 value on row~2, however, as promised earlier, the \co{smp_mb()}
 instances straighten things out in the end.
 \fi
@@ -809,9 +807,10 @@ Blank cells indicate that no ordering is supplied.
 ``Successful Non-Relaxed Non-\co{void} RMW'' 열은 \co{atomic_add_return()},
 \co{atomic_add_unless()}, \co{atomic_dec_and_test()}, \co{cmpxchg()},
 \co{xchg()}, 등등을 포함합니다.
-``Successful'' 이라는 수식어는 실패했을 때에는 메모리에도 순서에도 어떤 영향을
-끼치지 않는 \co{atomic_add_return()}, \co{cmpxchg_acquire()}, 그리고
-\co{cmpxchg_release()} 같은 도구들에 적용됩니다.
+``Successful'' 이라는 수식어는 앞의 ``Unsuccessful RMW operation'' 행에서도
+가리키듯이, 실패했을 때에는 메모리에도 순서에도 어떤 영향을 끼치지 않는
+\co{atomic_add_return()}, \co{cmpxchg_acquire()}, 그리고 \co{cmpxchg_release()}
+같은 도구들에 적용됩니다.
 \iffalse
 
 The \co{*_acquire} row covers \co{smp_load_acquire()},
@@ -824,7 +823,6 @@ the ``Successful Non-Relaxed Non-\co{void} RMW'' row covers
 The ``Successful'' qualifiers apply to primitives such as
 \co{atomic_add_unless()}, \co{cmpxchg_acquire()}, and \co{cmpxchg_release()},
 which have no effect on either memory or on ordering when they indicate
-% TODO: Apply translation
 failure, as indicated by the earlier ``Unsuccessful RMW operation'' row.
 \fi
 
@@ -857,6 +855,11 @@ are at most two threads involved.
 	각 열들은 전력과 오버헤드가 증가되는 하드웨어 메커니즘들에 대략적으로
 	연관되어 있습니다.
 
+	\co{WRITE_ONCE()} 행은 ``SV'' 열로 표시되듯이 하나의 변수로의 액세스는
+	항상 완벽히 순서잡힌다는 사실을 사용합니다.
+	특졍 변수에 순서를 제공하는 모드 다른 오퍼레이션들도 이 같은 변수로의
+	순서를 제공함을 알아 두시기 바랍니다.
+
 	\co{READ_ONCE()} 열은 (2017 년에 있어) 컴파일러들과 CPU 들은 사용자가
 	볼 수 있는 예측적 스토어를 탐닉하지 않아서, 주소, 데이터, 또는 수행이
 	앞의 로드에 의존적인 모든 스토어는 해당 로드가 완료된 후에 행해진다는
@@ -887,11 +890,19 @@ are at most two threads involved.
 	and~\ref{sec:memorder:Control-Dependency Restrictions}.
 	\fi
 
+	``Unsuccessful RMW operation'' 열은 실패한 RMW 라 하더라도 읽기는 하게
+	되고, 그 읽기는 \co{READ_ONCE()} 만큼은 좋은 효과를 낸다는 사실을
+	사용합니다.
+
 	\co{smp_read_barrier_depends()} 열은 DEC Alpha 의 예외가 있긴 하지만,
 	컴파일러들과 CPU 들은 사용자가 볼 수 있는 주소 의존성들은 깨지 않는다는
 	사실을 사용하는데, 역시 이 의존성들이
 	Section~\ref{sec:memorder:Address- and Data-Dependency Restrictions}
 	에서 설명한 대로 주의 깊게 구성되었다는 가정 하이긴 합니다.
+
+	\co{*_dereference()} 열은 \co{lockless_dereference()},
+	\co{rcu_dereference()}, 등등에 의해 제공되는 주소와 데이터 종속성 순서
+	규칙을 사용합니다.
 
 	``Successful \co{*_acquire()}'' 열은 많은 CPU 가 특별한 ``acquire''
 	형태의 로드와 atomic RMW 인스트럭션들을 가지고 있으며, 많은 다른 CPU 가
@@ -996,8 +1007,9 @@ are at most two threads involved.
 	\co{_relaxed}, \co{_acquire}, or \co{_release}.)
 	\fi
 
-	하지만, 리눅스 커널은 \co{void} atomic RMW 오퍼레이션들에 대해서는
-	어떠한 순서 보장도 제공할 것을 요구하지 않습니다.
+	하지만, 리눅스 커널은 \co{atomic_inc()} 와 같은 \co{void} atomic RMW
+	오퍼레이션들에 대해서는 어떠한 순서 보장도 제공할 것을 요구하지
+	않습니다.
 	따라서, 이 오퍼레이션들과 실패한 non-\co{void} atomic RMW
 	오퍼레이션들은 앞의, 또는 뒤의 메모리 액세스 모두에 대해 완전한 순서를
 	보장하기 위해 \co{smp_mb__before_atomic()} 을 앞세우고 뒤에
@@ -1190,12 +1202,14 @@ rest of the Linux kernel's ordering operations.
 \paragraph{Ordering operations must be paired.}
 여러분이 한 쓰레드에서의 오퍼레이션들의 순서는 주의깊게 맞췄지만, 다른
 쓰레드에서는 그렇게 하는데 실패했다면, 순서가 없게 됩니다.
-두 쓰레드 모두 앞의 if-then 규칙이 적용될 수 있도록 순서를 제공해야만 합니다.
+두 쓰레드 모두 앞의 if-then 규칙이 적용될 수 있도록 순서를 제공해야만
+합니다.\footnote{
+	Section~\ref{sec:memorder:Propagation} 에서, 짝 맞추기는 사이클로
+	일반화 될겁니다.}
 \iffalse
 
 If you carefully order the operations in one thread, but then fail to do
 so in another thread, then there is no ordering.
-% TODO: Apply to translation
 Both threads must provide ordering for the if-then rule to apply.\footnote{
 	In Section~\ref{sec:memorder:Propagation}, pairing will be
 	generalized to cycles.}
@@ -1476,8 +1490,8 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 \QuickQuizAnswer{
 	Section~\ref{sec:memorder:Why Hardware Misordering?}
 	에서 논의된 대로, 많은 CPU 들이 최근의 스토어 값을 기록하는 스토어
-	버퍼를 가지고 있으며, 이 값은 연관된 캐시 라인이 해당 CPU 로 올라왔을
-	때에 적용됩니다.
+	버퍼를 가지고 있으며, 이 값은 연관된 캐시 라인이 해당 CPU 로 올라오기
+	전에는 외부에 보여지지 않습니다.
 	따라서, 각 CPU 가 하나의 시점에 특정 변수에 대해 서로 다른 값을 보고
 	있는 것이---그리고 메인 메모리는 또 다른 값을 가지고 있는 것이
 	가능합니다.
@@ -1771,11 +1785,10 @@ exists (1:r2=2 /\ 1:r3=0)
 있을 법한 코드에서는 명시적인 순서 규칙을 추가해야 하는데, 예를 들면
 Listing~\ref{lst:memorder:Enforcing Order of Message-Passing Litmus Test}
 (\path{C-MP+o-wmb-o+o-rmb-o.litmus})
-의 line~20 에 보인 \co{smp_rmb()} 를 추가하는 식입니다.
-여기서는 \co{exists} 절이 발동될 수 없습니다.
+의 line~20 에 보인, \co{exists} 절이 발동될 수 없게 하는 \co{smp_rmb()} 를
+추가하는 식입니다.
 \iffalse
 
-% TODO: Apply to translation
 Thus, portable code relying on ordering in this case must
 add explicit ordering, for example, the \co{smp_rmb()} shown on
 line~20 of
@@ -1870,16 +1883,15 @@ exists (1:r2=2 /\ 0:r2=2)
 \label{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
 \end{listing}
 
-흥미롭게도, 실제 하드웨어가 이런 재배치를 하는건 비교적 드문
-일입니다~\cite{LucMaranget2017aarch64}.
-그렇다 하더라도, 여러분은
+실제 하드웨어가 이런 재배치를 하는건 비교적 드문
+일이긴 합니다만~\cite{LucMaranget2017aarch64},
+이식성 있는 코드는 더도 말고 덜도 말고
 Listing~\ref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
 (\path{C-LB+o-r+a-o.litmus})
-에 보인 것과 같이 line~22 의 \co{exists} 절이 절대 발동되지 않도록 필요한 순서
-강제를 해야 합니다.
+에 보인 것과 같이 모든 필요한 순서 규칙을 강제해야만 합니다.
+이는 line~22 의 \co{exists} 절이 절대 발동되지 않을 것을 보장합니다.
 \iffalse
 
-% TODO: Apply to translation
 Although it is rare for actual hardware to
 exhibit this reordering~\cite{LucMaranget2017aarch64},
 portable code must nevertheless enforce any required ordering, for example,
@@ -1936,7 +1948,7 @@ Listing~\ref{lst:memorder:Message-Passing Litmus Test, No Writer Ordering (No Or
 따라서, 이식성 있는 코드는
 Listing~\ref{lst:memorder:Enforcing Order of Message-Passing Litmus Test} 에서
 보인 것과 같이 스토어들에도 명시적 순서를 부여해서 \co{exists} 절이 발동되지
-않게 해야 합니다.
+않게 해야만 합니다.
 \iffalse
 
 Listing~\ref{lst:memorder:Message-Passing Litmus Test, No Writer Ordering (No Ordering)}
