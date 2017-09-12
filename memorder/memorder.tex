@@ -1970,9 +1970,14 @@ thus preventing the \co{exists} clause from triggering.
 \subsection{Address Dependencies}
 \label{sec:memorder:Address Dependencies}
 
+\emph{Address dependency} 는 로드 인스트럭션에 의해 리턴된 값이 나중의 메모리
+레퍼런스 인스트럭션에 의해 사용되는 주소의 계산에 사용될 때 발생합니다.
+\iffalse
+
 An \emph{address dependency} occurs when the value returned by a load
 instruction is used to compute the address used by a later memory-reference
 instruction.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -2013,6 +2018,23 @@ exists (1:r2=x0 /\ 1:r3=1)
 
 Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}
 (\path{C-MP+o-wmb-o+o-addr-o.litmus})
+은 message-passing 패턴의 링크 버전을 보입니다.
+헤드 포인터는 \co{x1} 으로, 최초에 \co{int} 변수 \co{y} 를 가리키게 되며
+(line~5), 변수 \co{y} 는 초기값 $1$ 을 갖습니다 (line~4).
+\co{P0()} 는 헤드 포인터 \co{x1} 이 \co{x0} 를 가리키도록 업데이트 (line~12)
+하는데 이는 \co{x0} 가 $2$ 로 초기화 (line~10) 된 후로 순서지어집니다
+(line~11).
+\co{P1()} 은 헤드 포인터 \co{x1} 을 가져오고 (line~21) 이를 통해 레퍼런스되는
+값을 가져옵니다 (line~22).
+따라서 line~21 의 로드와 line~22 의 로드 사이에는 address dependency 가
+존재합니다.
+이 경우에, line~21 에서 리턴되는 값은 line~22 에서 사용되는 주소값 그
+자체이지만, C-언어의 \co{->} 오퍼레이터를 사용한 필드 접근, 더하기, 빼기,
+그리고 배열 인덱싱 등 많은 변종이 있을 수 있습니다.
+\iffalse
+
+Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}
+(\path{C-MP+o-wmb-o+o-addr-o.litmus})
 shows a linked variant of the message-passing pattern.
 The head pointer is \co{x1}, which initially
 references the \co{int} variable \co{y} (line~5), which is in turn 
@@ -2028,6 +2050,17 @@ In this case, the value returned by line~21 is exactly the address
 used by line~22, but many variations are possible,
 including field access using the C-language \co{->} operator,
 addition, subtraction, and array indexing.
+\fi
+
+어떤 사람들은 line~21 의 헤드 포인터 로드가 line~22 의 dereference 전으로 순서
+잡히길 바랄 겁니다.
+하지만,
+Section~\ref{sec:app:whymb:Alpha} 에서 설명할, 종속적 로드에 대한 예측된 값의
+사용을 할 수 있는 DEC Alpha 에서는 그렇지 않을 겁니다.
+따라서,
+Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}
+의 \co{exists} 절은 발동될 수 \emph{있습니다}.
+\iffalse
 
 One might hope that line~21's load from the head pointer would be ordered
 before line~22's dereference.
@@ -2037,6 +2070,7 @@ Section~\ref{sec:app:whymb:Alpha}.
 Therefore,
 Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}'s
 \co{exists} clause \emph{can} trigger.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -2077,12 +2111,23 @@ exists (1:r2=x0 /\ 1:r3=1)
 
 Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
 (\path{C-MP+o-wmb-o+ld-addr-o.litmus})
+은 DEC Alpha 도 포함해서 이식성 있게 동작하도록 어떻게 할 수 있는지 보이는데,
+line~21 의 \co{READ_ONCE()} 를 \co{lockless_dereference()} 로 대체하는 것으로,
+\co{lockless_dereference()} 는 DEC Alpha 외의 모든 플랫폼에서 \co{READ_ONCE()}
+와 동일하지만, DEC Alpha 에서는 \co{READ_ONCE()} 뒤에 \co{smp_mb()} 를 붙여
+동작해서 모든 플랫폼에서 필요한 순서규칙을 강제하고, 결국 \co{exists} 절이
+발동되지 않게 해줍니다.
+\iffalse
+
+Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+(\path{C-MP+o-wmb-o+ld-addr-o.litmus})
 shows how to make this work portably, even on DEC Alpha, by
 replacing line~21's \co{READ_ONCE()} with \co{lockless_dereference()},
 which acts like \co{READ_ONCE()} on all platforms other than DEC Alpha,
 where it acts like a \co{READ_ONCE()} followed by an \co{smp_mb()},
 thereby forcing the required ordering on all platforms, in turn
 preventing the \co{exists} clause from triggering.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -2120,6 +2165,18 @@ exists (1:r2=x0 /\ x0=2)
 \label{lst:memorder:S Address-Dependency Litmus Test}
 \end{listing}
 
+하지만, 예를 들어,
+Listing~\ref{lst:memorder:S Address-Dependency Litmus Test}
+(\path{C-S+o-wmb-o+o-addr-o.litmus}) 에 보인 \emph{S} 리트머스
+테스트~\cite{JadeAlglave2011ppcmem} 와 같이 종속적 오퍼레이션이 로드가 아니라
+스토어라면 어떻게 될까요?
+어떤 제품 품질의 플랫폼도 스토어를 예측적으로 하진 않기 때문에, line~10 의
+\co{WRITE_ONCE()} 가 line~21 의 \co{WRITE_ONCE()} 를 덮어쓰기 할 수 없으며,
+이는 DEC Alpha 에서라 할지라도 종속적 로드의 경우에는 필요했던
+\co{lockless_dereference()} 없이도 line~25 의 \co{exists} 절이 발동될 수 없음을
+의미합니다.
+\iffalse
+
 But what happens if the dependent operation is a store rather than
 a load, for example, in the \emph{S}
 litmus test~\cite{JadeAlglave2011ppcmem} shown in
@@ -2131,13 +2188,39 @@ the \co{WRITE_ONCE()} on line~21, meaning that the \co{exists}
 clause on line~25 cannot trigger, even on DEC Alpha, even
 without the \co{lockless_dereference()} that is required in the
 dependent-load case.
+\fi
 
 \QuickQuiz{}
+	하지만 정말로 \emph{모든} 플랫폼에서
+	Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+	과~\ref{lst:memorder:S Address-Dependency Litmus Test} 의 \co{exists}
+	절이 발동되지 않는다는 걸 어떻게 알 수 있죠?
+	\iffalse
+
 	But how do we know that \emph{all} platforms really avoid
 	triggering the \co{exists} clauses in
 	Listings~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
 	and~\ref{lst:memorder:S Address-Dependency Litmus Test}?
+	\fi
 \QuickQuizAnswer{
+	여기에 답변을 하기 위해선 먼저 플랫폼들을 세개의 큰 그룹으로 나눠 볼 필요가 있습니다:
+	(1)~Total-store-order (TSO) platform,
+	(2)~Weakly ordered platorm, 그리고
+	(3)~DEC Alpha 입니다.
+
+	TSO 플랫폼은 앞의 스토어들을 뒤의 로드에 대해서 재배치 할 수 있는 걸
+	제외하곤 모든 메모리 레퍼런스들의 순서를 지켜줍니다.
+	Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+	의 line~21 과~22 의 address dependency 는 로드 뒤에 로드가 따라오는
+	형태이므로, TSO 플랫폼은 이 address dependency 를 지켜줍니다.
+	이 플랫폼들은 또한
+	Listing~\ref{lst:memorder:S Address-Dependency Litmus Test} 의
+	line~20 과~21 에서의 address dependency 도 지켜주는데, 이것은 로드 뒤에
+	스토어가 따라오는 형태이기 때문입니다.
+	Address dependecy 는 로드로 시작되어야만 하기 때문에, TSO 플랫폼들은
+	암묵적으로, 하지만 완벽하게 address dependency 를 지켜줍니다.
+	\iffalse
+
 	Answering this requires identifying three major groups of platforms:
 	(1)~Total-store-order (TSO) platforms,
 	(2)~Weakly ordered platorms, and
@@ -2154,6 +2237,27 @@ dependent-load case.
 	because this is a load followed by a store.
 	Because address dependencies must start with a load, TSO platforms
 	implicitly but completely respect them.
+	\fi
+
+	Weakly ordered platform 들은 관계되지 않은 액세스들의 순서는 지켜주지
+	않을 수 있습니다.
+	하지만,
+	Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+	과~\ref{lst:memorder:S Address-Dependency Litmus Test} 의 address
+	dependency 는 관계가 없지 않습니다: address dependency 가 존재합니다.
+	이 하드웨어는 종속성을 추적하고 필요한 순서 규칙을 지켜줍니다.
+
+	Weakly ordered platform 에서 이 규칙에 대한 하나의 (유명한) 예외가
+	있는데, 그 예외는 DEC Alpha 의 load-to-load address dependency 입니다.
+	그리고 이게 DEC Alpha 가
+	Listings~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+	의 line~21 에 \co{lockless_dereference()} 를 통한 명시적 메모리 배리어
+	제공을 필요로 하는 이유입니다.
+	하지만, DEC Alpha 도 load-to-store address dependency 는 추적을 하며,
+	이게
+	Listings~\ref{lst:memorder:S Address-Dependency Litmus Test}
+	의 line~20 에 \co{lockless_dereference()} 가 없는 이유입니다.
+	\iffalse
 
 	Weakly ordered platforms don't necessarily maintain ordering of
 	unrelated accesses.
@@ -2174,17 +2278,32 @@ dependent-load case.
 	which is why line~20 of
 	Listings~\ref{lst:memorder:S Address-Dependency Litmus Test}
 	does not have a \co{lockless_dereference()}.
+	\fi
+
+	정리해 보면, 현존하는 플랫폼들은 TSO 플랫폼들 (x86, mainframe,
+	SPARC,~...) 과 같이 암묵적으로 address dependency 를 지켜주거나,
+	address dependency 를 추적하는 하드웨어를 가지고 있거나 (ARM, PowerPC,
+	MIPS,~...), 또는 \co{lockless_dereference()} 를 통해 제공되는 메모리
+	배리어를 가지고 있습니다 (DEC Alpha).
+	\iffalse
 
 	To sum up, current platforms either respect address dependencies
 	implicitly, as is the case for TSO platforms (x86, mainframe,
 	SPARC,~...), have hardware tracking for address dependencies
 	(ARM, PowerPC, MIPS,~...), or have the required memory barriers
 	supplied by \co{lockless_dereference()} (DEC Alpha).
+	\fi
 } \QuickQuizEnd
+
+하지만, address dependency 는
+Section~\ref{sec:memorder:Address- and Data-Dependency Restrictions} 에서
+이야기하듯 컴파일러 최적화에 의해 쉽게 깨질 수 있음을 알아두시기 바랍니다.
+\iffalse
 
 However, it is important to note that address dependencies can
 be fragile and easily broken by compiler optimizations, as discussed in
 Section~\ref{sec:memorder:Address- and Data-Dependency Restrictions}.
+\fi
 
 \subsection{Data Dependencies}
 \label{sec:memorder:Data Reordering}
