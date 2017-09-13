@@ -2308,12 +2308,20 @@ Section~\ref{sec:memorder:Address- and Data-Dependency Restrictions}.
 \subsection{Data Dependencies}
 \label{sec:memorder:Data Reordering}
 
+\emph{Data depedency} 는 한 로드 인스트럭션에 의해 리턴된 값이 뒤의 스토어
+인스트럭션에 의해 저장되는 데이터를 계산하는데 사용될 때 발생합니다.
+앞의 ``data'' 에 대해서 유념하시기 바랍니다: 로드에 의해 리턴된 값이 뒤의
+스토어 인스트럭션에 의해 사용될 주소의 계산에 사용된다면, 그건 address
+dependency 입니다.
+\iffalse
+
 A \emph{data dependency} occurs when the value returned by a load
 instruction is used to compute the data stored by a later store
 instruction.
 Note well the ``data'' above: If the value returned by a load
 was instead used to compute the address used by a later store
 instruction, that would instead be an address dependency.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -2350,6 +2358,17 @@ exists (1:r2=2 /\ 0:r2=2)
 
 Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
 (\path{C-LB+o-r+o-data-o.litmus})
+은 \co{P1()} 의 line~18 과~19 사이의 순서 규칙이 acquire load 가 아니라 data
+dependency 로 강제된다는 점을 제외하고는
+Listing~\ref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
+와 비슷합니다:
+Line~18 에서 로드된 값이 line~19 에서 저장하는 값입니다.
+이 data dependency 에 의해 제공되는 순서는 \co{exists} 절이 발동되는걸 막기에
+충분합니다.
+\iffalse
+
+Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+(\path{C-LB+o-r+o-data-o.litmus})
 is similar to
 Listing~\ref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test},
 except that \co{P1()}'s ordering between lines~18 and~19 is
@@ -2357,16 +2376,43 @@ enforced not by an acquire load, but instead by a data dependency:
 The value loaded by line~18 is what line~19 stores.
 The ordering provided by this data dependency is sufficient to prevent
 the \co{exists} clause from triggering.
+\fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+	의 line~18 은 왜 \co{lockless_dereference()} 가 필요없나요?
+	\iffalse
+
 	Why doesn't line~18 of
 	Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
 	need a \co{lockless_dereference()}?
+	\fi
 \QuickQuizAnswer{
+	Data dependency 들은 항상 로드에서 스토어로의 종속성이며, 따라서 DEC
+	Alpha 까지 포함해서 모든 플랫폼이 이를 지켜주고, 같은 이유로 로드에서
+	스토어로 이어지는 address dependency 들에 대해서도 마찬가지로
+	지켜줍니다.
+	\iffalse
+
 	Data dependencies are always load-to-store dependencies, and
 	so all platforms respect them, even DEC Alpha, and for the
 	same reasons that they respect load-to-store address dependencies.
+	\fi
 } \QuickQuizEnd
+
+Address dependency 와 마찬가지로, data dependency 도 깨지기 쉽고
+Section~\ref{sec:memorder:Address- and Data-Dependency Restrictions} 에서
+이야기 되듯이 컴파일러 최적화에 의해 쉽게 깨질 수 있습니다.
+사실, data dependency 는 address dependency 보다도 취약할 수 있습니다.
+그 이유는 address dependency 는 일반적으로 포인터 값에 과년되기 때문입니다.
+반면에,
+Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+에 보였듯이, 컴파일러가 존재치 않는 것으로 최적화 시켜버릴 자유를 훨씬 많이
+가지고 있는 완전한 값으로 data dependency 를 가져가고 싶게 됩니다.
+한가지 예만 들어보자면, 만약 로드된 정수가 상수 0으로 곱해진다면, 컴파일러는 그
+결과가 0일 것을 알고, 따라서 로드된 값을 상수 0으로 바꿔서, 이 종속성을 깨버릴
+수 있습니다.
+\iffalse
 
 Just as with address dependencies, data dependencies are
 fragile and can be easily broken by compiler optimizations, as discussed in
@@ -2383,8 +2429,18 @@ For but one example, if the integer loaded was multiplied by the constant
 zero, the compiler would know that the result was zero, and could therefore
 substitute the constant zero for the value loaded, thus breaking
 the dependency.
+\fi
 
 \QuickQuiz{}
+	잠깐만요!!!
+	Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+	의 line~18 은 로드는 volatile 로 마킹하는 \co{READ_ONCE()} 를
+	사용하는데, 이 말은 컴파일러가 설령 그 값이 나중에 0으로 곱해진다 해도
+	로드 인스트럭션을 만들어 내야 함을 의미합니다.
+	그런데도 컴파일러가 data dependency 를 깨지 못하도록 그렇게까지 고생을
+	해야 하나요?
+	\iffalse
+
 	But wait!!!
 	Line~18 of
 	Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
@@ -2393,7 +2449,19 @@ the dependency.
 	instruction even if the value is later multiplied by zero.
 	So do you really need to work so hard to keep the compiler from
 	breaking your data dependencies?
+	\fi
 \QuickQuizAnswer{
+	맞습니다, 컴파일러는 volatile 로드에 대해선 반드시 로드 인스트럭션을
+	만들어 내야 하는게 분명합니다.
+	하지만 그렇게 로드된 값을 0으로 곱한다면, 컴파일러는 그 곱셈의 결과를
+	상수 0으로 바꿀 수 있으며, 이는 많은 플랫폼에서 data dependency 를
+	깨버립니다.
+
+	더 나쁜건, 이 종속된 스토어가 \co{WRITE_ONCE()} 를 사용하지 않는다면,
+	컴파일러는 이 스토어를 로드 위로 들어올려서, TSO 플랫폼에서조차도
+	순서규칙을 제공하지 못하게 만들 수 있습니다.
+	\iffalse
+
 	Yes, the compiler absolutely must emit a load instruction for
 	a volatile load.
 	But if you multiply the value loaded by zero, the compiler is
@@ -2404,10 +2472,16 @@ the dependency.
 	Worse yet, if the dependent store does not use \co{WRITE_ONCE()},
 	the compiler could hoist it above the load, which would cause
 	even TSO platforms to fail to provide ordering.
+	\fi
 } \QuickQuizEnd
+
+요약하자면, 여러분은 data dependency 에 의존해도 되지만, 컴파일러가 그걸
+깨버리는걸 방지하기 위해 조심해야만 합니다.
+\iffalse
 
 In short, you can rely on data dependencies, but only if you take care
 to prevent your compiler from breaking them.
+\fi
 
 \subsection{Control Dependencies}
 \label{sec:memorder:Control Dependencies}
