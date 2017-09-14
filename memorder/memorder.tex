@@ -2486,11 +2486,19 @@ to prevent your compiler from breaking them.
 \subsection{Control Dependencies}
 \label{sec:memorder:Control Dependencies}
 
+\emph{Control dependency} 는 로드 인스트럭션으로 리턴받은 값이 뒤의 스토어
+인스트럭션이 수행되어야 할지 말아야할지를 결정하는 테스트에 사용될 때
+발생합니다.
+``뒤의 스토어 인스트럭션'' 에 주의하시기 바랍니다: 많은 플랫폼들이 load-to-load
+control dependency 는 무시합니다.
+\iffalse
+
 A \emph{control dependency} occurs when the value returned by a load
 instruction is tested to determine whether or not a later store instruction
 is executed.
 Note well the ``later store instruction'': Many platforms do not respect
 load-to-load control dependencies.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -2528,6 +2536,19 @@ exists (1:r2=2 /\ 0:r2=2)
 
 Listing~\ref{lst:memorder:Load-Buffering Control-Dependency Litmus Test}
 (\path{C-LB+o-r+o-ctrl-o.litmus})
+은 또다른 load-buffering 예를 보이는데, 이번에는 line~18 의 로드와 line~20 의
+스토어 사이의 순서를 맞추는데 control dependency (line~19) 를 사용하고
+있습니다.
+이렇게 지켜진 순서는 \co{exists} 절이 발동하는걸 막기에 충분합니다.
+
+하지만, control dependency 는 data dependency 보다도 최적화 과정에서 제거되기가 더 쉽고,
+Section~\ref{sec:memorder:Control-Dependency Restrictions}
+은 여러분의 컴파일러가 control dependency 를 깨는걸 막기 위해 따라야만 하는
+규칙들을 일부 설명합니다.
+\iffalse
+
+Listing~\ref{lst:memorder:Load-Buffering Control-Dependency Litmus Test}
+(\path{C-LB+o-r+o-ctrl-o.litmus})
 shows another load-buffering example, this time using a control
 dependency (line~19) to order the load on line~18 and the store on
 line~20.
@@ -2538,6 +2559,7 @@ out of existence than are data dependencies, and
 Section~\ref{sec:memorder:Control-Dependency Restrictions}
 describes some of the rules that must be followed in order to prevent
 your compiler from breaking your control dependencies.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -2573,6 +2595,20 @@ exists (1:r2=2 /\ 1:r3=0)
 \label{lst:memorder:Message-Passing Control-Dependency Litmus Test (No Ordering)}
 \end{listing}
 
+Control dependency 는 로드에서 스토어로의 순서에 대해서만 지켜진다는걸 다시
+반복할 필요가 있습니다.
+따라서,
+Listing~\ref{lst:memorder:Message-Passing Control-Dependency Litmus Test (No Ordering)}
+(\path{C-MP+o-r+o-ctrl-o.litmus})
+의 line~17-19 에 보인 load-to-load control dependency 는 순서를 제공하지
+\emph{않으며}, 따라서 \co{exists} 절이 발동되는걸 막지 \emph{않습니다}.
+
+요약하자면, control dependency 는 유용할 수 있지만, 상당한 관리가 필요한
+항목입니다.
+따라서 여러분은 성능에 대한 고려가 다른 해법은 허용치 않을 때에만 이걸
+사용하셔야 합니다.
+\iffalse
+
 It is worth reiterating that control dependencies provide ordering only
 from loads to stores.
 Therefore, the load-to-load control dependency shown on lines~17-19 of
@@ -2585,12 +2621,22 @@ In summary, control dependencies can be useful, but they are
 high-maintenance items.
 You should therefore use them only when performance considerations
 permit no other solution.
+\fi
 
 \QuickQuiz{}
+	프로그래밍 언어 표준에 지켜진다고 되어있으면, control dependency 는 더
+	믿을만 하지 않을까요???
+	\iffalse
+
 	Wouldn't control dependencies be more robust if they were
 	mandated by language standards???
+	\fi
 \QuickQuizAnswer{
+	시간이 흐르면, 어쩌면 그렇게 표준이 만들어질 수 있을 겁니다.
+	\iffalse
+
 	In the fullness of time, perhaps they will be so mandated.
+	\fi
 } \QuickQuizEnd
 
 \subsection{Cache Coherence}
