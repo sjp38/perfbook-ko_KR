@@ -2642,6 +2642,21 @@ permit no other solution.
 \subsection{Cache Coherence}
 \label{sec:memorder:Cache Coherence}
 
+Cache-coherent 플랫폼에서는, 모든 CPU 들이 특정 변수로의 로드와 스토어들의
+순서에 대해 동의를 합니다.
+다행히도, \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 가 사용된 경우라면
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+에 보인 컨닝 페이퍼의 ``SV'' 열이 나타내듯이 거의 모든 플랫폼들이
+cache-coherent 합니다.
+불행히도, 이 특성은 너무 유명해서 여러 이름을 갖는데, ``single-variable
+SC'',\footnote{
+	SC 는 sequentially consistent 의 약자입니다.}
+``single-copy atomic''~\cite{Stone:1995:SP:623262.623912}, 그리고 그냥
+``coherence''~\cite{JadeAlglave2011ppcmem} 라고도 불렸습니다.
+이 개념에 대해 또다른 용어를 만들어 붙여서 혼란을 가중시키기보다는, 이 책에서는
+``cache coherence'' 와 ``coherence'' 라는 용어를 사용하겠습니다.
+\iffalse
+
 On cache-coherent platforms, all CPUs agree on the order of loads and
 stores to a given variable.
 Fortunately, when \co{READ_ONCE()} and \co{WRITE_ONCE()} are used,
@@ -2657,6 +2672,7 @@ having seen use.
 Rather than further compound the confusion by inventing yet another term
 for this concept, this book uses ``cache coherence'' and ``coherence''
 interchangeably.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -2706,6 +2722,19 @@ exists(2:r1=1 /\ 2:r2=2 /\ 3:r3=2 /\ 3:r4=1)
 
 Listing~\ref{lst:memorder:Cache-Coherent IRIW Litmus Test}
 (\path{C-CCIRIW+o+o+o-o+o-o.litmus})
+은 cache coherence 를 테스트 하는 리트머스 테스트를 보이는데, 여기서 ``IRIW''
+는 ``independent reads of independent writes'' 의 약자입니다.
+이 리트머스 테스트는 하나의 변수만 사용하므로, \co{P2()} 와 \co{P3()} 는
+\co{P0()} 와 \co{P1()} 의 스토어 순서에 동의해야만 합니다.
+달리 말해, \co{P2()} 가 \co{P0()} 의 스토어가 먼저 행해졌다고 믿는 결과가
+나온다면, \co{P3()} \co{P1()} 의 스토어가 먼저 행해졌다고 믿는 결과는 없어야
+합니다.
+그리고 그런 없어야 할 상황이 일어난다면 line~35 의 \co{exists} 절은 발동할
+겁니다.
+\iffalse
+
+Listing~\ref{lst:memorder:Cache-Coherent IRIW Litmus Test}
+(\path{C-CCIRIW+o+o+o-o+o-o.litmus})
 shows a litmus test that tests for cache coherence,
 where ``IRIW'' stands
 for ``independent reads of independent writes''.
@@ -2717,6 +2746,23 @@ came first, then \co{P3()} had better not believe that
 \co{P1()}'s store came first.
 And in fact the \co{exists} clause on line~35 will trigger if this
 situation arises.
+\fi
+
+하나의 메모리 영역에 서로 다른 크기의 겹치는 로드와 스토어들 (C-언어의
+\co{union} 키워드를 통해 행해질 수 있을 겁니다) 은 비슷한 순서 보장을 제공할
+거라고 믿고 싶을 수 있습니다.
+그러나, Flur 등은 이런 보장이 실제 하드웨어에서는 위배될 수 있음을 보이는
+놀랍도록 간단한 리트머스 테스트를
+찾아냈습니다~\cite{Flur:2017:MCA:3093333.3009839}.
+따라서 최소한 이식성이 고려되는 경우라면, 코드가 특정 변수에 대해서 겹치지 않는
+같은 크기의 정렬된 액세스만을 하도록 제한해야 합니다.\footnote{
+	Atomic RMW 오퍼레이션 (예를 들면, \co{xchg()}) 을 모든 스토어에
+	사용하는게 순차적으로 일관성 있는 순서를 제공할 거라고 믿을 만 하지만,
+	이는 아직 증명된 바가 없습니다.}
+
+더 많은 변수와 쓰레드를 사용하는 것은 순서 재배치 범위와 다른 반직관적 동작
+가능 영역을 넓히는데, 이에 대해 다음 섹션에서 설명합니다.
+\iffalse
 
 It is tempting to speculate that different-sized overlapping loads 
 and stores to a single region of memory (as might be set up using
@@ -2735,6 +2781,7 @@ is a consideration.\footnote{
 
 Adding more variables and threads increases the scope for reordering
 and other counterintuitive behavior, as discussed in the next section.
+\fi
 
 \subsection{Multicopy Atomicity}
 \label{sec:memorder:Multicopy Atomicity}
