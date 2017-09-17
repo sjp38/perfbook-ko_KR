@@ -2793,6 +2793,30 @@ and other counterintuitive behavior, as discussed in the next section.
 \label{fig:memorder:Global System Bus And Multi-Copy Atomicity}
 \end{figure}
 
+\emph{Multicopy atomic}~\cite{Stone:1995:SP:623262.623912} 플랫폼에서 돌아가는
+쓰레드들은 스토어들의 순서에 대해서는 심지어 서로 다른 변수들에 대한 것조차도
+동의를 할 것이 보장됩니다.
+그런 시스템에 대한 유용한 상상의 모델은
+Figure~\ref{fig:memorder:Global System Bus And Multi-Copy Atomicity}
+에 보인 싱글 버스 아키텍쳐 같은 시스템입니다.
+각각의 스토어가 버스로의 메세지를 낸다면, 그리고 이 버스가 한번에 하나의
+스토어만 처리할 수 있다면, 모든 CPU 들은 모든 스토어에 대해 각각 관측한 순서가
+동일할 겁니다.
+불행히도, 그림에 보인 것처럼 스토어 버퍼나 캐시조차 없이 컴퓨터 시스템을
+만드는건 빙하같은 계산속도가 나오게 할겁니다.
+따라서 multicopy atomicity 를 제공하는데 흥미를 갖는 CPU 제조사들은 그대신 약간
+더 완화된 \emph{other-multicopy atomicity}~\cite[Section B2.3]{ARMv8A:2017} 를
+제공하고자 하게 되는데, 여기선 특정 스토어를 수행하는 CPU 는 모든 스토어들의
+순서에 대한 CPU 들의 동의로부터 배제될 수 있게 해줍니다.
+이는 CPU 들 중 일부만 스토어를 수행한다면, 다른 CPU 들은 스토어들의 순서에
+동의함을 의미하는데, 따라서 ``other-multicopy atomicity'' 의 ``other'' 가
+존재하는 겁니다.
+Multicopy-atomic 플랫폼들과 달리, other-multicopy-atomic 플랫폼에서는, 스토어를
+수행하는 CPU는 자신의 스토어를 더 빨리 관측할 수 있어서, 나중의 로드가 새로
+스토어된 값을 스토어 버퍼로부터 곧바로 얻어올 수 있음을 의미합니다.
+이는 끔찍한 플랫폼은 피할 수 있게 해줍니다.
+\iffalse
+
 Threads running on a \emph{multicopy atomic}~\cite{Stone:1995:SP:623262.623912}
 platform are guaranteed
 to agree on the order of stores, even to different variables.
@@ -2817,11 +2841,17 @@ the CPU doing the store is permitted to observe its
 store early, which allows its later loads to obtain the newly stored
 value directly from the store buffer.
 This in turn avoids abysmal performance.
+\fi
 
 \QuickQuiz{}
+	Multicopy atomic 와 다른 multicopy atomic 사이의 다른 동작에 대한
+	특정한 예를 들어볼 수 있겠습니까?
+	\iffalse
+
 	Can you give a specific example showing different behavior for
 	multicopy atomic on the one hand and other-multicopy atomic
 	on the other?
+	\fi
 \QuickQuizAnswer{
 \begin{listing}[tbp]
 { \scriptsize
@@ -2861,6 +2891,26 @@ exists (1:r1=1 /\ 1:r2=0)
 
 	Listing~\ref{lst:memorder:Litmus Test Distinguishing Multicopy Atomic From Other Multicopy Atomic}
 	(\path{C-MP-OMCA+o-o-o+o-rmb-o.litmus})
+	이 그런 테스트를 보입니다.
+
+	Multicopy-atomic 플랫폼에서, \co{P0()} 의 line~10 에서의 \co{x} 로의
+	스토어는\co{P0()} 와 \co{P1()} 에게 동시에 보여야만 합니다.
+	이 스토어는 \co{P0()} 에게 line~11 에서야 보이게 되고, line~12 에서의
+	\co{P0()} 의 \co{y} 로의 스토어 전에, \co{P0()} 의 \co{x} 로의 스토어는
+	\co{P1()} 을 포함해서 \co{y} 로의 스토어 전에 보여야만 합니다.
+	따라서, line~20 에서 \co{P1()} 의 \co{y} 로부터의 로드가 값 1을
+	리턴하면, line~21 에서의 \co{smp_rmb()} 가 이 두 로드의 수행 순서를
+	강제하므로, line~22 에서의 \co{x} 역시 그래야만 합니다.
+	따라서, line~25 의 \co{exists} 절은 multicopy-atomic 플랫폼에선느
+	발동되지 않습니다.
+
+	반면, other-multicopy-atomic 플랫폼에서는 \co{P0()} 가 자신의 스토어를
+	일찍 볼 수 있으므로, \co{P1()} 이 이 두개의 스토어를 보는 순서에
+	대해서는 제약이 없어서 \co{exists} 절이 발동될 수 있을 겁니다.
+	\iffalse
+
+	Listing~\ref{lst:memorder:Litmus Test Distinguishing Multicopy Atomic From Other Multicopy Atomic}
+	(\path{C-MP-OMCA+o-o-o+o-rmb-o.litmus})
 	shows such a test.
 
 	On a multicopy-atomic platform, \co{P0()}'s store to \co{x} on
@@ -2881,6 +2931,7 @@ exists (1:r1=1 /\ 1:r2=0)
 	could see its own store early, so that there would be no constraint
 	on the order of visibility of the two stores from to \co{P1()},
 	which in turn allows the \co{exists} clause to trigger.
+	\fi
 } \QuickQuizEnd
 
 Perhaps there will come a day when all platforms provide some flavor
