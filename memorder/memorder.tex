@@ -189,7 +189,7 @@ imply decreased probability!
 % 167   :>0:r2=2; 1:r2=2;
 
 다음 섹션들은 이 직관이 정확히 어디서 깨졌는지 보이며, 이어서 여러분이 이런
-문제들을 피할 수 있게 도와주는 메모리 배리어의 정신적 모델을 제공합니다.
+문제들을 피할 수 있게 도와주는 메모리 순서 규칙의 정신적 모델을 제공합니다.
 \iffalse
 
 The following sections show exactly where this intuition breaks down,
@@ -220,13 +220,12 @@ later sections.
 \subsection{Why Hardware Misordering?}
 \label{sec:memorder:Why Hardware Misordering?}
 
-하지만 대체 왜 메모리 배리어가 필요한거죠?
+하지만 대체 왜 메모리 가 순서를 이상하게 만드는 경우가 발생하는거죠?
 CPU 는 스스로 순서를 기록하고 있을 수 없는 건가요?
 일단 그게 바로 우리가 어떤 것들을 기록하고 있기 위해 컴퓨터를 갖는 이유이지
 않던가요?
 \iffalse
 
-% TODO: Apply upstream change
 But why does memory misordering happen in the first place?
 Can't CPUs keep track of ordering on their own?
 Isn't that why we have computers in the first place, to keep track of things?
@@ -587,8 +586,7 @@ exists (1:r2=0 /\ 0:r2=0)
 \end{listing}
 
 하지만, 여러분 스스로 그런 동기화 도구들을 구현해야 한다면, 또는 그런 메모리
-순서 규칙과 메모리 배리어가 어떻게 동작하는지에 그저 흥미가 있는 거라면, 계속
-읽어주세요!
+순서 규칙이 어떻게 동작하는지에 그저 흥미가 있는 거라면, 계속 읽어주세요!
 이 여정에서의 첫번째 정류장은
 Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
 (\path{C-SB+o-mb-o+o-mb-o.litmus}) 으로, \co{smp_mb()} 리눅스 커널 메모리
@@ -768,9 +766,9 @@ instances straighten things out in the end.
 
 \co{smp_mb()} 가 상당히 강력한 순서 보장을 갖긴 하지만, 그 강력함은 높은
 비용으로부터 나옵니다.
-굉장히 많은 상황들이 저렴한 메모리 배리어 인스트럭션을 사용하는, 또는, 어떤
-경우에 있어서는, 아예 메모리 배리어 인스트럭션을 사용하지 않는 훨씬 약한 순서
-보장만으로도 처리될 수 있습니다.
+굉장히 많은 상황들이 저렴한 메모리 순서 보장 인스트럭션을 사용하는, 또는, 어떤
+경우에 있어서는, 아예 메모리 순서 보장 인스트럭션을 사용하지 않는 훨씬 약한
+순서 보장만으로도 처리될 수 있습니다.
 Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 은 리눅스 커널의 순서 보장 도구들과 그 보장사항들을 보이는 커닝 페이퍼를
 보입니다.
@@ -783,7 +781,6 @@ Operation'' 으로 라벨링된 행들은 각 열의 도구에 의해 순서가 
 빈 셀들은 어떤 순서 보장도 제공되지 않음을 의미합니다.
 \iffalse
 
-% TODO: Apply upstream change
 Although full barriers such as \co{smp_mb()} have extremely strong
 ordering guarantees, their strength comes at a high price.
 A great many situations can be handled with much weaker ordering guarantees
@@ -1534,8 +1531,8 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	가능한 한가지 이유는 이들이 커다란 공유된 캐시 외에 작은 개별 캐시를
 	갖고 있을 수 있다는 것입니다.
 	여기서의 짧은 10-나노세컨드 동안의 비동의된 시간과 해당 코드에 메모리
-	배리어가 아예 없었다는 것을 놓고 보면, 또다른 가능할 법한 이유는
-	인스트럭션 재배치입니다.
+	순서 강제 오퍼레이션이 아예 없었다는 것을 놓고 보면, 또다른 가능할 법한
+	이유는 인스트럭션 재배치입니다.
 	\iffalse
 
 	CPUs~2 and~3 are a pair of hardware threads on the same
@@ -1549,7 +1546,6 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	of private cache in addition to a larger shared cache.
 	Another possible reason is instruction reordering, given the
 	short 10-nanosecond duration of the disagreement and the
-	% TODO: Apply upstream change
 	total lack of memory-ordering operations in the code fragment.
 	\fi
 } \QuickQuizEnd
@@ -1604,7 +1600,8 @@ Again, CPU~0 coordinates the test, so does not record any values.
 Figure~\ref{fig:memorder:Possible Global Orders With More Simultaneous Values}
 에 보인 방향성 있는 그래프의 순서와 일관된 순서를 보았음을 알아두시기 바랍니다.
 더도 아니고 덜도 아니고, 두 그림은 메모리 접근 순서에 신경 쓰는 코드에서의
-메모리 배리어의 올바른 사용의 중요성을 강조합니다.
+메모리 배리어 같은 메모리 순서 보장 오퍼레이션들의 올바른 사용의 중요성을
+강조합니다.
 \iffalse
 
 All CPUs eventually agree on the final value of~9, but not before
@@ -1615,7 +1612,6 @@ Note also that all CPUs see sequences whose orderings are consistent with
 the directed graph shown in
 Figure~\ref{fig:memorder:Possible Global Orders With More Simultaneous Values}.
 Nevertheless, both figures underscore the importance of
-% TODO: Apply upstream change
 proper use of memory-ordering operations, such as memory barriers,
 for code that cares about memory ordering.
 \fi
@@ -1631,7 +1627,7 @@ for code that cares about memory ordering.
 시스템에 존재하는 스토어 버퍼 하나당 하나씩입니다!
 따라서 우리는 변수들의 값들과 시간의 흐름에 대한 편안한 직관에게 작별을
 고해야만 하는 체제에 들어섰습니다.
-이는 메모리 배리어들이 필요한 체제입니다.
+이는 메모리 순서 보장 오퍼레이션들이 필요한 체제입니다.
 
 이와 함께,
 Chapter~\ref{chp:Hardware and its Habits}
