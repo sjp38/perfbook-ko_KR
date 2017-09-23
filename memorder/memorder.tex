@@ -3536,6 +3536,17 @@ exists(1:r1=1 /\ 1:r2=0 /\ 2:r3=0)
 
 Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
 (\path{C-W+RWC+o-r+a-o+o-mb-o.litmus})
+은 cumulativity 와 store-release 가 전체 메모리 배리어의 도움에도 불구하고 갖는
+한계를 보입니다.
+문제는, line~12 에서의 \co{smp_store_release()} 가 cumulativity 를 가짐에도
+불구하고, 그리고 이 cumulativity 가 line~30 에서의 \co{P2()} 의 로드를
+순서잡음에도 불구하고, \co{smp_store_release()} 의 순서규칙은 \co{P1()} 의 로드
+(line~21) 와 \co{P2()} 의 스토어 (line~28) 에 전파될 수 없다는 것입니다.
+이는 line~33 에서의 \co{exitst} 절이 발동될 수 있음을 의미합니다.
+\iffalse
+
+Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+(\path{C-W+RWC+o-r+a-o+o-mb-o.litmus})
 shows the limitations of cumulativity and of store-release,
 even with a full memory barrier helping out.
 The problem is that although the \co{smp_store_release()} on
@@ -3544,10 +3555,16 @@ order \co{P2()}'s load on line~30, the \co{smp_store_release()}'s
 ordering cannot propagate through the combination of \co{P1()}'s
 load (line~21) and \co{P2()}'s store (line~28).
 This means that the \co{exists} clause on line~33 really can trigger.
+\fi
 
 \QuickQuiz{}
+	하지만 이 리트머스 테스트에 최소 세개의 쓰레드가 존재하지 않는다면
+	전파에 대해서는 걱정할 필요가 없을 거예요, 그렇죠?
+	\iffalse
+
 	But it is not necessary to worry about propagation unless
 	there are at least three threads in the litmus test, right?
+	\fi
 \QuickQuizAnswer{
 \begin{listing}[tbp]
 { \scriptsize
@@ -3581,6 +3598,22 @@ exists (1:r2=0 /\ x1=2)
 \caption{R Litmus Test With Write Memory Barrier (No Ordering)}
 \label{lst:memorder:R Litmus Test With Write Memory Barrier (No Ordering)}
 \end{listing}
+	그렇지 않습니다.
+
+	Listing~\ref{lst:memorder:R Litmus Test With Write Memory Barrier (No Ordering)}
+	(\path{C-R+o-wmb-o+o-mb-o.litmus})
+	은 propagation 을 필요로 하는 두개 쓰레드의 리트머스 테스트를 보이는데,
+	여기선 두 쓰레드 사이에 store-to-store 와 load-to-store 연결만이
+	존재하기 때문입니다.
+	\co{P0()} 가 \co{smp_wmb()} 를 통해 순서를 제대로 잡았고 \co{P1()} 이
+	\co{smp_mb()} 를 통해 완전히 순서를 잡았지만, 이 연결들의 근본적인 반
+	임시적 성격은 line~22 의 \co{exists} 절이 정말로 발동될 수 있음을
+	의미합니다.
+	이 발동을 막으려면, line~8 의 \co{smp_wmb()} 는 \co{smp_mb()} 가
+	되어서, 각각의 임시적이지 않은 링크마다 한번씩, 전파가 두번 발생하게
+	만들어야 합니다.
+	\iffalse
+
 	Wrong.
 
 	Listing~\ref{lst:memorder:R Litmus Test With Write Memory Barrier (No Ordering)}
@@ -3595,6 +3628,7 @@ exists (1:r2=0 /\ x1=2)
 	To prevent this triggering, the \co{smp_wmb()} on line~8
 	must become an \co{smp_mb()}, bringing propagation into play
 	twice, once for each non-temporal link.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[htbp]
@@ -3603,6 +3637,17 @@ exists (1:r2=0 /\ x1=2)
 \caption{Load-to-Store is Counter-Temporal}
 \label{fig:memorder:Load-to-Store is Counter-Temporal}
 \end{figure}
+
+이 상황은 완전히 반직관적으로 보일 수도 있겠습니다만, 빛의 속도는 제한되어 있고
+컴퓨터는 크기가 존재함을 기억하시기 바랍니다.
+따라서 \co{P2()} 의 \co{z} 로의 스토어가 \co{P1()} 에게 전달되기까지는
+시간을필요로 하고, 이는 결국 \co{P1()} 의 \co{z} 로부터의 읽기가 시간상으로
+훨씬 뒤에 일어날 수 있지만, 예전 값인 0을 읽을 수 있습니다.
+이 상황은
+Figure~\ref{fig:memorder:Load-to-Store is Counter-Temporal} 에 그려져 있습니다:
+어떤 로드가 기존 값을 본다는 것은 이 로드가 새로운 값에 대한 스토어보다 먼저
+수행되었음을 의미하지는 \emph{않습니다}.
+\iffalse
 
 This situation might seem completely counter-intuitive, but keep
 in mind that the speed of light is finite and computers are of
@@ -3616,6 +3661,29 @@ Figure~\ref{fig:memorder:Load-to-Store is Counter-Temporal}:
 Just because a load sees the old value does \emph{not} mean that
 this load executed at an earlier time than did the store of the
 new value.
+\fi
+
+Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+또한, 두개가 아니라 세개의 프로세스가 있음으로 인해 메모리 배리어 짝 맞추기의
+한계를 보이고 있음을 알아두시기 바랍니다.
+이런 보다 복잡한 리트머스 테스트들은 \emph{사이클} 을 가지고 있다고 말할 수도
+있는데, 메모리 배리어 짝 맞추기는 두개 쓰레드 사이클이 있는 특별한 경우입니다.
+Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+의 사이클은 \co{P0()} (line~11 과~12), \co{P1()} (line~20 과~21), \co{P2()}
+(line~28, 29, 그리고~30), 그리고 다시 \co{P0()} (line~11) 로 이어집니다.
+여기서의 \co{exists} 절은 이 사이클을 설명합니다:
+\co{1:r1=1} 은 line~20 에서의 \co{smp_load_acquire()} 가 line~12 에서
+\co{smp_store_release()} 가 저장한 값을 리턴했음을 의미하고, \co{1:r2=0} 는
+line~28 에서의 \co{WRITE_ONCE()} 가 line~21 에서의 \co{READ_ONCE()} 에 의해
+리턴되는 값에 영향을 끼치기에는 너무 늦게 도달했음을 의미하며, 마지막으로
+\co{2:r3=0} 는 line~11 에서의 \co{WRITE_ONCE()} 가 line~30 에서의
+\co{READ_ONCE()} 에 의해 리턴되는 값에 영향을 끼치기에는 너무 늦게 도착했음을
+의미합니다.
+이 경우, \co{exists} 절이 발동될 수 있다는 사실은 이 사이클이 \emph{허용된}
+것이라고 이야기 됩니다.
+반대로, \co{exists} 절이 발동될 수 없는 경우라면, 이 사이클이 \emph{금지된}
+것이라고 이야기 됩니다.
+\iffalse
 
 Note that
 Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
@@ -3639,6 +3707,7 @@ In this case, the fact that the \co{exists} clause can trigger means that
 the cycle is said to be \emph{allowed}.
 In contrast, in cases where the \co{exists} clause cannot trigger,
 the cycle is said to be \emph{prohibited}.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -3685,6 +3754,19 @@ exists(1:r1=1 /\ 1:r2=0 /\ 2:r3=0)
 \label{lst:memorder:W+WRC Litmus Test With More Barriers}
 \end{listing}
 
+하지만 우리가
+Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+의 line~33 에 있는 \co{exists} 절을 유지해야 한다면 어떡해야 할까요?
+한가지 해결책은 \co{P0()} 의 \co{smp_store_release()} 를
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+이 보이듯 cumulativity 만이 아니라 propagation 도 갖는
+\co{smp_mb()} 로 교체하는 것입니다.
+그렇게 한 결과가
+Listing~\ref{lst:memorder:W+WRC Litmus Test With More Barriers}
+(\path{C-W+RWC+o-mb-o+a-o+o-mb-o.litmus})
+에 보여져 있습니다.
+\iffalse
+
 But what if we need to keep the \co{exists} clause on line~33 of
 Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}?
 One solution is to replace \co{P0()}'s \co{smp_store_release()}
@@ -3694,13 +3776,38 @@ shows to have not only cumulativity, but also propagation.
 The result is shown in
 Listing~\ref{lst:memorder:W+WRC Litmus Test With More Barriers}
 (\path{C-W+RWC+o-mb-o+a-o+o-mb-o.litmus}).
+\fi
 
 \QuickQuiz{}
+	\co{smp_mb()} 가 propagation 속성을 갖는다면,
+	Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+	line~29 의 \co{smp_mb()} 는 왜 \co{exists} 절이 발동되는 걸 막지 못하는
+	거죠?
+	\iffalse
+
 	But given that \co{smp_mb()} has the propagation property,
 	why doesn't the \co{smp_mb()} on line~29 of
 	Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
 	prevent the \co{exists} clause from triggering?
+	\fi
 \QuickQuizAnswer{
+	대략적 경험상의 법칙으로는, \co{smp_mb()} 배리어의 propagation 속성은
+	프로세스들 사이에 하나의 store-to-load 연결에 순서를 지키기에만
+	충분합니다.
+	불행히도,
+	Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+	는 한개가 아니라 두개의 store-to-load 연결을 가지고 있는데, 첫번째는
+	line~21 에서의 \co{READ_ONCE()} 로부터 line~28 의 \co{WRITE_ONCE()}
+	로의 것이고 두번째는 line~30 의 \co{READ_ONCE()} 로부터 line~11 의
+	\co{WRITE_ONCE()} 로의 것입니다.
+	따라서, \co{exists} 절이 발동되는 것을 막기 위해선 한개가 아니라 두개의
+	\co{smp_mb()} 를 필요로 합니다.
+
+	이 경험상의 법칙에 대한 특수한 예외로, 하나의 release-acquire 묶음은
+	프로세스들 사이의 하나의 load-to-store 링크를 가질 수 있고, 여전히
+	사이클을 금지합니다.
+	\iffalse
+
 	As a rough rule of thumb, the \co{smp_mb()} barrier's
 	propagation property is sufficient to maintain ordering
 	through only one store-to-load link between
@@ -3719,6 +3826,7 @@ Listing~\ref{lst:memorder:W+WRC Litmus Test With More Barriers}
 	As a special exception to this rule of thumb, a release-acquire
 	chain can have one load-to-store link between processes
 	and still prohibit the cycle.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -3728,6 +3836,16 @@ Listing~\ref{lst:memorder:W+WRC Litmus Test With More Barriers}
 \label{fig:memorder:Store-to-Store is Counter-Temporal}
 \end{figure}
 
+완전함을 기하기 위해,
+Figure~\ref{fig:memorder:Store-to-Store is Counter-Temporal}
+는 같은 변수를 향핸 여러 스토어들 가운데 ``승리하는'' 스토어는 가장 마지막에
+행해진 스토어가 아닐 수 있음을 보이고 있습니다.
+Figure~\ref{fig:memorder:A Variable With More Simultaneous Values} 를 주의깊게
+이해한 사람에게 이는 그다지 놀라운 일이 아닐 겁니다.
+
+하지만 가끔 시간은 우리 편이기도 한데, 다음 섹션에서 이를 보이겠습니다.
+\iffalse
+
 For completeness,
 Figure~\ref{fig:memorder:Store-to-Store is Counter-Temporal}
 shows that the ``winning'' store among a group of stores to the
@@ -3736,6 +3854,7 @@ This should not come as a surprise to anyone who carefully examined
 Figure~\ref{fig:memorder:A Variable With More Simultaneous Values}.
 
 But sometimes time is on our side, as shown in the next section.
+\fi
 
 \subsubsection{Happens-Before}
 \label{sec:memorder:Happens-Before}
