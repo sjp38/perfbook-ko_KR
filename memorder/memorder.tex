@@ -4086,6 +4086,18 @@ exists (0:r2=2 /\ 1:r2=2 /\ 2:r2=2 /\ 3:r2=2)
 \label{lst:memorder:Long LB Release-Acquire Chain}
 \end{listing}
 
+최소한의 release-acquire 체인을
+Listing~\ref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
+(\path{C-LB+a-r+a-r+a-r+a-r.litmus})
+에 보였습니다만, 이 체인들은
+Listing~\ref{lst:memorder:Long LB Release-Acquire Chain}
+에 보인 것처럼 훨씬 더 길어질 수 있습니다.
+이 release-acquire 체인이 길어질수록, 시간의 흐름으로부터 얻어지는 이득이
+많아져서, 얼마나 많은 쓰레드가 연관되어 있는가와 관계 없이 관련된 \co{exists}
+절이 발동되지 않게 할 수 있습니다.
+더 큰 수의 쓰레드들의 늘어난 계산 요구는 물론 받아내야 합니다!
+\iffalse
+
 A minimal release-acquire chain was shown in
 Listing~\ref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
 (\path{C-LB+a-r+a-r+a-r+a-r.litmus}),
@@ -4096,6 +4108,7 @@ from the passage of time, so that no matter how many threads are
 involved, the corresponding \co{exists} clause cannot trigger.
 Give or take the increased computational demands of the larger number
 of threads, of course!
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -4145,6 +4158,27 @@ exists (1:r2=2 /\ 2:r2=2 /\ 3:r1=2 /\ 3:r2=0)
 \label{lst:memorder:Long ISA2 Release-Acquire Chain}
 \end{listing}
 
+release-acquire 체인이 본질적으로 store-to-load 이긴 하지만, 이것들은
+Figure~\ref{fig:memorder:Load-to-Store is Counter-Temporal}
+에 보인 것처럼 반 임시적이긴 하지만 하나의 load-to-store 단계를 처리할 수 있는
+것으로 밝혀졌습니다.
+예를 들어,
+Listing~\ref{lst:memorder:Long ISA2 Release-Acquire Chain}
+(\path{C-ISA2+o-r+a-r+a-r+a-o.litmus})
+은 세단계의 release-acquire 체인을 보입니다만, \co{P3()} 의 마지막 액세스는
+\co{P0()} 에 의해 \co{WRITE_ONCE()} 된 \co{x0} 로부터의 \co{READ_ONCE()} 여서,
+임시적이지 않은 load-to-store 링크를 두 프로세스 사이에 형성합니다.
+하지만, \co{P0()} 의 \co{smp_store_release()} (line~8) 는 cumulativity 를
+가지므로, \co{P3()} 의 \co{READ_ONCE()} 가 0 을 리턴한다면, 이 cumulativity 는
+이 \co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()} 앞으로
+순서지어지게 강제할 겁니다.
+또한, 이 release-acquire 체인 (line~8, 16, 17, 24, 25, 그리고~33) 은 \co{P3()}
+의 \co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()} 뒤로 순서지어지게
+강제합니다.
+\co{P3()} 의 \co{READ_ONCE()} 는 \co{P0()} 의 \co{smp_store_release()} 앞뒤에
+있을 수 없으므로, 다음 두가지 중 하나 또는 모두가 진실이어야만 합니다:
+\iffalse
+
 Although release-acquire chains are inherently store-to-load creatures,
 it turns out that they can tolerate one load-to-store step, despite
 such steps being counter-temporal, as shown in
@@ -4166,8 +4200,16 @@ forces \co{P3()}'s \co{READ_ONCE()} to be ordered after \co{P0()}'s
 Because \co{P3()}'s \co{READ_ONCE()} cannot be both before and after
 \co{P0()}'s \co{smp_store_release()}, either or both of two things must
 be true:
+\fi
 
 \begin{enumerate}
+\item	\co{P3()} 의 \co{READ_ONCE()} 가 \co{P0()} 의 \co{WRITE_ONCE()} 뒤에
+	와서, \co{READ_ONCE()} 가 값 2를 리턴해서, \co{exists} 절의 \co{3:r2=0}
+	는 거짓이 됨.
+\item	이 release-acquire 체인이 형성되지 않아서, \co{exists} 절의
+	\co{1:r2=2}, \co{2:r2=2}, \co{3:r1=2} 가운데 하나 이상이 거짓이 됩.
+\iffalse
+
 \item	\co{P3()}'s \co{READ_ONCE()} came after \co{P0()}'s
 	\co{WRITE_ONCE()}, so that the \co{READ_ONCE()} returned
 	the value two, so that the \co{exists} clause's \co{3:r2=0}
@@ -4175,7 +4217,16 @@ be true:
 \item	The release-acquire chain did not form, that is, one or more
 	of the \co{exists} clause's \co{1:r2=2}, \co{2:r2=2}, or \co{3:r1=2}
 	is false.
+\fi
 \end{enumerate}
+
+어느 쪽이던, 이 리트머스 테스트는 \co{P3()} 와 \co{P0()} 사이에 악명높은
+load-to-store 링크를 가지고 있음에도, \co{exists} 절은 발동되지 못합니다.
+하지만
+Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+에서 보였듯이 release-acquire 체인은 하나의 load-to-store 링크만 처리할 수
+있음을 절대 잊지 마시기 바랍니다.
+\iffalse
 
 Either way, the \co{exists} clause cannot trigger, despite this litmus
 test containing a notorious load-to-store link between
@@ -4183,6 +4234,7 @@ test containing a notorious load-to-store link between
 But never forget that release-acquire chains can tolerate only one
 load-to-store link, as was seen in
 Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -4231,6 +4283,17 @@ exists (1:r2=2 /\ 2:r2=2 /\ 3:r2=2 /\ x0=2)
 \label{lst:memorder:Long Z6.2 Release-Acquire Chain}
 \end{listing}
 
+Release-acquire 체인들은 또한 store-to-store 단계를 처리할 수 있는데,
+Listing~\ref{lst:memorder:Long Z6.2 Release-Acquire Chain}
+(\path{C-Z6.2+o-r+a-r+a-r+a-o.litmus})
+에 이 모습이 보여져 있습니다.
+앞의 예에서와 같이, \co{smp_store_release()} 의 cumulativity 는 release-acquire
+체인의 임시적 성질과 결합되어서 line~36 의 \co{exists} 절이 발동되는 것을
+막습니다.
+하지만 주의하세요: 두번째 store-to-store 단계를 추가하게 되면, 그에 맞춰
+업데이트된 \co{exists} 절은 발동될 수도 있습니다.
+\iffalse
+
 Release-acquire chains can also tolerate a single store-to-store step,
 as shown in
 Listing~\ref{lst:memorder:Long Z6.2 Release-Acquire Chain}
@@ -4240,15 +4303,30 @@ combined with the temporal nature of the release-acquire chain
 prevents the \co{exists} clause on line~36 from triggering.
 But beware: Adding a second store-to-store step would allow the correspondingly
 updated \co{exists} clause to trigger.
+\fi
 
 % @@@ QQ on having a release-acquire chain with one load-to-store and
 % @@@ one store-to-store link.
 
 \QuickQuiz{}
+	Store-to-load 링크, load-to-store 링크, 그리고 store-to-store 링크를
+	이야기 했군요.
+	Load-to-load 링크에 대해선 어떻죠?
+	\iffalse
+
 	There are store-to-load links, load-to-store links, and
 	store-to-store links.
 	But what about load-to-load links?
+	\fi
 \QuickQuizAnswer{
+	Load-to-load 링크의 컨셉에서의 문제는 같은 변수로부터의 두개의 로드가
+	같은 값을 리턴한다면, 그것들 사이의 순서를 특정할 방법이 없다는 겁니다.
+	이것들 사이의 순서를 특정할 유일한 방법은 다른 값을 리턴했을 때만
+	존재하는데, 그러기 위해선 연관된 스토어가 있어야만 합니다.
+	그리고 그 연관된 스토어는 load-to-load 링크가 아니라 load-to-store
+	링크에 이어 store-to-load 링크가 존재하는 것이 됩니다.
+	\iffalse
+
 	The problem with the concept of load-to-load links is that
 	if the two loads from the same variable return the same
 	value, there is no way to determine their ordering.
@@ -4258,11 +4336,17 @@ updated \co{exists} clause to trigger.
 	And that intervening store means that there is no load-to-load
 	link, but rather a load-to-store link followed by a
 	store-to-load link.
+	\fi
 } \QuickQuizEnd
+
+요약해보면, 제대로 구성된 release-acquire 체인은 직관적 환희의 평화로운 섬을
+훨씬 복잡한 메모리 순서 규칙의 강력한 반직관적 바다 가운데에 형성해 줍니다.
+\iffalse
 
 In short, properly constructed release-acquire chains form a peaceful
 island of intuitive bliss surrounded by a strongly counter-intuitive
 sea of more complex memory-ordering constraints.
+\fi
 
 % Exercises?
 % Hardware details from Appendix?
