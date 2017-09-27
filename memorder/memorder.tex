@@ -4378,6 +4378,16 @@ describes how to protect those delicate control dependencies.
 \subsection{Memory-Reference Restrictions}
 \label{sec:memorder:Memory-Reference Restrictions}
 
+다시 말하지만, 달리 이야기 해주지 않으면, 컴파일러는 생성된 코드에 의해
+접근되는 변수들에 영향을 끼치는 다른 존재는 없다고 가정합니다.
+이 가정은 단순한 설계상의 에러가 아니고, 다양한 표준에서 소중히 지켜지는
+것입니다.\footnote{
+	또는, 어쩌면 표준화된 설계상의 에러일 수도 있겠습니다.}
+이 가정은 컴파일러는 다음의 코드에 대해 컴파일러가 \co{do_something()} 은
+\co{a} 를 수정하지 않음을 증명할 수 있는 경우라면 \co{a} 로부터의 로드를 루프
+바깥으로 끄집어 내는 최적화를 수행할 (표준에 정의된) 권리를 가짐을 의미합니다:
+\iffalse
+
 Again, unless told otherwise, compilers assume that nothing else
 is affecting the variables being accessed by the generated code.
 This assumption is not simply some design error, but is instead enshrined in
@@ -4388,6 +4398,7 @@ This assumption means that compilers are within their rights
 so as to hoist the load from \co{a} out of the loop, at least
 in cases where the compiler can prove that \co{do_something()}
 does not modify \co{a}:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4399,9 +4410,14 @@ does not modify \co{a}:
 \end{minipage}
 \vspace{5pt}
 
+최적화된 코드는 아래와 같이, 임의의 거대한 횟수의 의도된 로드들을 하나의 실제
+로드로 합쳐버린 모습으로 될 수 있을 겁니다:
+\iffalse
+
 The optimized code might look something like this, essentially
 fusing an arbitrarily large number of intended loads into a single
 actual load:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4414,9 +4430,15 @@ actual load:
 \end{minipage}
 \vspace{5pt}
 
+이 최적화는 \co{a} 에 값 0을 저장함으로써 이 루프를 종료시킬 것이라고 예상한
+다른 곳의 코드에 놀라움으로 다가올 겁니다.
+이를 \co{READ_ONCE()} 를 사용해 방지할 수 있는데, 예를 들면 다음과 같습니다:
+\iffalse
+
 This optimization might come as a fatal surprise to code elsewhere
 that expected to terminate this loop by storing a zero to \co{a}.
 Prevent this by using \co{READ_ONCE()}, for example, as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4427,6 +4449,20 @@ Prevent this by using \co{READ_ONCE()}, for example, as follows:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+\co{READ_ONCE()} 는 이 로드를 \co{volatile} 캐스팅으로 표시합니다.
+\co{volatile} 은 원래 일반적인 메모리에 접근할 때 사용되는 것과 동일한 로드와
+스토어 인스트럭션을 사용해 접근되는 memory-mapped I/O (MMIO) 레지스터로의
+접근을 위해 설계되었습니다.
+하지만, MMIO 레지스터는 일반적 메모리처럼 동작해야 할 필요가 없습니다.
+MMIO 레지스터에 값을 저장하는 행위는 해당 레지스터로부터의 이어지는 로드가 지금
+저장한 값을 리턴함을 의미할 이유가 없습니다.
+MMIO 레지스터로부터의 로드는 부가 작용을 가질 수 있는데, 예를 들면 디바이스의
+상태를 바꾸거나 다른 MMIO 레지스터에 연관된, 뒤이어지는 로드와 스토어의 응답에
+영향을 끼치거나 하는 것입니다.
+같은 MMIO 주소로의 다른 크기의 로드와 스토어는 서로 다른 영향을 끼칠 수도
+있습니다.
+\iffalse
 
 \co{READ_ONCE()} marks the load with a \co{volatile} cast.
 Now \co{volatile} was originally designed for accessing
@@ -4442,6 +4478,28 @@ for example, changing the device state or affecting the response
 to subsequent loads and stores involving other MMIO registers.
 Loads and stores of different sizes to the same MMIO address
 might well have different effects.
+\fi
+
+이는, 설령 단일 프로세서 시스템이라 할지라도, MMIO 액세스의 순서, 갯수, 또는
+크기를 바꾸는 것은 엄격히 금지되어야만 함을 의미합니다.
+그리고 이게 정확히 C-언어의 \co{volatile} 키워드의 목적으로, 컴파일러가
+안정적인 디바이스 드라이버를 구현할 수 있게 해주는 것입니다.
+
+이는 왜 \co{READ_ONCE()} 가 \co{a} 로부터의 로드를 루프 바깥으로 끄집어 내는
+행위를 막아주는지 설명합니다:  그렇게 하는 것은 \co{a} 로부터의 \co{volatile}
+로드들의 수를 바꾸는 것으로, 그런 최적화는 허용되지 않습니다.
+하지만, \co{volatile} 은 하드웨어에 제약을 거는 일은 아무것도 하지 않음 역시
+알아두시기 바랍니다.
+따라서, 루프를 뒤따르는 코드가 이 루프를 종료시키는 0 값의 저장을 앞지르는
+메모리 레퍼런스의 결과를 봐야 한다면, 여러분은 값 0을 저장하는데에
+\co{smp_store_release()} 같은 것을, 그리고 루프 조건에는
+\co{smp_load_acquire()} 같은 것을 사용해야만 합니다.
+하지만 여러분에게 필요한게 루프의 안정적인 제어 뿐이고 다른 순서는 필요치
+않다면, \co{READ_ONCE()} 가 그 일을 해줄 수 있습니다.
+
+컴파일러는 로드를 복사할 수도 있습니다.
+예를 들어, 다음의 현실적인 코드를 보시기 바랍니다:
+\iffalse
 
 This means that, even on a uniprocessor system, changing the
 order, number, or size of MMIO accesses must be strictly
@@ -4465,6 +4523,7 @@ other ordering, \co{READ_ONCE()} can do the job.
 
 Compilers can also replicate loads.
 For example, consider this all-too-real code fragment:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4477,10 +4536,16 @@ For example, consider this all-too-real code fragment:
 \end{minipage}
 \vspace{5pt}
 
+여기서의 의도는 \co{do_something()} 함수가 \co{NULL} 포인터나 \co{q} 보다 큰
+포인터를 받지 않는 것입니다.
+하지만, 컴파일러는 이를 다음과 같이 바꿀 수 있는 권한이 있습니다:
+\iffalse
+
 Here the intent is that the \co{do_something()} function is never
 passed a \co{NULL} pointer or a pointer that is greater than \co{q}.
 However, the compiler is within its rights to transform this into the
 following:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4491,6 +4556,22 @@ following:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+이렇게 바뀐 코드에서, \co{p} 의 값은 세개의 서로 다른 시점에서 로드됩니다.
+이 변환은 처음엔 우습게 보일 수도 있겠지만, 이를 둘러싼 코드가 기계의 모든
+레지스터를 사용하고 있는 경우라면 컴파일러는 이런 변환을 하고자 할 겁니다.
+\co{p} 의 현재 값이 line~1 에서의 테스트를 통과하지만, line~2 가 수행되기 전에
+어떤 다른 쓰레드가 \co{p} 에 \co{NULL} 을 저장해서, 결국 \co{do_somethin()} 은
+놀랍게도 \co{NULL} 포인터를 받아올 수 있습니다.\footnote{
+	이 책의 편집자는 1990년대 초에 DYNIX/ptx 커널의 메모리 할당자에서
+	정확히 이와 같은 실수를 한 적이 있습니다.
+	이 버그를 찾아내기 위해 이 책의 편집자만이 아니라 그의 여러 동료들까지
+	휴일 주말을 반납해야 했습니다.
+	짧게 말해서, 이건 새로운 문제가 아닙니다.}
+
+컴파일러는 스토어들을 결합시킬 수도 있습니다.
+그런 가장 유명한 예는 아마도 아래에 보인 프로그레스바 예제일 겁니다:
+\iffalse
 
 In this transformed code, the value of \co{p} is loaded three
 separate times.
@@ -4510,6 +4591,7 @@ surprise to \co{do_something()}.\footnote{
 Compilers can also fuse stores.
 The most infamous example is probably the progress-bar example
 shown below:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4523,10 +4605,16 @@ shown below:
 \end{minipage}
 \vspace{5pt}
 
+컴파일러가 feedback 기반 최적화를 사용한다면, 공유 변수 \co{progress} 로의
+스토어가 상당히 비용이 비싸다는 걸 알게 되어서, 다음과 같이 의도되지 않은
+최적화를 만들어 낼 수도 있을 겁니다:
+\iffalse
+
 If the compiler used a feedback-driven optimizer, it might well
 notice that the store to the shared variable \co{progress} was
 quite expensive, resulting in the following well-intentioned
 optimization:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4541,12 +4629,20 @@ optimization:
 \end{minipage}
 \vspace{5pt}
 
+이는 성능을 약간 높일 수도 있겠지만, 프로그레스바를 바라보는 불쌍한 사용자는 이
+최적화로 인해 종종 잊혀져 버립니다.
+프로그레스바는 계속 0에 오랜시간 멈춰있다가, 마지막에 와서야 갑자기 커질
+겁니다.
+다음 코드는 이런 일반적으로 이런 문제를 막아줍니다:
+\iffalse
+
 This might well slightly increase performance, but the poor user
 watching the progress bar might be forgiven for harboring significant
 ill will towards this particular optimization.
 The progress bar will after all be stuck at zero for a long time,
 then jump at the very end.
 The following code will usually prevent this problem:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4560,6 +4656,17 @@ The following code will usually prevent this problem:
 \end{minipage}
 \vspace{5pt}
 
+컴파일러가 \co{do_something()} 을 분석해서 어토믹, 또는 \co{volatile} 변수로의
+액세스가 없다는 것을 알아낼 수 있다면 예외가 있을 수 있습니다.
+이런 경우에 컴파일러는 \co{do_something()} 을 호출하는 루프와 \co{progress} 를
+증가시키는 루프 두개의 루프를 만들어낼 수 있습니다.
+그런 일이 일어날 수 있는 희박한 확률의 상황에는 \co{WRITE_ONCE()} 를
+\co{smp_store_release()} 같은 것으로 바꿔야 할 겁니다.
+컴파일러가 \co{volatile} 액세스의 횟수, 크기, 순서를 바꿀 수는 없게 되어
+있지만, \co{volatile} 액세스들과 관계 없는 평범한 액세스들은 순서를 바꿀 권한을
+가지고 있음을 알아두는게 중요합니다.
+\iffalse
+
 Exceptions can occur if the compiler is able to analyze \co{do_something()}
 and learn that it has no accesses to atomic or \co{volatile} variables.
 In these cases the compiler could produce two loops, one invoking
@@ -4570,6 +4677,18 @@ It is important to note that although the compiler is forbidden from
 changing the number, size, or order of \co{volatile} accesses, it is
 perfectly within its rights to reorder normal accesses with unrelated
 \co{volatile} accesses.
+\fi
+
+이상하게 들릴 수 있지만, 컴파일러는 어떤 변수에의 스토어 직전에 그 변수를 임시
+저장소로 사용할 수 있어서, 해당 변수로의 스토어를 만들어 낼 수 있습니다.
+다행히도, 대부분의 컴파일러는 적어도 스택 변수 외에서는 이런 종류의 일을 하지
+않습니다.
+더도 아니고 덜도 아니고, \co{WRITE_ONCE()} (또는 해당 변수를 \co{volatile} 로
+선언하는 것) 이 이런 종류의 일을 막아줍니다.
+하지만 주의하세요: 해당 변수를 사용하는 변환 유닛을 가지고 있다면, 그리고
+그것으로의 volatile 액세스를 결코 행하지 않는다면, 컴파일러는 그게 주의깊게
+행해져야 함을 알 방법이 없습니다.
+\iffalse
 
 Oddly enough, the compiler is within its rights to use a variable
 as temporary storage just before a store to that variable, thus
@@ -4581,6 +4700,19 @@ Nevertheless, using \co{WRITE_ONCE()} (or declaring the variable
 But take care: If you have a translation unit that uses that variable,
 and never makes a volatile access to it, the compiler has no way of
 knowing that it needs to be careful.
+\fi
+
+앞의 예는 액세스의 횟수를 바꾸는 컴파일러 최적화에 관련된 것이었습니다.
+이제, 아래쪽에 있는 하드웨어는 액세스 순서를 바꿀 수 있다는 걸 놓고 보면
+컴파일러가 액세스 순서를 바꾸는 걸 막는건 무의미한 행위라고 보일 수도 있을
+겁니다.
+하지만, 근래의 기계들은 \emph{exact exception} 과 \emph{exact interrupt} 를
+갖는데, 이는 모든 인터럽트나 익셉션은 인스트럭션의 흐름 가운데 특정 위치에서
+발생한 것을 보외게 되어서, 이것들의 핸들러는 앞의 인스트럭션들의 효과를 모두
+보게 되지만, 뒤따르는 인스트럭션들의 효과는 보지 못하게 됨을 의미합니다.
+따라서 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 는 인터럽트된 코드와 인터럽트
+핸들러 사이의 통신을 제어하기 위해 사용될 수 있습니다.
+\iffalse
 
 The previous examples involved compiler optimizations that
 changed the number of accesses.
@@ -4594,6 +4726,21 @@ stream, so that the handler will see the effect of all prior
 instructions, but won't see the effect of any subsequent instructions.
 \co{READ_ONCE()} and \co{WRITE_ONCE()} can therefore be used to
 control communication between interrupted code and interrupt handlers.
+\fi
+
+실제 액세스되는 크기가 요청된 것보다 작을 경우에 \emph{load tearing} 과
+\emph{store tearing} 이라 알려진, 액세스의 크기의 변화에 대해선 이야기 되지
+않았습니다.
+예를 들어, 상수 \co{0x00010002} 를 32-bit 변수에 저장하는 것은 안전하게 보일
+겁니다.
+하지만, 작은 즉석값 (immediate value) 을 곧바로 메모리에 저장할 수 있는 CPU
+들이 존재하고, 그런 CPU 에서는, 명시적으로 32-bit 상수를 만드는 오버헤드를
+없애기 위해 이를 두개의 16-bit 스토어로 쪼갤 거라 예상할 수 있습니다.
+이는 이 변수의 값을 동시에 읽어들이는 다른 쓰레드 입장에서는 절반만 완료된
+스토어의 결과는 예상치 못했기에 커다란 놀라움이 됩니다.
+\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 의 사용은 컴파일러가 load tearing 과
+store tearing 을 활용하는 것을 각각 막아줍니다.
+\iffalse
 
 This leaves changes to the size of accesses, which is known as
 \emph{load tearing} and \emph{store tearing} when the actual size
@@ -4609,6 +4756,15 @@ loading from this variable, which might not expect to see the
 result of a half-completed store.
 Use of \co{READ_ONCE()} and \co{WRITE_ONCE()} prevent the compiler
 from engaging in load tearing and store tearing, respectively.
+\fi
+
+요약해서, \co{READ_ONCE()}, \co{WRITE_ONCE()}, 그리고 \co{volatile} 의 사용은
+컴파일러가 여러분의 병렬 알고리즘을 존재하는 것과 다르게 최적화 하는 것을
+막는데 효과적인 도구들입니다.
+컴파일러는 예를 들면 \co{memory_order_relaxed} 어토믹 로드와 스토어 같은, load
+와 store tearing 을 막기 위한 다른 메커니즘들을 제공하기 시작했습니다만,
+액세스들을 합치고 쪼개는 것을 막기 위해선 \co{volatile} 이 여전히 필요합니다.
+\iffalse
 
 In short, use of \co{READ_ONCE()}, \co{WRITE_ONCE()}, and
 \co{volatile} are valuable tools in preventing the compiler from
@@ -4617,6 +4773,7 @@ Compilers are starting to provide other mechanisms for avoiding
 load and store tearing, for example, \co{memory_order_relaxed}
 atomic loads and stores, however, \co{volatile} is still needed
 to avoid fusing and splitting of accesses.
+\fi
 
 \subsection{Address- and Data-Dependency Restrictions}
 \label{sec:memorder:Address- and Data-Dependency Restrictions}
