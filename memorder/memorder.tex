@@ -4850,6 +4850,14 @@ Failure to follow this rule can have serious side effects:
 \end{enumerate}
 
 \subsubsection{Avoid arithmetic dependency breakage}
+의존성 연결 안에서 포인터에 대한 산술적 연산을 행하는 건 괜찮지만, 컴파일러에게
+너무 많은 정보를 주지는 않도록 조심해야 하빈다.
+어쨌든, 컴파일러가 포인터의 정확한 값을 파악하기 충분한 정보를 얻게 되면,
+컴파일러는 포인터 자체 대신 그 값을 사용할 수 있고 그러려 할 겁니다.
+컴파일러가 그런 행위를 하게 되면, 의존성은 깨져버리고 모든 순서 규칙은
+사라집니다.
+\iffalse
+
 Although it is just fine to do some arithmetic operations on a pointer in
 your dependency chain, you need to be careful to avoid giving the
 compiler too much information.
@@ -4858,6 +4866,7 @@ of the pointer, it can and sometimes will use that exact value instead
 of the pointer itself.
 As soon as the compiler does that, the dependency is broken and all
 ordering is lost.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -4901,6 +4910,16 @@ ordering is lost.
 \end{listing}
 
 \begin{enumerate}
+\item	포인터로부터의 오프셋을 계산하는건 허용 가능하지만, 이런 오프셋은
+	완전한 취소가 가능한 결과가 되어선 안됩니다.
+	예를들어, \co{char} 포인터 \co{cp} 에 대해, \co{cp-(uintptr_t)cp} 는
+	취소가 될 수 있고 이는 컴파일러가 여러분의 의존성 연결을 깨게 만들 수
+	있습니다.
+	다른 한편, 서로에 대한 취소를 하는 오프셋 값들은 안전하고 합법적입니다.
+	예를 들어, \co{a} 와 \co{b} 가 같다면, \co{cp+a-b} 는 의존성을 유지하는
+	함수입니다.
+\iffalse
+
 \item	Although it is permissible to compute offsets from a
 	pointer, these offsets must not result in total cancellation.
 	For example, given a \co{char} pointer \co{cp},
@@ -4910,6 +4929,25 @@ ordering is lost.
 	is perfectly safe and legal.
 	For example, if \co{a} and \co{b} are equal, \co{cp+a-b}
 	is an identity function, including preserving the dependency.
+\fi
+\item	비교가 의존성을 깰 수 있습니다.
+	Listing~\ref{lst:memorder:Breakable Dependencies With Comparisons}
+	가 이게 어떻게 일어날 수 있는지 보입니다.
+	여기서 전역 변수 \co{gp} 는 동적으로 할당된 정수를 가리키지만, 메모리가
+	부족하다면, \co{reserve_int} 변수를 가리킬 수도 있습니다.
+	이 \co{reserve_int} 경우는 특별한 처리를 그림의 line~6 과~7 에서 보이듯
+		특수한 처리를 필요로 할 수 있습니다.
+	하지만 컴파일러는 이 코드를
+	Listing~\ref{lst:memorder:Broken Dependencies With Comparisons}
+	에 보인 것과 같이 변환시킬 수 있는데, 절대 주소를 갖는 인스트럭션들이
+	레지스터로 전해지는 주소를 사용하는 인스트럭션보다 빨리 처리되는
+	시스템에서 특히 그렇습니다.
+	하지만, line~5 에서의 포인터 로드와 line~8 에서의 포인터 디레처런스
+	사이에는 분명한 순서 강제 규칙이 없습니다.
+	이는 단순한 예제임을 알아두시기 바랍니다: 비교를 통해 의존성 연결을
+	깨버리는 다른 방법들이 매우 많습니다.
+\iffalse
+
 \item	Comparisons can break dependencies.
 	Listing~\ref{lst:memorder:Breakable Dependencies With Comparisons}
 	shows how this can happen.
@@ -4928,13 +4966,29 @@ ordering is lost.
 	load on line~5 and the dereference on line~8.
 	Please note that this is simply an example: There are a great
 	many other ways to break dependency chains with comparisons.
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	Listing~\ref{lst:memorder:Breakable Dependencies With Comparisons}
+	의 line~6 에서 \co{&reserve_int} 에서의 비교 대신 이 포인터를 그냥
+	디레퍼런스 할 수는 없나요?
+	\iffalse
+	
 	Why can't you simply dereference the pointer before comparing it
 	to \co{&reserve_int} on line~6 of
 	Listing~\ref{lst:memorder:Breakable Dependencies With Comparisons}?
+	\fi
 \QuickQuizAnswer{
+	일단, \co{do_something_with()} 전에 \co{handle_reserve()} 가 호출되어야
+	할 겁니다.
+
+	하지만 메모리 순서 규칙에 더 관계있게는, 컴파일러는 이 비교를
+	디레퍼런스 앞으로 옮길 권리를 가지고 있는데, 이는 컴파일러가 하드웨어가
+	의존성을 표시해둘 변수 \co{p} 대신 \co{&reserve_int} 를 사용하게 할 수
+	있습니다.
+	\iffalse
+
 	For first, it might be necessary to invoke
 	\co{handle_reserve()} before \co{do_something_with()}.
 
@@ -4943,13 +4997,19 @@ ordering is lost.
 	which would allow the compiler to use \co{&reserve_int} instead
 	of the varaiable \co{p} that the hardware has tagged with
 	a dependency.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	하지만 두 포인터 변수를 비교하는건 안전할 거예요, 그렇죠?  무엇보다,
+	컴파일러는 두 변수의 값을 모르니, 비교의 결과가 어떨지 모를거잖아요?
+	\iffalse
+
 	But it should be safe to compare two pointer variables,
 	right?  After all, the compiler doesn't know the value
 	of either, so how can it possibly learn anything from the
 	comparison?
+	\fi
 \QuickQuizAnswer{
 
 \begin{listing}[tbp]
@@ -4997,6 +5057,22 @@ ordering is lost.
 \label{lst:memorder:Broken Dependencies With Non-Constant Comparisons}
 \end{listing}
 
+	불행히도, 컴파일러는 여러분의 의존성 연결을 깨기 충분할 만한 정보를
+	얻을 수 있는데, 예를 들어,
+	Listing~\ref{lst:memorder:Breakable Dependencies With Non-Constant Comparisons}
+	에 보인 것처럼 그렇습니다.
+	컴파일러는 이 코드를
+	Listing~\ref{lst:memorder:Broken Dependencies With Non-Constant Comparisons}
+	에 보인 것처럼 변환할 수 있고, \co{handle_equality()} 가 인라인 함수로
+	만들어져서 레지스터가 더 필요하고 레지스터가 부족한 경우 특히 이런
+	변경을 만들 수 있습니다.
+	변경된 코드의 line~10 은 \co{q} 를 사용하는데, \co{p} 와 같긴 하지만,
+	이 변수는 하드웨어에게 의존성을 갖도록 표시되진 않을 겁니다.
+	따라서, 이 변경된 코드는 line~10 이 line~6 뒤에 순서지어지도록 보장하지
+	못합니다.\footnote{
+		이 예제를 제공해준 리눅스 토발즈에게 감사를.}
+	\iffalse
+
 	Unfortunately, the compiler really can learn enough to
 	break your dependency chain, for example, as shown in
 	Listing~\ref{lst:memorder:Breakable Dependencies With Non-Constant Comparisons}.
@@ -5011,6 +5087,7 @@ ordering is lost.
 	Therefore, this transformed code does not necessarily guarantee
 	that line~10 is ordered after line~6.\footnote{
 		Kudos to Linus Torvalds for providing this example.}
+	\fi
 } \QuickQuizEnd
 
 % @@@ Quick quiz showing other ways to break dependencies by comparison
