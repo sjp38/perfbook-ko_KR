@@ -5138,6 +5138,16 @@ compiler has gotten done with them.
 \subsection{Control-Dependency Restrictions}
 \label{sec:memorder:Control-Dependency Restrictions}
 
+현재의 컴파일러는 control dependency 를 이해하지 못하고, 쉽사리 이를 깨버릴 수
+있기 때문에 특히나 교묘합니다.
+이 섹션의 규칙과 예지들은 여러분의 컴파일러가 여러분의 코드를 깨버리는걸 돕고자
+의도되었습니다.
+
+Load-load control dependency 는 단순한 data dependency 배리어가 아니라 완전한
+읽기 메모리 배리어를 필요로 합니다.
+다음의 코드를 생각해 봅시다:
+\iffalse
+
 Control dependencies are especially tricky because current compilers
 do not understand them and can easily break them.
 The rules and examples in this section are intended to help you
@@ -5146,6 +5156,7 @@ prevent your compiler's ignorance from breaking your code.
 A load-load control dependency requires a full read memory barrier,
 not simply a data dependency barrier.
 Consider the following bit of code:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5160,11 +5171,19 @@ Consider the following bit of code:
 \end{minipage}
 \vspace{5pt}
 
+이 코드는 원했던 효과를 갖지 못할텐데, 여기엔 실제 data dependency 가 존재하지
+않고, CPU 가 결과를 미리 예측하려 시도함으로써 회로를 연결해버려서 다른
+CPUemfdl \co{y} 로부터의 로드를 \co{x} 로부터의 로드보다 먼저 일어난 걸로 보게
+만들 수 있는 control dependency 를 가지고 있기 때문입니다.
+이런 경우 정말로 필요한건 이런겁니다:
+\iffalse
+
 This will not have the desired effect because there is no actual data
 dependency, but rather a control dependency that the CPU may short-circuit
 by attempting to predict the outcome in advance, so that other CPUs see
 the load from~\co{y} as having happened before the load from~\co{x}.
 In such a case what's actually required is:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5179,9 +5198,15 @@ In such a case what's actually required is:
 \end{minipage}
 \vspace{5pt}
 
+하지만, 스토어는 예측되지 않습니다.
+이 말은 load-store control dependency 에서는 순서규칙이 다음 예에서와 같이
+\emph{제공됨}을 의미합니다.
+\iffalse
+
 However, stores are not speculated.
 This means that ordering \emph{is} provided for load-store control
 dependencies, as in the following example:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5193,6 +5218,20 @@ dependencies, as in the following example:
 \end{verbatim}
 \end{minipage}
 \vspace{5pt}
+
+Control dependency 는 보통 다른 종류의 순서 강제 오퍼레이션들과 짝을 이룹니다.
+그렇다고는 하나, \co{READ_ONCE()} 도 \co{WRITE_ONCE()} 도 선택적인 게 아님을
+알아두시기 바랍니다!
+\co{READ_ONCE()} 가 없다면, 컴파일러는 \co{x} 로부터의 로드를 \co{x} 로부터의
+다른 로드와 결합시킬 수 있습니다.
+\co{WRITE_ONCE()} 가 없다면, 컴파일러는 \co{y} 로의 스토어를 \co{y} 로의 다른
+스토어와 결합시킬 수 있습니다.
+두 경우 모두 상당히 반직관적인 순서를 만드는 효과를 낼 수 있습니다.
+
+더 나쁜 건, 컴파일러가 (예컨대) 변수~\co{x} 의 값이 항상 0이 아니라는 걸 증명할
+수 있다면, 컴파일러는 다음과 같이 ``\co{if}'' 문을 제거함으로써 이 코드를
+최적화 시킬 권리를 갖습니다.
+\iffalse
 
 Control dependencies pair normally with other types of ordering operations.
 That said, please note that neither \co{READ_ONCE()} nor \co{WRITE_ONCE()}
@@ -5207,6 +5246,7 @@ Worse yet, if the compiler is able to prove (say) that the value of
 variable~\co{x} is always non-zero, it would be well within its rights
 to optimize the original example by eliminating the ``\co{if}'' statement
 as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5218,8 +5258,13 @@ as follows:
 \end{minipage}
 \vspace{5pt}
 
+``\co{if}'' 문의 양갈래 경우의 동일한 스토어에 다음과 같이 순서를 강제하고 싶을
+수 있을 겁니다:
+\iffalse
+
 It is tempting to try to enforce ordering on identical stores on both
 branches of the ``\co{if}'' statement as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5239,8 +5284,13 @@ branches of the ``\co{if}'' statement as follows:
 \end{minipage}
 \vspace{5pt}
 
+불행히도, 현재의 컴파일러들은 이 코드를 높은 최적화 수준에서는 다음과 같이
+변환시킵니다:
+\iffalse
+
 Unfortunately, current compilers will transform this as follows at high
 optimization levels:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5258,12 +5308,21 @@ optimization levels:
 \end{minipage}
 \vspace{5pt}
 
+이제 여기에는 \co{x} 로부터의 로드와 \co{y} 로의 스토어 사이에 조건이 존재하지
+않게 되어서, CPU 는 이것들을 재배치할 권한을 갖게 됩니다:
+여기서의 조건은 분명 필요하며, 모든 컴파일러 최적화가 적용된 뒤에도 어셈블리
+코드 상에 존재해야 합니다.
+따라서, 이 예제에서 순서를 강제해야 한다면, 여러분은 예를 들어 release store 와
+같은, 메모리 순서 강제 오퍼레이션들을 명시적으로 사용해야 합니다:
+\iffalse
+
 Now there is no conditional between the load from~\co{x} and the store
 to~\co{y}, which means that the CPU is within its rights to reorder them:
 The conditional is absolutely required, and must be present in the
 assembly code even after all compiler optimizations have been applied.
 Therefore, if you need ordering in this example, you need explicit
 memory-ordering operations, for example, a release store:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5281,6 +5340,15 @@ memory-ordering operations, for example, a release store:
 \end{minipage}
 \vspace{5pt}
 
+최초의 \co{READ_ONCE()} 는 컴파일러가 \co{x} 의 값을 증명해 내는 걸 막기 위해
+여전히 필요합니다.
+
+또한, 로컬 변수 \co{q} 에 대해 행하는 일에 대해서도 조심해야 하는데, 그러지
+않으면 컴파일러는 그 값을 추측해서 또다시 이 필요한 조건을 제거해 버릴 수
+있습니다.
+예를 들어:
+\iffalse
+
 The initial \co{READ_ONCE()} is still required to prevent the compiler from
 proving the value of~\co{x}.
 
@@ -5289,6 +5357,7 @@ In addition, you need to be careful what you do with the local variable~%
 otherwise the compiler might be able to guess the value and again remove
 the needed conditional.
 For example:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5306,9 +5375,14 @@ For example:
 \end{minipage}
 \vspace{5pt}
 
+여기서 \co{MAX} 가 1로 정의되어 있다면, 컴파일러는 \co{(q\%MAX)} 이 0과 같다는
+걸 알게 되어서, 컴파일러는 앞의 코드를 다음과 같이 바꿔버릴 권한을 갖습니다:
+\iffalse
+
 If \co{MAX} is defined to be~1, then the compiler knows that \co{(q\%MAX)} is
 equal to zero, in which case the compiler is within its rights to
 transform the above code into the following:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5321,6 +5395,15 @@ transform the above code into the following:
 \end{minipage}
 \vspace{5pt}
 
+이렇게 변환되면, CPU 는 변수~\co{x} 로부터의 로드와 변수~\co{y} 로의 스토어
+사이에 순서를 지켜줄 필요가 없어집니다.
+컴파일러를 강제하기 위해 \co{barrier()} 를 넣고 싶겠지만, 이는 도움이 되지
+못합니다.
+조건은 이미 사라졌고, \co{barrier()} 는 이를 되돌리지 못합니다.
+따라서, 여러분이 이 순서를 지켜야 한다면, 여러분은 다음과 같은 식으로 \co{MAX}
+가 1보다 크다는 걸 분명히 해야 합니다:
+\iffalse
+
 Given this transformation, the CPU is not required to respect the ordering
 between the load from variable~\co{x} and the store to variable~\co{y}.
 It is tempting to add a \co{barrier()} to constrain the compiler,
@@ -5328,6 +5411,7 @@ but this does not help.
 The conditional is gone, and the \co{barrier()} won't bring it back.
 Therefore, if you are relying on this ordering, you should make sure
 that \co{MAX} is greater than one, perhaps as follows:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5346,12 +5430,21 @@ that \co{MAX} is greater than one, perhaps as follows:
 \end{minipage}
 \vspace{5pt}
 
+\co{y} 로의 스토어는 다르다는 걸 다시 한번 알아 두시기 바랍니다.
+두 스토어가 동일하다면, 앞서 언급한 것처럼, 컴파일러는 이 스토어를 ``\co{if}''
+문 바깥으로 끌어올릴 수 있습니다.
+
+또한 boolean short-circuit evaluation 에 과하게 기대는 것을 막아야 합니다.
+이 예제를 보십시오:
+\iffalse
+
 Please note once again that the stores to~\co{y} differ.
 If they were identical, as noted earlier, the compiler could pull this
 store outside of the ``\co{if}'' statement.
 
 You must also avoid excessive reliance on boolean short-circuit evaluation.
 Consider this example:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5364,9 +5457,14 @@ Consider this example:
 \end{minipage}
 \vspace{5pt}
 
+첫번째 조건은 fault 를 낼 수 없고 두번째 조건은 항상 참이므로, 컴파일러는 이
+예제를 다음과 같이 변환시켜서 control dependency 를 제거할 수 있습니다:
+\iffalse
+
 Because the first condition cannot fault and the second condition is
 always true, the compiler can transform this example as following,
 defeating control dependency:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5378,6 +5476,16 @@ defeating control dependency:
 \end{minipage}
 \vspace{5pt}
 
+이 예제는 컴파일러가 여러분의 코드의 결과를 예측하지 못하게 보장해야 하는
+필요성을 강조합니다.
+더 일반적으로 말해서, \co{READ_ONCE()} 는 컴파일러가 특정 로드를 위한 코드를
+실제로 만들도록 강제하지만, 컴파일러가 그 결과를 사용할 것을 강제하지는
+않습니다.
+
+또한, control dependency 는 if-문의 then-절과 else-절에만 적용됩니다.
+구체적으로, if-문을 뒤따르는 코드에는 적용되지 않습니다.
+\iffalse
+
 This example underscores the need to ensure that the compiler cannot
 out-guess your code.
 More generally, although \co{READ_ONCE()} does force
@@ -5388,6 +5496,7 @@ In addition, control dependencies apply only to the then-clause and
 else-clause of the if-statement in question.
 In particular, it does
 not necessarily apply to code following the if-statement:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5404,6 +5513,13 @@ not necessarily apply to code following the if-statement:
 \end{minipage}
 \vspace{5pt}
 
+컴파일러는 volatile 액세스를 재배치할 수 없고 조건 내의 \co{y} 로의 쓰기를
+재배치 할 수 없으므로 실제 순서가 강제된다고 주장하고 싶을 수 있습니다.
+이런 이유에 반론을 제기해보자면, 불행히도 컴파일러는 \co{y} 로의 두개의 쓰기를
+다음의 가상의 어셈블리 언어처럼 조건적 데이터 이동 인스트럭션으로 변환할 수
+있습니다.
+\iffalse
+
 It is tempting to argue that there in fact is ordering because the
 compiler cannot reorder volatile accesses and also cannot reorder
 the writes to~\co{y} with the condition.
@@ -5411,6 +5527,7 @@ Unfortunately for this line
 of reasoning, the compiler might compile the two writes to~\co{y} as
 conditional-move instructions, as in this fanciful pseudo-assembly
 language:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5426,6 +5543,21 @@ language:
 \end{minipage}
 \vspace{5pt}
 
+완화된 순서규칙의 CPU 는 \co{x} 로부터의 로드와 \co{z} 로의 스토어 사이에 어떤
+종류의 의존성도 갖지 않습니다.
+Control dependency 는 여기서 한쌍의 cmov 인스트럭션들과 거기에 의존적인 스토어
+까지만 확장됩니다.
+짧게 말해서, control dependency 는 ``\co{if}'' 문의 ``\co{then}'' 절과
+``\co{else}'' 절에만 (이 두 절에서 호출되는 함수들 포함) 적용되지, ``\co{if}''
+를 뒤따르는 코드에는 적용되지 않습니다.
+
+마지막으로, control dependency 는 cumulativity 를 제공하지 \emph{않습니다}.\footnote{
+	cumulativity 의 의미를 위해서는 Section~\ref{sec:memorder:Cumulativity}
+	를 참고하세요.}
+이 내용이 최초값 0을 갖는 \co{x} 와 \co{y} 를 갖는 두개의 연관된 예제로
+보여집니다:
+\iffalse
+
 A weakly ordered CPU would have no dependency of any sort between the load
 from~\co{x} and the store to~\co{z}.
 The control dependencies would extend
@@ -5439,6 +5571,7 @@ Finally, control dependencies do \emph{not} provide cumulativity.\footnote{
 	the meaning of cumulativity.}
 This is demonstrated by two related examples, with the initial values
 of~\co{x} and~\co{y} both being zero:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5459,9 +5592,15 @@ of~\co{x} and~\co{y} both being zero:
 \end{minipage}
 \vspace{5pt}
 
+이 두 CPU 예제는 \co{assert()} 를 발동시키지 않을 겁니다.
+하지만, 만약 control dependency 가 (실제로는 보장하지 않는) transitivity 를
+보장한다면, 다음 CPU를 추가하면 여기서의 assertion 을 보장할 겁니다:
+\iffalse
+
 The above two-CPU example will never trigger the \co{assert()}.
 However, if control dependencies guaranteed transitivity (which they do
 not), then adding the following CPU would guarantee a related assertion:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -5477,6 +5616,19 @@ not), then adding the following CPU would guarantee a related assertion:
 \end{minipage}
 \vspace{5pt}
 
+Control dependency 는 transitivity 를 제공하지 \emph{않기 때문에}, 앞의
+assertion 은 세개의 CPU 예제가 완료된 후에 실패할 겁니다.
+세개의 CPU 예제가 순서를 제공하길 바란다면, 여러분은 CPU~0 과 CPU~1 의 코드의
+로드와 스토어 사이, ``co{if}'' 문의 바로 앞 또는 뒤에 \co{smp_mb()} 를 추가해야
+합니다.
+뿐만 아니라, 원래의 CPU 두개짜리 예제는 매우 불안정하고 사용되지 않아야 합니다.
+
+이 두개의 CPU 예제는 LB (load buffering) 이라 알려져 있고 세개의 CPU 예제는
+WWC~\cite{Maranget2012TutorialARMPower}라 알려져 있습니다.
+
+다음의 규칙들의 리스트는 이 섹션에서의 교훈을 요약합니다:
+\iffalse
+
 But because control dependencies do \emph{not} provide transitivity, the above
 assertion can fail after the combined three-CPU example completes.
 If you need the three-CPU example to provide ordering, you will need
@@ -5488,6 +5640,7 @@ The two-CPU example is known as LB (load buffering) and the three-CPU
 example as WWC~\cite{Maranget2012TutorialARMPower}.
 
 The following list of rules summarizes the lessons of this section:
+\fi
 
 \begin{enumerate}
 \item	Compilers do not understand control dependencies, so it is
