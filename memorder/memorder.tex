@@ -5643,6 +5643,19 @@ The following list of rules summarizes the lessons of this section:
 \fi
 
 \begin{enumerate}
+\item	컴파일러는 control dependency 를 이해하지 못하므로, 컴파일러가 여러분의
+	코드를 망가뜨리지 않도록 하는건 여러분의 일입니다.
+
+\item	Control dependency 는 앞의 로드를 뒤의 스토어에 대해 순서 지을 수
+	있습니다.
+	하지만, 이는 다른 종류의 순서는 어떤 것도 보장하지 \emph{않습니다}.
+	앞의 로드는 뒤의 로드와 순서지어지지 않고, 앞의 스토어는 뒤의 어떠
+	것과도 순서지어지지 않습니다.
+	이런 다른 종류의 순서가 필요하다면, \co{smp_rmb()}, \co{smp_wmb()},
+	또는, 앞의 스토어와 뒤의 로드 사이의 순서가 필요하다면 \co{smp_mb()} 를
+	사용해야 합니다.
+\iffalse
+
 \item	Compilers do not understand control dependencies, so it is
 	your job to make sure that the compiler cannot break your code.
 
@@ -5653,6 +5666,17 @@ The following list of rules summarizes the lessons of this section:
 	If you need these other forms of ordering, use \co{smp_rmb()},
 	\co{smp_wmb()}, or, in the case of prior stores and later loads,
 	\co{smp_mb()}.
+\fi
+
+\item	``\co{if}'' 문의 양 브랜치가 동일한 변수에 대한 동일한 스토어로
+	시작한다면, 이 스토어들은 각각의 앞에 \co{smp_mb()} 를 위치시키거나
+	\co{smp_store_release()} 를 통해 스토를 행하든 해서 순서가
+	보장되어져야만 합니다.
+	``\co{if}'' 문의 양 브랜치의 시작에 \co{barrier()} 를 사용하는
+	것만으로는 충분치 \emph{않은데}, 이는 앞의 예제로 보여졌든, 컴파일러
+	최적화는 \co{barrier()} 의 규칙을 지키면서도 control dependency 를 깰
+	수 있기 때문이란 걸 알아두시기 바랍니다.
+\iffalse
 
 \item	If both legs of the ``\co{if}'' statement begin with identical stores
 	to the same variable, then those stores must be ordered,
@@ -5662,6 +5686,22 @@ The following list of rules summarizes the lessons of this section:
 	at beginning of each leg of the ``\co{if}'' statement because, as shown
 	by the example above, optimizing compilers can destroy the control
 	dependency while respecting the letter of the \co{barrier()} law.
+\fi
+
+\item	Control dependency 는 앞의 로드와 뒤따르는 스토어 사이에 최소 한번의
+	실행시간의 조건을 필요로 하며, 이 조건은 앞의 로드와 관계되어야만
+	합니다.
+	만약 컴파일러가 이 조건을 최적화를 통해 없애버릴 수 있다면, 컴파일러는
+	이 안의 순서 역시 최적화를 통해 없애버릴 수 있습니다.
+	\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 의 조심스러운 사용은 필요한
+	조건을 지키는데 도움을 줄 수 있습니다.
+
+\item	Control dependency 는 컴파일러가 의존성을 존재치 않게 재배치 해버리는걸
+	막을 것을 필요로 합니다.
+	\co{READ_ONCE()}, \co{atomic_read()}, 또는 \co{atomic64_read()} 의
+	조심스러운 사용은 여러분의 control dependency 를 지키는 걸 도울 수
+	있습니다.
+\iffalse
 
 \item	Control dependencies require at least one run-time conditional
 	between the prior load and the subsequent store, and this
@@ -5676,6 +5716,19 @@ The following list of rules summarizes the lessons of this section:
 	Careful use of \co{READ_ONCE()}, \co{atomic_read()}, or
 	\co{atomic64_read()} can help to preserve your control
 	dependency.
+\fi
+
+\item	Control dependency 는 ``\co{if}'' 절의 ``\co{then}'' 과 ``\co{else}''
+	와 이 두 절 내에서의 호출된 함수까지만 적용됩니다.
+	control dependency 는 control dependency 를 담은 ``\co{if}'' 를
+	뒤따르는 코드에는 적용되지 \emph{않습니다}.
+
+\item	Control dpendency 는 일반적으로 다른 종류의 메모리 순서 강제
+	오퍼레이션들과 짝을 이룹니다.
+
+\item	Control dependency 는 transitivity 를 제공하지 \emph{않습니다}.
+	Transitivity 가 필요하다면, \co{smp_mb()} 를 사용하세요.
+\iffalse
 
 \item	Control dependencies apply only to the ``\co{then}'' and
 	``\co{else}'' of the ``\co{if}'' containing the control
@@ -5688,13 +5741,21 @@ The following list of rules summarizes the lessons of this section:
 
 \item	Control dependencies do \emph{not} provide transitivity.
 	If you need transitivity, use \co{smp_mb()}.
+\fi
 \end{enumerate}
+
+짧게 말해서, 많은 유명한 언어들이 주로 싱글 쓰레드 환경만 고려한 채
+만들어졌습니다.
+이런 언어들을 멀티 쓰레드 소프트웨어를 구축하는데 성공적으로 사용하려면
+여러분이 메모리 레퍼런스와 의존성에 특별한 관심을 기울여야 합니다.
+\iffalse
 
 In short, many popular languages were designed primarily with
 single-threaded use in mind.
 Successfully using these languages to construct multi-threaded software
 requires that you pay special attention to your memory references and
 dependencies.
+\fi
 
 \section{Hardware Specifics}
 \label{sec:memorder:Hardware Specifics}
