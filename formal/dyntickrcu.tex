@@ -2695,7 +2695,7 @@ This effort provided some lessons (re)learned:
 	만약 겸증 코드가 그것들을 찾는데 실패한다면, 그 검증은 분명히 버그로
 	가득차 있는 것입니다.
 \item	{\bf 어토믹 인스트럭션들의 사용이 검증을 단순화 시킬 수 있습니다.}
-	안타깝게도, \co{cmpxchg} 어토믹 명령어의 사용은 중요한 irq 빠른 수행
+	안타깝게도, \co{cmpxchg} 어토믹 명령어의 사용은 중요한 \IRQ\ 빠른 수행
 	경로를 느리게 수행되도록 만들어서 이 경우에 적절치 못할 수도 있습니다.
 \item	{\bf 복잡한 정식 검증의 필요는 당신의 설계를 다시 한번 생각해 봐야 할
 	필요성을 의미합니다.}
@@ -2734,7 +2734,7 @@ the dynticks problem, which is presented in the next section.
 \subsubsection{Simplicity Avoids Formal Verification}
 \label{sec:formal:Simplicity Avoids Formal Verification}
 
-Preemption 가능한 RCU 의 dynticks 인터페이스의 복잡도는 주로 irq 도 NMI 도 같은
+Preemption 가능한 RCU 의 dynticks 인터페이스의 복잡도는 주로 \IRQ 도 NMI 도 같은
 코드 수행 경로와 같은 상태 변수들을 사용한다는 사실에서 기인합니다.
 이는
 Manfred Spraul~\cite{ManfredSpraul2008StateMachineRCU} 에 의해 간접적으로
@@ -2785,7 +2785,7 @@ Figure~\ref{fig:formal:Variables for Simple Dynticks Interface}
 그룹지어졌습니다.
 이어서 언급할 것들은 개별적인 per-CPU 변수들로 생각될 수도 있습니다.
 
-\co{dynticks_nesting}, \co{dynticks}, 그리고 \co{dynticks_snap} 변수들은 irq
+\co{dynticks_nesting}, \co{dynticks}, 그리고 \co{dynticks_snap} 변수들은 \IRQ\
 코드 수행 경로들을 위한 것이고, \co{dynticks_nmi} 와 \co{dynticks_nmi_snap}
 변수들은 NMI 코드 수행 경로들을 위한 것입니다만, NMI 코드 수행 경로는
 \co{dynticks_nesting} 변수 역시 레퍼런스할 (하지만 수정하지는 않을) 겁니다.
@@ -2811,11 +2811,12 @@ These variables are used as follows:
 \item	[\tco{dynticks_nesting}]
 	이 변수는 연관된 CPU 가 RCU read-side 크리티컬 섹션들을 위해 모니터링
 	되어야 하는 이유들의 수를 카운트 합니다.
-	만약 CPU 가 dynticks-idle 모드에 있다면, 이 변수는 irq 중첩 단계를
-	카운트하게 되고, 그렇지 않다면 irq 중첩 단계보다 1 큰 값을 갖게 됩니다.
+	만약 CPU 가 dynticks-idle 모드에 있다면, 이 변수는 \IRQ\ 중첩 단계를
+	카운트하게 되고, 그렇지 않다면 \IRQ\ 중첩 단계보다 1 큰 값을 갖게
+	됩니다.
 \item	[\tco{dynticks}]
 	이 카운터의 값은 연관된 CPU 가 dynticks-idle 모드에 있고 현재 해당 CPU
-	에서 수행중인 irq 핸들러가 없다면 짝수를, 그렇지 않다면 홀수의 값을
+	에서 수행중인 \IRQ\ 핸들러가 없다면 짝수를, 그렇지 않다면 홀수의 값을
 	갖게 됩니다.
 	달리 말하자면, 이 카운터의 값이 홀수라면, 연관된 CPU 는 RCU read-side
 	크리티컬 섹션 안에 있을 수 있습니다.
@@ -2836,7 +2837,7 @@ These variables are used as follows:
 \fi
 \item	[\tco{dynticks_nmi}]
 	이 카운터의 값은 연관된 CPU 가 NMI 핸들러 안에 있다면 홀수가 되는데,
-	해당 NMI 가 이 CPU 가 현재 수행중인 irq 핸들러 없이 dyntick-idle 모드에
+	해당 NMI 가 이 CPU 가 현재 수행중인 \IRQ\ 핸들러 없이 dyntick-idle 모드에
 	빠져 있을 때에만 그렇습니다.
 	그렇지 않다면, 해당 카운터의 값은 짝수가 됩니다.
 \item	[\tco{dynticks_snap}]
@@ -2873,19 +2874,19 @@ passed through a quiescent state during that interval.
 \fi
 
 \QuickQuiz{}
-	하지만, 만약 NMI 핸들러가 irq 핸들러가 완료되기 전에 동작하기 시작하면,
-	그리고 그 NMI 핸들러가 두번째 irq 핸들러가 시작될 때까지 돌아가면 어떤
-	일이 발생할까요?
+	하지만, 만약 NMI 핸들러가 \IRQ\ 핸들러가 완료되기 전에 동작하기
+	시작하면, 그리고 그 NMI 핸들러가 두번째 \IRQ\ 핸들러가 시작될 때까지
+	돌아가면 어떤 일이 발생할까요?
 	\iffalse
 
 	But what happens if an NMI handler starts running before
-	% TODO: Apply to Korean trans
 	an \IRQ\ handler completes, and if that NMI handler continues
 	running until a second \IRQ\ handler starts?
 	\fi
 \QuickQuizAnswer{
 	이는 하나의 CPU 에 몰아넣은 상황에선 일어날 수 없는 일입니다.
-	첫번째 irq 핸들러는 NMI 핸들러가 리턴하기 전까지는 완료될 수 없습니다.
+	첫번째 \IRQ\ 핸들러는 NMI 핸들러가 리턴하기 전까지는 완료될 수
+	없습니다.
 	따라서, \co{dynticks} 와 \co{dynticks_nmi} 변수들 각각이 주어진 시간
 	기간동안 짝수를 가졌다면, 연관된 CPU 는 그 기간 중의 어느 시점에는
 	quiescent 상태에 정말로 있었을 겁니다.
@@ -2950,7 +2951,7 @@ Figure~\ref{fig:formal:Entering and Exiting Dynticks-Idle Mode}
 Line~6 는 모든 앞의 (RCU read-side 크리티컬 섹션들로부터의 액세스들을 포함할 수
 있는) 메모리 액세스들이 dynticks-idle 모드로의 진입을 표시하는 CPU 들보다
 앞서서 다른 CPU 들에 보여질 것을 보장합니다.
-Line~7 과 12 는 irq 를 각각 비활성화시키고 재활성화 시킵니다.
+Line~7 과 12 는 \IRQ\ 를 각각 비활성화시키고 재활성화 시킵니다.
 Line~8 은 현재 CPU 의 \co{rcu_dynticks} 구조체로의 포인터를 얻어오고, line~9 는
 현재 CPU 의 \co{dynticks} 카운터의 값을 증가시키는데, 우린 프로세스
 컨텍스트에서 dynticks-idle 모드에 진입하고 있으므로 짝수가 되어야 할 겁니다.
@@ -3022,7 +3023,7 @@ the opposite \co{dynticks} polarity.
 Figure~\ref{fig:formal:NMIs From Dynticks-Idle Mode}
 는 dynticks-idle 모드로부터 NMI 에 들어가는 것과 빠져나오는 것을 RCU 에 알리는
 \co{rcu_nmi_enter()} 와 \co{rcu_nmi_exit()} 함수를 보입니다.
-하지만, 해당 NMI 가 irq 핸들러 수행 중에 들어오게 되면, RCU 는 이 CPU 의 RCU
+하지만, 해당 NMI 가 \IRQ\ 핸들러 수행 중에 들어오게 되면, RCU 는 이 CPU 의 RCU
 read-side 크리티컬 섹션들의 탐색 중일 것이므로, \co{rcu_nmi_enter()} 의 line~6
 과 7 과 \co{rcu_nmi_exit()} 의 line~18 과 19 는 \co{dynticks} 가 홀수라면
 아무것도 하지않고 리턴합니다.
@@ -3090,7 +3091,7 @@ respectively.
 \end{figure}
 
 Figure~\ref{fig:formal:Interrupts From Dynticks-Idle Mode}
-는 irq 컨텍스트로의 진입과 irq 컨텍스트로부터의 빠져나옴을 RCU 에 알리는
+는 \IRQ\ 컨텍스트로의 진입과 \IRQ\ 컨텍스트로부터의 빠져나옴을 RCU 에 알리는
 \co{rcu_irq_endter()} 와 \co{rcu_irq_exit()} 함수들을 보입니다.
 \co{rcu_irq_enter()} 의 Line~6 는 \co{dynticks_nesting} 의 값을 증가시키고, 이
 값이 이미 0이 아니었다면, line~7 에서 조용히 리턴합니다.
@@ -3118,12 +3119,12 @@ might execute.
 
 \co{rcu_irq_exit()} 의 line~18 에서는 \co{dynticks_nesting} 의 값을 감소시키고,
 그 결과가 0이 아니라면, line~19 에서 조용히 리턴합니다.
-그렇지 않다면, line~21 에서의 \co{dynticks} 의 값 증가가 앞의 irq 핸들러가
+그렇지 않다면, line~21 에서의 \co{dynticks} 의 값 증가가 앞의 \IRQ\ 핸들러가
 실행했을 수도 있는 모든 RCU read-side 크리티컬 섹션들 뒤에 보여질 것을 보장하기
 위해 메모리 배리어를 수행합니다.
 Line~22 는 \co{dynticks} 가 짝수임을 검증해서 어떤 RCU read-side 크리티컬
 섹션들도 dynticks-idle 모드에서는 나타날 수 없다는 사실과 일관적이게 합니다.
-Line~23-25 는 앞의 irq 핸들러들이 RCU 콜백들을 집어넣었는지 확인하고, 만약
+Line~23-25 는 앞의 \IRQ\ 핸들러들이 RCU 콜백들을 집어넣었는지 확인하고, 만약
 그렇다면 재스케쥴 API 를 통해 이 CPU 가 dynticks-idle 모드를 빠져나오도록
 합니다.
 \iffalse
@@ -3182,7 +3183,7 @@ Figure~\ref{fig:formal:Entering and Exiting Dynticks-Idle Mode},
 \ref{fig:formal:Interrupts From Dynticks-Idle Mode} 의 함수들의 메모리
 배리어들과 짝을 맞추기 위해 메모리 배리어를 실행합니다.
 Line~11 과 12 는 나중의 \co{rcu_implicit_dynticks_qs} 호출을 위한 스냅샷들을
-기록해 두고, line~13 과 14 는 dynticks-idle 모드의 이 CPU 가 irq 도 NMI 도
+기록해 두고, line~13 과 14 는 dynticks-idle 모드의 이 CPU 가 \IRQ 도 NMI 도
 진행중이 아니어서 (달리 말하자면, 두 스냅샷 모두 짝수를 가지고 있어서) 연장된
 quiescent state 안에 있는 것인지 체크를 합니다.
 만약 그렇다면, line~15 와 16 은 이 이벤트를 세고, 이 CPU 가 quiescent state
@@ -3292,7 +3293,7 @@ waiting for a CPU that is offline.
 \QuickQuiz{}
 	이건 여전히 상당히 복잡하네요.
 	왜 그냥 dyntick-idle 모드에 있는 각 CPU 들에 대해 bit 의 값이 설정되어
-	있는 \co{cpumask_t} 를 갖고 irq 나 NMI 핸들러에 들어갈 때에는 그 비트의
+	있는 \co{cpumask_t} 를 갖고 \IRQ\ 나 NMI 핸들러에 들어갈 때에는 그 비트의
 	값을 지우고, 빠져나올 때에는 그 값을 설정하는 식으로 하지 않는거죠?
 	\iffalse
 
@@ -3304,9 +3305,9 @@ waiting for a CPU that is offline.
 	\fi
 \QuickQuizAnswer{
 	이 방법이 기능적으로는 올바르겠지만, 이는 커다란 머신에서는 지나치게
-	커다란 irq 들어가고 빠져나올 때의 오버헤드를 초래할 겁니다.
-	반면에, 이 섹션에서 이야기한 방법은 각각의 CPU 가 irq 와 NMI 에
-	들어가고 나올 때에 per-CPU 데이터만을 만지게 하므로 훨씬 적은 irq
+	커다란 \IRQ\ 들어가고 빠져나올 때의 오버헤드를 초래할 겁니다.
+	반면에, 이 섹션에서 이야기한 방법은 각각의 CPU 가 \IRQ\ 와 NMI 에
+	들어가고 나올 때에 per-CPU 데이터만을 만지게 하므로 훨씬 적은 \IRQ\
 	들어가고 빠져나올 때의 오버헤드를 초래할 것이고, 특히 커다란 기계에선
 	더욱 그러할 겁니다.
 	\iffalse
@@ -3326,15 +3327,15 @@ waiting for a CPU that is offline.
 
 약간의 시점 변경이 RCU 를 위한 dynticks 이넡페이스의 상당한 단순화를
 가져왔습니다.
-이 단순화를 이끈 핵심 변경은 irq 와 NMI 컨텍스트 사이에 공유되는 것들의
+이 단순화를 이끈 핵심 변경은 \IRQ\ 와 NMI 컨텍스트 사이에 공유되는 것들의
 최소화였습니다.
-이 단순화된 인터페이스에서의 유일한 공유는 NMI 컨텍스트에서 irq 변수들로의
+이 단순화된 인터페이스에서의 유일한 공유는 NMI 컨텍스트에서 \IRQ\ 변수들로의
 레퍼런스들 (\co{dynticks} 변수) 뿐입니다.
 NMI 함수들은 이 변수를 절대 업데이트 하지 않아서 그 값은 NMI 핸들러의 수명 동안
 상수를 유지하므로 이런 종류의 공유는 친절한 편입니다.
 이런 공유의 한계는
 Section~\ref{sec:formal:Promela Parable: dynticks and Preemptible RCU} 에
-그려진, NMI 가 irq 함수들의 수행 도중의 어느 시점에든 공유된 상태를 바꿀 수
+그려진, NMI 가 \IRQ\ 함수들의 수행 도중의 어느 시점에든 공유된 상태를 바꿀 수
 있는 상황과는 반대로, 다행히도
 개별적인 함수들이 한번에 하나씩 이해되는걸 가능하게 합니다.
 
