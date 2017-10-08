@@ -6146,6 +6146,22 @@ these sections give a good overview.
 \subsection{Alpha}
 \label{sec:memorder:Alpha}
 
+수명이 다한지 오래된 CPU 에 대해 뭔가 이야기하는건 좀 이상하게 보일수도
+있겠습니다만, Alpha 는 가장 완화된 메모리 순서규칙 모델을 가지고 있으며, 메모리
+오퍼레이션들을 상당히 공격적으로 재배치하기에 흥미롭습니다.
+이때문에 Alpha 를 포함해 모든 CPU 에서 동작해야하는 리눅스 커널의 메모리 순서
+보장 기능들은 Alpha 를 바탕으로 정의되었습니다.
+따라서 Alpha 를 이해하는 것은 리눅스 커널 해커에게 매우 중요합니다.
+
+Alpha 와 다른 CPU 사이의 차이점이
+Listing~\ref{lst:memorder:Insert and Lock-Free Search}
+의 코드에 보여져 있습니다.
+이 그림의 line~9 에서의 \co{smp_wmb()} 는 line~6-8 의 원소 초기화가 line~10
+에서 원소가 추가되기 전에 수행될 것을 보장해서 이 lock-free 탐색이 제대로
+동작할 겁니다.
+정확히 말하면, Alpha 를 {\em 제외한} 모든 CPU 에서 이 보장이 지켜집니다.
+\iffalse
+
 It may seem strange to say much of anything about a CPU whose end of life
 has long since past, but Alpha is interesting because, with one of
 the weakest memory ordering models, it reorders memory operations quite
@@ -6163,6 +6179,7 @@ guarantees that the element initialization
 in lines~6-8 is executed before the element is added to the
 list on line~10, so that the lock-free search will work correctly.
 That is, it makes this guarantee on all CPUs {\em except} Alpha.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -6201,6 +6218,26 @@ That is, it makes this guarantee on all CPUs {\em except} Alpha.
 \label{lst:memorder:Insert and Lock-Free Search}
 \end{listing}
 
+Alpha 는 극단적으로 완화된 메모리 순서 규칙을 가져서
+Listing~\ref{lst:memorder:Insert and Lock-Free Search} 의 line~20 에서의 코드가
+line~6-8 의 초기화 전의 쓰레기 값을 보게 할 수 있습니다.
+
+Figure~\ref{fig:memorder:Why smp-read-barrier-depends() is Required}
+는 분리된 캐시를 가져서 분리된 캐시 사이를 왔다갔다 하는 캐시라인이 다른
+캐시에서 처리될 수 있는 상당히 병렬적인 기계에서 어떻게 이런 일이 일어날 수
+있는지 보입니다.
+예를 들어,
+Listing~\ref{lst:memorder:Insert and Lock-Free Search}
+의 line~17 에서의 \co{head.next} 의 로드는 캐시 뱅크~0 에 액세스 했고, line~20
+에서의 \co{p->key} 의 로드와 line~23 에서의 \co{p->next} 의 로드는 캐시 뱅크~1
+에 액세스 했을 수 있습니다.
+Alpha 에서, \co{smp_wmb()} 는
+Listing~\ref{lst:memorder:Insert and Lock-Free Search} 의 line~6-8 에 의해
+일어난 (\co{p->next}, \co{p->key}, \co{p->next}) 캐시 무효화가 (\co{head.next})
+line~10 전에 접합부에 도달할 것을 보장합니다만, 읽기를 하는 CPU 의 캐시
+뱅크로의 전파의 순서에 대해서는 어떤 보장도 하지 않습니다.
+\iffalse
+
 Alpha has extremely weak memory ordering
 such that the code on line~20 of
 Listing~\ref{lst:memorder:Insert and Lock-Free Search} could see the old
@@ -6223,6 +6260,26 @@ Listing~\ref{lst:memorder:Insert and Lock-Free Search}
 the interconnect before that of line~10 (for \co{head.next}), but
 makes absolutely no guarantee about the order of
 propagation through the reading CPU's cache banks.
+\fi
+예를 들어, 읽기를 하는 CPU 의 캐시 뱅크~1 이 매우 바쁜 사이, 캐시 뱅크~0 는
+한가할 수 있습니다.
+이는 새로운 원소를 위한 (\co{p->next}, \co{p->key}, 그리고 \co{p->data}) 캐시
+무효화가 지연되어서, 읽기를 하는 CPU 가 \co{head.next} 의 새로운 값을 읽지만
+\co{p->key} 와 \co{p->next} 의 예전 값을 읽을 읽게 하는 결과를 만들 수
+있습니다.
+그렇습니다, 이는 Alpha 가 포인터를 가져오기 {\em 전에} 포인터로 가리켜지는
+데이터를 가져올 수 있음을 의미합니다, 이상하지만 사실입니다.
+더 많은 정보를 원하시거나 제가 이 모든걸 꾸며냈다고 생각하신다면 앞서 작성된
+문서~\cite{Compaq01,WilliamPugh2000Gharachorloo} 를 참고하시기
+바랍니다.\footnote{
+	물론, 빈틈없는 독자분들은 Alpha 가 불쾌하고 추잡한 만큼이나 근처에서는
+	볼 수 없고, Section~\ref{sec:app:whymb:Ordering-Hostile Architecture}
+	의 (감사하게도) 미신적 아키텍쳐가 이 경우임을 이미 알아차렸을 겁니다.}
+이런 일반적이지 않은 순서규칙에 대한 접근법의 장점은 Alpha 가 더 간단한 캐시
+하드웨어를 가질 수 있어서 Alpha 의 전성기의 보다 높은 클락 주파수가 가능하게
+했다는 것입니다.
+\iffalse
+
 For example, it is possible that the reading CPU's cache bank~1 is very
 busy, but cache bank~0 is idle.
 This could result in the cache invalidations for the new element
@@ -6243,6 +6300,7 @@ or if you think that I am just making all this up.\footnote{
 The benefit of this unusual approach to ordering is that Alpha can use
 simpler cache hardware, which in turn permitted higher clock frequency
 in Alpha's heyday.
+\fi
 
 \begin{figure}[tbp]
 \centering
@@ -6250,6 +6308,20 @@ in Alpha's heyday.
 \caption{Why \tco{smp_read_barrier_depends()} is Required}
 \label{fig:memorder:Why smp-read-barrier-depends() is Required}
 \end{figure}
+
+어떤 사람은 Alpha 가 포인터의 로드를 뒤따르는 의존적 로드에 대해 순서지키도록
+강제하기 위해 포인터 로드와 디레퍼런스 사이에 \co{smp_rmb()} 를 위치시킬 수도
+있을 겁니다.
+하지만, 이는 읽기에 대해 data dependency 를 지키는 시스템들 (ARM, Itanium, PPC,
+그리고 SPARC) 에는 불필요한 오버헤드를 가져올 수 있습니다.
+그래서 이런 시스템에서의 오버헤드를 없애기 위해 \co{smp_read_barrier_depends()}
+기능이 리눅스 커널에 추가되었습니다.
+이 기능이
+Listing~\ref{lst:memorder:Insert and Lock-Free Search} 의 line~19 에 추가될 수
+있습니다만,
+Listing~\ref{lst:memorder:Safe Insert and Lock-Free Search} 의 line~17 과~22 에
+보여진 것처럼 \co{rcu_dereference()} 래퍼 매크로를 사용하는게 낫습니다.
+\iffalse
 
 One could place an \co{smp_rmb()} primitive
 between the pointer fetch and dereference in order to force Alpha
@@ -6263,6 +6335,25 @@ Listing~\ref{lst:memorder:Insert and Lock-Free Search},
 but it is better to use the \co{rcu_dereference()} wrapper macro
 as shown on lines~17 and~22 of
 Listing~\ref{lst:memorder:Safe Insert and Lock-Free Search}.
+\fi
+
+\co{smp_wmb()} 자리에 모든 읽기를 하는 CPU 들이 쓰기를 하는 CPU 의 쓰기를
+순서대로 읽게 강제하는 소프트웨어 배리어를 구현할 수도 있을 겁니다.
+하지만, 이 방법은 Alpha 와 같이 극단적으로 완화된 순서규칙을 갖는 CPU 에는
+지나친 오버헤드를 갖게 하고, 더 나아가서 시스템이 강력한 real-time 응답 요구를
+갖는 환경에서는 합리적인 방법으로 여겨지지 않기 때문에 리눅스 커뮤니티에서는
+받아들여지지 않았습니다.
+이 소프트웨어 배리어는 모든 다른 CPU에 inter-processor interrupt (IPI) 들을
+보내는 것으로 구현될 수 있습니다.
+그런 IPI 가 도착하면, CPU 는 메모리 배리어 인스트럭션을 수행해서 메모리 배리어
+슛다운을 구현할 겁니다.
+데드락을 막기 위해선 추가적인 로직이 필요합니다.
+물론, data dependency 를 지켜주는 CPU 에서는 그런 배리어를 단순히
+\co{smp_wmb()} 로 정의할 수 있을 겁니다.
+Alpha 는 저무는 해인 만큼 미래에는 이런 방법이 다시 고려되어야겠습니다만,
+2017년에 있어선 최신 리눅스 커널을 아끼는 DEC Alpha 시스템에서 돌리고 있는
+사람들이 놀랍게도 많습니다.
+\iffalse
 
 It is also possible to implement a software barrier
 that could be used in place of \co{smp_wmb()}, which would force
@@ -6283,6 +6374,7 @@ Perhaps this decision should be revisited in the future as Alpha
 fades off into the sunset, but as of 2017 there is a surprisingly
 large number of people who run recent Linux kernels on their lovingly
 preserved DEC Alpha systems.
+\fi
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -6320,16 +6412,38 @@ preserved DEC Alpha systems.
 \label{lst:memorder:Safe Insert and Lock-Free Search}
 \end{listing}
 
+리눅스 메모리 배리어 기능들은 그 이름을 Alpha 의 인스트럭션들에서 따왔는데,
+\co{smp_mb()} 는 {\tt mb} 로부터, \co{smp_rmb()} 는 {\tt rmb} 로부터, 그리고
+\co{smp_wmb()} 는 {\tt wmb} 로부터 왔습니다.
+Alpha 는 \co{smp_read_barrier_depends()} 가 no-op 이 아니라 \co{smp_mb()} 인
+유일한 CPU 입니다.
+\iffalse
+
 The Linux memory-barrier primitives took their names from the Alpha
 instructions, so \co{smp_mb()} is {\tt mb}, \co{smp_rmb()} is {\tt rmb},
 and \co{smp_wmb()} is {\tt wmb}.
 Alpha is the only CPU where \co{smp_read_barrier_depends()} is
 an \co{smp_mb()} rather than a no-op.
+\fi
 
 \QuickQuiz{}
+	Alpha 의 \co{smp_read_barrier_depends()} 는 왜 \co{smp_rmb()} 가 아니라
+	\co{smp_mb()} 죠?
+	\iffalse
+
 	Why is Alpha's \co{smp_read_barrier_depends()} an
 	\co{smp_mb()} rather than \co{smp_rmb()}?
+	\fi
 \QuickQuizAnswer{
+	먼저, Alpha 는 \co{mb} 와 \co{wmb} 인스트럭션만을 가지고 있어서,
+	\co{smp_rmb()} 는 어떻든간에 Alpha 의 \co{mb} 인스트럭션으로 구현될
+	겁니다.
+
+	더 중요한건, \co{smp_read_barrier_depends()} 는 뒤따르는 스토어들을
+	순서잡아야만 합니다.
+	예를들어, 다음과 같은 코드를 고려해 봅시다:
+	\iffalse
+
 	First, Alpha has only \co{mb} and \co{wmb} instructions,
 	so \co{smp_rmb()} would be implemented by the Alpha \co{mb}
 	instruction in either case.
@@ -6337,6 +6451,7 @@ an \co{smp_mb()} rather than a no-op.
 	More importantly, \co{smp_read_barrier_depends()} must
 	order subsequent stores.
 	For example, consider the following code:
+	\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -6350,11 +6465,21 @@ an \co{smp_mb()} rather than a no-op.
 \end{minipage}
 \vspace{5pt}
 
+	여기서는 \co{p->a} 와 \co{p->b} 로부터의 로드만이 아니라
+	\co{p->hey_look} 으로의 스토어도 순서가 잡혀져야만 합니다.
+	\iffalse
+
 	Here the store to \co{p->hey_look} must be ordered,
 	not just the loads from \co{p->a} and \co{p->b}.
+	\fi
 } \QuickQuizEnd
 
+Alpha 에 대한 더 자세한 정보를 위해선, 레퍼런스 매뉴얼~\cite{ALPHA2002} 을
+참고하시기 바랍니다.
+\iffalse
+
 For more on Alpha, see its reference manual~\cite{ALPHA2002}.
+\fi
 
 \subsection{ARMv7-A/R}
 \label{sec:memorder:ARMv7-A/R}
