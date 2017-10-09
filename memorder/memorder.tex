@@ -6484,13 +6484,32 @@ For more on Alpha, see its reference manual~\cite{ALPHA2002}.
 \subsection{ARMv7-A/R}
 \label{sec:memorder:ARMv7-A/R}
 
+ARM 제품군의 CPU 는 임베디드 응용에서, 특히 휴대폰과 같이 전력 제한이 있는 응용
+분야에서 굉장히 대중적으로 사용됩니다.
+그 메모리 모델은 \Power{}(
+(Section~\ref{sec:memorder:POWER / PowerPC} 을 참고하세요) 와 비슷합니다만, ARM
+은 다른 메모리 배리어 인스트럭션 집합을 사용합니다~\cite{ARMv7A:2010}:
+\iffalse
+
 The ARM family of CPUs is extremely popular in embedded applications,
 particularly for power-constrained applications such as cellphones.
 Its memory model is similar to that of \Power{}
 (see Section~\ref{sec:memorder:POWER / PowerPC}), but ARM uses a
 different set of memory-barrier instructions~\cite{ARMv7A:2010}:
+\fi
 
 \begin{description}
+\item	[\tco{DMB}] (data memory barrier) 는 특정 타입의 오퍼레이션들이 같은
+	타입의 뒤따르는 모든 오퍼레이션들보다 먼저 완료된 것으로 \emph{보이게}
+	합니다.
+	오퍼레이션들의 ``타입'' 은 모든 오퍼레이션들이거나 쓰기만으로 제한될 수
+	있습니다 (Alpha \co{wmb} 와 \Power{} \co{eieio} 인스트럭션과
+	유사합니다).
+	또한, ARM 은 캐시 일관성이 세가지 범위 중 하나를 가질 수 있게 합니다:
+	싱글 프로세서, 프로세서들 중 일부 (``inner'') 그리고 글로벌
+	(``outer'').
+\iffalse
+
 \item	[\tco{DMB}] (data memory barrier) causes the specified type of
 	operations to \emph{appear} to have completed before any
 	subsequent operations of the same type.
@@ -6500,6 +6519,21 @@ different set of memory-barrier instructions~\cite{ARMv7A:2010}:
 	In addition, ARM allows cache coherence to have one of three
 	scopes: single processor, a subset of the processors
 	(``inner'') and global (``outer'').
+\fi
+\item	[\tco{DSB}] (data synchronization barrier) 는 특정 타입의
+	오퍼레이션들이 뒤따르는 (모든 타입의) 오퍼레이션들이 수행되기 전에
+	정말로 완료되도록 만듭니다.
+	오퍼레이션들의 ``타입'' 은 \co{DMB} 에서와 같습니다.
+	\co{DSB} 인스트럭션은 ARM 아키텍쳐의 초기 버전에서는 \co{DWB} (drain
+	write buffer 또는 data write barrier) 라고 불렸습니다.
+\item	[\tco{ISB}] (instruction synchronization barrier) 는 CPU 파이프라인을
+	비워서, \co{ISB} 를 뒤따르는 모든 인스트럭션들은 \co{ISB} 가 완료된
+	후에야 불러들여집니다.
+	예를 들어, 여러분이 (JIT 와 같은) 스스로를 수정하는 프로그램을
+	만들었다면, 여러분은 해당 코드를 만들고 수행하기 전에 \co{ISB} 를
+	수행해야만 합니다.
+\iffalse
+
 \item	[\tco{DSB}] (data synchronization barrier) causes the specified
 	type of operations to actually complete before any subsequent
 	operations (of any type) are executed.
@@ -6513,7 +6547,22 @@ different set of memory-barrier instructions~\cite{ARMv7A:2010}:
 	For example, if you are writing a self-modifying program
 	(such as a JIT), you should execute an \co{ISB} between
 	generating the code and executing it.
+\fi
 \end{description}
+
+이 인스트럭션들 가운데 어떤 것도 리눅스의 \co{rmb()} 기능의 의미와 맞아떨어지지
+않아서, 리눅스에서의 \co{rmb()} 는 완전한 \co{DMB} 로 구현되어집니다.
+\co{DMB} 와 \co{DSB} 인스트럭션은 배리어의 앞과 뒤로 순서지어지는 액세스들의
+재귀적 정의를 가지고 있는데, 이는 \Power{} 의 cumulativity 와 비슷한 효과를
+갖습니다.
+
+ARM 은 또한 control dependency 를 구현하고 있어서, 조건적 브랜치가 어떤 로드에
+의존적이라면, 이 조건적 브랜치 뒤에 수행되는 모든 스토어는 이 로드 뒤로
+순서지어집니다.
+하지만, 조건적 브랜치를 뒤따르는 로드는 이 브랜치와 이 로드 사이에 \co{ISB}
+인스트럭션이 있지 않다면 순서가 보장되지 \emph{않습니다}.
+다음과 같은 예를 생각해 봅시다:
+\iffalse
 
 None of these instructions exactly match the semantics of Linux's
 \co{rmb()} primitive, which must therefore be implemented as a full
@@ -6529,6 +6578,7 @@ However, loads following the conditional branch will \emph{not}
 be guaranteed to be ordered unless there is an \co{ISB}
 instruction between the branch and the load.
 Consider the following example:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -6545,6 +6595,16 @@ Consider the following example:
 \end{minipage}
 \vspace{5pt}
 
+이 예에서, load-store control dependency 순서 규칙이 line~1 에서의 \co{x} 의
+로드가 line~4 에서의 \co{y} 로의 스토어 앞으로 순서지어지게 합니다.
+하지만, ARM 은 load-load control dependency 는 지켜주지 않으므로, line~1 에서의
+로드는 line~5 에서의 로드 \emph{뒤에} 수행될 수도 있습니다.
+다른 한편, line~2 에서의 조건적 브랜치는 line~6 에서의 \co{ISB} 인스트럭션과
+결합되어 line~7 에서의 로드가 line~1 에서의 로드 뒤에 수행될 것을 보장합니다.
+\co{ISB} 인스트럭션을 line~3 과~4 사이에 추가하면 line~1 과~5 사이의 순서가
+강제될 것임을 알아두시기 바랍니다.
+\iffalse
+
 In this example, load-store control dependency ordering causes
 the load from \co{x} on line~1 to be ordered before the store to
 \co{y} on line~4.
@@ -6556,6 +6616,7 @@ and the \co{ISB} instruction on line~6 ensures that
 the load on line~7 happens after the load on line~1.
 Note that inserting an additional \co{ISB} instruction somewhere between
 lines~3 and~4 would enforce ordering between lines~1 and~5.
+\fi
 
 \subsection{ARMv8}
 
