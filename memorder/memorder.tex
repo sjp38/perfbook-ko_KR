@@ -6691,6 +6691,20 @@ defined its memory ordering with a formal model~\cite{ARMv8A:2017}.
 
 \subsection{Itanium}
 
+Itanium 은 완화된 일관성 모델을 제공해서, 명시적인 메모리 배리어 인스트럭션이
+없으면, Itanium 은 임의적으로 메모리 레퍼런스들을 재배치 할 수
+있습니다~\cite{IntelItanium02v2}.
+Itanium 은 {\tt mf} 라는 이름의 memory-fence 인스트럭션을 갖습니다만, 또한
+로드, 스토어, 그리고 일부 어토믹 인스트럭션들을 ``반쪽짜리 memory fence'' 로
+변환하는 변경자 또한 갖습니다~\cite{IntelItanium02v2}.
+{\tt acq} 변경자는 뒤따르는 메모리 레퍼런스 인스트럭션들이 {\tt acq} 앞으로
+재배치 되는 것을 막습니다만, 앞의 메모리 레퍼런스 인스트럭션들이 {\tt acq} 뒤로
+재배치 되는건 허용하는데, 이는 ARMv8 의 load-acquire 인스트럭션과 유사합니다.
+비슷하게, {\tt rel} 변경자는 앞의 메모리 레퍼런스 인스트럭션들이 {\tt rel} 뒤로
+재배치 되는걸 막습니다만, 뒤따르는 메모리 레퍼런스 인스트럭션들이 {\tt rel}
+앞으로 재배치되는건 허용합니다.
+\iffalse
+
 Itanium offers a weak consistency model, so that in absence of explicit
 memory-barrier instructions, Itanium is within its rights to arbitrarily
 reorder memory references~\cite{IntelItanium02v2}.
@@ -6705,6 +6719,20 @@ Similarly, the {\tt rel} modifier prevents prior memory-reference
 instructions from being reordered after the {\tt rel}, but allows
 subsequent memory-reference instructions to be reordered before
 the {\tt rel}.
+\fi
+
+이런 반쪽짜리 memory fence 들은 크리티컬 섹션에 유용한데, 오퍼레이션들을
+크리티컬 섹션 안으로 들여보내는건 안전하지만 크리티컬 섹션 밖으로 내보내는건
+치명적일 수 있기 때문입니다.
+하지만, 이 기능을 가진 CPU 가운데 하나로써,\footnote{
+	ARMv8 은 최근에 load-acquire 와 store-release 인스트럭션을
+	추가했습니다.}
+Itanium 은 리눅스의 락 획득과 해제에 관련된 메모리 순서 규칙을 정의합니다.
+이상하게 들릴 수 있지만, 실제 Itanium 하드웨어는 load-acquire 와 store-release
+인스트럭션들을 완전한 배리어로 구현했다는 소문이 있습니다.
+어쨌든, Itanium 은 load-acquire 와 store-release 의 (소문이 사실이어서 실제가
+아니라면) 개념을 인스트럭션 집합에 추가한 첫번째 주류 CPU 였습니다.
+\iffalse
 
 These half-memory fences are useful for critical sections, since
 it is safe to push operations into a critical section, but can be
@@ -6719,6 +6747,21 @@ both load-acquire and store-release instructions as full barriers.
 Nevertheless, Itanium was the first mainstream CPU to introduce the concept
 (if not the reality) of load-acquire and store-release into its
 instruction set.
+\fi
+
+Itanium {\tt mf} 인스트럭션은 리눅스 커널의 \co{smp_rmb()}, \co{smp_mb()},
+그리고 \co{smp_wmb()} 기능에 사용됩니다.
+아, 그리고 반대의 루머가 있긴 하지만, ``mf'' 는 ``memory fence'' 의 약자가
+맞습니다.
+
+마지막으로, Itanium 은 ``mf'' 인스트럭션을 포함해 ``release'' 오퍼레이션들에
+글로벌하고 완전한 순서를 제공합니다.
+이는 transitivity 를 제공하는데, 이는 특정 코드 조각이 특정 액세스가 일어난
+것으로 파악했다면, 뒤따르는 모든 코드 조각은 역시 이 액세스가 이미 일어난
+것으로 보게 됨을 의미합니다.
+다시 말하지만, 모든 관련된 코드 조각들이 올바르게 메모리 배리어를 사용했다는
+가정 하의 이야기 입니다.
+\iffalse
 
 The Itanium {\tt mf} instruction is used for the \co{smp_rmb()},
 \co{smp_mb()}, and \co{smp_wmb()} primitives in the Linux kernel.
@@ -6732,6 +6775,7 @@ sees a given access as having happened, any later code fragment will
 also see that earlier access as having happened.
 Assuming, that is, that all the code fragments involved correctly use
 memory barriers.
+\fi
 
 \subsection{MIPS}
 
