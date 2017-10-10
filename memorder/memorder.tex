@@ -6627,6 +6627,22 @@ lines~3 and~4 would enforce ordering between lines~1 and~5.
 \ContributedBy{Figure}{fig:memorder:Half Memory Barrier}{Melissa Brossard}
 \end{figure}
 
+ARMv8 은 ARM 의 64-bit CPU~\cite{ARMv8A:2017} 로,
+Section~\ref{sec:memorder:ARMv7-A/R} 에서 설명된 32-bit CPU 와 대조됩니다.
+ARMv8 의 메모리 모델은 32-bit 에서의 것들과 비슷합니다만, load-acquire
+(\co{LDLARB}, \co{LDLARH}, 그리고 \co{LDLAR}) 와 store-release (\co{STLLRB},
+\co{STLLRH}, 그리고 \co{STLLR}) 인스트럭션들을 갖습니다.
+이 인스트럭션들은 ``반쪽 메모리 배리어'' 로 동작해서,
+Figure~\ref{fig:memorder:Half Memory Barrier} 로 그려진 것처럼 ARMv8 CPU 는
+앞의 액세스들은 뒤의 \co{LDLAR} 인스트럭션과 재배치 할 수 있지만, 앞의
+\co{LDLAR} 을 뒤의 액세스들과 재배치 하는건 금지되어 있습니다.
+비슷하게, ARMv8 CPU 는 앞의 \co{STLLR} 인스트럭션을 뒤따르는 액세스들과
+재배치하는건 가능하지만, 앞의 액세스들을 뒤따르는 \co{STLLR} 인스트럭션과
+재배치하는건 금지되어 있습니다.
+누군가는 예상했겠지만, 이는 이 인스트럭션들이 C11 의 load-acquire 와
+store-release 를 바로 지원함을 의미합니다.
+\iffalse
+
 ARMv8 is ARM's 64-bit CPU~\cite{ARMv8A:2017},
 in contrast to their 32-bit CPU described in
 Section~\ref{sec:memorder:ARMv7-A/R}.
@@ -6644,6 +6660,20 @@ a subsequent access, but are prohibited from reordering
 previous accesses with a later \co{STLLR} instruction.
 As one might expect, this means that these instructions directly support
 the C11 notion of load-acquire and store-release.
+\fi
+
+하지만, ARMv8 은 많은 환경에서 store-release 와 load-acquire 가 완전한 배리어로
+동작하도록 조합할 것을 필수로 함으로써 C11 메모리 모델 이상의 것을 할수도
+있습니다.
+예를 들어, ARMv8 에서, 스토어 뒤에 store-release, load-acquire, 로드가 모두
+서로 다른 변수들에 대해 행해지며 순서대로 뒤따른다면, 모든 CPU 들은 최초의
+스토어가 마지막의 로드를 앞선다는데에 동의하게 됩니다.
+흥미롭게도, 대부분의 (x86 과 mainframe 을 포함해서) TSO 아키텍쳐들은 이 보장을
+갖지 않아서, 두개의 로드가 두개의 스토어 앞으로 재배치 될 수 있게 합니다.
+
+ARMv8 은 또한 제조사가 공개적으로 정형적 모델을 통해 그 메모리 순서 규칙을
+정의한 첫번째 CPU 의 영예를 가졌습니다.
+\iffalse
 
 However, ARMv8 goes well beyond the C11 memory model by mandating that
 the combination of a store-release and load-acquire act as a full
@@ -6657,6 +6687,7 @@ reordered before the two stores.
 
 ARMv8 also has the distinction of being the first CPU whose vendor publicly
 defined its memory ordering with a formal model~\cite{ARMv8A:2017}.
+\fi
 
 \subsection{Itanium}
 
