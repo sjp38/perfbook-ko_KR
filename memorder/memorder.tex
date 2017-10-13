@@ -7029,6 +7029,21 @@ the instruction cache, and may be used in these situations.
 
 \subsection{SPARC RMO, PSO, and TSO}
 
+SPARC 에서의 Solaris 는 리눅스가 ``sparc'' 32-bit 아키텍쳐로 빌드되었을 때와
+같이 TSO (total-store order) 를 사용합니다.
+하지만, 64-bit 리눅스 커널 (``sparc64'' 아키텍쳐) 는 SPARC 를 RMO
+(relaxed-memory order) 모델~\cite{SPARC94} 로 돌아갑니다.
+SPARC 아키텍쳐는 또한 중간적 PSO (partial store order) 를 제공합니다.
+RMO 에서 돌아가는 모든 프로그램은 PSO 나 TSO 에서도 돌아갈 수 있으며, 비슷하게,
+PSO 에서 돌아가는 프로그램은 TSO 에서도 돌아갑니다.
+공유 메모리 병렬 프로그램을 다른 방향으로 옮겨 수행하는 것은 메모리 배리어의
+주의 깊은 추가를 필요로 합니다만, 앞에서도 이야기 되었듯, 동기화 도구의 표준적
+사용을 하는 프로그램은 메모리 배리어에 대해 걱정할 필요가 없을 겁니다.
+
+SPARC 는 세세한 수준의 규칙 보장 제어를 가능하게 하는, 매우 유연한 메모리
+배리어 인스트럭션~\cite{SPARC94} 을 갖습니다.
+\iffalse
+
 Solaris on SPARC uses TSO (total-store order), as does Linux when built for
 the ``sparc'' 32-bit architecture.
 However, a 64-bit Linux kernel (the ``sparc64'' architecture)
@@ -7044,7 +7059,26 @@ worry about memory barriers.
 
 SPARC has a very flexible memory-barrier instruction~\cite{SPARC94}
 that permits fine-grained control of ordering:
+\fi
 \begin{description}
+\item	[\tco{StoreStore}] 는 앞의 스토어들을 뒤따르는 스토어들에 대해
+	순서지어줍니다.
+	(이 옵션은 리눅스 \co{smp_wmb()} 기능에서 사용됩니다.)
+\item	[\tco{LoadStore}] 는 앞의 로드를 뒤따르는 스토어에 대해 순서지어줍니다.
+\item	[\tco{StoreLoad}] 는 앞의 스토어들을 뒤따르는 로드들에 대해
+	순서지어줍니다.
+\item	[\tco{LoadLoad}] 는 앞의 로드를 뒤따르는 로드들에 대해 순서지어줍니다.
+	(이 옵션은은 리눅스 \co{smp_rmb()} 기능에 의해 사용됩니다.)
+\item	[\tco{sync}] 는 모든 앞의 오퍼레이션들을 뒤따르는 오퍼레이션들 전에
+	완료되도록 합니다.
+\item	[\tco{MemIssue}] 는 진행중인 메모리 오퍼레이션들이 뒤따르는 메모리
+	오퍼레이션들 전에 완료되게 하는데, memory-mapped I/O 의 일부 경우에
+	중요합니다.
+\item	[\tco{Lookaside}] 는 MemIssue 와 동일하지만, 앞의 스토어들과 뒤따르는
+	로드들에만 적용되며, 같은 메모리 영역에 접근하는 스토어와 로드에만
+	적용됩니다.
+\iffalse
+
 \item	[\tco{StoreStore}] orders preceding stores before subsequent stores.
 	(This option is used by the Linux \co{smp_wmb()} primitive.)
 \item	[\tco{LoadStore}] orders preceding loads before subsequent stores.
@@ -7060,12 +7094,30 @@ that permits fine-grained control of ordering:
 	but only applies to preceding stores
 	and subsequent loads, and even then only for stores and loads that
 	access the same memory location.
+\fi
 \end{description}
+
+리눅스 \co{smp_mb()} 기능은 앞의 네개의 옵션들을 함께 사용하는데, 따라서
+\co{membar #LoadLoad | #LoadStore | #StoreStore | #StoreLoad} 는 완전한 메모리
+오퍼레이션들의 순서 보장을 제공합니다.
+\iffalse
 
 The Linux \co{smp_mb()} primitive uses the first four options together,
 as in
 \co{membar #LoadLoad | #LoadStore | #StoreStore | #StoreLoad},
 thus fully ordering memory operations.
+\fi
+
+그런데, \qco{membar #MemIssue} 는 왜 필요할까요?
+\qco{membar #StoreLoad} 는 뒤따르는 로드가 그 값을 스토어 버퍼에서 가져올 수
+있게 해서, 해당 쓰기가 MMIO 레지스터로 향하는 것이어서 읽히는 값에 따라
+부가작용을 일으킬 수 있는 것이라면 문제가 될 수 있습니다.
+반면에, \qco{membar #MemIssue} 는 이 로드가 수행되기 전에 스토어 버퍼들이
+비워지게 해서, 이 로드는 이 값을 실제로 MMIO 레지스터로부터 얻어오게 할 겁니다.
+드라이버는 이대신 \qco{membar #Sync} 를 사용할 수 있습니다만, 더 비싼
+\qco{membar #Sync} 의 추가적인 동작이 필요없는 경우엔 더 가벼운 편인
+\qco{membar #MemIssue} 가 낫습니다.
+\iffalse
 
 So, why is \qco{membar #MemIssue} needed?
 Because a \qco{membar #StoreLoad} could permit a subsequent
@@ -7078,6 +7130,21 @@ thereby ensuring that the load actually gets its value from the MMIO register.
 Drivers could instead use \qco{membar #Sync}, but the lighter-weight
 \qco{membar #MemIssue} is preferred in cases where the additional function
 of the more-expensive \qco{membar #Sync} are not required.
+\fi
+
+\qco{membar #Lookaside} 는 \qco{membar #MemIssue} 의 경량 버전으로, 특정 MMIO
+레지스터에 쓰기를 하는 행위가 해당 레지스터로부터 다음에 읽힐 값에 영향을 주는
+경우에 유용합니다.
+하지만, 더 무거운 \qco{membar #MemIssue} 는 해당 MMIO 레지스터로의 쓰기가
+나중에 {\em 다른} MMIO 레지스터로부터의 읽기에 영향을 끼치는 경우에는 반드시
+사용되어야만 합니다.
+
+SPARC 가 왜 \co{wmb()} 가 \qco{membar #MemIssue} 가 되게, 그리고 \co{smp_wmb()}
+가 \qco{membar #StoreStore} 로 되도록 정의하지 않아서 현재의 정의는 일부
+드라이버에서는 버그에 취약하도록 만들었는지는 분명치 않습니다.
+리눅스가 수행되는 모든 SPARC CPU 들은 아키텍쳐에서 허용하는 것보다 더 보수적인
+메모리 순서 보장 모델을 구현했을 가능성이 큽니다.
+\iffalse
 
 The \qco{membar #Lookaside} is a lighter-weight version of
 \qco{membar #MemIssue}, which is useful when writing to a given MMIO register
@@ -7093,6 +7160,17 @@ as the current definitions seem vulnerable to bugs in some drivers.
 It is quite possible that all the SPARC CPUs that Linux runs on
 implement a more conservative memory-ordering model than the architecture
 would permit.
+\fi
+
+SPARC 는 {\tt flush} 인스트럭션이 인스트럭션이 스토어된 시점과 수행되는 시점
+사이에서 사용될 것을 필요로 합니다~\cite{SPARC94}.
+이는 SPARC 의 인스트럭션 캐시로부터 해당 지역의 기존 값을 비우기 위해
+필요합니다.
+{\tt flush} 는 주소를 받아서, 인스트럭션 캐시로부터 해당 위치의 값만을 지운다는
+것을 알아두시기 바랍니다.
+SMP 시스템에서는 모든 CPU 의 캐시가 비워지지만, 언제 모든 CPU 의 플러시가
+완료되었는지를 알아낼 간편한 방법은 없습니다만, 구현상의 레퍼런스는 있습니다.
+\iffalse
 
 SPARC requires a {\tt flush} instruction be used between the time that
 an instruction is stored and executed~\cite{SPARC94}.
@@ -7103,6 +7181,7 @@ from the instruction cache.
 On SMP systems, all CPUs' caches are flushed, but there is no
 convenient way to determine when the off-CPU flushes complete,
 though there is a reference to an implementation note.
+\fi
 
 \subsection{x86}
 
