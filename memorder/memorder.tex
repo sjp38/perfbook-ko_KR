@@ -7357,6 +7357,26 @@ among others.
 \section{Where is Memory Ordering Needed?}
 \label{sec:memorder:Where is Memory Ordering Needed?}
 
+이 섹션은 중간의 토론을 고려하여
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+을 다시 살펴봅니다.
+
+메모리 순서 보장 오퍼레이션들은 최소 두개의 쓰레드 사이에 최소 두개의 변수에
+관여하는 상호작용의 가능성이 있을 때에만 필요합니다.
+항상 그렇듯, 싱글 쓰레드 프로그램이 충분한 성능을 제공한다면, 뭐하러 병렬성을
+고려하겠습니까?\footnote{
+	취미로 사는 사람들과 연구자들은 물론 이것 등의 경고들을 무시해도
+	좋을 겁니다.}
+무엇보다도, 병렬성을 제거하는건 메모리 순서 보장 오퍼레이션의 추가적 비용을
+제거합니다.
+
+한 사이클 내에서의 모든 쓰레드간의 통신이 store-to-load 연결 (즉, 다음 쓰레드의
+로드가 앞의 쓰레드가 스토어한 값을 리턴하는것) 을 사용한다면, 최소한의
+순서보장으로 충분합니다.
+최소한의 순서 보장은 의존성, acquire, 그리고 모든 더 강력한 순서 보장
+오퍼레이션들을 포함합니다.
+\iffalse
+
 This section revisits
 Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 in light of the intervening discussion.
@@ -7376,6 +7396,24 @@ If all thread-to-thread communication in a given cycle use store-to-load links
 stored), minimal ordering suffices.
 Minimal ordering includes dependencies, acquires, and all stronger
 ordering operations.
+\fi
+
+해당 사이클 내에서의 하나를 제외한 모든 연결들이 store-to-load 연결이라면,
+각각의 store-to-load 링크들에 release-acquire 쌍을 사용하는 것으로 충분합니다.
+여러분은 acquire 를 의존성으로 교체할 수도 있지만 이는 이를 허용하는 환경에서만
+가능하며, C11 표준의 메모리 모델은 이를 허용하지 \emph{않음} 을 명심하시기
+바랍니다.
+로드로 이어지는 의존성은 \co{lockless_dereference()} 나 \co{rcu_dereference()}
+로 시작되어야만 함 역시 알아두시기 바랍니다:
+\co{READ_ONCE()} 는 충분치 않습니다.
+여러분의 컴파일러에 의해 망가진 의존성은 아무짝에도 도움이 되지 않으니,
+Section~\ref{sec:memorder:Address- and Data-Dependency Restrictions}
+과~\ref{sec:memorder:Control-Dependency Restrictions} 를 주의깊게 다시 볼 것을 잊지 마세요!
+하나의 non-store-to-load 링크를 공유하는 두 쓰레드는 일반적으로
+\co{WRITE_ONCE()} 더하기 \co{smp_wmb()} 를 \co{smp_store_release()} 로 교체할
+수 있고, \co{READ_ONCE()} 더하기 \co{smp_rmb()} 를 \co{smp_load_acquire()} 로
+교체할 수 있습니다.
+\iffalse
 
 If all but one of the links in a given cycle is a store-to-load
 link, it is sufficient to use release-acquire pairs for each of
@@ -7395,6 +7433,19 @@ usually substitute \co{WRITE_ONCE()} plus \co{smp_wmb()} for
 \co{smp_store_release()} on the one hand,
 and \co{READ_ONCE()} plus \co{smp_rmb()} for \co{smp_load_acquire()}
 on the other.
+\fi
+
+해당 사이클이 두개 이상의 non-store-to-load 연결을 갖는다면 (즉, 두개 이상의
+load-to-store 와 store-to-store 링크), 여러분은 각 non-store-to-load 연결
+사이에 최소 하나의 완전한 배리어를 필요로 하게 됩니다.
+완전한 배리어는 \co{smp_mb()}, 성공적으로 수행된 full-strength non-\co{void}
+atomic RMW 오퍼레이션들, 그리고 \co{smp_mb__before_atomic()} 이나
+\co{smp_mb__after_atomic()} 과 결합된 원자적 RMW 오퍼레이션들을 포함합니다.
+RCU 의 grace-period-wait 기능들 (\co{synchronize_rcu()} 와 그 외의 비슷한 것들)
+역시 완전한 배리어로 동작합니다만, \co{smp_mb()} 보다도 많이 비쌉니다.
+강력함에는 비용이 따라옵니다만, 완전한 배리어의 오버헤드는 일반적으로 확장성을
+해치는 것보다는 성능을 해칩니다.
+\iffalse
 
 If a given cycle contains two or more non-store-to-load links (that is,
 a total of two or more load-to-store and store-to-store links), you will
@@ -7408,6 +7459,20 @@ friends) also act as full barriers, but at even greater expense than
 \co{smp_mb()}.
 With strength comes expense, though the overhead of full barriers
 usually hurts performance more than it hurts scalability.
+\fi
+
+이것들은 \emph{최소한의} 보장임을 알아두시기 바랍니다.
+서로 다른 아키텍쳐들은
+Section~\ref{sec:memorder:Hardware Specifics}
+에서 이야기한 것처럼 더 강력한 보장을 제공할 수도 있습니다만 이는 해당
+아키텍쳐에서의 수행만을 위해 설계된 코드 외의 부분에서는 이에 의존하지
+\emph{말아야} 합니다.
+
+마지막 충고의 말입니다: 다시 말하지만, 낮은 수준의 메모리 순서 보장 기능의
+사용은 마지막 수단입니다.
+락킹이나 RCU 같이 여러분을 위해 메모리 순서 보장을 고려하는, 존재하는 기능들을
+사용하는게 거의 항상 더 낫습니다.
+\iffalse
 
 Note that these are the \emph{minimum} guarantees.
 Different architectures may give
@@ -7421,3 +7486,4 @@ One final word of advice: Again, use of raw memory-ordering primitives is
 a last resort.
 It is almost always better to use existing primitives, such as locking
 or RCU, that take care of memory ordering for you.
+\fi
