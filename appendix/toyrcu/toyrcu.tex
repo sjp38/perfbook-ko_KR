@@ -62,7 +62,7 @@ provides a summary and a list of desirable RCU properties.
 \section{Lock-Based RCU}
 \label{sec:app:toyrcu:Lock-Based RCU}
 
-\begin{figure}[bp]
+\begin{listing}[bp]
 { \scriptsize
 \begin{verbbox}
   1 static void rcu_read_lock(void)
@@ -85,8 +85,8 @@ provides a summary and a list of desirable RCU properties.
 \centering
 \theverbbox
 \caption{Lock-Based RCU Implementation}
-\label{fig:app:toyrcu:Lock-Based RCU Implementation}
-\end{figure}
+\label{lst:app:toyrcu:Lock-Based RCU Implementation}
+\end{listing}
 
 아마도 가장 간단한 RCU 구현은
 Figure~\ref{fig:app:toyrcu:Lock-Based RCU Implementation}
@@ -98,7 +98,7 @@ Figure~\ref{fig:app:toyrcu:Lock-Based RCU Implementation}
 
 Perhaps the simplest RCU implementation leverages locking, as
 shown in
-Figure~\ref{fig:app:toyrcu:Lock-Based RCU Implementation}
+Listing~\ref{lst:app:toyrcu:Lock-Based RCU Implementation}
 (\path{rcu_lock.h} and \path{rcu_lock.c}).
 In this implementation, \co{rcu_read_lock()} acquires a global
 spinlock, \co{rcu_read_unlock()} releases it, and
@@ -147,12 +147,12 @@ preventing grace-period sharing.
 	\iffalse
 
 	Why wouldn't any deadlock in the RCU implementation in
-	Figure~\ref{fig:app:toyrcu:Lock-Based RCU Implementation}
+	Listing~\ref{lst:app:toyrcu:Lock-Based RCU Implementation}
 	also be a deadlock in any other RCU implementation?
 	\fi
 \QuickQuizAnswer{
 %
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 void foo(void)
@@ -179,9 +179,9 @@ preventing grace-period sharing.
 \centering
 \theverbbox
 \caption{Deadlock in Lock-Based RCU Implementation}
-\label{fig:app:toyrcu:Deadlock in Lock-Based RCU Implementation}
-\end{figure}
-
+\label{lst:app:toyrcu:Deadlock in Lock-Based RCU Implementation}
+\end{listing}
+%
 	Figure~\ref{fig:app:toyrcu:Deadlock in Lock-Based RCU Implementation} 의
 	함수 \co{foo()} 와 \co{bar()} 가 다른 CPU 들에서 동시에 호출된다고
 	생각해 봅시다.
@@ -200,7 +200,7 @@ preventing grace-period sharing.
 	\iffalse
 
 	Suppose the functions \co{foo()} and \co{bar()} in
-	Figure~\ref{fig:app:toyrcu:Deadlock in Lock-Based RCU Implementation}
+	Listing~\ref{lst:app:toyrcu:Deadlock in Lock-Based RCU Implementation}
 	are invoked concurrently from different CPUs.
 	Then \co{foo()} will acquire \co{my_lock()} on line~3,
 	while \co{bar()} will acquire \co{rcu_gp_lock} on
@@ -226,7 +226,7 @@ preventing grace-period sharing.
 
 	Why not simply use reader-writer locks in the RCU implementation
 	in
-	Figure~\ref{fig:app:toyrcu:Lock-Based RCU Implementation}
+	Listing~\ref{lst:app:toyrcu:Lock-Based RCU Implementation}
 	in order to allow RCU readers to proceed in parallel?
 	\fi
 \QuickQuizAnswer{
@@ -275,7 +275,7 @@ in the next section.
 \section{Per-Thread Lock-Based RCU}
 \label{sec:app:toyrcu:Per-Thread Lock-Based RCU}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 static void rcu_read_lock(void)
@@ -302,10 +302,10 @@ in the next section.
 \centering
 \theverbbox
 \caption{Per-Thread Lock-Based RCU Implementation}
-\label{fig:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
-\end{figure}
+\label{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+Listing~\ref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 (\path{rcu_lock_percpu.h} 와 \path{rcu_lock_percpu.c})
 는 쓰레드별로 하나의 락 두기에 기반한 구현을 보입니다.
 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 함수들은 각각 현재 쓰레드의 락을
@@ -315,7 +315,7 @@ Figure~\ref{fig:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 크리티컬 섹션들은 \co{synchronize_rcu()} 가 리턴하기 전에 완료되어야만 합니다.
 \iffalse
 
-Figure~\ref{fig:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+Listing~\ref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 (\path{rcu_lock_percpu.h} and \path{rcu_lock_percpu.c})
 shows an implementation based on one lock per thread.
 The \co{rcu_read_lock()} and \co{rcu_read_unlock()} functions
@@ -355,7 +355,7 @@ up to more than 100 \emph{microseconds} on 64 CPUs.
 
 	Wouldn't it be cleaner to acquire all the locks, and then
 	release them all in the loop from lines~15-18 of
-	Figure~\ref{fig:app:toyrcu:Per-Thread Lock-Based RCU Implementation}?
+	Listing~\ref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}?
 	After all, with this change, there would be a point in time
 	when there were no readers, simplifying things greatly.
 	\fi
@@ -376,7 +376,7 @@ up to more than 100 \emph{microseconds} on 64 CPUs.
 	\iffalse
 
 	Is the implementation shown in
-	Figure~\ref{fig:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+	Listing~\ref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 	free from deadlocks?
 	Why or why not?
 	\fi
@@ -444,7 +444,7 @@ up to more than 100 \emph{microseconds} on 64 CPUs.
 	\iffalse
 
 	Isn't one advantage of the RCU algorithm shown in
-	Figure~\ref{fig:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+	Listing~\ref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 	that it uses only primitives that are widely available,
 	for example, in POSIX pthreads?
 	\fi
@@ -484,7 +484,7 @@ the shortcomings of the lock-based implementation.
 \section{Simple Counter-Based RCU}
 \label{sec:app:toyrcu:Simple Counter-Based RCU}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 atomic_t rcu_refcnt;
@@ -514,8 +514,8 @@ the shortcomings of the lock-based implementation.
 \centering
 \theverbbox
 \caption{RCU Implementation Using Single Global Reference Counter}
-\label{fig:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
-\end{figure}
+\label{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
+\end{listing}
 
 약간 더 세련된 RCU 구현이
 Figure~\ref{fig:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
@@ -535,7 +535,7 @@ Line~19 의 \co{poll()} 은 단순히 순수한 지연을 제공하고, 순수�
 \iffalse
 
 A slightly more sophisticated RCU implementation is shown in
-Figure~\ref{fig:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
+Listing~\ref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
 (\path{rcu_rcg.h} and \path{rcu_rcg.c}).
 This implementation makes use of a global reference counter
 \co{rcu_refcnt} defined on line~1.
@@ -696,7 +696,7 @@ is of course unacceptable in production settings.
 	Why not simply make \co{rcu_read_lock()} wait when a concurrent
 	\co{synchronize_rcu()} has been waiting too long in
 	the RCU implementation in
-	Figure~\ref{fig:app:toyrcu:RCU Implementation Using Single Global Reference Counter}?
+	Listing~\ref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}?
 	Wouldn't that prevent \co{synchronize_rcu()} from starving?
 	\fi
 \QuickQuizAnswer{
@@ -729,7 +729,7 @@ scheme that is more favorable to writers.
 \section{Starvation-Free Counter-Based RCU}
 \label{sec:app:toyrcu:Starvation-Free Counter-Based RCU}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 DEFINE_SPINLOCK(rcu_gp_lock);
@@ -742,10 +742,10 @@ scheme that is more favorable to writers.
 \centering
 \theverbbox
 \caption{RCU Global Reference-Count Pair Data}
-\label{fig:app:toyrcu:RCU Global Reference-Count Pair Data}
-\end{figure}
+\label{lst:app:toyrcu:RCU Global Reference-Count Pair Data}
+\end{listing}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 static void rcu_read_lock(void)
@@ -781,10 +781,10 @@ scheme that is more favorable to writers.
 \centering
 \theverbbox
 \caption{RCU Read-Side Using Global Reference-Count Pair}
-\label{fig:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
-\end{figure}
+\label{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
 (\path{rcu_rcgp.h})
 는
 Figure~\ref{fig:app:toyrcu:RCU Global Reference-Count Pair Data} 에 보여진
@@ -804,7 +804,7 @@ a per-thread nesting counter \co{rcu_nesting},
 a per-thread snapshot of the global index (\co{rcu_read_idx}),
 and a global lock (\co{rcu_gp_lock}),
 which are themselves shown in
-Figure~\ref{fig:app:toyrcu:RCU Global Reference-Count Pair Data}.
+Listing~\ref{lst:app:toyrcu:RCU Global Reference-Count Pair Data}.
 \fi
 
 \paragraph{Design}
@@ -919,7 +919,7 @@ Line~13 에서는 메모리 배리어를 실행해서 RCU read-side 크리티컬
 \iffalse
 
 To make all this work, line~6 of \co{rcu_read_lock()} in
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
 picks up the
 current thread's instance of \co{rcu_nesting}, and if line~7 finds
 that this is the outermost \co{rcu_read_lock()},
@@ -956,7 +956,7 @@ Regardless of the nesting level, line~27 decrements this thread's
 instance of \co{rcu_nesting}.
 \fi
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 void synchronize_rcu(void)
@@ -985,10 +985,10 @@ instance of \co{rcu_nesting}.
 \centering
 \theverbbox
 \caption{RCU Update Using Global Reference-Count Pair}
-\label{fig:app:toyrcu:RCU Update Using Global Reference-Count Pair}
-\end{figure}
+\label{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+Listing~\ref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
 (\path{rcu_rcpg.c})
 는 이에 연관되는 \co{synchronize_rcu()} 구현을 보입니다.
 Line~6 과 19는 두개 이상의 \co{synchronize_rcu()} 인스턴스가 동시에 수행되는
@@ -1027,7 +1027,7 @@ checking of \co{rcu_refcnt}.
 	\iffalse
 
 	Why the memory barrier on line~5 of \co{synchronize_rcu()} in
-	Figure~\ref{fig:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+	Listing~\ref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
 	given that there is a spin-lock acquisition immediately after?
 	\fi
 \QuickQuizAnswer{
@@ -1063,7 +1063,7 @@ checking of \co{rcu_refcnt}.
 
 	Exercise for the reader: use a tool such as Promela/spin
 	to determine which (if any) of the memory barriers in
-	Figure~\ref{fig:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+	Listing~\ref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
 	are really needed.
 	See Chapter~\ref{chp:Formal Verification}
 	for information on using these tools.
@@ -1078,7 +1078,7 @@ checking of \co{rcu_refcnt}.
 	\iffalse
 
 	Why is the counter flipped twice in
-	Figure~\ref{fig:app:toyrcu:RCU Update Using Global Reference-Count Pair}?
+	Listing~\ref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}?
 	Shouldn't a single flip-and-wait cycle be sufficient?
 	\fi
 \QuickQuizAnswer{
@@ -1107,10 +1107,10 @@ checking of \co{rcu_refcnt}.
 	\iffalse
 
 	\item	Line~8 of \co{rcu_read_lock()} in
-		Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
+		Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
 		picks up \co{rcu_idx}, finding its value to be zero.
 	\item	Line~8 of \co{synchronize_rcu()} in
-		Figure~\ref{fig:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+		Listing~\ref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
 		complements the value of \co{rcu_idx}, setting its
 		value to one.
 	\item	Lines~10-13 of \co{synchronize_rcu()} find that the
@@ -1186,7 +1186,7 @@ Figure~\ref{fig:app:toyrcu:RCU Implementation Using Single Global Reference Coun
 
 This implementation avoids the update-starvation issues that could
 occur in the single-counter implementation shown in
-Figure~\ref{fig:app:toyrcu:RCU Implementation Using Single Global Reference Counter}.
+Listing~\ref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}.
 
 \paragraph{Discussion}
 
@@ -1211,7 +1211,7 @@ and \co{rcu_read_unlock()}
 are still quite heavyweight.
 In fact, they are more complex than those
 of the single-counter variant shown in
-Figure~\ref{fig:app:toyrcu:RCU Implementation Using Single Global Reference Counter},
+Listing~\ref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter},
 with the read-side primitives consuming about 150~nanoseconds on a single
 \Power{5} CPU and almost 40~\emph{microseconds} on a 64-CPU system.
 The update-side \co{synchronize_rcu()} primitive is more costly as
@@ -1268,7 +1268,7 @@ sharing.
 	Given that atomic increment and decrement are so expensive,
 	why not just use non-atomic increment on line~10 and a
 	non-atomic decrement on line~25 of
-	Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}?
+	Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}?
 	\fi
 \QuickQuizAnswer{
 	어토믹하지 않은 오퍼레이션들을 사용하면 값 증가와 감소가 사라지게 될 수
@@ -1308,7 +1308,7 @@ scheme that provides greatly improved read-side performance and scalability.
 \section{Scalable Counter-Based RCU}
 \label{sec:app:toyrcu:Scalable Counter-Based RCU}
 
-\begin{figure}[tb]
+\begin{listing}[tb]
 { \scriptsize
 \begin{verbbox}
   1 DEFINE_SPINLOCK(rcu_gp_lock);
@@ -1321,10 +1321,10 @@ scheme that provides greatly improved read-side performance and scalability.
 \centering
 \theverbbox
 \caption{RCU Per-Thread Reference-Count Pair Data}
-\label{fig:app:toyrcu:RCU Per-Thread Reference-Count Pair Data}
-\end{figure}
+\label{lst:app:toyrcu:RCU Per-Thread Reference-Count Pair Data}
+\end{listing}
 
-\begin{figure}[tb]
+\begin{listing}[tb]
 { \scriptsize
 \begin{verbbox}
   1 static void rcu_read_lock(void)
@@ -1360,10 +1360,10 @@ scheme that provides greatly improved read-side performance and scalability.
 \centering
 \theverbbox
 \caption{RCU Read-Side Using Per-Thread Reference-Count Pair}
-\label{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
-\end{figure}
+\label{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
 (\path{rcu_rcpl.h})
 는 쓰레드별 레퍼런스 카운터 한쌍을 사용하는 RCU 구현의 read-side 기능들을
 보입니다.
@@ -1384,10 +1384,10 @@ Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
 shows the read-side primitives of an RCU implementation that uses per-thread
 pairs of reference counters.
 This implementation is quite similar to that shown in
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair},
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair},
 the only difference being that \co{rcu_refcnt} is now a per-thread
 array (as shown in
-Figure~\ref{fig:app:toyrcu:RCU Per-Thread Reference-Count Pair Data}).
+Listing~\ref{lst:app:toyrcu:RCU Per-Thread Reference-Count Pair Data}).
 As with the algorithm in the previous section, use of this two-element
 array prevents readers from starving updaters.
 One benefit of per-thread \co{rcu_refcnt[]} array is that the
@@ -1431,7 +1431,7 @@ perform atomic operations.
 	\fi
 } \QuickQuizEnd
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 static void flip_counter_and_wait(int i)
@@ -1465,10 +1465,10 @@ perform atomic operations.
 \centering
 \theverbbox
 \caption{RCU Update Using Per-Thread Reference-Count Pair}
-\label{fig:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}
-\end{figure}
+\label{lst:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}
+Listing~\ref{lst:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}
 (\path{rcu_rcpl.c})
 는 \co{synchronize_rcu()} 의 구현을 \co{flip_counter_and_wait()} 라 이름지어진
 함수와 함께 보이고 있습니다.
@@ -1483,7 +1483,7 @@ Figure~\ref{fig:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}
 shows the implementation of \co{synchronize_rcu()}, along with a helper
 function named \co{flip_counter_and_wait()}.
 The \co{synchronize_rcu()} function resembles that shown in
-Figure~\ref{fig:app:toyrcu:RCU Update Using Global Reference-Count Pair},
+Listing~\ref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair},
 except that the repeated counter flip is replaced by a pair of calls
 on lines~22 and 23 to the new helper function.
 \fi
@@ -1640,7 +1640,7 @@ concurrent RCU updates.
 \section{Scalable Counter-Based RCU With Shared Grace Periods}
 \label{sec:app:toyrcu:Scalable Counter-Based RCU With Shared Grace Periods}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 DEFINE_SPINLOCK(rcu_gp_lock);
@@ -1653,10 +1653,10 @@ concurrent RCU updates.
 \centering
 \theverbbox
 \caption{RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update Data}
-\label{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update Data}
-\end{figure}
+\label{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update Data}
+\end{listing}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 static void rcu_read_lock(void)
@@ -1692,10 +1692,10 @@ concurrent RCU updates.
 \centering
 \theverbbox
 \caption{RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
-\label{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
-\end{figure}
+\label{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
 (\path{rcu_rcpls.h})
 는 기존과 같이 쓰레드별 레퍼런스 카운트 쌍을 사용하는, 하지만 업데이트들이
 grace period 들을 공유할 수 있게 하는 RCU 구현을 위하 read-side 쪽의 기능들을
@@ -1718,20 +1718,20 @@ shows the read-side primitives for an RCU implementation using per-thread
 reference count pairs, as before, but permitting updates to share
 grace periods.
 The main difference from the earlier implementation shown in
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
 is that \co{rcu_idx} is now a \co{long} that counts freely,
 so that line~8 of
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
 must mask off the low-order bit.
 We also switched from using \co{atomic_read()} and \co{atomic_set()}
 to using \co{READ_ONCE()}.
 The data is also quite similar, as shown in
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update Data},
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update Data},
 with \co{rcu_idx} now being a \co{long} instead of an
 \co{atomic_t}.
 \fi
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 static void flip_counter_and_wait(int ctr)
@@ -1776,10 +1776,10 @@ with \co{rcu_idx} now being a \co{long} instead of an
 \centering
 \theverbbox
 \caption{RCU Shared Update Using Per-Thread Reference-Count Pair}
-\label{fig:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pair}
-\end{figure}
+\label{lst:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pair}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pair}
+Listing~\ref{lst:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pair}
 (\path{rcu_rcpls.c})
 는 \co{synchronize_rcu()} 와 거기에 도움을 주는 \co{flip_counter_and_wait()}
 함수를 보입니다.
@@ -1799,7 +1799,7 @@ Figure~\ref{fig:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pa
 shows the implementation of \co{synchronize_rcu()} and its helper
 function \co{flip_counter_and_wait()}.
 These are similar to those in
-Figure~\ref{fig:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}.
+Listing~\ref{lst:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}.
 The differences in \co{flip_counter_and_wait()} include:
 \begin{enumerate}
 \item	Line~6 uses \co{WRITE_ONCE()} instead of \co{atomic_set()},
@@ -1975,7 +1975,7 @@ POSIX 쓰레드를 구현하는 시스템에서의 상대적으로 비싼 비용
 \iffalse
 
 Referring back to
-Figure~\ref{fig:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update},
+Listing~\ref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update},
 we see that there is one global-variable access and no fewer than four
 accesses to thread-local variables.
 Given the relatively high cost of thread-local accesses on systems
@@ -1990,7 +1990,7 @@ thread-local accesses to one, as is done in the next section.
 \section{RCU Based on Free-Running Counter}
 \label{sec:app:toyrcu:RCU Based on Free-Running Counter}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 DEFINE_SPINLOCK(rcu_gp_lock);
@@ -2002,10 +2002,10 @@ thread-local accesses to one, as is done in the next section.
 \centering
 \theverbbox
 \caption{Data for Free-Running Counter Using RCU}
-\label{fig:app:toyrcu:Data for Free-Running Counter Using RCU}
-\end{figure}
+\label{lst:app:toyrcu:Data for Free-Running Counter Using RCU}
+\end{listing}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
  1 static void rcu_read_lock(void)
@@ -2045,10 +2045,10 @@ thread-local accesses to one, as is done in the next section.
 \centering
 \theverbbox
 \caption{Free-Running Counter Using RCU}
-\label{fig:app:toyrcu:Free-Running Counter Using RCU}
-\end{figure}
+\label{lst:app:toyrcu:Free-Running Counter Using RCU}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:Free-Running Counter Using RCU}
+Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
 (\path{rcu.h} and \path{rcu.c})
 는 Figure~\ref{fig:app:toyrcu:Data for Free-Running Counter Using RCU} 에 보여진
 데이터와 함께 짝수 값만을 갖는 글로벌한 자유롭게 동작하는 카운터에 기반한 RCU
@@ -2064,7 +2064,7 @@ Figure~\ref{fig:app:toyrcu:Free-Running Counter Using RCU}
 (\path{rcu.h} and \path{rcu.c})
 shows an RCU implementation based on a single global free-running counter
 that takes on only even-numbered values, with data shown in
-Figure~\ref{fig:app:toyrcu:Data for Free-Running Counter Using RCU}.
+Listing~\ref{lst:app:toyrcu:Data for Free-Running Counter Using RCU}.
 The resulting \co{rcu_read_lock()} implementation is extremely
 straightforward.
 Lines~3 and~4 simply add one to the global free-running \co{rcu_gp_ctr}
@@ -2100,7 +2100,7 @@ of \co{synchronize_rcu()} will know to ignore it.
 
 	If any even value is sufficient to tell \co{synchronize_rcu()}
 	to ignore a given task, why don't lines~10 and~11 of
-	Figure~\ref{fig:app:toyrcu:Free-Running Counter Using RCU}
+	Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	simply assign zero to \co{rcu_reader_gp}?
 	\fi
 \QuickQuizAnswer{
@@ -2178,7 +2178,7 @@ destruction will not be reordered into the preceding loop.
 	\iffalse
 
 	Why are the memory barriers on lines~19 and~31 of
-	Figure~\ref{fig:app:toyrcu:Free-Running Counter Using RCU}
+	Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	needed?
 	Aren't the memory barriers inherent in the locking
 	primitives on lines~20 and~30 sufficient?
@@ -2227,7 +2227,7 @@ such CPUs.
 	Couldn't the update-side batching optimization described in
 	Section~\ref{sec:app:toyrcu:Scalable Counter-Based RCU With Shared Grace Periods}
 	be applied to the implementation shown in
-	Figure~\ref{fig:app:toyrcu:Free-Running Counter Using RCU}?
+	Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}?
 	\fi
 \QuickQuizAnswer{
 	실제로, 약간의 수정과 함께라면 그럴 수 있습니다.
@@ -2257,7 +2257,7 @@ addition to the high update-side overhead noted earlier.
 First, it is no longer permissible to nest RCU read-side critical
 sections, a topic that is taken up in the next section.
 Second, if a reader is preempted at line~3 of
-Figure~\ref{fig:app:toyrcu:Free-Running Counter Using RCU} after fetching from
+Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU} after fetching from
 \co{rcu_gp_ctr} but before storing to \co{rcu_reader_gp},
 and if the \co{rcu_gp_ctr} counter then runs through more than half
 but less than all of its possible values, then \co{synchronize_rcu()}
@@ -2277,7 +2277,7 @@ variables.
 	\iffalse
 
 	Is the possibility of readers being preempted in
-	lines~3-4 of Figure~\ref{fig:app:toyrcu:Free-Running Counter Using RCU}
+	lines~3-4 of Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	a real problem, in other words, is there a real sequence
 	of events that could lead to failure?
 	If not, why not?
@@ -2310,7 +2310,7 @@ variables.
 \section{Nestable RCU Based on Free-Running Counter}
 \label{sec:app:toyrcu:Nestable RCU Based on Free-Running Counter}
 
-\begin{figure}[tb]
+\begin{listing}[tb]
 { \scriptsize
 \begin{verbbox}
   1 DEFINE_SPINLOCK(rcu_gp_lock);
@@ -2324,10 +2324,10 @@ variables.
 \centering
 \theverbbox
 \caption{Data for Nestable RCU Using a Free-Running Counter}
-\label{fig:app:toyrcu:Data for Nestable RCU Using a Free-Running Counter}
-\end{figure}
+\label{lst:app:toyrcu:Data for Nestable RCU Using a Free-Running Counter}
+\end{listing}
 
-\begin{figure}[tb]
+\begin{listing}[tb]
 { \scriptsize
 \begin{verbbox}
  1 static void rcu_read_lock(void)
@@ -2376,10 +2376,10 @@ variables.
 \centering
 \theverbbox
 \caption{Nestable RCU Using a Free-Running Counter}
-\label{fig:app:toyrcu:Nestable RCU Using a Free-Running Counter}
-\end{figure}
+\label{lst:app:toyrcu:Nestable RCU Using a Free-Running Counter}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:Nestable RCU Using a Free-Running Counter}
+Listing~\ref{lst:app:toyrcu:Nestable RCU Using a Free-Running Counter}
 (\path{rcu_nest.h} and \path{rcu_nest.c})
 는 하나의 글로벌한 자유롭게 동작하는 카운터에 기반하지만 RCU read-side 크리티컬
 섹션들의 중첩을 허용하는 RCU 구현을 보입니다.
@@ -2412,7 +2412,7 @@ show an RCU implementation based on a single global free-running counter,
 but that permits nesting of RCU read-side critical sections.
 This nestability is accomplished by reserving the low-order bits of the
 global \co{rcu_gp_ctr} to count nesting, using the definitions shown in
-Figure~\ref{fig:app:toyrcu:Data for Nestable RCU Using a Free-Running Counter}.
+Listing~\ref{lst:app:toyrcu:Data for Nestable RCU Using a Free-Running Counter}.
 This is a generalization of the scheme in
 Section~\ref{sec:app:toyrcu:RCU Based on Free-Running Counter},
 which can be thought of as having a single low-order bit reserved
@@ -2610,7 +2610,7 @@ overhead.
 	\iffalse
 
 	Given the algorithm shown in
-	Figure~\ref{fig:app:toyrcu:Nestable RCU Using a Free-Running Counter},
+	Listing~\ref{lst:app:toyrcu:Nestable RCU Using a Free-Running Counter},
 	how could you double the time required to overflow the global
 	\co{rcu_gp_ctr}?
 	\fi
@@ -2635,7 +2635,7 @@ overhead.
 	\iffalse
 
 	Again, given the algorithm shown in
-	Figure~\ref{fig:app:toyrcu:Nestable RCU Using a Free-Running Counter},
+	Listing~\ref{lst:app:toyrcu:Nestable RCU Using a Free-Running Counter},
 	is counter overflow fatal?
 	Why or why not?
 	If it is fatal, what can be done to fix it?
@@ -2808,7 +2808,7 @@ overhead.
 \section{RCU Based on Quiescent States}
 \label{sec:app:toyrcu:RCU Based on Quiescent States}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 DEFINE_SPINLOCK(rcu_gp_lock);
@@ -2819,10 +2819,10 @@ overhead.
 \centering
 \theverbbox
 \caption{Data for Quiescent-State-Based RCU}
-\label{fig:app:toyrcu:Data for Quiescent-State-Based RCU}
-\end{figure}
+\label{lst:app:toyrcu:Data for Quiescent-State-Based RCU}
+\end{listing}
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 static void rcu_read_lock(void)
@@ -2858,10 +2858,10 @@ overhead.
 \centering
 \theverbbox
 \caption{Quiescent-State-Based RCU Read Side}
-\label{fig:app:toyrcu:Quiescent-State-Based RCU Read Side}
-\end{figure}
+\label{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:Quiescent-State-Based RCU Read Side}
+Listing~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 (\path{rcu_qs.h})
 는 조용한 상태에 기반한 사용자 레벨 RCU 구현을 만드는데에
 Figure~\ref{fig:app:toyrcu:Data for Quiescent-State-Based RCU} 에 보인 데이터와 함께
@@ -2893,8 +2893,8 @@ Figure~\ref{fig:app:toyrcu:Quiescent-State-Based RCU Read Side}
 (\path{rcu_qs.h})
 shows the read-side primitives used to construct a user-level
 implementation of RCU based on quiescent states, with the data shown in
-Figure~\ref{fig:app:toyrcu:Data for Quiescent-State-Based RCU}.
-As can be seen from lines~1-7 in the figure, the \co{rcu_read_lock()}
+Listing~\ref{lst:app:toyrcu:Data for Quiescent-State-Based RCU}.
+As can be seen from lines~1-7 in the listing, the \co{rcu_read_lock()}
 and \co{rcu_read_unlock()} primitives do nothing, and can in fact
 be expected to be inlined and optimized away, as they are in
 server builds of the Linux kernel.
@@ -2902,7 +2902,7 @@ This is due to the fact that quiescent-state-based RCU implementations
 \emph{approximate} the extents of RCU read-side critical sections
 using the aforementioned quiescent states.
 Each of these quiescent states contains a call to
-\co{rcu_quiescent_state()}, which is shown from lines~9-15 in the figure.
+\co{rcu_quiescent_state()}, which is shown from lines~9-15 in the listing.
 Threads entering extended quiescent states (for example, when blocking)
 may instead call \co{rcu_thread_offline()} (lines~17-23) when entering
 an extended quiescent state and then call
@@ -2912,7 +2912,7 @@ and \co{rcu_thread_offline()} is analogous to \co{rcu_read_unlock()}.
 In addition, \co{rcu_quiescent_state()} can be thought of as a
 \co{rcu_thread_online()} immediately followed by a
 \co{rcu_thread_offline()}.\footnote{
-	Although the code in the figure is consistent with
+	Although the code in the listing is consistent with
 	\co{rcu_quiescent_state()}
 	being the same as \co{rcu_thread_online()} immediately followed by
 	\co{rcu_thread_offline()}, this relationship is obscured by
@@ -2962,7 +2962,7 @@ re-ordered with the lines~12-13.
 	\iffalse
 
 	Doesn't the additional memory barrier shown on line~14 of
-	Figure~\ref{fig:app:toyrcu:Quiescent-State-Based RCU Read Side}
+	Listing~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 	greatly increase the overhead of \co{rcu_quiescent_state}?
 	\fi
 \QuickQuizAnswer{
@@ -3029,7 +3029,7 @@ ignore this thread.
 	\iffalse
 
 	Why are the two memory barriers on lines~19 and 22 of
-	Figure~\ref{fig:app:toyrcu:Quiescent-State-Based RCU Read Side}
+	Listing~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 	needed?
 	\fi
 \QuickQuizAnswer{
@@ -3060,7 +3060,7 @@ The \co{rcu_thread_online()} function simply invokes
 quiescent state.
 \fi
 
-\begin{figure}[tbp]
+\begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}
   1 void synchronize_rcu(void)
@@ -3086,10 +3086,10 @@ quiescent state.
 \centering
 \theverbbox
 \caption{RCU Update Side Using Quiescent States}
-\label{fig:app:toyrcu:RCU Update Side Using Quiescent States}
-\end{figure}
+\label{lst:app:toyrcu:RCU Update Side Using Quiescent States}
+\end{listing}
 
-Figure~\ref{fig:app:toyrcu:RCU Update Side Using Quiescent States}
+Listing~\ref{lst:app:toyrcu:RCU Update Side Using Quiescent States}
 (\path{rcu_qs.c})
 는 \co{synchronize_rcu()} 의 구현을 보이는데, 이는 앞 섹션들에서의 것과 상당히
 유사합니다.
@@ -3169,8 +3169,8 @@ certain types of library functions.
 	Why would the fact that the code is in a library make
 	any difference for how easy it is to use the RCU
 	implementation shown in
-	Figures~\ref{fig:app:toyrcu:Quiescent-State-Based RCU Read Side} and
-	\ref{fig:app:toyrcu:RCU Update Side Using Quiescent States}?
+	Listings~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side} and
+	\ref{lst:app:toyrcu:RCU Update Side Using Quiescent States}?
 	\fi
 \QuickQuizAnswer{
 	라이브러리 함수는 호출자에 대한 제어가 전혀 존재치 않고 따라서 호출자가
