@@ -1086,6 +1086,15 @@ is quite similar.
 \fi
 
 \QuickQuiz{}
+	하지만 데이터가 한방향으로만 흐르는 경우에는,
+	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	에 보인 알고리즘은 디큐를 하는쪽 끝이 그 아래에 있는 double-ended queue
+	를 비워버리게 되면 두 끝단이 모두 같은 락을 획득하려 시도할 겁니다.
+	이는 이 알고리즘이 어떤 경우에 있어서는 큐가 임의의 많은 수의 원소들을
+	가지고 있을 때조차도 큐의 양끝에 동시의 액세스를 제공하는데 실패한다는
+	의미가 아닌가요?
+	\iffalse
+
 	But in the case where data is flowing in only one direction,
 	the algorithm shown in
 	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
@@ -1095,8 +1104,26 @@ is quite similar.
 	Doesn't that mean that sometimes this algorithm fails to
 	provide concurrent access to both ends of the queue even
 	when the queue contains an arbitrarily large number of elements?
+	\fi
 \QuickQuizAnswer{
+	실제로 그렇습니다!
+
+	하지만 이 속성을 주장하는 다른 알고리즘들에 있어서도 같습니다.
+	예를 들어, 소프트웨어 트랜잭셔널 메모리 메커니즘을 사용하는 해결책들은
+	락들의 해시된 배열에 기반하는데, 가장 왼쪽과 가장 오른쪽 원소들의
+	주소들은 간혹 같은 락으로 해시됩니다.
+	이 해시 충돌 역시 동시의 액세스를 막을 겁니다.
+	또다른 예를 들어보면, 하드웨어 트랜잭셔널 메모리를 소프트웨어 폴백
+	(fallback) 과 함께 사용하는
+	해결책들~\cite{Yoo:2013:PEI:2503210.2503232,RickMerrit2011PowerTM,ChristianJacobi2012MainframeTM}
+	은 종종 이 소프트웨어 폴백 내에서 락킹을 사용하며, 따라서 (흔치 않을
+	테지만) 이 락킹 솔루션이 겪는 동시성의 제약으로 고통을 받게 됩니다.
 	Indeed it does!
+
+	따라서, 2017년에 있어, compound double-ended queue 를 포함해 동시성을
+	갖는 double-ended queue 문제에 대한 모든 현실적 해결책들은 최소 일부
+	환경에서는 완전한 동시성을 제공하는데 실패합니다.
+	\iffalse
 
 	But the same is true of other algorithms claiming this property.
 	For example, in solutions using software transactional memory
@@ -1115,6 +1142,7 @@ is quite similar.
 	concurrent double-ended queue problem fail to provide full
 	concurrency in at least some circumstances, including the
 	compound double-ended queue.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Double-Ended Queue Discussion}
