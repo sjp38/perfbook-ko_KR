@@ -4432,19 +4432,33 @@ actual load:
 
 이 최적화는 \co{a} 에 값 0을 저장함으로써 이 루프를 종료시킬 것이라고 예상한
 다른 곳의 코드에 놀라움으로 다가올 겁니다.
-이를 \co{READ_ONCE()} 를 사용해 방지할 수 있는데, 예를 들면 다음과 같습니다:
+다행히도, 이 문제를 막을 수 있는 여러 방법들이 있습니다:
 \iffalse
 
 This optimization might come as a fatal surprise to code elsewhere
 that expected to terminate this loop by storing a zero to \co{a}.
-\fi
 Fortunately, there are several ways of avoiding this sort of problem:
+\fi
 
 \begin{enumerate}
+\item	Volatile 액세스.
+\item	어토믹 변수들.
+\item	데이터 레이스를 가져오는 걸 막는것.
+\iffalse
+
 \item	Volatile accesses.
 \item	Atomic variables.
 \item	Prohibitions against introducing data races.
+\fi
 \end{enumerate}
+
+\co{volatile} 제약은 믿을 수 있는 디바이스 드라이버를 작성하는데 필요하고,
+어토믹 변수들과 데이터 레이스를 가져오는걸 막는 것은 믿을 수 있는 동시적 코드를
+작성하는데 필요합니다.
+
+다음 코드는 \co{READ_ONCE()} 의 무한루프 최적화를 막을 수 있도록 \co{volatile}
+캐스팅을 사용합니다:
+\iffalse
 
 The \co{volatile} restrictions are necessary to write reliable
 device drivers, and the atomic variables and prohibitions against
@@ -4454,6 +4468,7 @@ code.
 Starting with volatile accesses, the following code
 relies on the \co{volatile} casts in \co{READ_ONCE()} to prevent
 the unfortunate infinite-loop optimization:
+\fi
 
 \vspace{5pt}
 \begin{minipage}[t]{\columnwidth}
@@ -4694,15 +4709,14 @@ perfectly within its rights to reorder normal accesses with unrelated
 \co{volatile} accesses.
 \fi
 
-이상하게 들릴 수 있지만, 컴파일러는 어떤 변수에의 스토어 직전에 그 변수를 임시
-저장소로 사용할 수 있어서, 해당 변수로의 스토어를 만들어 낼 수 있습니다.
+이상하게 들릴 수 있지만, 컴파일러는 어떤 변수에의 일반적 스토어 직전에 그
+변수를 임시 저장소로 사용할 수 있어서, 해당 변수로의 스토어를 만들어 낼 수
+있습니다.
 다행히도, 대부분의 컴파일러는 적어도 스택 변수 외에서는 이런 종류의 일을 하지
 않습니다.
-더도 아니고 덜도 아니고, \co{WRITE_ONCE()} (또는 해당 변수를 \co{volatile} 로
-선언하는 것) 이 이런 종류의 일을 막아줍니다.
-하지만 주의하세요: 해당 변수를 사용하는 변환 유닛을 가지고 있다면, 그리고
-그것으로의 volatile 액세스를 결코 행하지 않는다면, 컴파일러는 그게 주의깊게
-행해져야 함을 알 방법이 없습니다.
+어떤 경우에는, \co{WRITE_ONCE()} 를 사용하는 것, 변수를 \co{volatile} 로
+선언하는것, 또는 (어토믹을 지원하는 최신 C 와 C++ 컴파일러에서) 해당 변수를
+어토믹으로 선언하는 것은 이런 일을 막아줄 겁니다.
 \iffalse
 
 Oddly enough, the compiler is within its rights to use a variable
@@ -4710,15 +4724,36 @@ as temporary storage just before a normal store to that variable, thus
 inventing stores to that variable.
 Fortunately, most compilers avoid this sort of thing, at least outside
 of stack variables.
-% TODO: Apply...
 In any case, using \co{WRITE_ONCE()}, declaring the variable
 \co{volatile}, or declaring the variable atomic (in recent C and C++
 compilers supporting atomics) will prevent this sort of thing.
+\fi
 
 \QuickQuiz{}
+	왜 컴파일러는 일반적 변수에의 스토어를 아무때나 만들 수 없는거죠?
+	\iffalse
+
 	Why can't the compiler invent a store to a normal variable
 	any time it likes?
+	\fi
 \QuickQuizAnswer{
+	컴파일러는 데이터 레이스로부터 숨겨져 있기 때문입니다.
+	일반적 스토어 앞에 스토어를 만들어내는 경우는 상당히 특수합니다:
+	코드가 만들어진 스토어가 없다 해도 데이터 레이스를 가지고 있다면, CPU,
+	쓰레드, 시그널 해늗ㄹ러, 또는 인터럽트 핸들러와 같은 다른 것들은 이
+	만들어진 스토어를 볼 수 없습니다.
+
+	하지만 \co{WRITE_ONCE()} 에서와 같이 원래의 스토어가 volatile 이라면,
+	모든 컴파일러가 어떤 다른 쓰레드에 시그널을 보내는 스토어에 관련된
+	부작용이 있을 수 있음을 알게 되어서 해당 변수에의 데이터 레이스로부터
+	자유로운 액세스를 가능하게 합니다.
+	이 스토어를 만들어냄으로써, 컴파일러는 데이터 레이스를 만들어내는,
+	해서는 안될 일을 할수도 있습니다.
+
+	\co{volatile} 과 어토믹 변수들의 경우, 컴파일러는 명시적으로 스토어를
+	만들지 못하도록 되어있습니다.
+	\iffalse
+
 	Because the compiler is forbidden from introducing data races.
 	The case of inventing a store just before a normal store is
 	quite special:  It is not possible for some other entity,
@@ -4735,6 +4770,7 @@ compilers supporting atomics) will prevent this sort of thing.
 
 	In the case of \co{volatile} and atomic variables, the compiler
 	is specifically forbidden from inventing writes.
+	\fi
 } \QuickQuizEnd
 
 \fi
@@ -4748,7 +4784,9 @@ compilers supporting atomics) will prevent this sort of thing.
 발생한 것을 보외게 되어서, 이것들의 핸들러는 앞의 인스트럭션들의 효과를 모두
 보게 되지만, 뒤따르는 인스트럭션들의 효과는 보지 못하게 됨을 의미합니다.
 따라서 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 는 인터럽트된 코드와 인터럽트
-핸들러 사이의 통신을 제어하기 위해 사용될 수 있습니다.
+핸들러 사이의 통신을 제어하기 위해 사용될 수 있습니다.\footnote{
+	하지만, 다양한 표준의 위원회들은 여러분이 이대신에 \co{sig_atomic_t}
+	타임의 변수들이나 어토믹 기능들을 대신 사용하길 권장할 겁니다.}
 \iffalse
 
 The previous examples involved compiler optimizations that
@@ -4762,7 +4800,6 @@ appear to have happened at a specific place in the instruction
 stream, so that the handler will see the effect of all prior
 instructions, but won't see the effect of any subsequent instructions.
 \co{READ_ONCE()} and \co{WRITE_ONCE()} can therefore be used to
-% TODO: Apply...
 control communication between interrupted code and interrupt handlers.\footnote{
 	That said, the various standards committees would prefer that
 	you instead use atomics or variables of type \co{sig_atomic_t}.}
