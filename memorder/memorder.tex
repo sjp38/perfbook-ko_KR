@@ -6803,9 +6803,9 @@ the {\tt rel}.
 크리티컬 섹션 안으로 들여보내는건 안전하지만 크리티컬 섹션 밖으로 내보내는건
 치명적일 수 있기 때문입니다.
 하지만, 이 기능을 가진 CPU 가운데 하나로써,\footnote{
-	ARMv8 은 최근에 load-acquire 와 store-release 인스트럭션을
-	추가했습니다.}
-Itanium 은 리눅스의 락 획득과 해제에 관련된 메모리 순서 규칙을 정의합니다.
+	이제는 PowerPC 가 이 모호한 특권을 갖는 아키텍쳐입니다.}
+Itanium 은 한때 리눅스의 락 획득과 해제에 관련된 메모리 순서 규칙을
+정의했습니다.
 이상하게 들릴 수 있지만, 실제 Itanium 하드웨어는 load-acquire 와 store-release
 인스트럭션들을 완전한 배리어로 구현했다는 소문이 있습니다.
 어쨌든, Itanium 은 load-acquire 와 store-release 의 (소문이 사실이어서 실제가
@@ -6856,7 +6856,7 @@ memory barriers.
 
 \subsection{MIPS}
 
-MIPS 메모리 모델~\cite[Table 6.6]{MIPSvII-A-2015} 은 ARM, Itanium, 그리고
+MIPS 메모리 모델~\cite[Table 6.6]{MIPSvII-A-2017} 은 ARM, Itanium, 그리고
 \Power{} 를 닮아서, 기본적으로는 완화된 순서를 갖지만, 의존성은 지켜줍니다.
 MIPS 는 다양한 메모리 배리어 인스트럭션을 갖습니다만, 하드웨어 상의 필요에
 매여있기보다는 ARM64 에 추가된 것들과 비슷하게, 리눅스 커널과 C++11
@@ -6875,21 +6875,21 @@ in a manner similar to the ARM64 additions:
 
 \begin{description}[style=nextline]
 \item[\tco{SYNC}]
-	메모리 레퍼런스 외에도 여러 하드웨어 오퍼레이션들을 위한 완전한 배리어.
+	메모리 레퍼런스 외에도 여러 하드웨어 오퍼레이션들을 위한 완전한
+	배리어로, v4.13 리눅스 커널의 OCTEON 시스템들을 위한 \co{smp_mb()} 를
+	구현함.
 	\iffalse
 
 	Full barrier for a number of hardware operations in addition
-	% TODO
 	to memory references, which is used to implement the v4.13
 	Linux kernel's \co{smp_mb()} for OCTEON systems.
-	to memory references.
 	\fi
 \item[\tco{SYNC_WMB}]
-	리눅스 커널의 \co{smp_wmb()} 기능을 구현하는데 사용될 수 있는 쓰기
-	메모리 배리어.
+	쓰기 메모리 배리어로, OCTEON 시스템들에서 v4.13 리눇 크너러의
+	\co{smp_wmb()} 기능을 \co{syncw} menemonic 을 통해 구현함.
+	다른 시스템들에서는 그냥 \co{sync} 만 사용함.
 	\iffalse
 
-	% TODO
 	Write memory barrier, which can be used on OCTEON systems
 	to implement the
 	\co{smp_wmb()} primitive in the v4.13 Linux kernel via the
@@ -6898,7 +6898,7 @@ in a manner similar to the ARM64 additions:
 	\fi
 \item[\tco{SYNC_MB}]
 	메모리 오퍼레이션들에만 작동하는 완전한 메모리 배리어.
-	이는 리눅스 커널의 \co{smp_mb()} 와 C++
+	이는 \co{smp_mb()} 와 C++
 	\co{atomic_thread_fence(memory_order_seq_cst)} 의 구현에 사용될 수
 	있습니다.
 	\iffalse
@@ -6908,9 +6908,11 @@ in a manner similar to the ARM64 additions:
 	C++ \co{atomic_thread_fence(memory_order_seq_cst)}.
 	\fi
 \item[\tco{SYNC_ACQUIRE}]
-	리눅스 커널의 \co{smp_load_acquire()} 와 C++
-	\co{atomic_load_explicit(..., memory_order_acquire)} 의 구현에 사용될
+	C++ 의 \co{atomic_thread_fence(memory_order_acquire)} 의 구현에 사용될
 	수 있는 acquire 메모리 배리어.
+	이론상으로는, 이 인스트럭션은 v4.13 리눅스 커널의
+	\co{smp_load_acquire()} 기능의 구현에도 사용될 수 있지만, 실제 코드는
+	\co{sync} 를 대신 사용합니다.
 	\iffalse
 
 	Acquire memory barrier, which could be used to implement
@@ -6920,9 +6922,11 @@ in a manner similar to the ARM64 additions:
 	\co{sync} is used instead.
 	\fi
 \item[\tco{SYNC_RELEASE}]
-	리눅스 커널의 \co{smp_store_release()} 와 C++
-	\co{atomic_store_explicit(..., memory_order_release)} 의 구현에 사용될
+	C++ 의 \co{atomic_thread_fence(memory_order_release)} 의 구현에 사용될
 	수 있는 release 메모리 배리어.
+	이론상으로는, v4.13 리눅스 커널의 \co{smp_store_release()} 기능
+	구현에도 사용될 수 있습니다만, 실제 코드에서는 \co{sync} 가 대신
+	사용됩니다.
 	\iffalse
 
 	Release memory barrier, which may be used to implement
@@ -6932,8 +6936,11 @@ in a manner similar to the ARM64 additions:
 	\co{sync} is used instead.
 	\fi
 \item[\tco{SYNC_RMB}]
-	리눅스 커널의 \co{smp_rmb()} 기능을 구현하는데 사용될 수 있는 읽기
-	메모리 배리어.
+	이론상으로는 리눅스 커널의 \co{smp_rmb()} 기능을 구현하는데 사용될 수
+	있는 읽기
+	메모리 배리어이나, v4.13 리눅스 커널에서 지원하는 현재의 MIPS
+	구현에서는 순서 규칙을 위한 명시적 인스트럭션이 필요없습니다.
+	따라서, \co{smp_rmb()} 는 단순히 컴파일러에 대한 강제만 가합니다.
 	\iffalse
 
 	Read memory barrier, which could in theory be used to implement the
@@ -6942,11 +6949,16 @@ in a manner similar to the ARM64 additions:
 	need an explicit instruction to force ordering.
 	Therefore, \co{smp_rmb()} instead simply constrains the compiler.
 	\fi
-% TODO
 \item[\tco{SYNCI}]
+	Just-in-time (JIT) 컴파일러들에서 사용될 수 있는, 스스로를 수정하는
+	코드가 사용될 수 있게 해주는 인스트럭션들과 함께 사용되는 인스트럭션
+	캐시 동기화 기능.
+	\iffalse
+
 	Instruction-cache synchronization, which is used in conjunction with
 	other instructions to allow self-modifying code, such as that produced
 	by just-in-time (JIT) compilers.
+	\fi
 \end{description}
 
 MIPS 설계자들과의 비공식적 토론은 MIPS 가 ARM 과 \Power{} 의 것과 유사한
