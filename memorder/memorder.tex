@@ -6856,7 +6856,7 @@ memory barriers.
 
 \subsection{MIPS}
 
-MIPS 메모리 모델~\cite[Table 6.6]{MIPSvII-A-2017} 은 ARM, Itanium, 그리고
+MIPS 메모리 모델~\cite[page~479]{MIPSvII-A-2017} 은 ARM, Itanium, 그리고
 \Power{} 를 닮아서, 기본적으로는 완화된 순서를 갖지만, 의존성은 지켜줍니다.
 MIPS 는 다양한 메모리 배리어 인스트럭션을 갖습니다만, 하드웨어 상의 필요에
 매여있기보다는 ARM64 에 추가된 것들과 비슷하게, 리눅스 커널과 C++11
@@ -7011,11 +7011,21 @@ instructions~\cite{PowerPC94,MichaelLyons05a}:
 	그리고 스토어를 뒤의 스토어에 대해 순서 맞춥니다.
 	하지만, 이 인스트럭션은 스토어를 뒤따르는 로드에 대해 순서맞추지는 {\em
 	않습니다}.
-	흥미롭게도, {\tt lwsync} 인스트럭션은 zSeries 와, 그리고 우연히도,
-	SPARC TSO 와 같은 순서 규칙을 강제합니다.
 	\co{lwsync} 인스트럭션은 load-acquire 와 store-release 오퍼레이션들을
 	구현하는데 사용될 수 있습니다.
+	흥미롭게도, {\tt lwsync} 인스트럭션은 x86, zSeries, 그리고 우연히도,
+	SPARC TSO 와 동일한 CPU 내에서의 순서 규칙을 강제합니다.
+	하지만, \co{lwsync} 인스트럭션을 각 메모리 레퍼런스 인스트럭션 쌍
+	사이에 위치시키는 것으로는 x86, zSeries, 또는 SPARC TSO 메모리
+	순서규칙을 이끌어내지 \emph{못합니다}.
+	이런 시스템들에서는, CPU 들의 한 쌍이 독립적으로 다른 변수들에 대한
+	스토어를 수행한다면, 모든 다른 CPU 들이 이 스토어들의 순서에
+	동의할겁니다.
+	PowerPC 에서는 \co{lwsync} 인스트럭션이 각 메모리 레퍼런스 인스트럭션
+	사이에 있다 해도 그렇지 않은데, PowerPC 는 non-multicopy atomic 하기
+	때문입니다.
 \iffalse
+
 \item	[\tco{sync}] causes all preceding operations to {\em appear to have}
 	completed before any subsequent operations are started.
 	This instruction is therefore quite expensive.
@@ -7025,7 +7035,6 @@ instructions~\cite{PowerPC94,MichaelLyons05a}:
 	loads.
 	The \co{lwsync} instruction may be used to implement
 	load-acquire and store-release operations.
-	% TODO
 	Interestingly enough, the {\tt lwsync} instruction enforces
 	the same within-CPU ordering as does x86, z~Systems, and coincidentally,
 	SPARC TSO.
