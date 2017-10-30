@@ -32,7 +32,22 @@ sufficient to implement synchronization primitives and other
 performance-critical code.
 \fi
 
-@@@ roadmap @@@
+Section~\ref{sec:memorder:Ordering: Why and How?}
+will demonstrate that real computer systems can reorder memory references,
+show some reasons why they do so, and provide some information on how
+to prevent undesired reordering.
+Section~\ref{sec:memorder:Tricks and Traps}
+will provide a more complete list of things that hardware can do to
+unwary parallel programmers.
+Section~\ref{sec:memorder:Compile-Time Consternation}
+follows up with some of the things that compilers can do to unwary
+parallel programmers.
+Section~\ref{sec:memorder:Hardware Specifics}
+follows up with more detail on what representative hardware platforms
+actually do to unwary parallel programmers.
+Finally, Section~\ref{sec:memorder:Where is Memory Ordering Needed?}
+provides some rules of thumb for what situations require parallel
+programmers to take special action to preserver memory ordering.
 
 \section{Ordering: Why and How?}
 \label{sec:memorder:Ordering: Why and How?}
@@ -151,8 +166,9 @@ exists (1:r2=0 /\ 0:r2=0)
 	And also from doing much else as well, so the examples in this
 	section will be making heavy use of
 	\co{READ_ONCE()} and \co{WRITE_ONCE()}.
-	% @@@ forward reference to a section describing READ_ONCE()
-	% @@@ and WRITE_ONCE().
+	% TODO
+	See Section~\ref{sec:memorder:Compile-Time Consternation}
+	for more detail on the need for \co{READ_ONCE()} and \co{WRITE_ONCE()}.
 	\fi
 } \QuickQuizEnd
 
@@ -412,8 +428,8 @@ record their stores in their respective store buffers.
 	\iffalse
 
 	There is an underlying cache-coherence protocol that straightens
-	things out, which will be discussed later.
-	% @@@ Add forward reference.
+	things out, which are discussed in
+	Appendix~\ref{sec:app:whymb:Cache-Coherence Protocols}.
 	But if you think that a given variable having two values at
 	the same time is surprising, just wait until you get to
 	Section~\ref{sec:memorder:Variables With Multiple Values}!
@@ -1086,13 +1102,13 @@ than these rules of thumb.
 This rule assumes that loads and stores from/to shared variables use
 \co{READ_ONCE()} and \co{WRITE_ONCE()}, respectively.
 Otherwise, the compiler can profoundly scramble\footnote{
-	Many compiler writers prefer the word ``optimize'' instead of
-	``scramble'', but we all have our preferences.}
-your code, and sometimes the CPU can do a bit of scrambling as well.
+	% TODO
+	Compiler writers often prefer the word ``optimize''.}
+your code, and sometimes the CPU can do a bit of scrambling as well
+(as is discussed in Section~\ref{sec:memorder:Itanium}).
 \fi
-% @@@ Itanium forward reference?
 
-\begin{figure}[htb]
+\begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{memorder/memorybarrier}}
 \caption{Memory Barriers Provide Conditional If-Then Ordering}
@@ -1641,8 +1657,7 @@ not if performance and scalability are at all important to you.
 Unfortunately, memory ordering has many other ways of insulting your
 intuition, and not all of these ways conflict with performance and
 scalability.
-The next section will give an overview of reordering of unrelated
-memory reference.
+The next section overviews reordering of unrelated memory reference.
 \fi
 
 \subsection{Memory-Reference Reordering}
@@ -1662,8 +1677,6 @@ store and load are to different variables.
 This section builds on that result, looking at the other combinations of
 loads and stores.
 \fi
-
-% @@@ Rationale for further reordering.
 
 \begin{listing}[tbp]
 { \scriptsize
@@ -1731,6 +1744,27 @@ Therefore, the \co{exists} clause on line~25 of the listing \emph{can}
 trigger.
 \fi
 
+One rationale for reordering loads from different locations is that doing
+so allows execution to proceed when an earlier load misses the cache,
+but the values for later loads are already present.
+
+\QuickQuiz{}
+	But why make load-load reordering visible to the user?
+	Why not just use speculative execution to allow execution to
+	proceed in the common case where there are no intervening
+	stores, in which case the reordering cannot be visible anyway?
+\QuickQuizAnswer{
+	They can and many do, otherwise systems containing
+	strongly ordered CPUs would be slow indeed.
+	However, speculative execution does have its downsides, especially
+	if speculation must be rolled back frequently, and especially
+	on battery-powered systems.
+	But perhaps future systems will be able to overcome these
+	disadvantages.
+	Until then, we can expect vendors to continue producing
+	weakly ordered CPUs.
+} \QuickQuizEnd
+
 \begin{listing}[tbp]
 { \scriptsize
 \begin{verbbox}[\LstLineNo]
@@ -1775,7 +1809,7 @@ Listing~\ref{lst:memorder:Enforcing Order of Message-Passing Litmus Test}
 추가하는 식입니다.
 \iffalse
 
-Thus, portable code relying on ordering in this case must
+Thus, portable code relying on ordered loads must
 add explicit ordering, for example, the \co{smp_rmb()} shown on
 line~20 of
 Listing~\ref{lst:memorder:Enforcing Order of Message-Passing Litmus Test}
@@ -1882,11 +1916,16 @@ Listing~\ref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
 
 Although it is rare for actual hardware to
 exhibit this reordering~\cite{LucMaranget2017aarch64},
-portable code must nevertheless enforce any required ordering, for example,
+one situation where it might be desirable to do so is when a load
+misses the cache, the store buffer is nearly full, and the cacheline for
+a subsequent store is ready at hand.
+Therefore, portable code must enforce any required ordering, for example,
 as shown in
 Listing~\ref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
 (\path{C-LB+o-r+a-o.litmus}).
-This guarantees that the \co{exists} clause on line~22 never triggers.
+% TODO
+The \co{smp_store_release()} and \co{smp_load_acquire()} guarantee that
+the \co{exists} clause on line~22 never triggers.
 \fi
 
 \begin{listing}[tbp]
@@ -1943,18 +1982,37 @@ Listing~\ref{lst:memorder:Enforcing Order of Message-Passing Litmus Test} 에서
 
 Listing~\ref{lst:memorder:Message-Passing Litmus Test, No Writer Ordering (No Ordering)}
 (\path{C-MP+o-o+o-rmb-o.litmus})
-once again shows the classic message-passing litmus test, but without
-explicit ordering for \co{P0()}'s stores and with the \co{smp_rmb()}
-providing ordering for \co{P1()}'s loads.
+once again shows the classic message-passing litmus test, with the
+\co{smp_rmb()} providing ordering for \co{P1()}'s loads, but without
+any ordering for \co{P0()}'s stores.
 Again, the relatively strongly ordered architectures do enforce ordering,
 but weakly ordered architectures do not necessarily do
 so~\cite{JadeAlglave2011ppcmem}, which means that the
 \co{exists} clause can trigger.
+One situation in which such reordering could be beneficial is when
+the store buffer is full, another store is ready to execute, but the
+cacheline needed by the oldest store still stuck in the store buffer is
+not yet available.
+In this situation, allowing stores to complete out of order would
+allow execution to proceed.
 Therefore, portable code must explicitly order the stores, for
 example, as shown in
 Listing~\ref{lst:memorder:Enforcing Order of Message-Passing Litmus Test},
 thus preventing the \co{exists} clause from triggering.
 \fi
+
+\QuickQuiz{}
+	Why should strongly ordered systems pay the performance price
+	of unnecessary \co{smp_rmb()} and \co{smp_wmb()} invocations?
+	Shouldn't weakly ordered systems shoulder the full cost of
+	their misordering choices???
+\QuickQuizAnswer{
+	That is in fact exactly what happens.
+	On strongly ordered systems, \co{smp_rmb()} and \co{smp_wmb()}
+	emit no instructions, but instead just constrain the compiler.
+	Thus, in this case, weakly ordered systems do in fact shoulder
+	the full cost of their memory-ordering choices.
+} \QuickQuizEnd
 
 \subsection{Address Dependencies}
 \label{sec:memorder:Address Dependencies}
@@ -6768,6 +6826,7 @@ defined its memory ordering with a formal model~\cite{ARMv8A:2017}.
 \fi
 
 \subsection{Itanium}
+\label{sec:memorder:Itanium}
 
 Itanium 은 완화된 일관성 모델을 제공해서, 명시적인 메모리 배리어 인스트럭션이
 없으면, Itanium 은 임의적으로 메모리 레퍼런스들을 재배치 할 수
@@ -6999,7 +7058,8 @@ barrier.
 배리어 인스트럭션을 갖습니다~\cite{PowerPC94,MichaelLyons05a}:
 \iffalse
 
-The \Power{} and PowerPC\textsuperscript{\textregistered}
+% TODO
+The \Power{} and PowerPC\mytextregistered\
 CPU families have a wide variety of memory-barrier
 instructions~\cite{PowerPC94,MichaelLyons05a}:
 \fi
@@ -7368,9 +7428,9 @@ own stores as having happened earlier than this total global order
 would indicate.
 This exception to the total ordering is needed to allow important
 hardware optimizations involving store buffers.
-In addition, memory ordering obeys causality, so that if CPU~0 sees a
-store by CPU~1, then CPU~0 is guaranteed to see all stores that CPU~1
-saw prior to its store.
+In addition, x86 provides other-multicopy atomicity, for example,
+so that if CPU~0 sees a store by CPU~1, then CPU~0 is guaranteed to see
+all stores that CPU~1 saw prior to its store.
 Software may use atomic operations to override these hardware optimizations,
 which is one reason that atomic operations tend to be more expensive
 than their non-atomic counterparts.
@@ -7398,7 +7458,8 @@ that same location, you are on your own.
 
 However, note that some SSE instructions are weakly ordered ({\tt clflush}
 and non-temporal move instructions~\cite{IntelXeonV2b-96a}).
-CPUs that have SSE can use {\tt mfence} for \co{smp_mb()},
+Code that uses these non-temporal move instructions
+can also use {\tt mfence} for \co{smp_mb()},
 {\tt lfence} for \co{smp_rmb()}, and {\tt sfence} for \co{smp_wmb()}.
 \fi
 
@@ -7412,7 +7473,7 @@ serializing 인스트럭션 (e.x: \co{cpuid}) 을 수행해야만 합니다~\cit
 8.1.3]{Intel64IA32v3A2011}.
 \iffalse
 
-A few versions of the x86 CPU have a mode bit that enables out-of-order
+A few older variants of the x86 CPU have a mode bit that enables out-of-order
 stores, and for these CPUs, \co{smp_wmb()} must also be defined to
 be {\tt lock;addl}.
 
@@ -7438,7 +7499,7 @@ Table~\ref{tab:memorder:Summary of Memory Ordering}
 특히, 모든 CPU 들은 다른 CPU 들로부터의 관계없는 스토어들의 순서에 동의를 하게 되는데, 즉, z~Systems 는 완전한 multicopy atomic 을 제공합니다.
 \iffalse
 
-The z~Systems machines make up the IBM\textsuperscript{\texttrademark}
+The z~Systems machines make up the IBM\mytexttrademark\
 mainframe family, previously
 known as the 360, 370, 390 and zSeries~\cite{IBMzSeries04a}.
 Parallelism came late to z~Systems, but given that these mainframes first
