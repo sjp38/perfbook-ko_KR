@@ -65,10 +65,13 @@ to a special-purpose language are confined to design-time verification.
 변환시키고는 여기서 생겨날 수 있는 모든 액세스 순서들을 생성합니다.
 이 방법은 잘 동작할 듯 보입니다만, 실제 환경에서 얼마나 잘 동작할지는 볼 필요가
 있습니다.
-예를 들어, 이 테크닉이 어떤 타입과 크기의 프로그램들을 처리할 수 있을지는
-분명하지 않습니다.
-하지만, SAT solver 들이 병렬 코드를 검증하는데 유용해 지기를 빌어볼 만한
-이유들이 있습니다.
+한가지 좋은 징조는 2016년에 있었던 \co{cbmc} 를 리눅스 커널 RCU 에 적용하려 한
+작업~\cite{LihaoLiang2016VerifyTreeRCU,LanceRoy2017CBMC-SRCU} 입니다.
+이 작업은 RCU 의 최소한의 구성과 작은 수의 쓰레드를 사용한 검증 시나리오를
+사용하긴 했습니다만, 리눅스 커널 C 코드를 수집하고 유용한 결과를 내놓았습니다.
+이 C 코드에서 생성된 논리 표현식은 9천만개의 변수, 4만5천개의 절들을 가져서 이
+SAT solver 가 올바른 결과를 내놓는데 수십기가바이트의 메모리 사용과 80시간의
+CPU 시간을 필요로 했습니다.
 \iffalse
 
 More recently, SAT solvers have appeared that handle parallel code.
@@ -76,7 +79,6 @@ These solvers operate by converting the input code into single static
 assignment (SSA) form, then generating all permitted access orders.
 This approach seems promising, but it remains to be seen how well
 it works in practice.
-% TODO
 One encouraging sign is work in 2016 applying \co{cbmc} to Linux-kernel
 RCU~\cite{LihaoLiang2016VerifyTreeRCU,LanceRoy2017CBMC-SRCU}.
 This work used minimal configurations of RCU, and verified scenarios
@@ -86,6 +88,23 @@ The logic expressions generated from the C code had up to 90~million
 variables, 450~million clauses, occupied tens of gigabytes of memory,
 and required up to 80~hours of CPU time for the SAT solver to produce
 the correct result.
+\fi
+
+그러나, 리눅스 커널 해커는 자신의 코드가 자동으로 검증되었다는 데 대해 회의감을
+느낄 수도 있을 겁니다.
+그런 비판적 감정에 대처하는 한가지 방법은 해당 코드의 버그가 삽입된 버전을
+제공하는 거입니다.
+만약 formal-verification tool 이 모든 버그를 찾는다면, 우리의 해커는 이 도구의
+기능에 대해 더 만족할 수 있을 겁니다.
+그리고 이게 바로 리눅스 커널 RCU 에 버그가 잠재적으로 삽입되어 있는 20개의 서로
+다른 브랜치를 갖는 \co{git}
+저장소~\cite{PaulEMcKenney2017VerificationChallenge6}를 가진 이유입니다.
+
+현재, \co{cbmc} 는 여러개의 주입된 버그들을 찾을 수 있습니다만, RCU 의
+메인테이너가 아직 알지 못한 버그를 찾지는 못했습니다.
+그러나, SAT solver 들이 언젠가는 병렬 코드의 동시성 버그를 찾는데 유용해질 날이
+올거라는 희망을 가질만 합니다.
+\iffalse
 
 Nevertheless, a Linux-kernel hacker might be justified in feeling skeptical
 of a claim that his or her code had been automatically verified.
