@@ -33,6 +33,9 @@ include $(top)/recipes.mk
 hash_bkt: hash_bkt.c ../../api.h hashtorture.h
 	cc $(GCC_ARGS) -DTEST_HASH -o hash_bkt hash_bkt.c -lpthread
 
+hash_bkt_ref: hash_bkt_ref.c ../../api.h hashtorture.h
+	cc $(GCC_ARGS) -DTEST_HASH -o hash_bkt_ref hash_bkt_ref.c -lpthread
+
 hash_bkt_rcu: hash_bkt_rcu.c ../../api.h hashtorture.h
 	cc $(GCC_ARGS) -DTEST_HASH -o hash_bkt_rcu hash_bkt_rcu.c -lpthread -lurcu -lurcu-signal
 	# cc $(GCC_ARGS) -DTEST_HASH -o hash_bkt_rcu hash_bkt_rcu.c -lpthread -lurcu -lurcu-qsbr
