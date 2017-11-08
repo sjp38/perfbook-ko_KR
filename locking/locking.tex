@@ -2763,6 +2763,9 @@ leaf \co{rcu_node} 구조체의 \co{->fqslock} 을 잡고, 그 락을 잡는데 
 이 획득한 후 해제하기 시퀀스는 \co{gp_flags} 변수가 누군가가 토너먼트에
 승리했다는 것을 알리게 되거나, \co{->fqslock} 획득에 실패했거나, 또는 root
 \co{rcu_node} 구조체의 \co{->fqslock} 이 획득될 때까지 반복됩니다.
+루트 \co{rcu_node} 구조체의 \co{->fqslock} 이 획득된다면,
+\co{do_force_quiescent_state()} 라는 이름의 함수가 호출되지만, 이 함수는
+100\,밀리세컨드에 최대 한번 호출되어야 합니다.
 \iffalse
 
 The general approach is a \emph{tournament}, where
@@ -2775,7 +2778,6 @@ asserted the event, the first CPU drops out of the competition.
 This acquire-then-release sequence continues until either the
 \co{gp_flags} variable indicates that someone else won the tournament,
 one of the attempts to acquire an \co{->fqslock} fails, or
-% TODO
 the root \co{rcu_node} structure's \co{->fqslock} has been acquired.
 If the root \co{rcu_node} structure's \co{->fqslock} is acquired,
 a function named \co{do_force_quiescent_state()} is invoked, but this
@@ -2825,6 +2827,8 @@ Listing~\ref{lst:locking:Conditional Locking to Reduce Contention} 에 보여져
 실행되고 있어야만 의미가 지켜지며, 따라서 이 함수에의 여러 동시적인 호출자들이
 존재한다면, 그들 중 하나만이 정말로 \co{do_force_quiescent_state()} 함수를
 호출하고, 나머지들은 (가능한 빠르고 고통 없이) 포기하고 떠나도록 해야만 합니다.
+더 나아가서, \co{do_force_quiescent_state()} 가 과거의 100\,밀리세컨드 내에
+호출된 적 있다면, 그 함수를 다시 한번 호출할 필요는 없습니다.
 \iffalse
 
 Simplified code to implement this is shown in
@@ -2836,7 +2840,6 @@ At any given time, it only makes sense for one instance of
 concurrent callers, we need at most one of them to actually invoke
 \co{do_force_quiescent_state()}, and we need the rest to (as quickly and
 painlessly as possible) give up and leave.
-% TODO
 Furthermore, if \co{do_force_quiescent_state()} has been invoked within
 the past 100\,milliseconds, there is no need to invoke it again.
 \fi
@@ -2877,8 +2880,9 @@ variable \co{rnp_old} in preparation for the next pass through the loop.
 \co{rcu_node} 구조체의 \co{->fqslock} 을 잡고 있다는 이야기입니다.
 Line~16 이 여전히 \co{gp_flags} 전역 변수의 값이 0임을 확인하면, line~17 에서
 \co{gp_flags} 를 1로 설정하고 line~18 에서 \co{do_force_quiescent_state()} 를
-호추한 후, line~19 에서 \co{gp_flags} 를 0으로 되돌려 놓습니다.
-어떤 경우였든, line~21 에서는 root \co{rcu_node} 구조체의 \co{->fqslock} 을
+호출한 후, line~19 에서 100\,밀리세컨드를 기다리고, line~20 에서 \co{gp_flags}
+를 0으로 되돌려 놓습니다.
+어떤 경우였든, line~22 에서는 root \co{rcu_node} 구조체의 \co{->fqslock} 을
 해제합니다.
 \iffalse
 
@@ -2950,8 +2954,8 @@ Either way, line~22 releases the root \co{rcu_node} structure's
 } \QuickQuizEnd
 
 이 함수는 드물지 않게 사용되는 계층적 락킹의 패턴을 보여주고 있습니다.
-이 패턴은 앞서 이야기한 iterator 캡슐화와 마찬가지로 RAII 락킹을 사용해서
-구현하기 상당히 어렵고, 따라서 예측가능한 미래를 위해서는 lick/unlock 기능들이
+이 패턴은 앞서 이야기한 iterator 캡슐화와 마찬가지로 엄격한 RAII 락킹을
+사용해서 구현하기 상당히 어렵고, 따라서 미래에는 명시적 lock/unlock 기능들이
 필요하게 될 것입니다.
 \iffalse
 
