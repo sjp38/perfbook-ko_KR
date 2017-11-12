@@ -5382,6 +5382,14 @@ ordering is lost.
 	\fi
 } \QuickQuizEnd
 
+동일 여부 비교의 연속은 함께 이루어진다면, 컴파일러에게 해당 포인터의 실제 값을
+판단하기 충분한 정보를 줄 수도 있으며, 이는 종속성을 깰 수 있음을 알아두시기
+바랍니다.
+더 나아가서, 컴파일러는 하나의 동일 여부 비교로부터도 정보를 다른 정보들과
+결합해서 그 실제 값을 알아낼 수도 있어서, 역시 종속성을 깰 수 있습니다.
+배열의 원소로의 포인터들은 특히 두번째로 설명한 의존성 파괴에 민감합니다.
+\iffalse
+
 Note that a series of inequality comparisons might, when taken together,
 give the compiler enough information to determine the exact value of
 the pointer, at which point, you should consider the dependency broken.
@@ -5390,6 +5398,7 @@ even a single inequality comparison with other information to learn
 the exact value, again breaking the dependency.
 Pointers to elements in arrays are especially susceptible to this latter
 form of dependency breakage.
+\fi
 
 \subsubsection{Safe comparison of dependent pointers}
 의존적인 포인터들을 비교하는 몇가지 안전한 방법들이 있습니다:
@@ -5405,8 +5414,10 @@ pointers:
 	뿐으로, 이 경우에는 어쨌건 그 포인터를 디레퍼런스 할 수 없습니다.
 \item	의존적인 포인터가 비교 전이든 후든 결코 디레퍼런스 되지 않는 경우.
 \item	의존적인 포인터가 매우 오래 전에 수정된 객체를 레퍼런스 하는 포인터와
-	비교되는 경우.  여기서의 ``매우 오래 전'' 의 충분한 값은 컴파일
-	시점입니다.
+	비교되는 경우.  여기서의 ``매우 오래 전'' 의 유일하게 충분한 값은
+	컴파일 시점입니다.
+	여기서의 핵심은 address 또는 data dependency 외에도 순서 규칙을
+	보장하는 다른 무언가가 있어야 한다는 것입니다.
 \iffalse
 
 \item	Comparisons against the \co{NULL} pointer.
@@ -5417,11 +5428,19 @@ pointers:
 	after the comparison.
 \item	The dependent pointer is compared to a pointer that references
 	objects that were last modified a very long time ago, where
-	% TODO
 	the only unconditionally safe value of ``a very long time ago'' is
 	``at compile time''.
 	The key point is that there absolutely must be something other
 	than the address or data dependency that guarantees ordering.
+\fi
+\item	충분한 종속성을 가지고 있는 두 포인터들간의 비교.
+	예를 들어, 여러분이 두개의 포인터를 가지고 있고, 각 포인터는 종속성을
+	가지고 있으며, 여러분은 포인터가 가리키는 데이터 원소의 주소 순서대로
+	락을 잡음으로써 데드락을 회피하는 경우.
+\item	비교가 동일하지 않으며, 컴파일러는 종속성을 갖고 있는 이 포인터의 값을
+	알아내기 충분한 정보를 가지고 있지 못한 경우.
+\iffalse
+
 \item	Comparisons between two pointers, each of which is carrying
 	a good-enough dependency.
 	For example, you have a pair of pointers, each carrying a
@@ -5483,6 +5502,15 @@ pointers:
 \label{lst:memorder:Broken Dependencies With Pointer Comparisons}
 \end{listing}
 
+포인터 비교는 상당히 복잡할 수 있고, 따라서
+Listing~\ref{lst:memorder:Broken Dependencies With Pointer Comparisons}
+으로 보인 예제를 통해 알아가는게 좋을 겁니다.
+이 예제는 line~1-5 에 보여진 간단한 \co{struct foo}, line~6 과~7 에 각각 보인
+전역 포인터, \co{gp1} 과 \co{gp2} 를 사용합니다.
+이 예제는 두 쓰레드, line~9-22 에 보인 \co{updater()} 와 lines~24-39 의
+\co{reader()} 를 사용합니다.
+\iffalse
+
 Pointer comparisons can be quite tricky, and so it is well worth working
 through the example shown in
 Listing~\ref{lst:memorder:Broken Dependencies With Pointer Comparisons}.
@@ -5491,6 +5519,21 @@ two global pointers, \co{gp1} and \co{gp2}, shown on lines~6 and~7,
 respectively.
 This example uses two threads, namely \co{updater()} on lines~9-22 and
 \co{reader()} on lines~24-39.
+\fi
+
+\co{updater()} 쓰레드는 line~13 에서 메모리를 할당받고, 메모리가 없다면 line~14
+에서 통렬히 이의 제기합니다.
+Line~15-17 은 새로 할당받은 구조체를 초기화하고, line~18 에서 이 포인터를
+\co{gp1} 에 할당합니다.
+Line~19 와~20 은 이어서 이 구조체의 필드들 가운데 두개를 업데이트 하는데, 이는
+line~18 에서 이 필드들이 읽기를 하는 쓰레드들에게 보일 수 있도록 한 후입니다.
+읽기를 하는 쓰레드가 볼 수 있는 필드에 대한 동기화 되지 않은 업데이트는 종종
+버그를 만들어냄을 알아두시기 바랍니다.
+이를 행하는 합법적인 사용예도 있긴 하지만, 그런 사용예는 이 예제에서 보여지는
+것보다 많은 주의를 필요로 합니다.
+
+마지막으로, line~21 은 이 포인터를 \co{gp2} 로 할당합니다.
+\iffalse
 
 The \co{updater()} thread allocates memory on line~13, and complains
 bitterly on line~14 if none is available.
@@ -5504,6 +5547,23 @@ Although there are legitmate use cases doing just this, such use cases
 require more care than is exercised in this example.
 
 Finally, line~21 assigns the pointer to \co{gp2}.
+\fi
+
+\co{reader()} 쓰레드는 먼저 line~30 에서 \co{gp2} 를 읽어오고, line~31 과~32
+에서 \co{NULL} 을 체크한 후 만약 그렇다면 리턴합니다.
+Line~33 은 \co{->b} 필드를 읽어옵니다.
+이제 line~34 는 \co{gp1} 을 읽어오고, line~35 가 line~30 에서 읽어온
+포인터와~34 에서 읽어온 포인터가 동일하게 보인다면, line~36 에서 \co{p->c} 를
+읽어옵니다.
+Line~36 은 line~30 에서 읽어온 포인터 \co{p} 를 사용하지, line~34 에서 읽어온
+\co{q} 를 사용하지 않음을 알아두시기 바랍니다.
+
+하지만 이 차이는 문제되지 않을 겁니다.
+Line~35 에서의 같음에 대한 비교는 실제로는 서로 다른 종속성을 갖는 두 포인터를
+컴파일러가 (잘못되게도) 동일하다고 결론내리게 할 수 있습니다.
+이는 컴파일러가 line~36 을 \co{r2 = q->c} 로 변환하게 만들 수 있어서, 예상되는
+값 144가 아니라 44 가 로드되게 할 수 있음을 의미합니다.
+\iffalse
 
 The \co{reader()} thread first fetches \co{gp2} on line~30, with
 lines~31 and~32 checking for \co{NULL} and returning if so.
@@ -5520,11 +5580,26 @@ different dependencies.
 This means that the compiler might well transform line~36 to instead
 be \co{r2 = q->c}, which might well cause the value 44 to be loaded
 instead of the expected value 144.
+\fi
 
 \QuickQuiz{}
+	하지만 line~35 에서의 조건은 line~36 이 line~34 뒤로 순서지어지게 하는
+	control dependency 를 제공하지 않나요?
+	\iffalse
+
 	But doesn't the condition in line~35 supply a control dependency
 	that would keep line~36 ordered after line~34?
+	\fi
 \QuickQuizAnswer{
+	맞아요, 하지만, 아닙니다.
+	그래요, control dependency 가 존재합니다, 하지만 control dependency
+	들은 뒤의 로드들을 순서짓지 않고, 뒤의 스토어들만을 순서짓습니다.
+	여러분이 정말 순서규칙을 필요로 한다면, 여러분은 line~35 와~36 사이에
+	\co{smp_rmb()} 를 위치시킬 수 있습니다.
+	또는 더 일관적이게, \co{update()} 가 이 구조체를 재사용하는 대신에 두
+	구조체를 할당하게 할 수 있을 겁니다.
+	\iffalse
+
 	Yes, but no.
 	Yes, there is a control dependency, but control dependencies do
 	not order later loads, only later stores.
@@ -5532,6 +5607,7 @@ instead of the expected value 144.
 	between lines~35 and~36.
 	Or considerably better, have \co{update()}
 	allocate two structures instead of reusing the structure.
+	\fi
 } \QuickQuizEnd
 
 요약해서, 여러분의 소스 코드의 의존성 연결이 컴파일러의 처리가 끝난 후에도
