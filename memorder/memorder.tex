@@ -4453,12 +4453,34 @@ exists(1:r1=1 /\ 2:r2=0 /\ z=2)
 \end{listing}
 
 \QuickQuiz{}
+	Listing~\ref{lst:memorder:Z6.0 Release-Acquire Chain (Ordering?)}
+	에 보인 것과 같이 하나의 load-to-store 링크와 하나의 store-to-store
+	링크와 함께 짧은 release-acquire 체인이 있다고 해봅시다.
+	각 non-store-to-load 링크가 하나씩만 있으므로, \co{exists} 절은
+	발동되지 않을 겁니다, 그렇죠?
+	\iffalse
+
 	Suppose we have a short release-acquire chain along with one
 	load-to-store link and one store-to-store link, like that shown in
 	Listing~\ref{lst:memorder:Z6.0 Release-Acquire Chain (Ordering?)}.
 	Given that there is only one of each type of non-store-to-load
 	link, the \co{exists} cannot trigger, right?
+	\fi
 \QuickQuizAnswer{
+	아닙니다.
+	문제되는건 non-store-to-load 링크의 갯수입니다.
+	하나의 non-store-to-load 링크만이 존재한다면, 하나의 release-acquire
+	체인은 여기서의 \co{exists} 절이 발동되는걸 막을 수 있습니다.
+	하지만, 두개 이상의 non-store-to-load 링크가 존재한다면, 예를 들어
+	store-to-store, load-to-store, 또는 그런것들의 어떤 조합이 존재한다면,
+	각각의 non-store-to-load 링크 사이에 최소 하나의 전체 배리어
+	(\co{smp_mb()} 나 그보다 나은 것들) 를 가져야 합니다.
+	따라서,
+	Listing~\ref{lst:memorder:Z6.0 Release-Acquire Chain (Ordering?)} 에서
+	\co{exists} 절이 발동되는걸 막으려면 \co{P0()} 의 또는 \co{P1()} 의
+	액세스들 사이에 전체 배리어가 추가되어야 합니다.
+	\iffalse
+
 	Wrong.
 	It is the number of non-store-to-load links that matters.
 	If there is only one non-store-to-load link, a release-acquire
@@ -4472,6 +4494,7 @@ exists(1:r1=1 /\ 2:r2=0 /\ z=2)
 	preventing the \co{exists} clause from triggering therefore requires
 	an additional full barrier between either \co{P0()}'s or
 	\co{P1()}'s accesses.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
