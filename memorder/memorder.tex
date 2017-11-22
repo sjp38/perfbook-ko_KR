@@ -6652,13 +6652,11 @@ these sections give a good overview.
 \label{sec:memorder:Alpha}
 
 수명이 다한지 오래된 CPU 에 대해 뭔가 이야기하는건 좀 이상하게 보일수도
-있겠습니다만, Alpha 는 가장 완화된 메모리 순서규칙 모델을 가지고 있으며, 메모리
-오퍼레이션들을 상당히 공격적으로 재배치하기에 흥미롭습니다.
-이때문에 Alpha 를 포함해 모든 CPU 에서 동작해야하는 리눅스 커널의 메모리 순서
-보장 기능들은 Alpha 를 바탕으로 정의되었습니다.
+있겠습니다만, Alpha 는 의존적 로드들을 재배치하는 유일한 주류 CPU 이고, 따라서
+리눅스를 포함한 동시성 API 에 많은 영향을 끼쳤기에 흥미롭습니다.
 따라서 Alpha 를 이해하는 것은 리눅스 커널 해커에게 매우 중요합니다.
 
-Alpha 와 다른 CPU 사이의 차이점이
+Alpha 와 다른 CPU 사이의 의존적 로드에 대한 차이점이
 Listing~\ref{lst:memorder:Insert and Lock-Free Search}
 의 코드에 보여져 있습니다.
 이 그림의 line~9 에서의 \co{smp_wmb()} 는 line~6-8 의 원소 초기화가 line~10
@@ -6721,7 +6719,7 @@ That is, it makes this guarantee on all CPUs {\em except} Alpha.
 \label{lst:memorder:Insert and Lock-Free Search}
 \end{listing}
 
-Alpha 는 극단적으로 완화된 메모리 순서 규칙을 가져서
+Alpha 는 실제로
 Listing~\ref{lst:memorder:Insert and Lock-Free Search} 의 line~20 에서의 코드가
 line~6-8 의 초기화 전의 쓰레기 값을 보게 할 수 있습니다.
 
@@ -6840,21 +6838,18 @@ Listing~\ref{lst:memorder:Safe Insert and Lock-Free Search}.
 \fi
 
 \co{smp_wmb()} 자리에 모든 읽기를 하는 CPU 들이 쓰기를 하는 CPU 의 쓰기를
-순서대로 읽게 강제하는 소프트웨어 배리어를 구현할 수도 있을 겁니다.
-하지만, 이 방법은 Alpha 와 같이 극단적으로 완화된 순서규칙을 갖는 CPU 에는
-지나친 오버헤드를 갖게 하고, 더 나아가서 시스템이 강력한 real-time 응답 요구를
-갖는 환경에서는 합리적인 방법으로 여겨지지 않기 때문에 리눅스 커뮤니티에서는
-받아들여지지 않았습니다.
+순서대로 읽게 강제하는 소프트웨어 메카니즘을 구현할 수도 있을 겁니다.
 이 소프트웨어 배리어는 모든 다른 CPU에 inter-processor interrupt (IPI) 들을
 보내는 것으로 구현될 수 있습니다.
-그런 IPI 가 도착하면, CPU 는 메모리 배리어 인스트럭션을 수행해서 메모리 배리어
-슛다운을 구현할 겁니다.
+그런 IPI 가 도착하면, CPU 는 리눅스 커널의 \co{sys_membarrier()} 시스템 콜로
+제공되는 것과 비슷한 메모리 배리어 shootdown 을 구현하는 인스트럭션을 수행할
+겁니다.
 데드락을 막기 위해선 추가적인 로직이 필요합니다.
 물론, data dependency 를 지켜주는 CPU 에서는 그런 배리어를 단순히
 \co{smp_wmb()} 로 정의할 수 있을 겁니다.
-Alpha 는 저무는 해인 만큼 미래에는 이런 방법이 다시 고려되어야겠습니다만,
-2017년에 있어선 최신 리눅스 커널을 아끼는 DEC Alpha 시스템에서 돌리고 있는
-사람들이 놀랍게도 많습니다.
+하지만, 이 방법은 상당한 오버헤드를 가하고, 더 나아가서 시스템이 강력한
+real-time 응답 요구사항을 지켜야만 하는 사람들에게는 비합리적이라고 여겨지기에
+리눅스 커뮤니티에서는 사용되지 않습니다.
 \iffalse
 
 It is also possible to implement a software mechanism
@@ -6868,7 +6863,6 @@ provided by the Linux kernel's \co{sys_membarrier()} system call.
 Additional logic is required to avoid deadlocks.
 Of course, CPUs that respect data dependencies would define such a barrier
 to simply be \co{smp_wmb()}.
-% TODO
 However, this approach was deemed by the Linux community
 to impose excessive overhead, and furthermore would
 not be considered a reasonable approach by those whose systems must meet
@@ -6934,16 +6928,20 @@ an \co{smp_mb()} rather than a no-op.
 	\co{smp_mb()} rather than \co{smp_rmb()}?
 	\fi
 \QuickQuizAnswer{
-	먼저, Alpha 는 \co{mb} 와 \co{wmb} 인스트럭션만을 가지고 있어서,
+	Alpha 는 \co{mb} 와 \co{wmb} 인스트럭션만을 가지고 있어서,
 	\co{smp_rmb()} 는 어떻든간에 Alpha 의 \co{mb} 인스트럭션으로 구현될
 	겁니다.
+	또한, \co{smp_read_barrier_depends()} 가 리눅스 커널에 추가되었던
+	시절에는 Alpha 가 의존성 있는 스토어를 순서 지켜주는지 확실치 않았고,
+	따라서 \co{smp_mb()} 는 어떤 경우에든 안전한 선택이었습니다.
 
-	더 중요한건, \co{smp_read_barrier_depends()} 는 뒤따르는 스토어들을
-	순서잡아야만 합니다.
-	예를들어, 다음과 같은 코드를 고려해 봅시다:
+	여러분이 이걸 읽고 있는 시점에는 리눅스 커널이 \co{READ_ONCE()} 와
+	Alpha 의 일부 어토믹한 read-modify-write 오퍼레이션들에
+	\co{smp_read_barrier_depends()} 를 추가했어서, 커널 핵심부 외에서는
+	어디에서도 \co{smp_read_barrier_depends()} 를 사용할 필요가 없게
+	되어있을 겁니다.
 	\iffalse
 
-	% TODO
 	Alpha has only \co{mb} and \co{wmb} instructions,
 	so \co{smp_rmb()} would be implemented by the Alpha \co{mb}
 	instruction in either case.
@@ -6961,13 +6959,24 @@ an \co{smp_mb()} rather than a no-op.
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	DEC Alpha 는 가장 완화된 메모리 순서 규칙을 갖는 만큼 중요하지 않나요?
+	\iffalse
+
 	Isn't DEC Alpha significant as having the weakest possible
 	memory ordering?
+	\fi
 \QuickQuizAnswer{
+	DEC Alpha 가 상당한 비난을 받긴 하지만, 같은 CPU 에서 같은 변수로의
+	읽기들은 재배치하지 않습니다.
+	또한 Java 와 C11 메모리 모델을 괴롭히는 out-of-thin-air 문제도
+	막습니다.
+	\iffalse
+
 	Although DEC Alpha does take considerable flak, it does avoid
 	reordering reads from the same CPU to the same variable.
 	It also avoids the out-of-thin-air problem that plagues
 	the Java and C11 memory models.
+	\fi
 } \QuickQuizEnd
 
 Alpha 에 대한 더 자세한 정보를 위해선, 레퍼런스 매뉴얼~\cite{ALPHA2002} 을
