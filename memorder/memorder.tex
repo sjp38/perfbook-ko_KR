@@ -8,13 +8,14 @@
 
 인과성과 순차적 순서는 상당히 직관적이며, 해커들은 일반인들에 비해 이런
 개념들을 잘 이해하고 있는 경향을 띄는 경우가 많습니다.
-이런 직관들은 순차적 코드와, 락킹과 RCU 같은 표준적 상호배타성 메커니즘을
-사용하는 병렬 코드를 작성하고, 분석하고, 디버깅 하는데 매우 강력한 도구가 될 수
+이런 직관들은 순차적 코드와, 락킹과 같은 표준적 상호배타성 메커니즘을 사용하는
+병렬 코드를 작성하고, 분석하고, 디버깅 하는데 매우 강력한 도구가 될 수
 있습니다.
 불행히도, 표준적 메커니즘을 사용하지 않는 코드에서는 이런 직관들이 깨어지게
 되는데, 그런 중요한 예 하나는 이런 표준 메커니즘들을 구현하는 코드이고, 또다른
-하나는 완화된 동기화를 사용하는 성능이 중요한 코드입니다 (사실, 일부는 이
-완화성이 덕목이라고 주장했습니다~\cite{JadeAlglave2013-WeaknessIsVirtue}).
+하나는 완화된 동기화를 사용하는 성능이 중요한 코드입니다.
+사실, 일부는 이 완화성이 덕목이라고
+주장했습니다~\cite{JadeAlglave2013-WeaknessIsVirtue}.
 이 챕터는 동기화 도구들과 다른 성능이 중요한 코드를 구현하기 충분할 만큼
 메모리의 순서 규칙에 대해 여러분이 이해할 수 있도록 돕습니다.
 \iffalse
@@ -42,16 +43,13 @@ Section~\ref{sec:memorder:Ordering: Why and How?}
 이유를 보이며, 원치 않는 재배치를 어떻게 방지할 수 있는지에 대한 정보를
 제공합니다.
 Section~\ref{sec:memorder:Tricks and Traps}
-은 하드웨어가 병렬 프로그래머에게 해줄 수 있는 것들의 완전한 리스트를
-제공합니다.
-Section~\ref{sec:memorder:Compile-Time Consternation}
-은 컴파일러들이 병렬 프로그래머들에게 할 수 있는 것들 일부를 제공합니다.
+와~\ref{sec:memorder:Compile-Time Consternation}
+은 하드웨어와 컴파일러들이 각각 병렬 프로그래머에게 해줄 수 있는 것들의 보다
+완전한 리스트를 제공합니다.
 Section~\ref{sec:memorder:Hardware Specifics}
-은 실제 하드웨어 플랫폼들이 병렬 프로그래머들에게 실제로 어떤 일을 해주는지에
-대해 자세한 내용을 설명합니다.
+은 일부 대표적 하드웨어 플랫폼들에 대한 자세한 설명을 제공합니다.
 마지막으로, Section~\ref{sec:memorder:Where is Memory Ordering Needed?}
-은 메모리 순서를 지키기 위해 어떤 상황에 어떤 특수한 동작이 병렬 프로그래머에게
-필요한지에 대한 경험으로부터의 법칙을 제공합니다.
+은 경험으로부터의 법칙 일부를 제공합니다.
 \iffalse
 
 Section~\ref{sec:memorder:Ordering: Why and How?}
@@ -65,7 +63,6 @@ respectively can do to unwary parallel programmers.
 Section~\ref{sec:memorder:Hardware Specifics}
 follows up with more detail on a few representative hardware platforms.
 Finally, Section~\ref{sec:memorder:Where is Memory Ordering Needed?}
-% TODO
 provides some useful rules of thumb.
 \fi
 
@@ -269,10 +266,9 @@ Isn't that why we have computers in the first place, to keep track of things?
 
 많은 사람들이 실제로 자신의 컴퓨터가 사물에 대해 기록을 가지고 있을 것이라
 기대합니다만, 많은 사람들은 또한 그 기록을 빠르게 관리할 것을 요구합니다.
-하지만, Chapter~\ref{chp:Hardware and its Habits} 에서 보였듯이, 근래의 컴퓨터
-시스템 제조사들이 직면한 어려움 중 한가지는 메인 메모리가 CPU 의 속도 향상을
-따라가지 못한다는 것입니다---근래의 CPU 들은 메모리로부터 변수 하나의 값을
-읽어오는데 필요한 시간 동안 수백개의 명령어를 실행할 수 있습니다.
+하지만, Chapter~\ref{chp:Hardware and its Habits} 에서 보였듯이, 메인 메모리는
+메모리로부터 하나의 변수를 가져오는데 필요한 시간 동안 수백개의 명령어를 수행할
+수 있는 근래의 CPU 의 속도를 따라깆 못합니다.
 따라서 CPU 들은
 Figure~\ref{fig:cpu:System Hardware Architecture} 에서 보인 것과 같이
 갈수록 커다란 캐시들을 갖추는데, 이는 특정 CPU 의 특정 변수로부터의 첫번째
@@ -359,8 +355,7 @@ residing in other CPUs' caches.
 Figure~\ref{fig:memorder:CPUs Can Do Things Out of Order} 에 그려져 있습니다.
 구체적으로는, 이런 스토어 버퍼들이
 Listing~\ref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 에
-보인 스토어 버퍼 리트머스 테스트에 보인 잘못된 메모리 순서를 가능하게 할 수
-있습니다.
+보인 스토어 버퍼 리트머스 테스트에 보인 잘못된 메모리 순서를 가능하게 합니다.
 \iffalse
 
 Although store buffers can greatly increase performance,
@@ -876,8 +871,8 @@ are at most two threads involved.
 
 	\co{WRITE_ONCE()} 행은 ``SV'' 열로 표시되듯이 하나의 변수로의 액세스는
 	항상 완벽히 순서잡힌다는 사실을 사용합니다.
-	특졍 변수에 순서를 제공하는 모드 다른 오퍼레이션들도 이 같은 변수로의
-	순서를 제공함을 알아 두시기 바랍니다.
+	여러 변수들로의 접근들에 대해 순서를 제공하는 모든 다른 오퍼레이션들
+	또한 이 같은-변수 순서 규칙을 제공한다는 걸 알아두시기 바랍니다.
 
 	\co{READ_ONCE()} 열은 (2017 년에 있어) 컴파일러들과 CPU 들은 사용자가
 	볼 수 있는 예측적 스토어를 탐닉하지 않아서, 주소, 데이터, 또는 수행이
@@ -1063,13 +1058,32 @@ are at most two threads involved.
 	% forward reference to rf co fr section
 } \QuickQuizEnd
 
-% TODO
 \QuickQuiz{}
+	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+	은 왜 \co{smp_mb__after_unlock_lock()} 과 \co{smp_mb__after_spinlock()}
+	을 빼먹고 있나요?
+	\iffalse
+
 	Why is
 	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 	missing \co{smp_mb__after_unlock_lock()} and
 	\co{smp_mb__after_spinlock()}?
+	\fi
 \QuickQuizAnswer{
+	이 두 기능들은 좀 더 특수화 되어 있고, 현재로썬
+	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+	에 맞추기 어려워 보입니다.
+	\co{smp_mb__after_unlock_lock()} 기능은 락 획득 직후에 위치되도록
+	의도되었고, 이 기능은 모든 CPU 들이 앞의 크리티컬 섹션들의 액세스들이
+	해당 \co{smp_mb__after_unlock_lock()} 를 뒤따르는 모든 액세스들보다,
+	그리고 모든 뒤의 크리티컬 섹션의 액세스들보다 전에 이루어진 것으로
+	보이도록 보장합니다.
+	여기서 ``모든 CPU 들'' 은 해당 락을 잡지 않은 CPU 들도 포함하며, ``앞의
+	크리티컬 섹션'' 은 해당 락을 잡는 앞의 크리티컬 섹션은 물론이고
+	\co{smp_mb__after_unlock_lock()} 을 수행한 CPU 에서 해제한 모든 다른
+	락들을 사용하는 크리티컬 섹션들을 포함합니다.
+	\iffalse
+
 	These two primitives are rather specialized, and at present
 	seem difficult to fit into 
 	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
@@ -1083,6 +1097,19 @@ are at most two threads involved.
 	for the lock in question as well as all prior critical sections
 	for all other locks that were released by the same CPU that executed
 	the  \co{smp_mb__after_unlock_lock()}.
+	\fi
+
+	\co{smp_mb__after_spinlock()} 은 \co{smp_mb__after_unlock_lock()} 과
+	같은 보장을 제공하지만, 또한 \co{smp_mb__after_spinlock()} 을 수행한
+	CPU 에 의해 수행된 다른 액세스들이 보일 것에 대한 추가적 보장을
+	제공합니다.
+	어떤 스토어 S 가 앞의 어떤 락 획득 전에 수행되었고 어떤 로드 L 이
+	\co{smp_mb__after_spinlock()} 뒤에 수행되었다면, 모든 CPU 들은 S 가 L
+	전에 일어난 것으로 보게 됩니다.
+	달리 말하면, 어떤 CPU 가 스토어 S 를 수행하고, 락을 잡고,
+	\co{smp_mb__after_spinlock()} 을 수행하고서, 로드 L 을 수행한다면, 모든
+	CPU 들은 S 가 L 전에 일어난 것으로 보게 됩니다.
+	\iffalse
 
 	The \co{smp_mb__after_spinlock()} provides the same guarantees
 	as does \co{smp_mb__after_unlock_lock()}, but also provides
@@ -1094,6 +1121,7 @@ are at most two threads involved.
 	In other words, if a CPU performs a store S, acquires a lock,
 	executes an \co{smp_mb__after_spinlock()}, then performs a
 	load L, all CPUs will see S as happening before L.
+	\fi
 } \QuickQuizEnd
 
 이 표는 단지 컨닝 페이퍼에 불과하며, 따라서 메모리 순서 규칙에 대한 제대로 된
@@ -1214,7 +1242,7 @@ Line~10 과~20 에서의 \co{smp_mb()} 는 배리어들의 역할을, line~9 에
 달리 말하자면,
 \emph{만약} \co{P0()} 의 로컬 변수 \co{r2} 가 값 0으로 끝난다면 \co{P1()} 의
 로컬 변수 \co{r2} 는 값 2로 끝날 것이 보장됩니다.
-다시 말하지만, 메모리 순서 보장은 조건적이지, 절대적이지 않습니다.
+이는 메모리 순서 보장이 조건적이지, 절대적이지 않다는 점의 중요성을 강조합니다.
 \iffalse
 
 Listing~\ref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
@@ -1232,7 +1260,6 @@ In other words,
 \co{P1()}'s local variable \co{r2} is guaranteed
 to end up with the value two \emph{only if}
 \co{P0()}'s local variable \co{r2} ends up with the value zero.
-% TODO
 This underscores the point that memory ordering guarantees are
 conditional, not absolute.
 \fi
@@ -2052,8 +2079,8 @@ Listing~\ref{lst:memorder:Message-Passing Litmus Test, No Writer Ordering (No Or
 지켜주지만, 완화된 순서 규칙의 아키텍쳐들은 그러지 않기
 때문에~\cite{JadeAlglave2011ppcmem}, \co{exists} 절은 발동될 수 있습니다.
 이런 재배치가 이득이 될 수 있는 경우는 스토어 버퍼가 꽉찼고, 또다른 스토어는
-수행될 준비가 되었지만, 앞의 스토어에 필요한 캐시라인은 여전히 스토어 버퍼에
-막혀 있어 여전히 접근이 불가능한 경우입니다.
+수행될 준비가 되었지만, 앞의 스토어에 필요한 캐시라인은 여전히 접근이 불가능한
+경우입니다.
 이 상황에서, 스토어들이 비순차적으로 완료될 수 있게 하는건 수행이 진행될 수
 있게 해줄 겁니다.
 따라서, 이식성 있는 코드는
@@ -2173,7 +2200,10 @@ Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ord
 존재합니다.
 이 경우에, line~21 에서 리턴되는 값은 line~22 에서 사용되는 주소값 그
 자체이지만, C-언어의 \co{->} 오퍼레이터를 사용한 필드 접근, 더하기, 빼기,
-그리고 배열 인덱싱 등 많은 변종이 있을 수 있습니다.
+그리고 배열 인덱싱 등 많은 변종이 있을 수 있습니다.\footnote{
+	하지만 리눅스 커널에서, address dependency 는 배열로의 포인터를 통해
+	제공되어야지, 배열 인덱스를 통해서 제공되어선 안된다는 점을 알아두시기
+	바랍니다.}
 \iffalse
 
 Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}
@@ -2192,7 +2222,6 @@ load on line~22.
 In this case, the value returned by line~21 is exactly the address
 used by line~22, but many variations are possible,
 including field access using the C-language \co{->} operator,
-% TODO
 addition, subtraction, and array indexing.\footnote{
 	But note that in the Linux kernel, the address dependency must
 	be carried through the pointer to the array, not through the
@@ -2926,16 +2955,46 @@ situation arises.
 \iffalse
 
 \QuickQuiz{}
+	하지만
+	Listing~\ref{lst:memorder:Cache-Coherent IRIW Litmus Test} 에서,
+	\co{P2()} 의 \co{r1} 과 \co{r2} 가 값 2 와 1 을 각각 얻고, \co{P3()} 의
+	\co{r1} 과 \co{r2} 가 값 1과 2 를 각각 얻게 되는것 역시 만만치 않게
+	나쁘지 않을까요?
+	\iffalse
+
 	But in
 	Listing~\ref{lst:memorder:Cache-Coherent IRIW Litmus Test},
 	wouldn't be just as bad if \co{P2()}'s \co{r1} and \co{r2}
 	obtained the values 2 and 1, respectively, while \co{P3()}'s
 	\co{r1} and \co{r2} obtained the values 1 and 2, respectively?
+	\fi
 \QuickQuizAnswer{
+	맞아요, 그렇습니다.
+	여기서 \co{exists} 절을 그런 결과를 검사하도록 수정하고 어떻게 되는지
+	한번 보세요.
+	\iffalse
+
 	Yes, it would.
 	Feel free to modify the \co{exists} clause to
 	check for that outcome and see what happens.
+	\fi
 } \QuickQuizEnd
+
+하나의 메모리 영역에 대한 다른 크기의 겹치는 로드와 스토어들은 (C-언어의
+\co{union} 키워드를 통해 이뤄질 수 있을 겁니다) 비슷한 순서 보장을 제공할거라
+생각하고 싶을 겁니다.
+하지만, Flur 등은 이런 보장들이 실제 하드웨어 위에서 위배될 수 있다는 것을
+보이는 놀랍도록 간단한 리트머스 테스트를
+발견했습니다~\cite{Flur:2017:MCA:3093333.3009839}.
+따라서 하나의 변수에 대해서는 겹치지 않는 같은 크기의 정렬된 액세스만 행하도록
+코드를 제한할 필요가 있는데, 적어도 이식성이 중요하다면 그렇습니다.\footnote{
+	어토믹 RMW 오퍼레이션들 (예를 들면, \co{xchg()}) 을 모든 스토어들에
+	사용하는 것이 순차적으로 일관적인 순서를 제공할 거라 믿을 수도
+	있겠습니다만, 이는 어떤 방식으로도 증명된 바 없습니다.}
+
+더 많은 변수와 쓰레드를 추가하면 재배치와 다른 반직관적인 행동을 일으킬 범위가
+커질텐데, 이에 대해 다음 섹션에서 설명합니다.
+\iffalse
 
 It is tempting to speculate that different-sized overlapping loads
 and stores to a single region of memory (as might be set up using
@@ -3109,7 +3168,7 @@ exists (1:r1=1 /\ 1:r2=0)
 
 모든 플랫폼이 어떤 형태의 multi-copy atomicity 를 제공하는 시대가 올수도
 있겠습니다만, 그 사이에는 multicopy-atomic 이 아닌 플랫폼이 존재할 것이고,
-따라서 소프트웨어는 그걸 잘 다뤄야 합니다.
+따라서 소프트웨어는 그걸 잘 다뤄야만 합니다.
 \iffalse
 
 Perhaps there will come a day when all platforms provide some flavor
@@ -3697,8 +3756,8 @@ exists(1:r1=1 /\ 1:r2=0 /\ 2:r3=0)
 
 Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
 (\path{C-W+RWC+o-r+a-o+o-mb-o.litmus})
-은 cumulativity 와 store-release 가 전체 메모리 배리어의 도움에도 불구하고 갖는
-한계를 보입니다.
+은 cumulativity 와 store-release 가 전체 메모리 배리어에도 불구하고 갖는 한계를
+보입니다.
 문제는, line~12 에서의 \co{smp_store_release()} 가 cumulativity 를 가짐에도
 불구하고, 그리고 이 cumulativity 가 line~30 에서의 \co{P2()} 의 로드를
 순서잡음에도 불구하고, \co{smp_store_release()} 의 순서규칙은 \co{P1()} 의 로드
@@ -3706,7 +3765,6 @@ Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
 이는 line~33 에서의 \co{exitst} 절이 발동될 수 있음을 의미합니다.
 \iffalse
 
-% TODO
 Listing~\ref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
 (\path{C-W+RWC+o-r+a-o+o-mb-o.litmus})
 shows the limitations of cumulativity and store-release,
@@ -4157,10 +4215,10 @@ But sometimes time really is on our side.  Read on!
 \end{figure}
 
 Figure~\ref{fig:memorder:Store-to-Load is Temporal}
-에 보인 것과 같이, non-speculative 플랫폼에서는, 어떤 로드가 특정 스토어
-로부터의 값을 리턴한다면, 빛의 유한한 속도와 크기가 존재하는 근래의 컴퓨팅
-시스템 덕분에, 해당 스토어는 분명 로드보다 먼저 수행되었다고 확신할 수
-있습니다.
+에 보인 것과 같이, 사용자에게 보여지는 예측적 수행이 없는 플랫폼에서는, 어떤
+로드가 특정 스토어 로부터의 값을 리턴한다면, 빛의 유한한 속도와 크기가 존재하는
+근래의 컴퓨팅 시스템 덕분에, 해당 스토어는 분명 로드보다 먼저 수행되었다고
+확신할 수 있습니다.
 이는 주의깊게 짜여진 프로그램은 시간의 흐름 자체를 메모리 순서 강제
 오퍼레이션처럼 생각하고 의존할 수 있다는 뜻입니다.
 \iffalse
@@ -4386,7 +4444,6 @@ Listing~\ref{lst:memorder:Long LB Release-Acquire Chain}
 이 release-acquire 체인이 길어질수록, 시간의 흐름으로부터 얻어지는 이득이
 많아져서, 얼마나 많은 쓰레드가 연관되어 있는가와 관계 없이 관련된 \co{exists}
 절이 발동되지 않게 할 수 있습니다.
-더 큰 수의 쓰레드들의 늘어난 계산 요구는 물론 받아내야 합니다!
 \iffalse
 
 A minimal release-acquire chain was shown in
@@ -4730,8 +4787,8 @@ sea of more complex memory-ordering constraints.
 
 C 를 포함해서 대부분의 언어는 병렬 프로그래밍에 대한 경험이 적거나 아예 없는
 사람들에 의해 단일 프로세서 시스템에서 개발되었습니다.
-그 결과, 명시적으로 달리 이야기되지 않는다면, 이 언어들은 다른 존재들이
-메모리를 읽거나 쓰고 있지는 않다고 가정합니다.
+그 결과, 명시적으로 달리 이야기되지 않는다면, 이 언어들은 현재의 CPU 가
+메모리를 읽거나 쓰는 유일한 존재라고 가정합니다.
 이는 결국 이런 언어들의 컴파일러들의 최적화 도구들은 여러분의 프로그램이
 수행하는 메모리 참조들의 순서, 갯수, 그리고 크기를 극적으로 바꿀 준비도
 되어있고, 의지도 있고, 그럴 능력을 가지고 있습니다.
@@ -4985,7 +5042,7 @@ following:
 
 이렇게 바뀐 코드에서, \co{p} 의 값은 세개의 서로 다른 시점에서 로드됩니다.
 이 변환은 처음엔 우습게 보일 수도 있겠지만, 이를 둘러싼 코드가 기계의 모든
-레지스터를 사용하고 있는 경우라면 컴파일러는 이런 변환을 하고자 할 겁니다.
+레지스터를 사용하고 있는 경우라면 매우 유용할 겁니다.
 \co{p} 의 현재 값이 line~1 에서의 테스트를 통과하지만, line~2 가 수행되기 전에
 어떤 다른 쓰레드가 \co{p} 에 \co{NULL} 을 저장해서, 결국 \co{do_somethin()} 은
 놀랍게도 \co{NULL} 포인터를 받아올 수 있습니다.\footnote{
@@ -5166,6 +5223,9 @@ compilers supporting atomics) will prevent this sort of thing.
 	자유로운 액세스를 가능하게 합니다.
 	이 스토어를 만들어냄으로써, 컴파일러는 데이터 레이스를 만들어내는,
 	해서는 안될 일을 할수도 있습니다.
+	그리고 만약 이 코드가 이미 데이터 레이스를 가지고 있다면, 개발자의
+	바램과는 상관없이 컴파일러가 원하는대로 어떤 코드든 만들어낼 수 있는,
+	비정의된 행동의 무서운 유령을 이미 불러낸 것입니다.
 
 	\co{volatile} 과 어토믹 변수들의 경우, 컴파일러는 명시적으로 스토어를
 	만들지 못하도록 되어있습니다.
@@ -5281,8 +5341,9 @@ to avoid fusing and splitting of accesses.
 해서), \co{WRITE_ONCE()} 를 사용할 필요가 없습니다.
 하지만, 제 경험으로는 개발자들은 그들이 생각하는 것보다 더 자주
 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 같은 걸 사용해야 하고, 불필요한 사용으로
-인한 오버헤드는 상당히 낮으며, 이것들을 사용하지 않음으로써 생기는 문제는
-상당히 큽니다.
+인한 오버헤드는 상당히 낮습니다.
+더 나아가서, 필요한 곳에 이것들을 사용하지 않음으로써 생기는 문제는 상당히
+큽니다.
 \iffalse
 
 Please note that, it is possible to overdo use of \co{READ_ONCE()} and
@@ -5296,7 +5357,6 @@ that variable before any other CPU or thread has access to it),
 there is no point in using \co{WRITE_ONCE()}.
 However, in my experience, developers need to use things like
 \co{READ_ONCE()} and \co{WRITE_ONCE()} more often than they think that
-% TODO
 they do, the overhead of unnecessary uses is quite low.
 Furthermore, the penalty for failing to use them when needed is quite high.
 \fi
