@@ -378,6 +378,22 @@ exists (0:r1=0 /\ 1:r1=0)
 \label{tab:formal:Emulating Locking: Performance (s)}
 \end{table}
 
+이 접근법의 성능 이득은 리눅스 커널 메모리
+모델~\cite{JadeAlglave2017LWN-LKMM-1,JadeAlglave2017LWN-LKMM-2} 을 통해 보여질
+수 있습니다.
+이 모델은 \co{spin_lock()} 과 \co{spin_unlock()} 기능을 제공하지만, 이 기능들은
+또한
+Listing~\ref{lst:formal:Emulating Locking with cmpxchg}
+(\path{C-SB+l-o-o-u+l-o-o-*u.litmus} 와 \path{C-SB+l-o-o-u+l-o-o-u*-C.litmus})
+에 보인대로 \co{cmpxchg_acquire()} 와 \co{smp_store_release()} 를 사용해서도
+에뮬레이션 될 수 있습니다.
+Table~\ref{tab:formal:Emulating Locking: Performance (s)}
+은 이 모델의 \co{spin_lock()} 과 \co{spin_unlock()} 을 사용할 때의 성능과
+확장성을 이 기능들을 앞의 리스트에 보인대로 에뮬레이션 했을 때와 비교합니다.
+이 차이는 무의미하지 않습니다: 네개 프로세스에서, 이 모델은 에뮬레이션보다 백배
+이상 빠릅니다!
+\iffalse
+
 The performance benefits of this approach can be demonstrated using
 the Linux-kernel memory
 model~\cite{JadeAlglave2017LWN-LKMM-1,JadeAlglave2017LWN-LKMM-2}.
@@ -392,17 +408,31 @@ compares the performance and scalability of using the model's
 primitives as shown in the listing.
 The difference is not insignificant: At four processes, the model
 is more than two orders of magnitude faster than emulation!
+\fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:formal:Emulating Locking with cmpxchg}
+	의 line~26 에서 해당 컨디션을 그냥 \co{exists} 절에 넣는 대신 왜 별개의
+	\co{filter} 커맨드를  사용하나요?
+	그리고 \co{cmpxchg_acquire()} 대신 \co{xchg_acquire()} 를 사용하는게 더
+	간단하지 않겠어요?
+	\iffalse
+
 	Why bother with a separate \co{filter} command on line~28 of
 	Listing~\ref{lst:formal:Emulating Locking with cmpxchg}
 	instead of just adding the condition to the \co{exists} clause?
 	And wouldn't it be simpler to use \co{xchg_acquire()} instead
 	of \co{cmpxchg_acquire()}?
+	\fi
 \QuickQuizAnswer{
+	이 \co{filter} 절은 \co{herd} 툴이 \co{exists} 절보다 더 이른 처리
+	단계에서 수행을 멈추게 해주는데, 이는 상당한 속도 향상을 가져다 줍니다.
+	\iffalse
+
 	The \co{filter} clause causes the \co{herd} tool to discard
 	executions at an earlier stage of processing than does
 	the \co{exists} clause, which provides significant speedups.
+	\fi
 
 \begin{table}[tbh]
 \rowcolors{7}{lightgray}{}
@@ -431,6 +461,23 @@ is more than two orders of magnitude faster than emulation!
 \label{tab:formal:Emulating Locking: Performance Comparison (s)}
 \end{table}
 
+	\co{xchg_acquire()} 어토믹 오퍼레이션은 락 획득이 성공하든 실패하든
+	쓰기를 하게 되는데, 이는 \co{xchg_acquire()} 를 사용하는 모델은 락 획득
+	실패의 경우에는 쓰기를 하지 않을 \co{cmpxchg_acquire()} 를 사용하는
+	모델보다 많은 오퍼레이션을 갖게 될 것을 의미합니다.
+	더 많은 쓰기는
+	Table~\ref{tab:formal:Emulating Locking: Performance Comparison (s)}
+	(\path{C-SB+l-o-o-u+l-o-o-*u.litmus},
+	\path{C-SB+l-o-o-u+l-o-o-u*-C.litmus},
+	\path{C-SB+l-o-o-u+l-o-o-u*-CE.litmus},
+	\path{C-SB+l-o-o-u+l-o-o-u*-X.litmus}, 그리고
+	\path{C-SB+l-o-o-u+l-o-o-u*-XE.litmus}) 에서 보이는 것과 같이 더 많은
+	조합의 폭증을 의미합니다.
+	이 테이블은 \co{cmpxchg_acquire()} 가 \co{xchg_acquire()} 보다 성능이
+	높음을 , 그리고 \co{filter} 절의 사용이 \co{exists} 절의 사용보다
+	성능이 높음을 보입니다.
+	\iffalse
+
 	As for \co{xchg_acquire()}, this atomic operation will do a
 	write whether or not lock acquisition succeeds, which means
 	that a model using \co{xchg_acquire()} will have more operations
@@ -446,7 +493,19 @@ is more than two orders of magnitude faster than emulation!
 	This table clearly shows that \co{cmpxchg_acquire()}
 	outperforms \co{xchg_acquire()} and that use of the
 	\co{filter} clause outperforms use of the \co{exists} clause.
+	\fi
 } \QuickQuizEnd
+
+도구들이 자동으로 커다란 프로그램들을 쪼개고, 그 조각들을 검증하고, 그 조각들의
+조합을 검증한다면 물론 매우 유용할 겁니다.
+그렇게 되기 전까지는, 커다란 프로그램의 검증은 상당한 수작업을 필요로 할
+겁니다.
+이 작업은 매 릴리즈마다 반복된 검증을 안정적으로 해내기에 낫고 결국 continuous
+integration 에 잘 맞는 방식인 스크립팅으로 중개를 하는게 바람직할겁니다.
+
+어떤 경우든, 우린 formal-verification 기능이 시간에 따라 증가하길 계속할 것을
+기대할 수 있습니다.
+\iffalse
 
 It would of course be quite useful for tools to automatically divide
 up large programs, verify the pieces, and then verify the combinations
@@ -459,6 +518,7 @@ preferably eventually in a manner well-suited for continuous integration.
 
 In any case, we can expect formal-verification capabilities to continue
 to increase over time.
+\fi
 
 \subsection{Locate Bugs}
 \label{sec:formal:Locate Bugs}
