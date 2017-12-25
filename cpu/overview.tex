@@ -228,24 +228,26 @@ described in the following sections.
 \subsection{Atomic Operations}
 \label{sec:cpu:Atomic Operations}
 
-그런 장애 중 하나는 어토믹 오퍼레이션들입니다.
-여기서의 문제는 모든 어토믹 오퍼레이션은 CPU 파이프라인의 한 순간에는 조각으로
-나뉘어 수행되는 어셈블리 오퍼레이션들과 한번씩은 충돌한다는 것입니다.
-하드웨어 설계자는 근래의 CPU 들은 그런 오퍼레이션들이 실은 여러 조각으로
-나뉘어져 여러 순간동안 수행되더라도 원자적으로 수행되는 것처럼 \emph{보이게}
-하기 위해 여러개의 굉장히 현명한 트릭들을 사용한다고 이야기합니다. 그런 트릭 중
-흔한 한가지는 어토믹하게 수행되어야 하는 데이터를 담고 있는 캐시라인들을 모두
-파악해두고, 이 캐시라인들은 해당 어토믹 오퍼레이션을 수행하는 CPU 에 소유되어
-있음을 분명하게 하고, 그러고나서야만 해당 캐시라인들이 해당 CPU 에 의해 여전히
-소유되어 있음을 분명히 한 채로 어토믹 오퍼레이션을 수행하는 것입니다.
-모든 데이터가 해당 CPU 만 접근할 수 있는 상태이기에, 다른 CPU 들은 실은
+그런 장애 중 하나는 어토믹 오퍼레이션 (Atomic Operation) 들입니다.
+여기서의 문제는 모든 어토믹 오퍼레이션은 어셈블리 언어 상으로는 하나의
+오퍼레이션이지만 파이프라인 내에서는 여러 조각들로 나뉘어 수행되는
+오퍼레이션들과 한번씩은 충돌한다는 것입니다.
+하드웨어 설계자들의 업적으로 인해,
+근래의 CPU 들은 그런 오퍼레이션들이 실은 여러 조각으로 나뉘어져 수행되지만
+원자적으로 수행되는 것처럼 \emph{보이게} 하기 위해 여러개의 굉장히 현명한
+트릭들을 사용하는데, 그런 트릭 중 흔한 한가지는 어토믹하게 수행되어야 하는
+데이터를 담고 있는 캐시라인들을 모두 파악해두고, 이 캐시라인들은 해당 어토믹
+오퍼레이션을 수행하는 CPU 에 소유되어 있음을 분명하게 하고, 그러고 나서야만
+해당 캐시라인들이 해당 CPU 에 의해 여전히 소유되어 있음을 분명히 한 채로 어토믹
+오퍼레이션을 수행하는 것입니다.
+모든 데이터가 해당 CPU 만 접근할 수 있는 상태이기에, 다른 CPU 들은 실제로는
 조각으로 나뉘어 수행되는 CPU 파이프라인의 현실에도 불구하고 해당 어토믹
 오퍼레이션에 간섭을 끼칠 수 없습니다.
 말할 필요도 없겠지만, 이런 종류의 트릭은 그 셋업이 수행되도록 주어진 어토믹
-오퍼레이션이 완전히 끝날 때까지 파이프라인이 지연되거나 심지어 플러시될 수도
+오퍼레이션이 완전히 끝날 때까지 파이프라인이 지연되거나 심지어 비워질 수도
 있습니다.
-
 \iffalse
+
 One such obstacle is atomic operations.
 The problem here is that the whole idea of an atomic operation conflicts with
 the piece-at-a-time assembly-line operation of a CPU pipeline.
@@ -278,16 +280,16 @@ permit a given atomic operation to complete correctly.
 위해 기다릴 필요 없이 곧바로 버퍼에 써넣을 수 있습니다.
 다행히도, CPU 설계자들은 어토믹 오퍼레이션에 신경을 많이 쏟았고, 덕분에 2014년
 초에 이르러서는 그 오버헤드를 상당히 감소시켰습니다.
-하지만 그래도, 그 성능에 끼치는 효과는 Figure~\ref{fig:cpu:CPU Meets an Atomic
-Operation} 에 보이는 대로입니다.
+하지만 그래도, 그 성능에 끼치는 효과는
+Figure~\ref{fig:cpu:CPU Meets an Atomic Operation} 에 보이는 대로입니다.
 
 불행히도, 어토믹 오퍼레이션들은 보통 데이터의 한개 요소에만 적용 가능합니다.
-많은 병렬 알고리즘들이 복수개의 데이터 요소들에의 업데이트 간에도 순서가
+많은 병렬 알고리즘들이 복수개의 데이터 요소로의 업데이트 간에도 순서가
 이루어지길 필요로 하기 때문에, 대부분의 CPU 들은 메모리 배리어들을 제공합니다.
-이런 메모리 배리어들 역시 성능에의 문제로 존재합니다. 다음 섹션에서 이를 이야기
-합니다.
-
+이런 메모리 배리어들 역시 성능에 문제를 일으키는데, 다음 섹션에서 이에 대해
+이야기 합니다.
 \iffalse
+
 In contrast, when executing a non-atomic operation, the CPU can load
 values from cachelines as they appear and place the results in the
 store buffer, without the need to wait for cacheline ownership.
@@ -307,8 +309,8 @@ as described in the next section.
 
 \QuickQuiz{}
 	어떤 기계가 복수 데이터 요소에 대한 어토믹 오퍼레이션을 허용하겠어요?
-
 	\iffalse
+
 	What types of machines would allow atomic operations on
 	multiple data elements?
 	\fi
@@ -329,8 +331,8 @@ as described in the next section.
 	에 대해서는 아직 적합하지 않다는 평가입니다.
 	소프트웨어 트랜잭셔널 메모리에 대한 더 많은 내용은
 	Section~\ref{sec:future:Transactional Memory} 에서 볼 수 있을 겁니다.
-
 	\iffalse
+
 	One answer to this question is that it is often possible to
 	pack multiple elements of data into a single machine word,
 	which can then be manipulated atomically.
@@ -358,8 +360,8 @@ as described in the next section.
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 와
 Appendix~\ref{chp:app:whymb:Why Memory Barriers?} 에서 좀 더 깊게 다룰 겁니다.
 그 전에, 여기서는 다음의 간단한 락을 사용한 크리티컬 섹션을 생각해 봅시다:
-
 \iffalse
+
 Memory barriers will be considered in more detail in
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} and
 Appendix~\ref{chp:app:whymb:Why Memory Barriers?}.
@@ -397,8 +399,8 @@ Figure~\ref{fig:cpu:CPU Meets a Memory Barrier} 에서 보여지듯 성능을
 
 어토믹 오퍼레이션과 같이, CPU 설계자들은 메모리 배리어 오버헤드를 줄이려 열심히
 노력해왔고, 꽤 많은 진전을 이뤘습니다.
-
 \iffalse
+
 If the CPU were not constrained to execute these statements in the
 order shown, the effect would be that the variable ``a'' would be
 incremented without the protection of ``mylock'', which would certainly
