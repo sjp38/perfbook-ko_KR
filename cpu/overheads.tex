@@ -527,6 +527,23 @@ cycles, as shown in the ``Global Comms'' row.
 \subsection{Hardware Optimizations}
 \label{sec:cpu:Hardware Optimizations}
 
+하드웨어가 어떻게 도움을 주고 있는지 묻는건 자연스럽고, 그에 대한 대답은
+``상당히!'' 입니다.
+
+하드웨어 최적화 중 하나는 큰 캐시라인입니다.
+이는 소프트웨어가 메모리를 순차적으로 접근할 때 특히 성능을 크게 향상시킬 수
+있습니다.
+예를 들어, 64바이트 캐리아닝에서 소프트웨어가 64비트 변수를 접근할 때, 첫번째
+접근은 빛의 속도의 지연으로 인해 느릴 수 있습니다만, 뒤이은 일곱번은 상당히
+빠를 겁니다.
+하지만, 이 최적화는 같은 캐시라인에 있는 다른 변수가 다른 CPU 들에 의해
+업데이트 되는 경우에 발생하여 상당한 캐시 미스 발생율을 일으키는 false sharing
+이라 하는 어두운 측면을 갖습니다.
+소프트웨어는 많은 컴파일러에서 사용할 수 있는 정렬 지시어를 사용해서 false
+sharing 을 없앨 수 있으며, 그런 지시어를 추가하는건 병렬 소프트웨어를
+최적화하는 흔한 방법입니다.
+\iffalse
+
 It is only natural to ask how the hardware is helping, and the answer
 is ``Quite a bit!''
 
@@ -542,6 +559,19 @@ being updated by different CPUs, resulting in a high cache-miss rate.
 Software can use the alignment directives available in many compilers
 to avoid false sharing, and adding such directives is a common step
 in tuning parallel software.
+\fi
+
+두번째의 관련된 하드웨어 최적화는 캐시 프리페칭으로, 하드웨어가 연속된 접근에
+대해 연속된 캐시라인을 미리 얻어옴으로써 빛의 속도의 지연을 이 연속된
+새리아니들에 대해 제거하는 겁니다.
+물론, 이 하드웨어는 언제 프리페치를 할 것인지에 대한 단순한 휴리스틱을 사용해야
+하며, 이 휴리스틱은 많은 어플리케이션의 복잡한 데이터 접근 패턴에 의해 멍청해
+질 수 있습니다.
+운좋게도, 일부 CPU 제품군들은 특별한 프리페치 명령을 제공하믕로써 이를
+허용합니다.
+불행히도, 일반적인 경우에서 이런 명령어들의 효율성은 일부 경우에 효과적이지
+못합니다.
+\iffalse
 
 A second related hardware optimization is cache prefetching, in which
 the hardware reacts to consecutive accesses by prefetching subsequent
@@ -554,6 +584,15 @@ Fortunately, some CPU families allow for this by providing special
 prefetch instructions.
 Unfortunately, the effectiveness of these instructions in the general
 case is subject to some dispute.
+\fi
+
+세번째 하드웨어 최적화는 스토어 버퍼로, 이는 비연속적인 주소에 대한 스토어들도,
+그리고 필요한 캐시라인들이 해당 CPU 의 캐시에 있지 않을때도 빨리 행해지게
+만듭니다.
+이 최적화의 어두운 부분은 메모리 순서의 잘못됨으로, 이에 대해서는
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+를 보시기 바랍니다.
+\iffalse
 
 A third hardware optimization is the store buffer, which allows a string
 of store instructions to execute quickly even when the stores are to
@@ -561,6 +600,19 @@ non-consecutive addresses and when none of the needed cachelines are
 present in the CPU's cache.
 The dark side of this optimization is memory misordering, for which see
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}.
+\fi
+
+네번째 하드웨어 최적화는 예측적 수행으로, 하드웨어가 스토어 버퍼를 메모리 순서
+잘못됨 없이 사용할 수 있게 해줍니다.
+이 최적화의 어두운 면은 예측된 수행이 잘못되어서 롤백되고 다시 수행되어야 할 때
+일어나는 에너지 비효율성과 하락되는 성능입니다.
+
+다섯번째 최적화는 커다란 캐시로, 개별 CPU 들이 비싼 캐시 미스 없이 커다란
+데이터셋을 사용할 수 있게 합니다.
+커다란 캐시가 전력 효율성과 캐시 미스 응답시간을 악화시킬 수 있지만, 제품화된
+마이크로 프로세서들의 캐시 사이즈가 계속증가되고 있는 캐시 크기는 이 최적화의
+힘을 증명합니다.
+\iffalse
 
 A fourth hardware optimization is speculative execution, which can
 allow the hardware to make good use of the store buffers without
@@ -575,6 +627,14 @@ misses.
 Although large caches can degrade energy efficiency and cache-miss
 latency, the ever-growing cache sizes on production microprocessors
 attests to the power of this optimization.
+\fi
+
+마지막 하드웨어 최적화는 읽기가 대부분인 경우의 복사로, 자주 읽혀지지만
+가끔씩만 업데이트 되는 데이터에 대한 것입니다.
+이 최적화는 읽기가 대부분인 데이터가 매우 효율적으로 접근될 수 있게 하는
+것이며,
+Chapter~\ref{chp:Deferred Processing} 의 주제입니다.
+\iffalse
 
 A final hardware optimization is read-mostly replication, in which
 data that is frequently read but rarely updated is present in all
@@ -582,6 +642,7 @@ CPUs' caches.
 This optimization allows the read-mostly data to be accessed
 exceedingly efficiently, and is the subject of
 Chapter~\ref{chp:Deferred Processing}.
+\fi
 
 \begin{figure}[tb]
 \centering
