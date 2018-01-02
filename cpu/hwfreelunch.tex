@@ -6,13 +6,13 @@
 
 동시성이 최근들어 기존보다 주목을 받게 된 것은
 페이지~\pageref{fig:intro:Clock-Frequency Trend for Intel CPUs} 의
-Figure~\ref{fig:intro:Clock-Frequency Trend for Intel CPUs} 에 나타난대로
+Figure~\ref{fig:intro:Clock-Frequency Trend for Intel CPUs} 에서 보이는 대로
 무어의 법칙에 의한 싱글 쓰레드 성능 증가(또는 ``공짜
 점심''~\cite{HerbSutter2008EffectiveConcurrency})가 멈췄기 때문입니다.
 이 섹션에서는 하드웨어 설계자들이 ``공짜 점심''을 약간이라도 다시 가져올 수
 있는 몇가지 방법을 간략히 알아봅니다.
-
 \iffalse
+
 The major reason that concurrency has been receiving so much focus over
 the past few years is the end of Moore's-Law induced single-threaded
 performance increases
@@ -24,17 +24,17 @@ This section briefly surveys a few ways that hardware designers
 might be able to bring back some form of the ``free lunch''.
 \fi
 
-하지만, 앞의 섹션에서는 동시성을 노출하는데 생기는 현저한 하드웨어적 문제를
+하지만, 앞의 섹션에서는 동시성을 노출하는데 생기는 상당한 하드웨어적 문제를
 알아봤습니다.
 하드웨어 설계자들이 직면하는 강력한 물리적 한계점들 중 하나는 빛의 유한한
 속도입니다.
 페이지~\pageref{fig:cpu:System Hardware Architecture} 의
 Figure~\ref{fig:cpu:System Hardware Architecture} 에 보여진 것처럼, 빛은
-진공에서 1.8 GHz 클락 시간동안 8 센티미터만을 왕복할 수 있습니다.
-이 거리는 5 GHz 클락에서는 3 센티미터로 줄어듭니다.
-근래 컴퓨터 시스템의 크기에 비교해 보면 둘 다 비교적 작은 거리입니다.
-
+진공에서 1.8\,GHz 클락 시간동안 8 센티미터만을 왕복할 수 있습니다.
+이 거리는 5\,GHz 클락에서는 3 센티미터로 줄어듭니다.
+근래의 컴퓨터 시스템의 크기에 비교해 보면 둘 다 비교적 작은 거리입니다.
 \iffalse
+
 However, the preceding section presented some substantial hardware
 obstacles to exploiting concurrency.
 One severe physical limitation that hardware designers face is the
@@ -49,15 +49,15 @@ Both of these distances are relatively small compared to the size
 of a modern computer system.
 \fi
 
-상황이 더 나빠지는게, 실리콘에서의 전자파는 진공에서의 빛에 비해 3-30 배 느리게
-움직이고, 일반적인 클락 주파수에 맞춰 움직이는 논리 회로들은 더욱 느리게
-동작합니다. 예를 들어, 메모리 접근은 접근 요청이 시스템의 나머지 영역으로
-넘어가기 전에 로컬 캐시 검색의 완료를 기다려야 합니다.
+상황이 더 나빠지는게, 실리콘에서의 전자파는 진공에서의 빛에 비해 세배에서
+서른배까지 느리게 움직이고, 일반적인 클락 주파수에 맞춰 움직이는 논리 회로들은
+더욱 느리게 동작하는데, 예를 들어 메모리 접근은 접근 요청이 시스템의 나머지
+영역으로 넘어가기 전에 로컬 캐시 검색의 완료를 기다려야 합니다.
 더욱이, 예를 들어 CPU 와 메인 메모리 사이의 통신의 경우와 같이, 전기 신호를 한
 실리콘 다이에서 다른 다이로 넘기기 위해서는 상대적으로 느린 속도와 큰 파워의
 드라이버가 필요합니다.
-
 \iffalse
+
 To make matters even worse, electric waves in silicon move from three to
 thirty times more slowly than does light in a vacuum, and common
 clocked logic constructs run still more slowly, for example, a
@@ -70,11 +70,11 @@ to communicate between a CPU and main memory.
 
 \QuickQuiz{}
 	하지만 개별의 전자들은 컨덕터 내에서조차도 그렇게 빠르지 않아요!!!
-	세미컨덕터에서 발견된 저전력의 컨덕터 안에서의 전자 이동 속도는 초당
-	겨우 1 \emph{밀리미터} 정도라구요.
+	반도체에서 발견된 저전압 컨덕터 안에서의 전자 이동 속도는 초당 겨우 1
+	\emph{밀리미터} 정도라구요.
 	뭔가요???
-
 	\iffalse
+
 	But individual electrons don't move anywhere near that fast,
 	even in conductors!!!
 	The electron drift velocity in a conductor under the low voltages
@@ -84,14 +84,14 @@ to communicate between a CPU and main memory.
 	\fi
 \QuickQuizAnswer{
 	전자 이동 속도는 긴 시간동안의 개별 전자들의 이동을 추적합니다.
-	개별 전자들은 꽤 무작위적으로 튀어다니고, 따라서 그들의 순간 속도는
-	매우 빠르지만 긴 시간으로 보게 되면 그렇게 멀리 이동하지는 않습니다.
+	개별 전자들은 꽤 무작위적으로 튀어다녀서 그들의 순간 속도는 매우
+	빠르지만 긴 시간으로 보게 되면 그렇게 멀리 이동하지는 않습니다.
 	여기서, 전자들은 대부분의 시간을 고속으로 이동하는데 소모하지만 긴
 	시간으로 보면 어디에도 가지 않는 통근자와도 같습니다.
-	이런 통근자들의 속도는 시속 70 마일(113 킬로미터) 정도지만, 지구의
+	이런 통근자들의 속도는 시속 70 마일(시속 113 킬로미터) 정도지만, 지구의
 	표면에 비교해 보는 긴 시간동안의 이동 속도는 제로에 가까울 겁니다.
-
 	\iffalse
+
 	Electron drift velocity tracks the long-term movement of individual
 	electrons.
 	It turns out that individual electrons bounce around quite
@@ -109,10 +109,10 @@ to communicate between a CPU and main memory.
 	합니다.
 	하지만, 전자의 순간적 속도라 하더라도 빛의 속도에는 발끝도 따라가지
 	못합니다.
-	컨덕터에서 측정된 전자파의 속도는 더도 아니고 덜도 아니고 빛의 속도의
-	발끝은 따라가고 있는데, 이 때문에 여전히 미스테리는 풀리지 않습니다.
-
+	그러나, 컨덕터에서 측정된 전자파의 속도는 빛의 속도의 발끝은 따라가고
+	있는데, 이 때문에 여전히 미스테리는 풀리지 않습니다.
 	\iffalse
+
 	Therefore, we should pay attention not to the electrons'
 	drift velocity, but to their instantaneous velocities.
 	However, even their instantaneous velocities are nowhere near
@@ -122,8 +122,8 @@ to communicate between a CPU and main memory.
 	speed of light, so we still have a mystery on our hands.
 	\fi
 
-	하나 더 있는 트릭은 전자는 그 음극의 성질로 인해 다른 전자와
-	상당히(원자적 관점에서요) 상호착용을 한다는 것입니다.
+	또다른 트릭은 전자는 그 음극의 성질로 인해 다른 전자와 상당히(원자적
+	관점에서요) 상호작용 한다는 것입니다.
 	이 상호작용은 광자에 의해 이끌어지는데, 광자는 \emph{바로} 빛의 속도로
 	움직입니다.
 	따라서 전기학에서의 전자라 해도, 대부분의 일을 하는건 광자입니다.
@@ -132,8 +132,8 @@ to communicate between a CPU and main memory.
 	혼잡들을 알리는데 스마트폰을 사용할 수 있고, 이로 인해 교통 상황의
 	변화를 개별 차들의 순간 속도보다 훨씬 빠르게 전파할 수 있는 겁니다.
 	이 전기학과 교통상황 사이의 비유를 요약하자면 다음과 같습니다:
-
 	\iffalse
+
 	The other trick is that electrons interact with each other at
 	significant distances (from an atomic perspective, anyway),
 	courtesy of their negative charge.
@@ -152,8 +152,10 @@ to communicate between a CPU and main memory.
 	\begin{enumerate}
 	\item	전자의 (매우 낮은) 이동 속도는 통근자의 장시간 속도와 비슷해서,
 		둘 다 제로에 가깝습니다.
-	\item	전자의 (여전히 낮은) 순간 속도는 통행 중인 차의 순간 속도와 비슷합니다.
-		둘 다 이동 속도에 비해선 높지만, 변화가 전달되는 속도에 비교하면 굉장이 작습니다.
+	\item	전자의 (여전히 낮은) 순간 속도는 통행 중인 차의 순간 속도와
+		비슷합니다.
+		둘 다 이동 속도에 비해선 높지만, 변화가 전달되는 속도에
+		비교하면 굉장이 작습니다.
 	\item	전자파의 (훨씬 높은) 전달 속도는 대부분 전자들 사이에서
 		전자기력을 전달하는 광자의 덕분입니다.
 		유사하게, 교통 상황은 운전자 사이의 커뮤니케이션으로 인해 훨씬
@@ -161,10 +163,8 @@ to communicate between a CPU and main memory.
 		이것은 이미 교통 혼잡에 빠져 있는 운전자에겐 큰 도움이 되지
 		않듯이, 이미 주어진 캐퍼시터에 잡혀 있는 전자들에겐 큰 도움이
 		되지 않습니다.
-	\end{enumerate}
-
 	\iffalse
-	\begin{enumerate}
+
 	\item	The (very low) drift velocity of an electron is similar
 		to the long-term velocity of a commuter, both being
 		very nearly zero.
@@ -182,18 +182,23 @@ to communicate between a CPU and main memory.
 		Not that this is necessarily of much help to the
 		drivers already stuck in traffic, any more than it
 		is to the electrons already pooled in a given capacitor.
-	\end{enumerate}
 	\fi
+	\end{enumerate}
 
 	물론, 이 주제를 완전히 이해하려면 전자기학을 공부해야 할겁니다.
-
 	\iffalse
+
 	Of course, to fully understand this topic, you should read
 	up on electrodynamics.
 	\fi
 } \QuickQuizEnd
 
-(하드웨어에도 소프트웨어에도) 이를 개선할 기술은 더도 말고 덜도 말고 약간만 있습니다:
+그러나, 이를 개선할 기술이 (하드웨어에도 소프트웨어에도) 약간 있습니다:
+\iffalse
+
+There are nevertheless some technologies (both hardware and software)
+that might help improve matters:
+\fi
 
 \begin{enumerate}
 \item	3D 융합,
@@ -201,21 +206,18 @@ to communicate between a CPU and main memory.
 \item	전자를 빛으로 대체하는것,
 \item	특수 목적의 가속기, 그리고
 \item	존재하는 병렬 소프트웨어.
-\end{enumerate}
-
-이것들 각각을 다음 섹션에서 설명합니다.
-
 \iffalse
-There are nevertheless some technologies (both hardware and software)
-that might help improve matters:
 
-\begin{enumerate}
 \item	3D integration,
 \item	Novel materials and processes,
 \item	Substituting light for electricity,
 \item	Special-purpose accelerators, and
 \item	Existing parallel software.
+\fi
 \end{enumerate}
+
+이것들 각각을 다음 섹션에서 설명합니다.
+\iffalse
 
 Each of these is described in one of the following sections.
 \fi
