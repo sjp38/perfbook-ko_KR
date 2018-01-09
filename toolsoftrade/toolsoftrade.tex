@@ -2105,6 +2105,16 @@ these often suffer from complexity, scalability, and performance
 problems~\cite{MauriceHerlihy90a}.
 \fi
 
+\QuickQuiz{}
+	Given that these atomic operations will often be able to
+	generate single atomic instructions that are directly
+	supported by the underlying instruction set, shouldn't
+	they be the fastest possible way to get things done?
+\QuickQuizAnswer{
+	Unfortunately, no.
+	See Chapter~\ref{chp:Counting} for some stark counterexamples.
+} \QuickQuizEnd
+
 \co{__sync_synchronize()} 함수는
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서
 다루는, 컴파일러와 CPU 의 오퍼레이션 재배치 기능을 제한하는 ``메모리 배리어''
@@ -2139,40 +2149,45 @@ Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}.
 Similarly, the \co{WRITE_ONCE()} primitive may be used to prevent the
 compiler from optimizing away a given memory write.
 These last three primitives are not provided directly by \GCC,
-but may be implemented straightforwardly as follows:
+% TODO: Apply
+but may be implemented straightforwardly as shown in
+Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
+\begin{listing}[tb]
+{ \scriptsize
+\begin{verbbox}
 #define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
 #define READ_ONCE(x) \
             ({ typeof(x) ___x = ACCESS_ONCE(x); ___x; })
 #define WRITE_ONCE(x, val) ({ ACCESS_ONCE(x) = (val); })
 #define barrier() __asm__ __volatile__("": : :"memory")
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{verbbox}
+}
+\centering
+\theverbbox
+\caption{Compiler Barrier Primitive (for \GCC)}
+\label{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
+\end{listing}
 
 \QuickQuiz{}
-	이 어토믹 오퍼레이션들은 기계의 인스트럭션 셋에서 바로 지원되는
-	한개짜리 어토믹 인스트럭션으로 변환될테니, 이것들이 일을 돌아가게 할 수
-	있는 가장 빠른 방법 아닌가요?
-
-	\iffalse
-	Given that these atomic operations will often be able to
-	generate single atomic instructions that are directly
-	supported by the underlying instruction set, shouldn't
-	they be the fastest possible way to get things done?
-	\fi
+	What happened to \co{ACCESS_ONCE()}?
 \QuickQuizAnswer{
-	안타깝지만, 아닙니다.
-	극명한 반례를 위해 Chapter~\ref{chp:Counting} 을 보시기 바랍니다.
-	\iffalse
-	Unfortunately, no.
-	See Chapter~\ref{chp:Counting} for some stark counterexamples.
-	\fi
+	As of early 2018, the Linux kernel's \co{ACCESS_ONCE()} is being
+	replaced by \co{READ_ONCE()} and \co{WRITE_ONCE()} for reads and
+	writes, respectively~\cite{JonCorbet2012ACCESS:ONCE,
+	JonathanCorbet2014ACCESS:ONCEcompilerBugs,
+	MarkRutland2017ACCESS:ONCE:remove}.
+	\co{ACCESS_ONCE()} was introduced as a helper in RCU code, but was
+	promoted to core API soon afterward~\cite{
+	PaulEMcKenney2007ACCESS:ONCE:rcu,
+	LinusTorvalds2008ACCESS:ONCE:move}.
+	Linux kernel's \co{READ_ONCE()} and \co{WRITE_ONCE()} have
+	evolved into complex forms that look quite different than
+	the original \co{ACCESS_ONCE()} implementation due to the
+	need to support access-once semantics for large structures,
+	but with the possibility of load/store tearing if the structure
+	cannot be loaded and stored with a single machine instruction.
 } \QuickQuizEnd
 
 \subsection{Atomic Operations (C11)}
