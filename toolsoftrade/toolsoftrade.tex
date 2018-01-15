@@ -315,13 +315,13 @@ occasionally updated.
 \subsection{POSIX Process Creation and Destruction}
 \label{sec:toolsoftrade:POSIX Process Creation and Destruction}
 
-프로세스는 \co{fork()} 를 통해 생성되고, \co{kill()} 를 통해 소멸될 수도,
+프로세스는 \co{fork()} 를 통해 생성되고, \co{kill()} 를 통해 소멸 당할 수도,
 스스로 \co{exit()} 를 통해 소멸될 수도 있습니다.
 \co{fork()} 를 실행하는 프로세스는 새로 생성되는 프로세스의 ``부모'' 라고
 불리웁니다.
-부모는 자신의 자식을 \co{wait()} 를 통해 기다릴 수도 있습니다.
-
+부모는 \co{wait()} 를 통해 자기 자식들을 기다릴 수도 있습니다.
 \iffalse
+
 Processes are created using the \co{fork()} primitive, they may
 be destroyed using the \co{kill()} primitive, they may destroy
 themselves using the \co{exit()} primitive.
@@ -332,15 +332,15 @@ A parent may wait on its children using the \co{wait()} primitive.
 
 이 섹션의 예제들은 상당히 간단한 것들이란 점을 기억해 두시기 바랍니다.
 이 간단한 도구들을 사용하는 실제 어플리케이션들은 시그널, 파일 디스크립터,
-공유된 메모리 조각, 그리고 또다른 많은 자원들을 사용해야만 할 수도 있을 겁니다.
+공유된 메모리 조각, 그리고 또다른 많은 자원들을 제어해야 할 수도 있을 겁니다.
 또한, 어떤 어플리케이션은 어떤 자식 프로세스가 종료되었을 때 특별한 행동을
 취해야 할 수도 있고, 또한 자식 프로세스가 어떤 이유로 종료되었는지에 대해서도
 신경써야 할 수 있습니다.
 이렇게 신경써야 하는 부분들은 물론 코드에 상당한 복잡도를 추가할 수 있습니다.
 더 많은 내용을 위해서는, 해당 주제에 대한
 교재들~\cite{WRichardStevens1992,StewartWeiss2013UNIX} 을 보시기 바랍니다.
-
 \iffalse
+
 Please note that the examples in this section are quite simple.
 Real-world applications using these primitives might need to manipulate
 signals, file descriptors, shared memory segments, and any number of
@@ -377,20 +377,20 @@ subject~\cite{WRichardStevens1992,StewartWeiss2013UNIX}.
 \co{fork()} 가 성공하면, \co{fork()}는 한번은 부모에게, 또한번은 자식에게 두번
 리턴합니다.
 \co{fork()} 가 리턴하는 값은
-Listing~\ref{lst:toolsoftrade:Using the fork() Primitive}(\co{forkjoin.c}) 에
-보여진 것처럼 콜러가 그 차이를 알 수 있게 합니다.
+Listing~\ref{lst:toolsoftrade:Using the fork() Primitive}
+(\path{forkjoin.c}) 에 보여진 것처럼 호출자가 그 차이를 알 수 있게 합니다.
 라인~1 은 \co{fork()} 함수를 실행하고, 그 리턴값을 지역 변수 \co{pid} 에
 저장합니다.
 라인~2 에서는 \co{pid} 가 0인지 체크하는데, 만약 맞다면 자신은 자식
 프로세스라는 뜻이며, 이 경우 코드 실행은 라인~3으로 이어집니다.
-앞서 이야기 했듯, 자식 프로세스는 \co{exit()} 함수를 통해 종료될 수 있습니다.
+앞서 이야기 했듯, 자식 프로세스는 \co{exit()} 기능을 통해 종료될 수 있습니다.
 만약 \co{fork()} 리턴값이 0이 아니어서 자신이 부모 프로세스라면, 라인~4 에서
-얻은 \co{fork()} 리턴값을 가지고 라인~5-7 에서 에러가 있었는지 확인하고 에러가
-있었다면 에러를 화면에 출력하고 종료합니다.
+얻은 \co{fork()} 리턴값을 가지고 에러가 있었는지 확인하고, 에러가 있었다면
+라인~5-7 에서 에러를 화면에 출력하고 종료합니다.
 그렇지 않고 \co{fork()} 가 성공적으로 수행되었다면, 자식 프로세스의 프로세스 ID
 값을 가지고 있는 변수 \co{pid} 와 함께 라인~9로 넘어갑니다.
-
 \iffalse
+
 If \co{fork()} succeeds, it returns twice, once for the parent
 and again for the child.
 The value returned from \co{fork()} allows the caller to tell
@@ -438,24 +438,26 @@ process ID of the child.
 
 부모 프로세스는 자식 프로세스가 완료될 때까지 \co{wait()} 함수를 이용해 기다릴
 수도 있습니다.
-하지만, 각 \co{wait()} 호출은 오로지 한개 자식 프로세스만 기다리기 때문에, 이
-함수의 사용은 셸 스크립트에서 사용할 때보다 좀 더 복잡합니다.
+하지만, 하나의 \co{wait()} 호출은 오로지 한개의 자식 프로세스만 기다리기
+때문에, 이 함수의 사용은 셸 스크립트에서의 같은 이름의 기능을 사용할 때보다 좀
+더 복잡합니다.
 그래서
-Listing~\ref{lst:toolsoftrade:Using the wait() Primitive}(\path{api-pthread.h})
+Listing~\ref{lst:toolsoftrade:Using the wait() Primitive}
+(\path{api-pthread.h})
 에서 보여진, 셸 스크립트 에서의 \co{wait} 명령과 유사한 의미를 가진,
 \co{waitall()} 함수와 비슷한 함수로 \co{wait()} 를 감싸는게 일반적입니다.
 라인~6-15 에서의 루프의 각 패스에서는 한개 자식 프로세스를 기다립니다.
-라인~7 에서는 \co{wait()} 함수를 호출하는데, 이로 인해 부모 프로세스는 자식
-프로세스 하나가 종료할 때까지 블록되어 있고, 자식 프로세스가 종료된 후 자식
+라인~7 에서는 \co{wait()} 함수를 호출하는데, 이 함수는 자식 프로세스 하나가
+종료될 때까지 부모 프로세스를 블록시키고, 자식 프로세스가 종료된 후 자식
 프로세스의 프로세스 ID 를 리턴합니다.
-만약 프로세스 ID 가 아니라 -1 이 리턴된다면, 이는 \co{wait()} 함수가 자식
+만약 프로세스 ID 가 아니라 $-1$ 이 리턴된다면, 이는 \co{wait()} 함수가 자식
 프로세스를 기다릴 수 없었음을 의미합니다.
 만약 그렇다면, 라인~9 에서 errno 가 \co{ECHILD} 로 되었는지 여부를 체크하는데,
-만약 그렇다면 더이상 자식 프로세스가 존재하지 않았다는 의미로, 이 때엔 라인~10
+만약 그렇다면 더이상 자식 프로세스가 존재하지 않는다는 의미로, 이 때엔 라인~10
 에서 루프를 빠져나옵니다.
-그렇지 않다면, 라인~11 과 12 에서 에러를 출력하고 종료합니다.
-
+그렇지 않다면, 라인~11 과~12 에서 에러를 출력하고 종료합니다.
 \iffalse
+
 The parent process may use the \co{wait()} primitive to wait for its children
 to complete.
 However, use of this primitive is a bit more complicated than its shell-script
@@ -480,24 +482,23 @@ Otherwise, lines~11 and~12 print an error and exit.
 \QuickQuiz{}
 	왜 이 \co{wait()} 함수는 그렇게 복잡해야만 하는거죠?
 	왜 그냥 셸 스크립트의 \co{wait} 같이 동작하도록 만들지 않는 거예요?
-
 	\iffalse
+
 	Why does this \co{wait()} primitive need to be so complicated?
 	Why not just make it work like the shell-script \co{wait} does?
 	\fi
 \QuickQuizAnswer{
 	일부 병렬 어플리케이션은 특정 자식 프로세스가 끝났을 때 특별한 행동을
-	취해야 할 수 있고, 그 때문에 각 자식 프로세스에 대해 개별적으로 대기를
-	할 필요가 있습니다.
+	취해야 해서, 각 자식 프로세스에 대해 개별적으로 대기를 할 필요가 있을
+	수 있습니다.
 	또한, 일부 병렬 어플리케이션들은 자식 프로세스가 종료된 이유를 알
 	필요도 있습니다.
 	Listing~\ref{lst:toolsoftrade:Using the wait() Primitive} 에서 본
 	것처럼, \co{wait()} 함수를 가지고 \co{waitall()} 함수를 만드는 건
 	어렵지 않습니다만 그 반대는 불가능하겠지요.
-	한번 특정 자식 프로세스에 대한 정보를 잃어버리면, 그건 복구될 수
-	없습니다.
-
+	한번 특정 자식 프로세스에 대한 정보를 잃어버리면, 되돌이킬 수 없습니다.
 	\iffalse
+
 	Some parallel applications need to take special action when
 	specific children exit, and therefore need to wait for each
 	child individually.
@@ -539,15 +540,16 @@ Otherwise, lines~11 and~12 print an error and exit.
 
 부모와 자식 프로세스가 메모리를 공유하지 \emph{않는}다는 점은 매우 중요하므로
 반드시 기억해야 합니다.
-이는 Listing~\ref{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
-(\path{forkjoinvar.c}) 에 나타난 프로그램에 보여지는데, 자식 프로세스는 라인~6
-에서 전역 변수 \co{x} 를 1로 만들고 라인~7 에서 메세지를 프린트한 후, 라인~8
-에서 종료합니다.
+이는
+Listing~\ref{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
+(\path{forkjoinvar.c}) 의 프로그램으로 보여지는데, 자식 프로세스는 라인~6 에서
+전역 변수 \co{x} 를 1로 만들고 라인~7 에서 메세지를 프린트한 후, 라인~8 에서
+종료합니다.
 부모는 라인~14에서 실행 흐름을 이어서 자식 프로세스를 기다리고 라인~15 에서
 변수 \co{x} 의 값을 보지만 여전히 그 값은 0입니다.
 따라서 이 프로그램의 출력은 다음과 같습니다:
-
 \iffalse
+
 It is critically important to note that the parent and child do \emph{not}
 share memory.
 This is illustrated by the program shown in
@@ -573,31 +575,31 @@ Parent process sees x=0
 \QuickQuiz{}
 	여기서 이야기한 것 외에도 \co{fork()} 와 \co{wait()} 에 대해 이야기할
 	것들이 많지 않나요?
-
 	\iffalse
+
 	Isn't there a lot more to \co{fork()} and \co{wait()}
 	than discussed here?
 	\fi
 \QuickQuizAnswer{
-	맞습니다, 그리고 그리고 이 섹션은 나중에 메세징 기능 (UNIX 파이프,
-	TCP/IP, 그리고 공유 파일 I/O 같은) 과 메모리 매핑 (\co{mmap()} 과
-	\co{shmget()} 같은) 기능을 포함하도록 확장될 수도 있을 겁니다.
+	맞습니다, 그리고 그리고 이 섹션은 나중에 (UNIX 파이프, TCP/IP, 그리고
+	공유 파일 I/O 같은) 메세징 기능과 (\co{mmap()} 과 \co{shmget()} 같은)
+	메모리 매핑 기능에 대한 논의를 포함하도록 확장될 수도 있을 겁니다.
 	그 전까지는, 이런 기능들에 대해 훨씬 자세하게 설명하는 다른 교재들이
 	많이 있고, 정말 잘 알고 싶다면 man 페이지(역주: UNIX 커맨드
-	\co{man})나, 이런 기능을 사용하며 현존하는 병렬 어플리케이션들, 또는
-	리눅스 커널 구현의 소스 코드를 참고해도 될 것입니다.
+	\co{man})나, 이런 기능을 사용하는 현존 병렬 어플리케이션들, 또는 리눅스
+	커널 구현의 소스 코드를 참고해도 될 것입니다.
 
-	Listing~\ref{lst:toolsoftrade:Processes Created Via fork() Do Not Share
-	Memory} 의 부모 프로세스는 자식 프로세스가 종료될 때까지 자신의
-	\co{printf()} 를 위해 기다리고 있다는 것을 기억해 둘 필요가 있습니다.
+	Listing~\ref{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
+	의 부모 프로세스는 자식 프로세스가 종료될 때까지 자신의 \co{printf()}
+	를 위해 기다리고 있다는 것을 기억해 둘 필요가 있습니다.
 	\co{printf()} 의 buffered I/O 를 같은 파일에 대해 여러 프로세스에서
 	동시적으로 사용하는 것은 일반적이지 않고, 그러지 않는게 최선입니다.
-	정말로 동시적으로 buffered I/O 를 해야만 한다면, 당신의 OS 의 문서를
-	보세요.
+	정말로 동시적으로 buffered I/O 를 해야만 한다면, 여러분 OS 의 문서를
+	참고하세요.
 	UNIX/Linux 시스템에서는 Stewart Weiss 의 강의 노트가
 	예제~\cite{StewartWeiss2013UNIX} 와 함께 좋은 소개를 제공합니다.
-
 	\iffalse
+
 	Indeed there is, and
 	it is quite possible that this section will be expanded in
 	future versions to include messaging features (such as UNIX
@@ -625,9 +627,9 @@ Parent process sees x=0
 가장 잘게 크리티컬 섹션을 쪼갠 병렬성은 공유 메모리를 필요로 하며, 이는
 Section~\ref{sec:toolsoftrade:POSIX Thread Creation and Destruction} 에서
 다룹니다.
-참고로, 공유 메모리 병렬성은 fork-join 병렬성에 비해 상당히 복잡할 수 있습니다.
-
+하지만, 공유 메모리 병렬성은 fork-join 병렬성에 비해 상당히 복잡할 수 있습니다.
 \iffalse
+
 The finest-grained parallelism requires shared memory, and
 this is covered in
 Section~\ref{sec:toolsoftrade:POSIX Thread Creation and Destruction}.
