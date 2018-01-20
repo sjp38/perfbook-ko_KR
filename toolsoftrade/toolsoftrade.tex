@@ -1979,14 +1979,14 @@ Figure~\ref{fig:toolsoftrade:Reader-Writer Lock Scalability} 가 리더-라이�
 크리티컬 섹션을 보호할 다른 나은 방안을 찾아봐야 하겠습니다.
 그런 한가지 방안은 어토믹 오퍼레이션의 사용입니다.
 우린 Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability} 의
-라인~18 에서 \co{__sync_fetch_and_add()} 를 통해 어토믹 오퍼레이션 하나를 본 바
-있습니다.
+라인~18 에서 \co{__sync_fetch_and_add()} 를 통해 어토믹 오퍼레이션 중 하나를 본
+바 있습니다.
 이 기능은 첫번째 인자로 참조된 값에 두번째 인자로 주어진 값을 어토믹하게
 더하고, 예전 값(이 경우엔 그냥 무시되었었죠)을 리턴합니다.
 두개의 쓰레드가 같은 변수에 대해 동시에 \co{__sync_fetch_and_add()} 를 실행하면
 변수의 값은 두 더하기 연산이 모두 수행된 값이 됩니다.
-
 \iffalse
+
 Given that
 Figure~\ref{fig:toolsoftrade:Reader-Writer Lock Scalability}
 shows that the overhead of reader-writer locking is most severe for the
@@ -2005,22 +2005,21 @@ the result of both additions.
 \fi
 
 \GNUC\ 컴파일러는 이외에도 아래와 같이 추가적인 어토믹 오퍼레이션들을
-제공합니다.
-먼저
+제공하는데,
 \co{__sync_fetch_and_sub()},
 \co{__sync_fetch_and_or()},
 \co{__sync_fetch_and_and()},
 \co{__sync_fetch_and_xor()}, 그리고
 \co{__sync_fetch_and_nand()} 는 기존 값을 리턴합니다.
-기존 값이 아니라 새롭게 바뀐 값이 필요하다면, 아래의 것들이 있습니다.
+기존 값이 아니라 새롭게 바뀐 값이 필요하다면,
 \co{__sync_add_and_fetch()},
 \co{__sync_sub_and_fetch()},
 \co{__sync_or_and_fetch()},
 \co{__sync_and_and_fetch()},
 \co{__sync_xor_and_fetch()}, 그리고
-\co{__sync_nand_and_fetch()} 입니다.
-
+\co{__sync_nand_and_fetch()} 를 사용할 수 있습니다.
 \iffalse
+
 The \GNUC\ compiler offers a number of additional atomic operations,
 including \co{__sync_fetch_and_sub()},
 \co{__sync_fetch_and_or()},
@@ -2039,16 +2038,17 @@ If you instead need the new value, you can instead use the
 \QuickQuiz{}
 	정말로 이것들이 다 필요한 거 맞나요?
 	\iffalse
+
 	Is it really necessary to have both sets of primitives?
 	\fi
 \QuickQuizAnswer{
 	엄격하게 말하면, 아닙니다.
 	필요하면 첫번째 분류의 것들을 이용해서 두번째 분류의 것들을 구현할 수가
 	있습니다.
-	예를 들어, 누군가는 \co{__sync_fetch_and_nand()} 를 이용해서
+	예를 들어, \co{__sync_fetch_and_nand()} 를 이용해서
 	아래와 같이 \co{__sync_nand_and_fetch()} 를 구현할 수 있겠죠.
-
 	\iffalse
+
 	Strictly speaking, no.
 	One could implement any member of the second set using the
 	corresponding member of the first set.
@@ -2073,8 +2073,8 @@ ret = ~ret & tmp;
 
 	하지만, 이를 대신해주는 기능이 있는 게 프로그래머에게도
 	컴파일러/라이브러리를 구현하는 사람에게도 편리할 것입니다.
-
 	\iffalse
+
 	It is similarly possible to implement \co{__sync_fetch_and_add()},
 	\co{__sync_fetch_and_sub()}, and \co{__sync_fetch_and_xor()}
 	in terms of their post-value counterparts.
@@ -2084,11 +2084,11 @@ ret = ~ret & tmp;
 	\fi
 } \QuickQuizEnd
 
-고전의 compare-and-swap 오퍼레이션은 \co{__sync_bool_compare_and_swap()} 과
+고전적인 compare-and-swap 오퍼레이션은 \co{__sync_bool_compare_and_swap()} 과
 \co{__sync_val_compare_and_swap()} 두개의 함수로 제공됩니다.
-두 함수 모두 어토믹하게 변수의 현재 값이 제시한 값과 같을 경우 새로운 값으로
+두 함수 모두 변수의 현재 값이 제시한 값과 같을 경우 어토믹하게 새로운 값으로
 변경해 줍니다.
-첫번째 함수는 오퍼레이션이 성공하면 1을, 그리고 실패하면(예를 들어, 기존 값이
+첫번째 함수는 오퍼레이션이 성공하면 1을, 그리고 실패하면 (예를 들어, 기존 값이
 제시한 값과 같지 않은 경우) 0을 리턴합니다.
 두번째 함수는 기존 값을 리턴합니다. 따라서 리턴받은 값이 제시했던 기존값과
 같다면 오퍼레이션이 성공했음을 의미합니다.
@@ -2099,8 +2099,8 @@ ret = ~ret & tmp;
 뿐만 아니라 compare-and-swap 오퍼레이션은 더 넓은 어토믹 오퍼레이션 집합의 토대
 역할을 할수도 있습니다. 그렇게 만들어진 것들은 보통 복잡도, 확장성, 성능
 문제~\cite{MauriceHerlihy90a}를 겪지만요.
-
 \iffalse
+
 The classic compare-and-swap operation is provided by a pair of
 primitives, \co{__sync_bool_compare_and_swap()} and
 \co{__sync_val_compare_and_swap()}.
@@ -2122,19 +2122,30 @@ problems~\cite{MauriceHerlihy90a}.
 \fi
 
 \QuickQuiz{}
+	이 어토믹 오퍼레이션들이 인스트럭션 집합에서 곧바로 지원하는
+	인스트럭션들을 만들어낼 수 있다면, 그게 바로 동작하는 가장 빠른 방법
+	아닐까요?
+	\iffalse
+
 	Given that these atomic operations will often be able to
 	generate single atomic instructions that are directly
 	supported by the underlying instruction set, shouldn't
 	they be the fastest possible way to get things done?
+	\fi
 \QuickQuizAnswer{
+	불행히도, 아닙니다.
+	극명한 반례를 위해 Chapter~\ref{chp:Counting} 을 참고하시기 바랍니다.
+	\iffalse
+
 	Unfortunately, no.
 	See Chapter~\ref{chp:Counting} for some stark counterexamples.
+	\fi
 } \QuickQuizEnd
 
 \co{__sync_synchronize()} 함수는
-Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서
-다루는, 컴파일러와 CPU 의 오퍼레이션 재배치 기능을 제한하는 ``메모리 배리어''
-를 불러옵니다.
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서 이야기
+되는대로, 컴파일러와 CPU 의 오퍼레이션 재배치 기능을 제한하는 ``메모리 배리어''
+를 발생시킵니다.
 어떤 경우에는 CPU 의 재배치 가능성은 두고 컴파일러의 오퍼레이션 재배치를
 제한하는 것만으로도 충분한데, 이 경우에는
 Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability} 의
@@ -2143,7 +2154,7 @@ Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability} 의
 것만으로도 충분한 경우가 있을 수 있는데, 이 경우에는 
 Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks} 의 라인~17
 에서처럼 \co{READ_ONCE()} 함수가 사용될 수 있을 겁니다.
-비슷하게, 컴파일러가 특정 메모리로의 쓰게를 최적화해 버리는 것을 막기 위해
+비슷하게, 컴파일러가 특정 메모리로의 쓰기를 최적화해 버리는 것을 막기 위해
 \co{WRITE_ONCE()} 기능이 사용될 수 있습니다.
 이 마지막 두개의 함수들은 \GCC 에 의해 제공되지는 않습니다만,
 Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
