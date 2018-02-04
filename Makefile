@@ -39,6 +39,12 @@ EPSSOURCES := $(sort $(EPSSOURCES_DUP))
 
 PDFTARGETS_OF_EPS := $(EPSSOURCES:%.eps=%.pdf)
 
+EPSORIGIN := $(filter-out $(EPSSOURCES_FROM_TEX) $(EPSSOURCES_FROM_DOT) $(EPSSOURCES_FROM_FIG),$(EPSSOURCES))
+
+PDFTARGETS_OF_EPSORIG := $(EPSORIGIN:%.eps=%.pdf)
+
+PDFTARGETS_OF_EPSOTHER := $(filter-out $(PDFTARGETS_OF_EPSORIG),$(PDFTARGETS_OF_EPS))
+
 BIBSOURCES := bib/*.bib alphapf.bst
 
 SVGSOURCES := $(wildcard */*.svg)
@@ -52,6 +58,16 @@ FIG2EPS := $(shell which fig2eps 2>/dev/null)
 A2PING := $(shell which a2ping 2>/dev/null)
 
 INKSCAPE := $(shell which inkscape 2>/dev/null)
+
+URWPS := $(shell fc-list | grep "Nimbus Mono PS" | wc -l)
+
+ifeq ($(URWPS),0)
+FIXSVGFONTS   = utilities/fixsvgfonts.sh
+FIXANEPSFONTS = utilities/fixanepsfonts.sh
+else
+FIXSVGFONTS   = utilities/fixsvgfonts-urwps.sh
+FIXANEPSFONTS = utilities/fixanepsfonts-urwps.sh
+endif
 
 default = $(PERFBOOK_DEFAULT)
 
@@ -146,7 +162,7 @@ $(EPSSOURCES_FROM_TEX): %.eps: %.tex
 	sh utilities/mpostcheck.sh
 	@latex -output-directory=$(shell dirname $<) $< > /dev/null 2>&1
 	@dvips -Pdownload35 -E $(patsubst %.tex,%.dvi,$<) -o $@ > /dev/null 2>&1
-	@sh utilities/fixanepsfonts.sh $@
+	@sh $(FIXANEPSFONTS) $@
 
 $(EPSSOURCES_FROM_DOT): %.eps: %.dot
 	@echo "$< --> $@"
@@ -154,7 +170,7 @@ ifndef DOT
 	$(error "$< --> $@: dot not found. Please install graphviz")
 endif
 	@dot -Tps -o $@ $<
-	@sh utilities/fixanepsfonts.sh $@
+	@sh $(FIXANEPSFONTS) $@
 
 $(EPSSOURCES_FROM_FIG): %.eps: %.fig
 	@echo "$< --> $@"
@@ -162,9 +178,19 @@ ifndef FIG2EPS
 	$(error "$< --> $@: fig2eps not found. Please install fig2ps")
 endif
 	@fig2eps --nogv $< > /dev/null 2>&1
-	@sh utilities/fixanepsfonts.sh $@
+	@sh $(FIXANEPSFONTS) $@
 
-$(PDFTARGETS_OF_EPS): %.pdf: %.eps
+$(PDFTARGETS_OF_EPSORIG): %.pdf: %.eps
+	@echo "$< --> $@"
+	@cp $< $<i
+	@sh $(FIXANEPSFONTS) $<i
+ifndef A2PING
+	$(error "$< --> $@: a2ping not found. Please install it.")
+endif
+	@a2ping --below --hires --bboxfrom=compute-gs $<i $@ > /dev/null 2>&1
+	@rm -f $<i
+
+$(PDFTARGETS_OF_EPSOTHER): %.pdf: %.eps
 	@echo "$< --> $@"
 ifndef A2PING
 	$(error "$< --> $@: a2ping not found. Please install it.")
@@ -176,7 +202,9 @@ $(PDFTARGETS_OF_SVG): %.pdf: %.svg
 ifndef INKSCAPE
 	$(error "$< --> $@: inkscape not found. Please install it.")
 endif
-	@inkscape --export-pdf=$@ $<
+	@sh $(FIXSVGFONTS) < $< > $<i
+	@inkscape --export-pdf=$@ $<i > /dev/null 2>&1
+	@rm -f $<i
 
 help:
 	@echo "Official targets (Latin Modern Typewriter for monospace font):"
