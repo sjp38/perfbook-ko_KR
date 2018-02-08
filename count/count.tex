@@ -322,13 +322,13 @@ are more appropriate for advanced students.
 
 일단 간단한, 예를 들어,
 Listing~\ref{lst:count:Just Count!} (\path{count_nonatomic.c})
-에 나온 것과 같이 직관적인 케이스부터 보도록 하죠.
-여기서, 우리는 라인~1 에 카운터를 두고, 라인~5 에서 그 값을 증가시키며, 라인~10
-에서 그 값을 읽어옵니다.
+에 나온 것과 같이 직관적인 알고리즘부터 보도록 하죠.
+여기서, 우리는 라인~1 에서 카운터를 정의하고, 라인~5 에서 그 값을 증가시키며,
+라인~10 에서 그 값을 읽어옵니다.
 이보다 간단할 수는 없겠죠?
 
 이 방법은 당신이 대부분의 경우 읽기만을 하고 값의 증가는 아주 가끔만 한다면
-매우 빠르다는 장점을 가지고, 또한 작은 시스템에서도 훌륭한 성능을 보일 겁니다.
+매우 빠르다는 장점을 가지고, 또한 작은 시스템에서는 훌륭한 성능을 보일 겁니다.
 \iffalse
 
 Let's start with something simple, for example, the straightforward
@@ -343,11 +343,12 @@ you are doing lots of reading and almost no incrementing, and on small
 systems, the performance is excellent.
 \fi
 
-다만 여기에는 한가지 문제가 있습니다: 이 방법은 카운트를 놓칠 수 있습니다.
+다만 여기에는 한가지 커다란 문제가 있습니다: 이 방법은 카운트를 놓칠 수
+있습니다.
 제 듀얼 코어 랩탑에서 짧은 시간동안 \co{inc_count()} 를 100,014,000 번 수행했을
 때, 카운터의 마지막 값은 52,909,118 이었습니다.
 컴퓨팅에서는 대략적인 값도 충분한 경우도 있지만 그렇다 해도 50\,\% 이상의
-정밀도는 항상 필요합니다.
+정밀도는 거의 항상 필요합니다.
 \iffalse
 
 There is just one large fly in the ointment: this approach can lose
@@ -372,8 +373,8 @@ accuracies far greater than 50\,\% are almost always necessary.
 	\co{++} 연산자는 어토믹할 수\emph{도 있지만}, 그래야만 한다는 규칙은
 	없습니다.
 	그리고 실제로, \GCC\ 는 값을 레지스터에 읽어오고, 레지스터의 값을
-	증가시킨 후, 메모리에 그 값을 저장하는, 어토믹하지 않은 방법을 종종
-	택합니다.
+	증가시킨 후, 메모리에 그 값을 저장하는, 분명 어토믹하지 않은 방법을
+	종종 택합니다.
 	\iffalse
 
 	Although the \co{++} operator \emph{could} be atomic, there
@@ -398,10 +399,10 @@ accuracies far greater than 50\,\% are almost always necessary.
 	especially when the bug is easily seen by inspection?
 	\fi
 \QuickQuizAnswer{
-	사소한 병렬 프로그램이 아주 조금만 존재하지는 않고, 순차적 프로그램에도
+	사소한 병렬 프로그램 일부만이 아니라, 순차적 프로그램에도
 	마찬가지라고 저는 생각합니다.
 
-	프로그램이 얼마나 작거나 간단한지와는 상관 없이, 테스트 해보지
+	프로그램이 얼마나 작거나 간단한지와는 상관 없이, 여러분이 테스트 해보지
 	않았다면, 그건 동작하지 않는 것입니다.
 	그리고 설령 테스트 해봤다 해도, 머피의 법칙에 의하면 여전히 숨어있는
 	버그가 몇개는 있을 수 있을 수 있습니다.
@@ -421,7 +422,7 @@ accuracies far greater than 50\,\% are almost always necessary.
 	\path{counttorture.h} 테스트를 포홤해 테스트를 대체하는 일은 결코 없을
 	겁니다.
 	무엇보다, 증명은 그것이 바닥에 깔고 있는 가정에 국한됩니다.
-	게다가, 증명은 프로그램이 그렇듯 버그를 가지고 있기 쉽습니다!
+	게다가, 증명은 프로그램만큼이나 버그를 가지고 있기 쉽습니다!
 	\iffalse
 
 	Furthermore, while proofs of correctness certainly do have their
@@ -468,7 +469,7 @@ Listing~\ref{lst:count:Just Count Atomically!} (\path{count_atomic.c})
 라인~1 은 어토믹 변수를 정의하고, 라인~5 에서 어토믹하게 값을 증가시키고,
 라인~10 에서 읽어냅니다.
 이건 어토믹하기 때문에, 완벽한 카운트를 유지합니다.
-하지만, 느립니다: 인텔 Core Duo 랩탑에서 이것은 어토믹하지 않은 방법에 비해
+하지만, 느립니다: Intel Core Duo 랩탑에서 이것은 어토믹하지 않은 방법에 비해
 싱글쓰레드에서 여섯배, 그리고 두 쓰레드를 사용했을 때엔 \emph{열 배}
 느립니다.\footnote{
 	흥미롭게도, 어토믹하지 않게 카운터를 증가시키는 두개의 쓰레드는
@@ -476,9 +477,9 @@ Listing~\ref{lst:count:Just Count Atomically!} (\path{count_atomic.c})
 	증가시킵니다.
 	물론, 당신의 목표가 단순히 카운터를 더 빨리 증가시키는 거라면, 그냥
 	카운터에 큰 값을 넣으면 되겠습니다.
-	분명한건, 거대한 성능과 확장성을 위해선 정확성을 주의깊게 완화한
-	알고리즘의 역할도 있을 수 있다는
-	것입니다~\cite{Andrews91textbook,Arcangeli03,DavidUngar2011unsync}.}
+	그러나, 거대한 성능과 확장성을 위해선 정확성을 주의깊게 완화한
+	알고리즘의 역할도 있을 수
+	있습니다~\cite{Andrews91textbook,Arcangeli03,DavidUngar2011unsync}.}
 \iffalse
 
 The straightforward way to count accurately is to use atomic operations,
@@ -538,8 +539,8 @@ decidedly non-ideal, and gets worse as you add CPUs.
 	\fi
 \QuickQuizAnswer{
 	어토믹 오퍼레이션의 오버헤드 때문입니다.
-	x~축의 점선은 싱글 \emph{어토믹하지 않은} 증가 연산의 오버헤드를
-	나타냅니다.
+	x~축의 점선은 \emph{어토믹하지 않은} 증가 연산의 싱글쓰레드 수행에서의
+	오버헤드를 나타냅니다.
 	\emph{이상적인} 알고리즘은 선형적으로 확장될 뿐만 아니라,
 	싱글 쓰레드 코드에 비해서도 성능 하락이 없어야 할 것입니다.
 
@@ -648,7 +649,7 @@ avoids the delays inherent in such circulation.
 
 \QuickQuiz{}
 	그런데 왜 CPU 설계자들은 단순히 데이터에의 증가 연산을 추가해서
-	담고 있는 캐시 라인의 순회가 증가하는걸 막지 않는거죠?
+	담고 있는 캐시 라인의 순회가 증가하는걸 막지 못한 거죠?
 	\iffalse
 
 	But why can't CPU designers simply ship the addition operation to the
@@ -707,8 +708,8 @@ avoids the delays inherent in such circulation.
 \label{fig:count:Data Flow For Global Combining-Tree Atomic Increment}
 \end{figure}
 
-	앞의 두개 조건이 하나라도 걸려 있다면, 개선된 하드웨어에 \emph{약간}의
-	희망이 있습니다.
+	앞의 두개 조건이 모두, 또는 하나라도 걸려 있다면, 개선된 하드웨어에
+	\emph{약간}의 희망이 있습니다.
 	컴바이닝 트리(combining tree) 를 하드웨어에서 구현해서, 여러 CPU 에서의
 	증가 요청이 하드웨어에 의해 결합되어 하나의 더하기 연산으로 변환되는
 	방법을 생각해 볼 수 있을 것입니다.
