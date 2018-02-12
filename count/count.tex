@@ -836,8 +836,8 @@ Section~\ref{sec:SMPdesign:Data Ownership}.
 \subsection{Array-Based Implementation}
 \label{sec:count:Array-Based Implementation}
 
-쓰레드별 변수를 제공하는 방법 중 하나는 쓰레드별로 (아마도 false sharing 을
-막기 위해 캐시 얼라인 되어있고 패딩 되어있는)원소 하나를 갖는 배열을 만드는
+쓰레드별 변수를 제공하는 방법 중 하나는 쓰레드별로 (false sharing 을 막기 위해
+캐시 라인 크기에 맞춰 정렬 되어있고 채워져 있는)원소 하나를 갖는 배열을 만드는
 겁니다.
 \iffalse
 
@@ -857,7 +857,7 @@ thread (presumably cache aligned and padded to avoid false sharing).
 \QuickQuizAnswer{
 	그럴 수 있고, 이 간단한 구현에서는 그렇습니다.
 	하지만 임의의 갯수의 쓰레드를 지원하는 구현을 만드는 건 그렇게 어렵지
-	않은데요, 예를 들면,
+	않은데, 예를 들면,
 	Section~\ref{sec:count:Per-Thread-Variable-Based Implementation}
 	\GCC 의 \co{__thread} 를 사용하는 거죠.
 	\iffalse
@@ -902,14 +902,14 @@ thread (presumably cache aligned and padded to avoid false sharing).
 Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
 (\path{count_stat.c}) 에 보여진 것처럼 per-thread 기능을 사용할 수도 있습니다.
 라인~1 은 \co{long} 타입의 쓰레드별 카운터들을 담는, \co{counter} 라는 이름의
-배열을 만듭니다.
+배열을 정의합니다.
 
-라인~3-6 은 이 카운터를 증가시키는 함수로, \co{__get_thread_var()} 함수로 현재
-수행중인 쓰레드의 원소를 \co{counter} 배열에서 얻어옵니다.
+라인~3-6 은 이 카운터를 증가시키는 함수로, \co{__get_thread_var()} 함수를
+사용해 \co{counter} 배열에서 현재 수행중인 쓰레드의 원소를 얻어옵니다.
 이 원소는 연관된 쓰레드에 의해서만 수정되므로, 어토믹하지 않은 방식으로도
 충분합니다.
 
-라인~8-16 은 카운터의 총계 값을 얻어오는 함수로, \co{for_each_thread()} 를
+라인~8-16 은 카운터의 전체 값을 얻어오는 함수로, \co{for_each_thread()} 를
 이용해 현재 돌고 있는 쓰레드들의 리스트를 순회하면서 \co{per_thread()} 를
 이용해 특정 쓰레드의 카운터 값을 얻어옵니다.
 하드웨어는 제대로 정렬되어 있는 \co{long} 변수는 어토믹하게 읽고 쓸 수 있기
@@ -948,14 +948,17 @@ normal loads suffice, and no special atomic instructions are required.
 	C 표준대로라면, 다른 쓰레드에 의해 동시에 수정되고 있을 수 있는 변수를
 	읽어들이는 행동의 효과에 대해선 정의되어 있지 않습니다.
 	C 는 어토믹하게 \co{long} 타입 변수를 읽어들일 수가 없는 (예를
-	들면)8-비트 아키텍쳐를 지원해야만 했기에 C 표준은 다른 선택의 여지가
+	들면) 8-비트 아키텍쳐를 지원해야만 했기에 C 표준은 다른 선택의 여지가
 	없었습니다.
 	다음 버전의 C 표준에서는 이 현실과의 격차를 해결해 보려 합니다만, 그
 	전까지는 \GCC\ 개발자들의 친절함에 의존해야 합니다.
 
 	대신, 하드웨어가 한번의 메모리 참조 명령으로 필요한 값을 읽을 수 있는
-	경우라면, \co{ACCESS_ONCE()}~\cite{JonCorbet2012ACCESS:ONCE} 같은
-	volatile 접근법을 사용해서 컴파일러에 제약을 가할 수 있습니다.
+	경우라면, \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 에 의해 제공되는
+	volatile 접근을 사용해서 컴파일러에 제약을 가할 수 있습니다.\footnote{
+		\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 의 간단한 정의가
+		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for
+		GCC)}에 보여져 있습니다.}
 	\iffalse
 
 	According to the C standard, the effects of fetching a variable
@@ -991,8 +994,9 @@ normal loads suffice, and no special atomic instructions are required.
 \QuickQuizAnswer{
 	C 표준은 전역 변수의 초기값은 명시적으로 초기화되지 않는 이상 0이라고
 	명시합니다.
-	그리고, 사용자가 통계적 카운터들의 연속되는 값 사이의 차이에
-	관심있는게 아니라면, 초기값은 의미가 없습니다.
+	따라서 \co{counter} 의 모든 인스턴스의 초기값은 0이 될겁니다.
+	그리고, 사용자가 통계적 카운터들의 연속적으로 읽어들이는 값 사이의
+	차이에만 관심있는 일반적인 경우에는 초기값은 의미가 없습니다.
 	\iffalse
 
 	The C standard specifies that the initial value of
@@ -1035,9 +1039,9 @@ normal loads suffice, and no special atomic instructions are required.
 
 이 방법은 \co{inc_count()} 를 호출하는 업데이터 쓰레드의 수가 늘어나더라도
 선형적으로 성능이 확장됩니다.
-Figure~\ref{fig:count:Data Flow For Per-Thread Increment} 에 각 CPU 의 초록색
-화살표로 보여지듯, 각 CPU 는 자신의 쓰레드의 변수를 시스템을 통과하는 비싼 통신
-없이 빠르게 증가시킬 수 있기 때문입니다.
+Figure~\ref{fig:count:Data Flow For Per-Thread Increment} 의 각 CPU 위의 초록색
+화살표로 보여지듯, 각 CPU 는 시스템 사이를 통과하는 비싼 비용의 통신 없이
+자신의 쓰레드의 변수를 빠르게 증가시킬 수 있기 때문입니다.
 이와 같이, 이 섹션은 이 챕터의 시작에서 소개된 네트워크 패킷 카운팅 문제를
 해결합니다.
 \iffalse
@@ -1054,12 +1058,13 @@ at the beginning of this chapter.
 
 \QuickQuiz{}
 	읽기 오퍼레이션은 쓰레드별 값을 모두 더하는 시간을 가져야 할 것이고,
-	그동안도 카운터는 값이 변할 수 있어요.
-	그럼 Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
-	의  \co{read_count()} 는 정확하지 않다는 의미입니다.
-	이 카운터는 단위시간당 $r$ 만큼 카운터 값을 증가하고 \co{read_count()}
-	는 $\Delta$ 단위시간을 소모한다고 해봅시다.
-	리턴되는 값의 예상 오류값은 얼마입니까?
+	그동안에도 카운터는 값이 변할 수 있어요.
+	이는,
+	Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
+	의  \co{read_count()} 는 정확하지 않다는 것을 의미합니다.
+	이 카운터는 단위시간당 $r$ 만큼 값이 증가되고 \co{read_count()} 는
+	$\Delta$ 단위시간을 소모한다고 해봅시다.
+	반환되는 값의 예상 오류값은 얼마입니까?
 	\iffalse
 
 	The read operation takes time to sum up the per-thread values,
@@ -1109,6 +1114,7 @@ at the beginning of this chapter.
 			\sum_{i = 1}^N i
 	\end{equation}
 	\iffalse
+
 	This worst-case behavior is rather unlikely, so let us instead
 	consider the case where the reads from each of the $N$
 	counters is spaced equally over the time period $\Delta$.
@@ -1168,10 +1174,6 @@ at the beginning of this chapter.
 	t\right)$ 로 늘어날 겁니다.
 
 	예상 오류치도 비슷하게 늘어나겠죠:
-
-	\begin{equation}
-		r \left( \frac{\Delta}{2} + t \right)
-	\end{equation}
 	\iffalse
 
 	It is important to remember that error continues accumulating
@@ -1182,11 +1184,11 @@ at the beginning of this chapter.
 	worst-case error will have increased to $r \left(\Delta + t\right)$.
 
 	The expected error will have similarly increased to:
+	\fi
 
 	\begin{equation}
 		r \left( \frac{\Delta}{2} + t \right)
 	\end{equation}
-	\fi
 
 	물론, 읽기 중에 카운터가 계속 증가하는건 용납될 수 없는 경우도
 	있겠습니다.
@@ -1194,7 +1196,7 @@ at the beginning of this chapter.
 	에서는 이런 상황을 해결하는 방법을 알아봅니다.
 
 	이렇게, 우리는 감소는 없고 증가만 이루어지는 카운터를 알아보았습니다.
-	만약 카운터 값이 단위시간당 $r$ 만큼 감소로든 증가로든 바뀐다면,
+	만약 카운터 값이 단위시간당 $r$ 만큼 감소되든 증가되든 바뀐다면,
 	오류값은 줄어들 거라고 예상할 수 있을 겁니다.
 	하지만, 카운터가 어느 쪽으로든 움직일 수 \emph{있을지 몰라도} 최악의
 	경우는 해당 읽기 오퍼레이션이 금방 끝났지만 $\Delta$ 단위 시간동안
@@ -1223,7 +1225,7 @@ at the beginning of this chapter.
 
 	평균 에러치를 계산하는데는 값의 증감 패턴에 대한 다양한 가정을 바탕으로
 	하는 여러가지 방법이 있습니다.
-	일단은 간단하게, 1 의 오퍼레이션 중 $f$ 만큼이 감소 오퍼레이션이고,
+	일단은 간단하게, 오퍼레이션들 중 $f$ 만큼이 감소 오퍼레이션이고,
 	관심있는 오류값은 카운터의 장시간 추세선에서의 굴곡이라고 가정해
 	봅시다.
 	이 가정 하에서는 $f$ 가 0.5 이하라면, 각 감소는 증가에 의해 무효화
@@ -1236,10 +1238,6 @@ at the beginning of this chapter.
 	따라서, 긴 시점에서의 카운터의 변화는 $\left( 1-2f \right) r$ 로
 	주어집니다.
 	이걸 Equation~\ref{eq:count:CounterErrorAverage} 에 대입하면:
-
-	\begin{equation}
-		\frac{\left( 1 - 2 f \right) r \Delta}{2}
-	\end{equation}
 	\iffalse
 
 	There are a number of ways to compute the average error,
@@ -1261,11 +1259,11 @@ at the beginning of this chapter.
 	movement of the counter is given by $\left( 1-2f \right) r$.
 	Plugging this into
 	Equation~\ref{eq:count:CounterErrorAverage} yields:
+	\fi
 
 	\begin{equation}
 		\frac{\left( 1 - 2 f \right) r \Delta}{2}
 	\end{equation}
-	\fi
 
 	그렇지만, 대부분의 통계적 카운터 사용에서 \co{read_count()} 에 의해
 	리턴되는 값의 오류치는 별 의미가 없습니다.
@@ -1285,7 +1283,7 @@ at the beginning of this chapter.
 
 하지만, 이 업데이트 쪽 확장성은 쓰레드의 수가 늘어날 경우 읽기 쪽에 큰 부담으로
 다가옵니다.
-다음 섹션에서는, 업데이트 쪽 확장성을 유지하면서 읽기 쪽 부담을 줄이는 방법을
+다음 섹션에서는 업데이트 쪽 확장성을 유지하면서 읽기 쪽 부담을 줄이는 방법을
 알아봅니다.
 \iffalse
 
