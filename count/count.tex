@@ -1296,14 +1296,13 @@ still retaining the update-side scalability.
 \subsection{Eventually Consistent Implementation}
 \label{sec:count:Eventually Consistent Implementation}
 
-읽기 쪽 성능을 엄청나게 개선하면서 업데이트 쪽 확장성도 지키는 한가지 방법은
+읽기 쪽 성능을 크게 개선하면서 업데이트 쪽 확장성도 지키는 한가지 방법은
 일관성에 대한 요구사항을 약화시키는 것입니다.
-앞 섹션의 카운팅 알고리즘은 이상적인 카운터가 \co{read_count()} 실행 직전과
-직후에 내놓을 값들 사이의 값을 내놓는 것을 보장했습니다.
-\emph{최종적 일관성(Eventual
-consistency}~\cite{WernerVogels:2009:EventuallyConsistent} 는 더 약한
-보장사항을 제공합니다: \co{inc_count()} 호출이 없을 때라는 조건 하에,
-\co{read_count()} 는 최종적으로는 정확한 값을 리턴할 것입니다.
+앞 섹션의 카운팅 알고리즘은 이상적인 카운터가 \co{read_count()} 실행 직전에
+내놓을 값과 실행 직후에 내놓을 값 사이의 값을 내놓는 것을 보장했습니다.
+\emph{최종적 일관성(Eventual consistency}~\cite{WernerVogels:2009:EventuallyConsistent}
+는 더 완화된 보장사항을 제공합니다: \co{inc_count()} 호출이 없을 때라는 조건
+하에, \co{read_count()} 는 최종적으로는 정확한 값을 리턴할 것입니다.
 \iffalse
 
 One way to retain update-side scalability while greatly improving
@@ -1319,13 +1318,12 @@ guarantee: in absence of calls to \co{inc_count()}, calls to
 \fi
 
 우리는 글로벌 카운터를 사용해 최종적 일관성을 제공할 것입니다.
-하지만, 업데이트는 쓰레드별 카운터만을 사용합니다.
-별도의 쓰레드가 존재하며 이 쓰레드가 업데이트 쓰레드들의 쓰레드별 카운터의 값을
-세어 글로벌 카운터의 값을 만들어냅니다.
-읽기는 단순히 글로벌 카운터의 값을 읽습니다.
-업데이트가 수행 중이라면, 읽기 쓰레드가 읽어낸 값은 과거의 값을 것입니다만,
-일단 업데이트가 중단되면 글로벌 카운터는 최종적으로 진짜 값을 가질
-겁니다---그래서 이 방법이 최종적 일관성에 분류되는 겁니다.
+하지만, 업데이트 쓰레드는 쓰레드별 카운터만을 사용합니다.
+이 쓰레드별 카운터를 글로벌 카운터로 이동시키는 별도의 쓰레드가 제공됩니다.
+읽기 쓰레드는 단순히 글로벌 카운터의 값을 읽습니다.
+업데이트 쓰레드가 수행 중이라면, 읽기 쓰레드가 읽어낸 값은 과거의 값일
+것입니다만, 일단 업데이트가 중단되면 글로벌 카운터는 최종적으로 진짜 값을 가질
+겁니다---따라서 이 방법은 최종적 일관성에 부합합니다.
 \iffalse
 
 We exploit eventual consistency by maintaining a global counter.
@@ -1406,9 +1404,10 @@ Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 라인~1-2 는 카운터의 값을 갖는 쓰레드별 변수와 글로벌 변수를 보여주며, 세번째
 라인은 프로그램을 정확한 카운터 값과 함께 종료하고자 할 경우를 위해 종료 조건을
 알리는 \co{stopflag} 를 보입니다.
-라인~5-8 의 \co{inc_count()} 함수는 Listing~\ref{lst:count:Array-Based
-Per-Thread Statistical Counters} 것과 비슷합니다.
-라인~10-13 의 \co{read_count()} 함수는 단순히 \co{global_count} 변수의 값을
+라인~5-9 의 \co{inc_count()} 함수는
+Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters} 의 것과
+비슷합니다.
+라인~11-14 의 \co{read_count()} 함수는 단순히 \co{global_count} 변수의 값을
 리턴합니다.
 \iffalse
 
@@ -1426,10 +1425,10 @@ The \co{read_count()} function shown on lines~11-14 simply returns the
 value of the \co{global_count} variable.
 \fi
 
-하지만, 라인~34-42 의 \co{count_init()} 함수는 라인~15-32 의 \co{eventual()}
+하지만, 라인~35-43 의 \co{count_init()} 함수는 라인~16-33 의 \co{eventual()}
 쓰레드를 생성하는데, 이 쓰레드는 모든 쓰레드를 순회하며 쓰레드별 로컬
 \co{counter} 를 더해서 \co{global_count} 변수에 저장하는 일을 반복합니다.
-\co{eventual()} 쓰레드는 일의 반복 사이에 적당히 선택된 1 밀리세컨드 동안
+\co{eventual()} 쓰레드는 일의 반복 사이에 임의로 선택된 1 밀리세컨드 동안
 기다립니다.
 라인~45-51 의 \co{count_cleanup()} 함수는 프로그램 종료를 관장합니다.
 
@@ -1455,8 +1454,8 @@ comes at the cost of the additional thread running \co{eventual()}.
 \fi
 
 \QuickQuiz{}
-	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent
-	Counters} 의 \co{inc_count()} 는 왜 어토믹 명령을 사용하지 않죠?
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 \co{inc_count()} 는 왜 어토믹 명령을 사용하지 않죠?
 	쓰레드별 카운터를 여러 쓰레드에서 접근하고 있잖아요!
 	\iffalse
 
@@ -1470,9 +1469,12 @@ comes at the cost of the additional thread running \co{eventual()}.
 	두 쓰레드 중 하나는 읽기만 하고 있고, 변수는 정렬되어 있으며 기계가
 	지원하는 워드 크기이기에, 어토믹하지 않은 명령들만으로도
 	충분합니다.
-	다만, \co{ACCESS_ONCE()} 매크로는 카운터 업데이트가 \co{eventual()}
-	에게 보여지는 것을 막을 수도 있는~\cite{JonCorbet2012ACCESS:ONCE}
-	컴파일러 최적화를 막기 위해 사용되었습니다.
+	다만, 카운터 업데이트가 \co{eventual()} 에게 보여지지 않게 할 수도 있는
+	컴파일러 최적화를 막기 위해 \co{READ_ONCE()} 매크로가
+	사용되었습니다.\footnote{
+		\co{READ_ONCE()} 의 간단한 정의가
+		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
+		에 표시되어 있습니다.}
 	\iffalse
 
 	Because one of the two threads only reads, and because the
@@ -1487,8 +1489,9 @@ comes at the cost of the additional thread running \co{eventual()}.
 		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.}
 	\fi
 
-	이 알고리즘의 예전 버전은 어토믹 명령을 사용했습니다만, 감사하게도
-	Ersoy Bayramoglu 가 그것들이 필요 없다는 것을 지적해 줬습니다.
+	이 알고리즘의 예전 버전은 실제로 어토믹 명령을 사용했었습니다만,
+	감사하게도 Ersoy Bayramoglu 가 그것들이 필요 없다는 것을 지적해
+	줬습니다.
 	그렇다곤 하나, 쓰레드별 \co{counter} 변수가 \co{global_counter} 보다
 	작았다면 어토믹 명령이 필요했을 겁니다.
 	하지만, 32-bit 시스템에서 쓰레드별 \co{counter} 변수는 정확하게 합을
@@ -1496,7 +1499,7 @@ comes at the cost of the additional thread running \co{eventual()}.
 	\co{global_count} 변수는 64-bit 이 되어야 할겁니다.
 	이 경우엔, 오버플로를 막기 위해 쓰레드별 \co{counter} 변수를 주기적으로
 	0으로 초기화 시켜줘야 할 겁니다.
-	0으로의 주기적 초기화는 너무 오래 지연되면 쓰레드별 변수의 오버플로가
+	0으로의 주기적 초기화가 너무 오래 지연되면 쓰레드별 변수의 오버플로가
 	가능하단 것을 반드시 기억해 둬야만 합니다.
 	따라서 이 방법은 프로그램이 돌아가는 시스템이 리얼-타임 속성을 가지고
 	있어야 하며, 매우 조심스럽게 사용되어야 함을 의미합니다.
@@ -1530,9 +1533,9 @@ comes at the cost of the additional thread running \co{eventual()}.
 } \QuickQuizEnd
 
 \QuickQuiz{}
-	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent
-	Counters} 의 단일 글로벌 쓰레드인 \co{eventual()} 함수는 글로벌 락처럼
-	큰 병목이 되거나 하진 않나요?
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 단일 글로벌 쓰레드인 \co{eventual()} 함수는 글로벌 락처럼 큰 병목이
+	되거나 하진 않나요?
 	\iffalse
 
 	Won't the single global thread in the function \co{eventual()} of
@@ -1567,8 +1570,8 @@ comes at the cost of the additional thread running \co{eventual()}.
 	맞습니다.
 	이게 문제가 된다면, 여러 \co{eventual()} 쓰레드를 만들고, 각 쓰레드가
 	일을 나눠서 해야 하는게 한가지 해결책이 될 수 있습니다.
-	더 극단적인 경우에는, tree 같은 \co{eventual()} 쓰레드 계층 관리가
-	필요할 수도 있습니다.
+	더 극단적인 경우에는, tree 같은 구조의 \co{eventual()} 쓰레드 계층
+	관리가 필요할 수도 있습니다.
 	\iffalse
 
 	Yes.
@@ -1581,9 +1584,9 @@ comes at the cost of the additional thread running \co{eventual()}.
 } \QuickQuizEnd
 
 \QuickQuiz{}
-	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent
-	Counters} 의 최종적 일관성 알고리즘은 읽기에도 쓰기에도 매우 적은
-	오버헤드와 극단적인 확장성을 보이는데, 과연 누가
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 최종적 일관성 알고리즘은 읽기에도 쓰기에도 매우 적은 오버헤드와
+	극단적인 확장성을 보이는데, 과연 누가
 	Section~\ref{sec:count:Array-Based Implementation} 같이 읽기 쪽이 비싼
 	구현을 사용하겠습니까?
 	\iffalse
@@ -1597,11 +1600,11 @@ comes at the cost of the additional thread running \co{eventual()}.
 	given its costly read-side code?
 	\fi
 \QuickQuizAnswer{
-	\co{eventual()} 쓰레드를 돌리는 것은 CPU 시간을 소모합니다. 이
-	최종적으로 일관적인 카운터가 추가되어가면 언젠가는 \co{eventual()}
-	쓰레드들이 모든 CPU 를 차지할 겁니다.
-	따라서 이 구현은 확장성이 쓰레드나 CPU 의 갯수가 아니라 최종적으로
-	일관적인 카운터의 갯수에 제한되는, 또다른 종류의 확장성 한계 문제를
+	\co{eventual()} 쓰레드를 돌리는 것은 CPU 시간을 소모합니다.
+	이런 최종적으로 일관적인 카운터의 갯수가 늘어나면 언젠가는
+	\co{eventual()} 쓰레드들이 모든 CPU 를 차지할 겁니다.
+	따라서 이 구현은 쓰레드나 CPU 의 갯수가 아니라 최종적으로 일관적인
+	카운터의 갯수에 확장성이 제한되는, 또다른 종류의 확장성 한계 문제를
 	갖습니다.
 
 	물론, 다른 트레이드오프를 갖는 것도 가능합니다.
