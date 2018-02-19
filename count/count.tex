@@ -2275,15 +2275,15 @@ if you instead need the limit to be exact).
 한계 카운터를 위해 사용할 수 있을 설계 중 하나는 한계치 10,000 을 쓰레드의 수로
 나눠서 각 쓰레드에게 크기가 고정된 구조체 풀을 주는 것입니다.
 예를 들어, 100 개의 쓰레드가 있다면, 각 쓰레드가 100개의 구조체를 갖는 풀을
-알아서 관리하게 하는 것입니다.
-이 방법은 간단하고, 일부 경우에는 잘 동작합니다만, 구조체를 할당하는 쓰레드와
-해제하는 쓰레드가 다른~\cite{McKenney93} 많은 경우에는 동작하지 못합니다.
-만약 한 쓰레드가 자신이 해제하는 모든 구조체에 대해 관리 책임을 갖는다면,
+관리하게 하는 것입니다.
+이 방법은 간단하고, 어떤 경우에는 잘 동작합니다만, 구조체를 할당하는 쓰레드와
+해제하는 쓰레드가 다른 많은 경우~\cite{McKenney93} 에는 동작하지 못합니다.
+일단, 만약 한 쓰레드가 자신이 해제하는 모든 구조체에 대해 관리 책임을 갖는다면,
 대부분의 해제를 하는 쓰레드가 구조체 해제 처리를 하느라 바쁜 동안 대부분의
 할당을 하는 쓰레드는 풀의 구조체가 바닥나게 할겁니다.
-한편으로는, 구조체를 할당한 CPU 에게 해제된 구조체에 대한 관리 책임이 있다면,
-CPU 들은 다른 CPU 들을 모두 돌아봐야 할거고, 이는 비싼 어토믹 명령어나 다른
-쓰레드간 통신 비용을 발생시킬 것입니다.\footnote{
+다른 한편, 구조체를 할당한 CPU 에게 해당 구조체의 메모리 해제 책임이 있다면,
+CPU 들은 다른 CPU 들의 카운터를 모두 돌아봐야 할거고, 이는 비싼 어토믹 명령어나
+다른 쓰레드간 통신 비용을 발생시킬 것입니다.\footnote{
 	그렇지만, 만약 각 구조체가 항상 같은 CPU (또는 쓰레드) 에 의해
 	해제된다면, 이 간단한 쪼개기 전략은 매우 잘 동작합니다.}
 \iffalse
@@ -2318,9 +2318,9 @@ or other means of communicating between threads.\footnote{
 이 알고리즘은 업데이트를 위한 쓰레드별 \co{counter} 변수와 읽기를 위한
 \co{global_count} 변수 두개의 저장소를 유지하고, 주기적으로 \co{global_count}
 를 업데이트해서 최종적으로는 쓰레드별 \co{counter} 의 값과 \co{global_count} 를
-일관되게 만들어주는 \co{eventual()} 쓰레드를 운용했습니다.
+일관되게 만들어주는 \co{eventual()} 쓰레드를 운용합니다.
 쓰레드별 \co{counter} 는 카운터 값을 완벽하게 분할했고 \co{global_count} 는
-전체 값을 유지했습니다.
+전체 값을 유지합니다.
 \iffalse
 
 In short, for many important workloads, we cannot fully partition the counter.
@@ -2345,8 +2345,8 @@ The per-thread \co{counter} perfectly partitioned the counter value, while
 예를 들어, 네개의 쓰레드가 각각 쓰레드별 \co{counter} 를 가질 수 있지만, 각각은
 또한 쓰레드별 최대값 (\co{countermax} 라고 해봅시다) 을 가지는 것입니다.
 
-그렇게 되면 한 쓰레드가 자신의 \co{counter} 를 증가시키는데, \co{counter} 는
-자신의 \co{countermax} 와 동일하면 어떻게 될까요?
+하지만, 한 쓰레드가 자신의 \co{counter} 의 값을 증가시키려 하는데, \co{counter}
+의 값이 자신의 \co{countermax} 와 동일하면 어떻게 될까요?
 그 쓰레드의 \co{counter} 값의 절반을 \co{globalcount} 로 옮기고, \co{counter}
 를 증가시키는 트릭을 씁니다.
 예를 들어, 한 쓰레드의 \co{counter} 와 \co{countermax} 변수가 똑같이 10이라면,
@@ -2372,11 +2372,9 @@ variables were both equal to 10, we do the following:
 \item	\co{globalcount} 에 5를 더한다.
 \item	앞의 합과 균형을 맞추기 위해, 이 쓰레드의 \co{counter} 에서 5를 뺀다.
 \item	글로벌 락을 놓는다.
-\item	이 쓰레드의 \co{counter} 를 증가시켜서 6으로 만든다.
-\end{enumerate}
+\item	이 쓰레드의 \co{counter} 의 값을 증가시켜서 6으로 만든다.
 \iffalse
 
-\begin{enumerate}
 \item	Acquire a global lock.
 \item	Add five to \co{globalcount}.
 \item	To balance out the addition, subtract five from this
@@ -2388,7 +2386,7 @@ variables were both equal to 10, we do the following:
 
 이 방법은 여전히 글로벌 락을 필요로 하지만, 그 락은 다섯번의 증가
 오퍼레이션마다 한번씩만 사용되므로, 락 경쟁을 상당히 줄여줄 겁니다.
-이 경쟁정도는 \co{countermax} 값을 올려줌으로써 필요한 만큼까지 낮춰줄 수
+이 경쟁의 정도는 \co{countermax} 값을 올려줌으로써 필요한 정도까지 낮춰줄 수
 있습니다.
 하지만, \co{countermax} 를 늘리는데 대한 페널티가 존재하는데 \co{globalcount}
 의 정확도가 떨어진다는 점입니다.
@@ -2412,17 +2410,17 @@ In contrast, if \co{countermax} is increased to 100, \co{globalcount}
 might be in error by as much as 400 counts.
 \fi
 
-이는 \co{globalcount} 와 \co{globalcount} 와 각 쓰레드의 \co{counter} 변수의
+이는 \co{globalcount} 와, \co{globalcount} 와 각 쓰레드의 \co{counter} 변수의
 값의 합으로 만들어지는 값 사이의 차이를 얼마나 많이 신경써야 하나 하는 질문을
 가져옵니다.
-답은 얼마나 합으로 만들어진 값이 카운터의 리미트 (\co{globalcountmax} 라고
-해두죠) 와 차이가 나나에 달려 있습니다.
+답은 합으로 만들어진 값이 카운터의 리미트 (\co{globalcountmax} 라고 해두죠) 와
+얼마나 차이가 나나에 달려 있습니다.
 이 두 값 사이의 차이가 크면 클수록 \co{countermax} 는 \co{globalcountmax}
 리미트를 넘지는 않는다는 한계 내에서 커져도 괜찮습니다.
 이말은 주어진 쓰레드의 \co{countermax} 변수는 이 차이에 맞춰 설정될 수 있다는
 겁니다.
-리미트가 한참 남았다면, \co{countermax} 쓰레드별 변수는 성능과 확장성을 위한
-최적화를 위해 큰 값을 가질 수 있고, 반대로 리미트가 가깝다면, 이 값들은
+한계점이 한참 남았다면, \co{countermax} 쓰레드별 변수는 성능과 확장성을 위한
+최적화를 위해 큰 값을 가질 수 있고, 반대로 한계점이 가깝다면, 이 값들은
 \co{globalcountmax} 리미트에의 체크의 에러를 줄이기 위해 작은 값으로 설정되어야
 합니다.
 \iffalse
@@ -2444,7 +2442,7 @@ to minimize the error in the checks against the \co{globalcountmax} limit.
 \fi
 
 이 디자인은 일반적인 경우는 쓰레드간의 상호작용과 비싼 동작 없이 수행하되 결국
-사용해야만 할 때에는 보수적으로 설계 된 (그리고 오버헤드가 큰) 알고리즘을
+사용해야만 할 때에는 보수적으로 설계된 (그리고 오버헤드가 큰) 알고리즘을
 사용하는 유명한 디자인 패턴인 \emph{병렬 패스트패스(parallel fastpath)} 의 한
 예입니다.
 이 디자인 패턴은 Section~\ref{sec:SMPdesign:Parallel Fastpath} 에서 더 자세히
