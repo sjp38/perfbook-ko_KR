@@ -2487,26 +2487,18 @@ Section~\ref{sec:SMPdesign:Parallel Fastpath}.
 \end{figure}
 
 Listing~\ref{lst:count:Simple Limit Counter Variables} 는 이 구현에서 사용되는
-쓰레드별, 그리고 글로벌 변수를 보여줍니다.
-쓰레드별 \co{counter} 와 \co{countermax} 변수들은 연관되는 쓰레드의 로컬
-카운터와 그 카운터의 최대 허용값을 각각 나타냅니다.
+쓰레드별 변수들과 글로벌 변수를 보여줍니다.
+쓰레드별 \co{counter} 와 \co{countermax} 변수들은 각각 연관되는 쓰레드의 로컬
+카운터와 그 카운터의 최대 허용값입니다.
 라인~3 의 \co{globalcountmax} 변수는 합계 카운터의 최대값을 가지며, 라인~4 의
 \co{globalcount} 변수는 글로벌 카운터 입니다.
-\co{globalcount} 와 각 쓰레드의 \co{counter} 의 합은 전체 카운터의 합산 값을
-갖습니다.
+\co{globalcount} 와 각 쓰레드의 \co{counter} 의 합은 전체 카운터의 합산 값이
+됩니다.
 라인~5 의 \co{globalreserve} 변수는 모든 쓰레드별 \co{countermax} 변수의 값의
 합입니다.
 이 변수들 간의 관계가
 Figure~\ref{fig:count:Simple Limit Counter Variable Relationships} 에 나타나
 있습니다:
-\begin{enumerate}
-\item	\co{globalcount} 와 \co{globalreserve} 의 합은 \co{globalcountmax} 보다
-	작거나 같아야만 합니다.
-\item	모든 쓰레드의 \co{countermax} 값의 합은 \co{globalreserve} 보다 작거나
-	같아야만 합니다.
-\item	각 쓰레드의 \co{counter} 는 해당 쓰레드의 \co{countermax} 보다 작거나
-	같아야만 합니다.
-\end{enumerate}
 \iffalse
 
 Listing~\ref{lst:count:Simple Limit Counter Variables}
@@ -2524,20 +2516,29 @@ The \co{globalreserve} variable on line~5 is the sum of all of the
 per-thread \co{countermax} variables.
 The relationship among these variables is shown by
 Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}:
+\fi
 \begin{enumerate}
+\item	\co{globalcount} 와 \co{globalreserve} 의 합은 \co{globalcountmax} 보다
+	작거나 같아야만 합니다.
+\item	모든 쓰레드의 \co{countermax} 값의 합은 \co{globalreserve} 보다 작거나
+	같아야만 합니다.
+\item	각 쓰레드의 \co{counter} 는 해당 쓰레드의 \co{countermax} 보다 작거나
+	같아야만 합니다.
+\iffalse
+
 \item	The sum of \co{globalcount} and \co{globalreserve} must
 	be less than or equal to \co{globalcountmax}.
 \item	The sum of all threads' \co{countermax} values must be
 	less than or equal to \co{globalreserve}.
 \item	Each thread's \co{counter} must be less than or equal to
 	that thread's \co{countermax}.
-\end{enumerate}
 \fi
+\end{enumerate}
 
-\co{counterp[]} 배열의 각 원소는 상응하는 쓰레드의 \co{counter} 변수를
-가리키며, 마지막으로, \co{gblcnt_mutex} 스핀락은 모든 글로벌 변수들을
-보호하는데, 달리 말하자면 어떤 쓰레드도 \co{gblcnt_mutex} 를 잡지 못했다면 어떤
-글로벌 변수들도 접근하거나 수정하지 못합니다.
+\co{counterp[]} 배열의 각 원소는 연관된 쓰레드의 \co{counter} 변수를 가리키며,
+마지막으로, \co{gblcnt_mutex} 스핀락은 모든 글로벌 변수들을 보호하는데, 달리
+말하자면 \co{gblcnt_mutex} 를 잡지 못했다면 모든 쓰레드는 어떤 글로벌 변수들도
+접근하거나 수정하지 못합니다.
 \iffalse
 
 Each element of the \co{counterp[]} array references the corresponding
@@ -2609,8 +2610,8 @@ has acquired \co{gblcnt_mutex}.
 \end{listing}
 
 Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}
-(\path{count_lim.c}) 에서 \co{add_count()}, \co{sub_count()}, and
-\co{read_count()} 함수들을 보이고 있습니다.
+(\path{count_lim.c}) 은 \co{add_count()}, \co{sub_count()}, 그리고
+\co{read_count()} 함수를 보이고 있습니다.
 \iffalse
 
 Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}
@@ -2666,7 +2667,7 @@ references only per-thread variables, and should not incur any cache misses.
 \QuickQuiz{}
 	Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}
 	라인~3 의 저 이상한 조건문은 뭔가요?
-	왜 다음과 같이 더 직관적힌 형태의 빠른 수행경로를 사용하지 않는거죠?
+	왜 다음과 같이 더 직관적인 형태의 빠른 수행경로를 사용하지 않는거죠?
 	\iffalse
 
 	What is with the strange form of the condition on line~3 of
@@ -2687,7 +2688,7 @@ references only per-thread variables, and should not incur any cache misses.
 	\vspace{5pt}
 \QuickQuizAnswer{
 	두단어로 설명하죠.
-	``인티저 오버플로우.''
+	``인티저 오버플로우 (Integer overflow).''
 
 	앞의 코드를 10의 값을 갖는 \co{counter} 와 \co{ULONG_MAX} 값을 갖는
 	\co{delta} 에 대해 수행해 보세요.
@@ -2721,12 +2722,12 @@ references only per-thread variables, and should not incur any cache misses.
 
 라인~3 에서의 테스트가 실패한다면, 글로벌 변수들에 접근해야 하므로, 라인~7 의
 \co{gblcnt_mutex} 를 반드시 잡아야 하고, 이 락은 실패하는 경우 라인~11 에서,
-성공하는 경우는 라인~16 에서 해제합니다.
-라인~8 에서는 Figure~\ref{lst:count:Simple Limit Counter Utility Functions} 의
+성공하는 경우는 라인~16 에서 놓아집니다.
+라인~8 에서는 Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
 \co{globalize_count()} 를 호출하는데, 이 함수는 쓰레드 로컬 변수들을 초기화
 하고, 글로벌 변수들을 필요한 대로 맞춰줘서 전역적인 처리를 단순화 시킵니다.
 (하지만 \emph{제} 말을 믿지만 말고, 직접 코딩해보세요!)
-라인~9 와 10 에서는 \co{delta} 를 더하는 것이 합법적인지
+라인~9 와~10 에서는 \co{delta} 를 더하는 것이 합법적인지
 Listing~\ref{fig:count:Simple Limit Counter Variable Relationships} 에서 가장
 왼쪽 두 빨간 막대의 높이 차이로 나타난 크기 규칙이 지켜지는지로 체크합니다.
 \co{delta} 의 합이 이루어져선 안된다면, 라인~11 은 (앞서 이야기했듯)
@@ -2751,14 +2752,14 @@ returns indicating failure.
 \fi
 
 만약 아니라면, 느린 수행경로를 실행하게 됩니다.
-라인~14 는 \co{delta} 를 \co{globalcount} 에 더하고, 글로벌 변수들과 쓰레드별
-변수들 모두 업데이트 하기 위해 라인~15 에서
+라인~14 는 \co{delta} 를 \co{globalcount} 에 더하고, 라인~15 에서 글로벌
+변수들과 쓰레드별 변수들을 모두 업데이트 하기 위해
 (Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에서 나왔던)
 \co{balance_count()} 를 호출합니다.
 이 \co{balance_count()} 호출은 대부분의 경우 이 쓰레드가 다음엔 빠른 수행경로로
 수행되도록 \co{countermax} 를 조정할 것입니다.
-그러고나서 라인~16 에서 \co{gblcnt_mutex} 를 (역시 앞에서 언급했듯) 풀어주고,
-마지막으로 라인~17 에서 성공을 의미하는 리턴을 합니다.
+그러고나서 라인~16 에서 \co{gblcnt_mutex} 를 (역시 앞에서 언급했듯) 놓아주고,
+마지막으로 라인~17 에서 성공을 의미하는 값을 리턴 합니다.
 \iffalse
 
 Otherwise, we take the slowpath.
@@ -2786,7 +2787,7 @@ line~17 returns indicating success.
 	Why not just leave the per-thread variables non-zero?
 	\fi
 \QuickQuizAnswer{
-	사실 이전의 버전의 이 코드에서는 그렇게 했습니다.
+	사실 이 코드의 이전 버전에서는 그렇게 했습니다.
 	하지만 더하기와 빼기는 매우 비용이 싼 동작이고, 모든 특수 케이스를
 	처리하는건 상당히 복잡합니다.
 	다시 말하지만, 직접 한번 해보세요, 다만 인티저 오버플로우를 조심하구요!
@@ -2802,7 +2803,7 @@ line~17 returns indicating success.
 
 라인~20-36 은 \co{sub_count()} 함수를 보여주는데, 이 함수는 \co{delta} 만큼을
 카운터에서 제거합니다.
-라인~22 는 쓰레드별 카운터가 이 빼기를 해도 되는 값인지 체크하고, 만약 그렇다면
+라인~22 는 쓰레드별 카운터를 체크해서 이 빼기를 해도 되는지 보고, 만약 그렇다면
 라인~23 에서 그 빼기를 수행한 후 라인~24 에서 성공을 리턴합니다.
 이 부분들이 \co{add_count()} 에서의 그것과 같은 \co{sub_count()} 의 빠른
 수행경로로, 이 경로에서는 비용이 심한 동작은 하지 않습니다.
@@ -2817,7 +2818,7 @@ These lines form \co{sub_count()}'s fastpath, and, as with
 \co{add_count()}, this fastpath executes no costly operations.
 \fi
 
-빠른 수행경로에서 \co{delta} 의 빼기가 적절치 못함으로 판단된다면, 실행은
+빠른 수행경로에서 \co{delta} 의 빼기가 적절치 못하다고 판단된다면, 실행은
 라인~26-35 의 느린 실행경로로 이어집니다.
 느린 실행 경로는 글로벌 상태에 접근해야 하기 때문에, 라인~26 에서
 \co{gblcnt_mutex} 를 잡고, 이 락은 (실패의 경우) 라인~29 에서, 또는 (성공의
@@ -2894,8 +2895,9 @@ Line~28 checks to see if the counter can accommodate subtracting
 	\fi
 \QuickQuizAnswer{
 	실제로 그럴 것입니다!
-	많은 경우에, 이것은 Section~\ref{sec:count:Simple Limit Counter
-	Discussion} 에서 이야기되는 것처럼 문제가 될 것이고, 그런 경우에는
+	많은 경우에, 이것은
+	Section~\ref{sec:count:Simple Limit Counter Discussion} 에서 이야기되는
+	것처럼 문제가 될 것이고, 그런 경우에는
 	Section~\ref{sec:count:Exact Limit Counters} 에서 다루는 알고리즘을
 	사용하는게 좋을 겁니다.
 	\iffalse
@@ -2912,8 +2914,8 @@ Line~28 checks to see if the counter can accommodate subtracting
 한편, 만약 라인~28 에서 카운터가 \co{delta} 빼기를 해도 \emph{적합}하다고
 판단되면, 느린 수행경로를 걷게 됩니다.
 라인~32 에서 실제 빼기를 행하게 되고, 이후 라인~33 에서
-(Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에
-나온)\co{balance_count()} 를 호출해서 글로벌 변수들과 쓰레드별 변수들을 모두
+(Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에 나온)
+\co{balance_count()} 를 호출해서 글로벌 변수들과 쓰레드별 변수들을 모두
 (가능하면 다음엔 빠른 수행경로로 돌 수 있도록) 업데이트 합니다.
 라인~34 에서는 \co{gblcnt_mutex} 를 해제하고, 라인~35 에서 성공을 리턴합니다.
 \iffalse
@@ -2940,7 +2942,7 @@ Then line~34 releases \co{gblcnt_mutex}, and line~35 returns success.
 	Why not simply pass a negative number to \co{add_count()}?
 	\fi
 \QuickQuizAnswer{
-	\co{add_count()} \co{unsigned} \co{long} 타입을 인자로 받기 때문에,
+	\co{add_count()} 는 \co{unsigned} \co{long} 타입을 인자로 받기 때문에,
 	음수를 넘기는건 조금 어려울 겁니다.
 	그리고 설령 반물질 메모리를 가지고 있다 해도, 사용중인 구조체의 수를
 	세는데에 음수를 넘긴다는건 좀 말이 이상하죠!
