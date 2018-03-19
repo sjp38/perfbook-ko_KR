@@ -4417,15 +4417,15 @@ atomic operations are not necessary, as shown in the next section.
 이 동기화는 Figure~\ref{fig:count:Signal-Theft State Machine} 에 보여지는
 스테이트 머신에 의해 제공됩니다.
 해당 스테이트 머신은 IDLE 상태에서 시작하고 \co{add_count()} 나
-\co{sub_count()} 가 로컬 쓰레드의 카운트의 합과 글로벌 카운트가 주어진
-리퀘스트를 수용할 수 없다는 걸 알았을 때, 관련된 느린 수행 경로는 각 쓰레드의
-\co{theft} 상태를 REQ 로 만듭니다 (해당 쓰레드가 카운트가 있을 경우이고, 그렇지
-않다면 READY 로 곧바로 변환시킵니다).
-초록색으로 표시되어 있듯, \co{gblcnt_mutex} 락을 쥐고 있는 느린 수행경로에게만
-IDLE 상태로부터의 변환이 허가되어 있습니다.\footnote{
+\co{sub_count()} 가 로컬 쓰레드의 카운트의 합과 글로벌 카운트가 주어진 요청을
+수용할 수 없다는 걸 알았을 때, 관련된 느린 수행 경로는 각 쓰레드의 \co{theft}
+상태를 REQ 로 만듭니다 (해당 쓰레드가 카운트가 있을 경우이고, 그렇지 않다면
+READY 로 곧바로 변환시킵니다).
+초록색으로 표시되어 있듯, \co{gblcnt_mutex} 락을 쥐고 있는 느린 수행경로만이
+IDLE 상태로부터의 변환을 할 수 있습니다.\footnote{
 	이 책의 흑백 버전을 위해 말해두자면, IDLE 과 READY 는 초록, REQ 는
 	빨강, 그리고 ACK 는 파란색으로 되어 있습니다.}
-해당 느린 수행 경로는 이후 각 쓰레드에 시그널을 보내고, 그에 상응하는 시그널
+이 느린 수행 경로는 이후 각 쓰레드에 시그널을 보내고, 그에 상응하는 시그널
 핸들러들이 연관된 쓰레드의 \co{theft} 와 \co{counting} 변수들을 체크합니다.
 만약 \co{theft} 상태가 REQ 가 아니라면 시그널 핸들러는 상태를 바꿀 권한이 없고,
 따라서 그냥 리턴합니다.
@@ -4458,13 +4458,13 @@ the current thread's fastpath is in progress, the signal handler
 sets the \co{theft} state to ACK, otherwise to READY.
 \fi
 
-파란색으로 표시되어 있듯, \co{theft} 상태가 ACK 이라면 빠른 수행 경로만이
+파란색으로 표시되어 있듯, \co{theft} 상태가 ACK 라면 빠른 수행 경로만이
 \co{theft} 상태를 바꿀 수 있습니다.
 빠른 수행 경로가 완료되면, \co{theft} 상태를 READY 로 바꿉니다.
 
-한번 느린 수행 경로가 한 쓰레드의 \co{theft} 상태가 READY 임을 봤다면, 해당
-느린 수행 경로는 해당 쓰레드의 카운트를 훔칠 권한을 갖습니다.
-해당 느린 수행 경로는 이후 해당 쓰레드의 \co{theft} 상태를 IDLE 로 만듭니다.
+느린 수행 경로가 한 쓰레드의 \co{theft} 상태가 READY 임을 일단 봤다면, 이 느린
+수행 경로는 해당 쓰레드의 카운트를 훔칠 권한을 갖습니다.
+이 느린 수행 경로는 이후 해당 쓰레드의 \co{theft} 상태를 IDLE 로 만듭니다.
 \iffalse
 
 If the \co{theft} state is ACK,
