@@ -3502,7 +3502,7 @@ represent \co{counter} and the low-order 16 bits to represent
 \QuickQuiz{}
 	쓰레드의 \co{counter} 와 \co{countermax} 변수를 한번에 어토믹하게
 	수정해야 하는 이유가 뭐죠?
-	각 변수를 개별적으로 어토믹하게 수정해도 충분하지 않아요?
+	각 변수를 개별적으로 어토믹하게 수정해도 충분하지 않나요?
 	\iffalse
 
 	Why is it necessary to atomically manipulate the thread's
@@ -3511,8 +3511,8 @@ represent \co{counter} and the low-order 16 bits to represent
 	individually?
 	\fi
 \QuickQuizAnswer{
-	그렇게도 할 수 있겠지만, 엄청난 주의가 필요합니다.
-	\co{counter} 를 \co{countermax} 를 먼저 0으로 하지 않고 없애는 것은
+	그렇게도 할 수 있겠지만, 각별한 주의가 필요합니다.
+	\co{countermax} 를 먼저 0으로 하지 않고 \co{counter}를 없애는 것은
 	\co{counter} 를 0이 된 직후 증가시키는 같은 쓰레드가 카운터를 0으로
 	만든 효과를 없애버리게 만듭니다.
 
@@ -3620,12 +3620,12 @@ represent \co{counter} and the low-order 16 bits to represent
 Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
 (\path{count_lim_atomic.c}) 에 보였습니다.
 앞의 알고리즘에서의 \co{counter} 와 \co{countermax} 변수들은 라인~1 에 있는
-하나의 변수 \co{ctrandmax} 에 \co{counter} 는 앞쪽 절반에, \co{countermax} 는
-뒷쪽 절반에 위치하도록 합쳐졌습니다.
-이 변수는 \co{atomic_t} 타입으로, \co{int} 형의 값을 갖습니다.
+하나의 변수 \co{ctrandmax} 의 앞쪽 절반에 \co{counter} 가, 뒷쪽 절반에는
+\co{countermax} 가 위치하도록 합쳐졌습니다.
+이 변수는 결국 \co{int} 인 \co{atomic_t} 타입입니다.
 
 라인~2-6 은 \co{globalcountmax}, \co{globalcount}, \co{globalreserve},
-\co{counterp}, 그리고 \co{gblcnt_mutex} 정의를 보이는데, 이들은
+\co{counterp}, 그리고 \co{gblcnt_mutex} 의 정의를 보이는데, 이들은
 Listing~\ref{lst:count:Approximate Limit Counter Variables} 에 있는 것들과
 비슷한 역할을 합니다.
 라인~7 은 \co{ctrandmax} 의 각 절반에 사용되는 비트의 수를 나타내는
@@ -3847,9 +3847,9 @@ Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 는
 경로가, 나머지에는 느린 수행경로가 있습니다.
 빠른 수행경로의 라인~8-14는 라인~13-14 에서 실제 CAS 를 \co{atomic_cmpxchg()}
 함수로 수행하는 compare-and-swap (CAS) 루프를 구성합니다.
-라인~9 는 현재 쓰레드의 \co{ctrandmax} 변수를 \co{counter} (\co{c} 에) 와
-\co{countermax} (\co{cm} 에) 으로 쪼개고, 기존의 \co{ctrandmax} 가 갖는
-\co{int} 값을 \co{old} 에 넣어 둡니다.
+라인~9 는 현재 쓰레드의 \co{ctrandmax} 변수를 \co{counter} (\co{c}) 와
+\co{countermax} (\co{cm}) 로 쪼개고, 기존의 \co{ctrandmax} 가 갖는 \co{int}
+값을 \co{old} 에 넣어 둡니다.
 라인~10 에서는 \co{delta} 값이 로컬하게 처리 가능할지 (인티저 오버플로우를 막기
 위한 처리를 하면서) 체크하고, 만약 그렇지 않다면 라인~11 의 느린 수행경로를
 밟게 됩니다.
@@ -3888,8 +3888,8 @@ execution continues in the loop at line~9.
 \QuickQuiz{}
 	우웩!
 	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 라인~11
-	의 저 더러운 \co{goto} 는 웬말이예요?
-	\co{break} 몰라요???
+	의 저 더러운 \co{goto} 는 웬건가요?
+	\co{break} 모르시나요???
 	\iffalse
 
 	Yecch!
@@ -3952,7 +3952,7 @@ Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 의 라인~16-31 �
 라인~18 에서는 \co{globalize_count()} 를 호출하는데, 이 함수는 이 쓰레드의
 상태를 글로벌 카운터로 옮겨줍니다.
 라인~19-20 은 \co{delta} 값이 현재의 글로벌 상태에 사용 가능한지 체크하고,
-불가능하다면 라인~21 에서 \co{fluch_local_count()} 를 호출해서 모든 쓰레드의
+불가능하다면 라인~21 에서 \co{flush_local_count()} 를 호출해서 모든 쓰레드의
 로컬 스테이트를 글로벌 카운터로 몰아넣고, 라인~22-23 에서 \co{delta} 가 이제는
 사용 가능한지 다시 체크합니다.
 이후에도 \co{delta} 더하기가 불가능하다면, 라인~24 에서 \co{gblcnt_mutex} 를
@@ -3981,7 +3981,7 @@ then line~25 returns failure.
 
 Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 의 라인~34-63
 에서는 \co{sub_count()} 를 보이는데, 이 함수는 \co{add_count()} 와 유사하게
-구성되어 있어서, 라인~41-48 에 빠른 수행경로를, 그리고 라인~49-62 에 누린
+구성되어 있어서, 라인~41-48 에 빠른 수행경로를, 그리고 라인~49-62 에 느린
 수행경로를 갖습니다.
 이 함수의 각 라인별 분석은 독자 여러분의 연습문제로 남겨두겠습니다.
 \iffalse
@@ -4225,6 +4225,7 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 	없습니다 --- \co{globalcount} 가 재설정을 허용할 만큼 충분히 크다는
 	가정 하에서요.
 	\iffalse
+
 	This other thread cannot refill its \co{ctrandmax}
 	until the caller of \co{flush_local_count()} releases the
 	\co{gblcnt_mutex}.
