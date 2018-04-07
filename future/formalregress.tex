@@ -197,9 +197,9 @@ Promela 와 \co{spin} 은 순차적 일관성을 가정하는데, 이는
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서 볼 수 있듯이
 최근의 컴퓨터 시스템에서는 좋은 맞춤이 아닙니다.
 대조적으로, PPCMEM 과 \co{herd} 의 큰 강점 중 하나는 x86, ARM, Power, 그리고,
-\co{herd} 의 경우에는 심지어 프로토타입 리눅스 커널 메모리
-모델~\cite{JadeAlglave2017LWN-LKMM-1,JadeAlglave2017LWN-LKMM-2} 을 포함해
-다양한 CPU 제품군들의 메모리 모델에 대한 모델링입니다.
+\co{herd} 의 경우에는 리눅스 커널 v4.17 에서 받아들여진 리눅스 커널 메모리
+모델~\cite{Alglave:2018:FSC:3173162.3177156} 을 포함해 다양한 CPU 제품군들의
+메모리 모델에 대한 모델링입니다.
 \iffalse
 
 It is critically important that formal-verification tools correctly
@@ -217,7 +217,6 @@ Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}.
 In contrast, one of the great strengths of PPCMEM and \co{herd}
 is their detailed modeling of various CPU families memory models,
 including x86, ARM, Power, and, in the case of \co{herd},
-% TODO: Apply
 even a Linux-kernel memory model~\cite{Alglave:2018:FSC:3173162.3177156},
 which has been been accepted into version v4.17 of
 the Linux kernel.
@@ -248,7 +247,9 @@ but it may be some time before this comes to pass.
 \label{sec:future:Overhead}
 
 거의 모든 하드코어 formal-verification 도구들이 기본적으로 기하급수적으로
-증가하는 오버헤드를 갖습니다만, 그 정도에는 차이가 있습니다.
+증가하는 오버헤드를 가져서, 많은 흥미로운 소프트웨어 질문들은 실제로 논증
+불능이란 걸 여러분이 고려하기 전까지는 사용하고 싶지 않게 보일 겁니다.
+하지만, 그 기하급수적 단계 사이에도 그 정도에는 차이가 있습니다.
 
 PPCMEM 은 설계적으로 최적화 되어 있지 않은데, 관심의 메모리 모델이 실제로
 정확하게 표현되었음에 대한 확증을 주기 위해서입니다.
@@ -387,11 +388,11 @@ exists (0:r1=0 /\ 1:r1=0)
 수 있습니다.
 이 모델은 \co{spin_lock()} 과 \co{spin_unlock()} 기능을 제공하지만, 이 기능들은
 또한
-Listing~\ref{lst:formal:Emulating Locking with cmpxchg}
+Listing~\ref{lst:future:Emulating Locking with cmpxchg}
 (\path{C-SB+l-o-o-u+l-o-o-*u.litmus} 와 \path{C-SB+l-o-o-u+l-o-o-u*-C.litmus})
 에 보인대로 \co{cmpxchg_acquire()} 와 \co{smp_store_release()} 를 사용해서도
 에뮬레이션 될 수 있습니다.
-Table~\ref{tab:formal:Emulating Locking: Performance (s)}
+Table~\ref{tab:future:Emulating Locking: Performance (s)}
 은 이 모델의 \co{spin_lock()} 과 \co{spin_unlock()} 을 사용할 때의 성능과
 확장성을 이 기능들을 앞의 리스트에 보인대로 에뮬레이션 했을 때와 비교합니다.
 이 차이는 무의미하지 않습니다: 네개 프로세스에서, 이 모델은 에뮬레이션보다 백배
@@ -415,7 +416,7 @@ is more than two orders of magnitude faster than emulation!
 \fi
 
 \QuickQuiz{}
-	Listing~\ref{lst:formal:Emulating Locking with cmpxchg}
+	Listing~\ref{lst:future:Emulating Locking with cmpxchg}
 	의 line~26 에서 해당 컨디션을 그냥 \co{exists} 절에 넣는 대신 왜 별개의
 	\co{filter} 커맨드를  사용하나요?
 	그리고 \co{cmpxchg_acquire()} 대신 \co{xchg_acquire()} 를 사용하는게 더
@@ -470,7 +471,7 @@ is more than two orders of magnitude faster than emulation!
 	실패의 경우에는 쓰기를 하지 않을 \co{cmpxchg_acquire()} 를 사용하는
 	모델보다 많은 오퍼레이션을 갖게 될 것을 의미합니다.
 	더 많은 쓰기는
-	Table~\ref{tab:formal:Emulating Locking: Performance Comparison (s)}
+	Table~\ref{tab:future:Emulating Locking: Performance Comparison (s)}
 	(\path{C-SB+l-o-o-u+l-o-o-*u.litmus},
 	\path{C-SB+l-o-o-u+l-o-o-u*-C.litmus},
 	\path{C-SB+l-o-o-u+l-o-o-u*-CE.litmus},
@@ -535,10 +536,9 @@ to increase over time.
 
 \co{cbmc} 의 출력은 소스 코드로 매핑되는 기록을 포함하며, Promela/spin 의 것과
 유사하고, Nidhugg 도 그러합니다.
-물론, 이런 기록은 매우 길수도 있습니다만, 이는 거의 항상 분석할 가치가
-있습니다.
-그러는게 지겨울 수 있긴 하지만, 과거의 방식으로 버그를 찾는것보다는 일반적으로
-훨씬 빠르고 즐겁습니다.
+물론, 이런 기록은 매우 길수도 있고, 그걸 분석하는건 상당히 지루할 수 있습니다.
+하지만, 그러는게 과거의 방식으로 버그를 찾는것보다는 일반적으로 훨씬 빠르고
+즐겁습니다.
 \iffalse
 
 Any software artifact of any size contains bugs.
@@ -583,7 +583,9 @@ are the rest of us.
 
 이게 다가 아니라, 리눅스 커널 RCU 를 포함한 여러 소프트웨어 제품들을 위한
 요구사항은 근본적으로
-경험적입니다~\cite{PaulEMcKenney2015RCUreqts1,PaulEMcKenney2015RCUreqts2,PaulEMcKenney2015RCUreqts3}.
+경험적입니다~\cite{PaulEMcKenney2015RCUreqts1,PaulEMcKenney2015RCUreqts2,PaulEMcKenney2015RCUreqts3}.\footnote{
+	또는, formal-verification 용어로, 리눅스 커널 RCU 는 \emph{불완전한
+	명세}를 가지고 있습니다.}
 이런 흔한 종류의 소프트웨어에게, 완전한 명세는 환상입니다.
 하드웨어에게 완전한 명세는 더이상 환상만이 아닌데, 2017년 말의 Meltdown 과
 Spectre side-channel 공격~\cite{JannHorn2018MeltdownSpectre} 을 통해
@@ -646,8 +648,9 @@ thus implicitly adding them to the specification.
 \fi
 
 이 암묵적 명세 접근법은 상당히 말이 되는데, 여러분이 formal verification 을
-올바름에 대한 완전한 증명으로 보기보다는 테스트와 같이 서로 다른 강점과 약점을
-가진 하나의 대안으로 생각하고 있다면 특히 그렇습니다.
+올바름에 대한 완전한 증명으로 보기보다는 일반적으로 사용되는, 테스트와 다른
+강점과 약점을 가진 하나의 대안적 형태의 검증이라고 생각하고 있다면 특히
+그렇습니다.
 이 관점에서, 소프트웨어는 항상 버그를 가지고 있고, 따라서 이런 버그를 찾아주는
 모든 종류의 도구는 실제로 매우 좋은 물건입니다.
 \iffalse
@@ -1007,8 +1010,9 @@ so they are all yellow with question marks.
 	결국은요.
 	어쩌면 지질 시대적 시간 안에 말입니다.
 
-	하지만 여러분의 코드가 200억개의 시스템에서 돌아가고 있다면, Murphy 는
-	진짜 짜증나는 놈일 수 있어요!
+	하지만 여러분의 코드가 2017년 말의 리눅스 커널이 그렇다 이야기되었듯
+	200억개의 시스템에서 돌아가고 있다면, Murphy 는 진짜 짜증나는 놈일 수
+	있어요!
 	모든것은 잘못될 수 있고, 그럴 것이며, 매우 빨리 잘못될 수 있습니다!!!
 	\iffalse
 
@@ -1057,6 +1061,11 @@ so they are all yellow with question marks.
 	파일 시스템을 검증하는데 사용되었습니다.
 	\emph{여러분의} formal verification 도구는 Mars 탐사선에 사용되었나요?}
 단지 regression testing 을 위한 건 아니란 거죠.
+
+하지만, 이는 바뀔 수 있습니다.
+무엇보다, formal verification 도구들은 2010년대에 인상적인 활보들을 보였습니다.
+이 발전이 지속된다면, formal verification 은 병렬 프로그래머의 검증 도구상자에
+없을 수 없는 도구가 될 수도 있을 겁니다.
 \iffalse
 
 Once again, please note that this table rates these tools for use in
@@ -1068,10 +1077,9 @@ many of them have proven their worth many times over.\footnote{
 	of none other than the Curiosity Rover.
 	Was \emph{your} formal verification tool used on a Mars rover?}
 Just not for regression testing.
-\fi
 
-% TODO: Apply
 However, this might well change.
 After all, formal verification tools made impressive strides in the 2010s.
 If that progress continues, formal verification might well become an
 indespensible tool in the parallel programmer's validation toolbox.
+\fi
