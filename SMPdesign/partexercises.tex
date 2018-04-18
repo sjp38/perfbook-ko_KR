@@ -1155,12 +1155,11 @@ Compound 기반 구현은 Section~\ref{sec:SMPdesign:Hashed Double-Ended Queue} 
 물론, 더 똑똑한 균형잡기 방법들은 어느정도 복잡할 수 있겠습니다만, 여기 소개한
 간단한 방법들은 다른 소프트웨어 기반
 방법들~\cite{LukeDalessandro:2011:ASPLOS:HybridNOrecSTM:deque} 과 비교해서도,
-그리고 심지어 하드웨어의 도움을 받는
-알고리즘들~\cite{DavidDice:2010:SCA:HTM:deque} 과 비교해서도 잘 동작함을 보이기
-위한 것들입니다.
-더도 아니고 덜도 아니고, 이런 방법에서 우리가 최대한 희망할 수 있는 건
-2배까지의 확장성인데, 최대 두개의 쓰레드가 디큐를 위한 락들을 동시에 잡고 있을
-수 있기 때문입니다.
+심지어 하드웨어의 도움을 받는
+알고리즘들~\cite{DavidDice:2010:SCA:HTM:deque} 과 비교해서도 잘 동작한다고
+알려져 있습니다.
+그러나, 이런 방법에서 우리는 최대 2배의 확장성까지만 기대할 수 있는데, 최대
+두개의 쓰레드가 디큐를 위한 락들을 동시에 잡고 있을 수 있기 때문입니다.
 이런 제약은 Michael 의 compare-and-swap 기반 디큐
 알고리즘~\cite{DBLP:conf/europar/Michael03} 과 같은 non-blocking 동기화
 알고리즘에도 적용됩니다.\footnote{
@@ -1215,10 +1214,10 @@ Michael~\cite{DBLP:conf/europar/Michael03}.\footnote{
 사실, Dice 등~\cite{DavidDice:2010:SCA:HTM:deque} 에 의해 이야기 되었듯, 동기화
 되지 않은 단일 쓰레드 기반 double-ended 큐는 그들이 알아본 다른 어떤 병렬
 구현들보다도 성능이 좋습니다.
-따라서, 핵심은 실제 구현과 관계 없이 공유된 큐에 인큐와 디큐를 하는 데에는
-커다란 오버헤드가 존재한다는 점입니다.
-Chapter~\ref{chp:Hardware and its Habits} 에서의 내용이 이 큐들의 FIFO 의
-섭리를 생각하면 크게 놀라운 일도 아닙니다.
+따라서, 공유된 큐에 enqueue 와 dequeue 를 하는 데에는 실제 구현과 관계 없이
+커다란 오버헤드가 존재한다는 점이 핵심입니다.
+Chapter~\ref{chp:Hardware and its Habits} 에서의 내용과 이 큐들의 FIFO 특성을
+생각하면 크게 놀라운 일도 아닙니다.
 \iffalse
 
 In fact, as noted by Dice et al.~\cite{DavidDice:2010:SCA:HTM:deque},
@@ -1239,7 +1238,7 @@ FIFO nature of these queues.
 	섹션 안의 어딘가라고 할 수 있습니다.}
 들에 대해서만 엄격하게 FIFO 인데, 이 예에서, linearization point 들은 락 기반의
 크리티컬 섹션들 안에 있습니다.
-이런 큐들은 개별적인 오퍼레이션들이 시작된 시점의 관점에서는 철저한 FIFO 가
+개별적인 오퍼레이션들이 시작된 시점의 관점에서 보기에 이 큐들은 엄격한 FIFO 는
 아닙니다~\cite{AndreasHaas2012FIFOisnt}.
 이는 동시적 프로그램들에서 철저한 FIFO 속성은 그렇게 가치있는 것은 아님을
 의미하며, 실제로 Kirsch 등은 향상된 성능과 확장성을 제공하는 덜 철저한 큐들을
@@ -1286,13 +1285,13 @@ overall design.
 \subsection{Partitioning Example Discussion}
 \label{sec:SMPdesign:Partitioning Example Discussion}
 
-Section~\ref{sec:SMPdesign:Dining Philosophers Problem} 의 퀵 퀴즈에 대한
+Section~\ref{sec:SMPdesign:Dining Philosophers Problem} 의 Quick Quiz 에 대한
 답으로 이야기된 식사하는 철학자들 문제의 최적화된 해결책은 ``수평적 병렬성''
 또는 ``데이터 병렬성'' 의 훌륭한 예 중 하나입니다.
 이 경우의 동기화 오버헤드는 거의 (또는 정확히) 없습니다.
 반면, double-ended 큐 구현은 ``수직적 병렬성'' 또는 ``파이프라이닝'' 의 예로,
 데이터를 한 쓰레드에서 다른 쓰레드로 옮깁니다.
-파이프라이닝에 필요한 더 밀착된 협동은 일의 더 큰 단위가 주어진 수준의 효율성을
+파이프라이닝에 필요한 더 밀착된 협동은 일의 더 큰 단위가 특정 수준의 효율성을
 가질 것을 필요로 합니다.
 \iffalse
 
@@ -1330,7 +1329,7 @@ larger units of work to obtain a given level of efficiency.
 	허용하지만, 일반적인 경우에는 오퍼레이션당 하나의 락 획득만을 필요로
 	합니다.
 	따라서, 직렬화된 double-ended 큐는 해시 기반 double-ended 큐보다 성능이
-	나을 것으로 여겨집니다.
+	나을 것으로 예상될 수 있습니다.
 
 	여러개의 동시적 오퍼레이션들을 가능하게 하는 double-ended 큐를 만들 수
 	있을 것 같나요?
@@ -1372,8 +1371,7 @@ larger units of work to obtain a given level of efficiency.
 	아이템을 처음으로 처리할 것이라는 의미를 갖지는
 	않습니다~\cite{AndreasHaas2012FIFOisnt}.
 	그리고 그런 보장이 없다면, 이런 보장을 제공하지 않는데서 오는 성능
-	이득을 얻을 수도 있을 것입니다.
-	% 4.2GHz Power 에서 해시 기반 버전보다 2배 가량 빠름.
+	이득을 얻을 수도 있을 겁니다.
 	\iffalse
 
 	One approach is to transform the problem to be solved
@@ -1398,8 +1396,8 @@ larger units of work to obtain a given level of efficiency.
 	\fi
 
 	문제가 여러 큐를 사용하는 형태로 바뀔 수 있느냐 없느냐와 관계없이, 일이
-	몰아서 처리될 수 있어서 각 인큐와 디큐 오퍼레이션이 더 큰 단위의 일에
-	연관될 수 있는지 알아보는 것도 해볼 가치가 있습니다.
+	몰아서 처리될 수 있어서 각 enqueue 와 dequeue 오퍼레이션이 더 큰 단위의
+	일에 연관될 수 있는지 알아보는 것도 해볼 가치가 있습니다.
 	이 배칭 (batching) 전략은 큐 데이터 구조체들로의 경쟁을 줄여줘서,
 	성능과 확장성 둘 다를 증가시켜주는데,
 	Section~\ref{sec:SMPdesign:Synchronization Granularity} 에서 알아볼
@@ -1431,7 +1429,7 @@ larger units of work to obtain a given level of efficiency.
 이 두개의 예들은 병렬 알고리즘을 고안하는데 파티셔닝이 얼마나 강력하지
 보여줍니다.
 Section~\ref{sec:SMPdesign:Locking Granularity and Performance} 에서는 세번째
-예, 행렬 곱셈을 간단히 볼 겁니다.
+예인 행렬 곱셈을 간단히 볼 겁니다.
 하지만, 이 세개의 예 모두 병렬 프로그램들의 더 나은 디자인 표준을 필요로
 하는데, 이는 다음 섹션의 주제입니다.
 \iffalse
