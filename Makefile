@@ -54,13 +54,11 @@ PNGTARGETS_OF_SVG := $(SVG_LARGE_BITMAP:%.svg=%.png)
 TARGETS_OF_SVG :=  $(PDFTARGETS_OF_SVG) $(PNGTARGETS_OF_SVG)
 
 DOT := $(shell which dot 2>/dev/null)
-
 FIG2EPS := $(shell which fig2eps 2>/dev/null)
-
 A2PING := $(shell which a2ping 2>/dev/null)
-
 INKSCAPE := $(shell which inkscape 2>/dev/null)
-
+LATEXPAND := $(shell which latexpand 2>/dev/null)
+STEELFONT := $(shell fc-list | grep -c -i steel)
 URWPS := $(shell fc-list | grep "Nimbus Mono PS" | wc -l)
 
 ifeq ($(URWPS),0)
@@ -69,6 +67,19 @@ FIXANEPSFONTS = utilities/fixanepsfonts.sh
 else
 FIXSVGFONTS   = utilities/fixsvgfonts-urwps.sh
 FIXANEPSFONTS = utilities/fixanepsfonts-urwps.sh
+endif
+
+STEELFONTID := $(shell fc-list | grep -i steel | grep -c Steel)
+
+ifdef A2PING
+A2PING_277P := $(shell a2ping --help 2>&1 | grep -c "2.77p,")
+ifeq ($(A2PING_277P),1)
+GS_VER := $(shell gs --version)
+A2PING_GSCNFL := $(shell env printf "%05.2f\n%05.2f\n" $(GS_VER) 9.22 | \
+	sort | head -1 | grep -c "09.22")
+else
+A2PING_GSCNFL := 0
+endif
 endif
 
 default = $(PERFBOOK_DEFAULT)
@@ -105,6 +116,9 @@ autodate.tex: perfbook.tex $(LATEXSOURCES) $(BIBSOURCES) $(SVGSOURCES) $(FIGSOUR
 	sh utilities/autodate.sh >autodate.tex
 
 perfbook_flat.tex: autodate.tex $(PDFTARGETS_OF_EPS) $(TARGETS_OF_SVG)
+ifndef LATEXPAND
+	$(error --> $@: latexpand not found. Please install it)
+endif
 	echo > qqz.tex
 	echo > contrib.tex
 	echo > origpub.tex
@@ -169,7 +183,7 @@ $(EPSSOURCES_FROM_TEX): %.eps: %.tex
 $(EPSSOURCES_FROM_DOT): %.eps: %.dot
 	@echo "$< --> $@"
 ifndef DOT
-	$(error "$< --> $@: dot not found. Please install graphviz")
+	$(error $< --> $@: dot not found. Please install graphviz)
 endif
 	@dot -Tps -o $@ $<
 	@sh $(FIXANEPSFONTS) $@
@@ -177,43 +191,60 @@ endif
 $(EPSSOURCES_FROM_FIG): %.eps: %.fig
 	@echo "$< --> $@"
 ifndef FIG2EPS
-	$(error "$< --> $@: fig2eps not found. Please install fig2ps")
+	$(error $< --> $@: fig2eps not found. Please install fig2ps)
 endif
 	@fig2eps --nogv $< > /dev/null 2>&1
 	@sh $(FIXANEPSFONTS) $@
 
 $(PDFTARGETS_OF_EPSORIG): %.pdf: %.eps
 	@echo "$< --> $@"
+ifndef A2PING
+	$(error $< --> $@: a2ping not found. Please install it)
+endif
+ifeq ($(A2PING_GSCNFL),1)
+	$(error a2ping version conflict. See #7 in FAQ-BUILD.txt)
+endif
 	@cp $< $<i
 	@sh $(FIXANEPSFONTS) $<i
-ifndef A2PING
-	$(error "$< --> $@: a2ping not found. Please install it.")
-endif
 	@a2ping --below --hires --bboxfrom=compute-gs $<i $@ > /dev/null 2>&1
 	@rm -f $<i
 
 $(PDFTARGETS_OF_EPSOTHER): %.pdf: %.eps
 	@echo "$< --> $@"
 ifndef A2PING
-	$(error "$< --> $@: a2ping not found. Please install it.")
+	$(error $< --> $@: a2ping not found. Please install it)
+endif
+ifeq ($(A2PING_GSCNFL),1)
+	$(error a2ping version conflict. See #7 in FAQ-BUILD.txt)
 endif
 	@a2ping --below --hires --bboxfrom=compute-gs $< $@ > /dev/null 2>&1
 
 $(PDFTARGETS_OF_SVG): %.pdf: %.svg
 	@echo "$< --> $@"
-ifndef INKSCAPE
-	$(error "$< --> $@: inkscape not found. Please install it.")
+ifeq ($(STEELFONT),0)
+	$(error "Steel City Comic" font not found. See #1 in FAQ.txt)
 endif
+ifndef INKSCAPE
+	$(error $< --> $@ inkscape not found. Please install it)
+endif
+ifeq ($(STEELFONTID),0)
+	@sh $(FIXSVGFONTS) < $< | sed -e 's/Steel City Comic/Test/g' > $<i
+else
 	@sh $(FIXSVGFONTS) < $< > $<i
+endif
 	@inkscape --export-pdf=$@ $<i > /dev/null 2>&1
 	@rm -f $<i
 
 $(PNGTARGETS_OF_SVG): %.png: %.svg
 	@echo "$< --> $@"
 ifndef INKSCAPE
-	$(error "$< --> $@: inkscape not found. Please install it.")
+	$(error $< --> $@: inkscape not found. Please install it)
 endif
+ifeq ($(STEELFONTID),0)
+	@sh $(FIXSVGFONTS) < $< | sed -e 's/Steel City Comic/Test/g' > $<i
+else
 	@sh $(FIXSVGFONTS) < $< > $<i
+endif
 	@inkscape --export-dpi=200 --export-png=$@ $<i > /dev/null 2>&1
 	@rm -f $<i
 
