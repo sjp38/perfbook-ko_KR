@@ -395,11 +395,11 @@ hierarchy~\cite{JonathanCorbet2006lockdep}.
 \subsubsection{Local Locking Hierarchies}
 \label{sec:locking:Local Locking Hierarchies}
 
-하지만, 전역적이라는 락킹 계층의 본연적 특성은 해당 방법을 라이브러리 함수에
+하지만, 전역적이라는 락킹 계층의 본연적 특성은 이 방법을 라이브러리 함수에
 적용하기 어렵게 합니다.
-무엇보다도, 주어진 라이브러리 함수를 사용하는 프로그램은 아직 작성되지도
-않았고, 따라서 어떻게 이 불쌍한 라이브러리 함수 구현자가 아직 작성되지 않은
-프로그램의 락킹 계층에 충실할 수 있기를 바랄 수 있겠어요?
+어쨌든, 주어진 라이브러리 함수를 사용하는 프로그램은 아직 작성되지도 않았는데
+어떻게 이 불쌍한 라이브러리 함수 구현자가 아직 작성되지 않은 프로그램의 락킹
+계층에 충실할 수 있기를 바랄 수 있겠어요?
 
 다행히도 일반적인 특수한 경우가 있는데 해당 라이브러리 함수가 호출자의 코드를
 전혀 사용하지 않을 때입니다.
@@ -497,12 +497,12 @@ containing locks from both the library and the caller.
 
 하지만 라이브러리 함수가 실제로 호출자의 코드를 실행하는 경우를 생각해 봅시다.
 예를 들어, \co{qsort()} 함수는 호출자가 제공하는 비교 함수를 실행합니다.
-\co{qsort()} 의 동시적인 구현은 아마도 락킹을 사용할텐데, 이는 아마도 그러지
+\co{qsort()} 의 동시성 있는 구현은 아마도 락킹을 사용할텐데, 이는 아마도 그러지
 않을 확률이 크긴 한 케이스지만 비교 함수가 락킹에도 관여되는 좀 복잡한 함수인
 경우라면 데드락을 일으킬 수 있습니다.
 이 라이브러리 함수는 어떻게 데드락을 막을 수 있을까요?
 
-이 경우에의 황금률은 ``알 수 없는 코드를 실행하기 전에 모든 락을 놓아버리기''
+이 경우의 황금률은 ``알 수 없는 코드를 실행하기 전에 모든 락을 놓아버리기''
 입니다.
 이 규칙을 따르기 위해선, 앞서 언급한 \co{qsort()} 함수는 비교 함수를 실행하기
 전에 모든 락을 해제해야만 합니다.
@@ -525,8 +525,8 @@ locks before invoking the comparison function.
 
 \QuickQuiz{}
 	하지만 \co{qsort()} 가 비교 함수를 실행하기 전에 그 자신의 락들을 모두
-	해제해버리면, 다른 \co{qsort()} 쓰레드들과의 경주 문제를 어떻게 지킬 수
-	있나요?
+	해제해버리면, 다른 \co{qsort()} 쓰레드들과의 경주 문제로부터 안전성을
+	어떻게 지킬 수 있나요?
 	\iffalse
 
 	But if \co{qsort()} releases all its locks before invoking
@@ -534,10 +534,11 @@ locks before invoking the comparison function.
 	with other \co{qsort()} threads?
 	\fi
 \QuickQuizAnswer{
-	비교되는 데이터 원소들을 사유화 시켜버리거나 (Chapter~\ref{chp:Data
-	Ownership} 에서 설명한 것과 같이) 레퍼런스 카운팅과 같은 뒤로 미루기
-	메커니즘을 사용하는 것 (Chapter~\ref{chp:Deferred Processing} 에서
-	설명한 것과 같이) 으로 가능합니다.
+	비교되는 데이터 원소들을 사유화 시켜버리거나
+	(Chapter~\ref{chp:Data Ownership} 에서 설명한 것과 같이) 레퍼런스
+	카운팅과 같은 뒤로 미루기 메커니즘을 사용하는 것
+	(Chapter~\ref{chp:Deferred Processing} 에서 설명한 것과 같이) 으로
+	가능합니다.
 	\iffalse
 
 	By privatizing the data elements being compared
@@ -566,7 +567,7 @@ locks before invoking the comparison function.
 Figure~\ref{fig:lock:Without Local Locking Hierarchy for qsort()} 와
 \ref{fig:lock:Local Locking Hierarchy for qsort()} 를 비교해 보시기 바랍니다.
 두개의 그림에서, 어플리케이션의 함수들인 \co{foo()} 와 \co{bar()} 는 각각
-Lock~A 와 B 를 잡은 상태로 \co{qsort()} 를 호출합니다.
+Lock~A 와~B 를 잡은 상태로 \co{qsort()} 를 호출합니다.
 이것은 \co{qsort()} 의 병렬화된 구현이기 때문에, 이 함수는 Lock~C 를 잡습니다.
 함수 \co{foo()} 는 \co{cmp()} 함수를 \co{qsort()} 에게 전달하고, \co{cmp()}
 함수는 Lock~B 를 잡습니다.
@@ -592,8 +593,8 @@ locks.
 Figure~\ref{fig:lock:Without Local Locking Hierarchy for qsort()} 에 보인
 것처럼 \co{cmp()} 를 호출하는 동안 Lock~C 를 잡고 있는다면 데드락이 일어날 수
 있습니다.
-이를 확실히 보기 위해, 한 쓰레드가 \co{foo()} 를 호출했고 두번째 쓰레드가
-그사이 동시적으로 \co{bar()} 를 호출하는 경우를 생각해 봅시다.
+이를 좀 더 자세히 보기 위해, 한 쓰레드가 \co{foo()} 를 호출했고 두번째 쓰레드가
+그사이 \co{bar()} 를 호출하는 경우를 생각해 봅시다.
 첫번째 쓰레드는 Lock~A 를 잡고 두번째 쓰레드는 Lock~B 를 잡게 됩니다.
 만약 첫번째 쓰레드의 \co{qsort()} 함수 호출이 Lock~C 를 잡게 된다면, 이제
 \co{qsort()} 안에서 \co{cmp()} 함수를 호출했을 때 Lock~B 를 잡는 것은
