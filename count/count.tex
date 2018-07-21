@@ -950,15 +950,15 @@ normal loads suffice, and no special atomic instructions are required.
 	C 는 어토믹하게 \co{long} 타입 변수를 읽어들일 수가 없는 (예를
 	들면) 8-비트 아키텍쳐를 지원해야만 했기에 C 표준은 다른 선택의 여지가
 	없었습니다.
-	다음 버전의 C 표준에서는 이 현실과의 격차를 해결해 보려 합니다만, 그
-	전까지는 \GCC\ 개발자들의 친절함에 의존해야 합니다.
-
-	대신, 하드웨어가 한번의 메모리 참조 명령으로 필요한 값을 읽을 수 있는
-	경우라면, \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 에 의해 제공되는
-	volatile 접근을 사용해서 컴파일러에 제약을 가할 수 있습니다.\footnote{
-		\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 의 간단한 정의가
-		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for
-		GCC)}에 보여져 있습니다.}
+	최신 버전의 C 표준은 이 간극을 매우기 위한 의도로 atomic 기능을
+	추가했습니다.
+	하지만, 이것들을 리눅스 커널에 적용하려는 시도는 뭐가 뭔지 모를 결과를
+	내놓았는데~\cite{JonathanCorbet2016C11atomics}, 이는 부분적으로는
+	atomic 기능이 만들어내는 코드의 낮은 품질 때문이기도 합니다.
+	또한, 리눅스 커널은 스스로의 메모리 모델에서 C11 어토믹 기능이 제공하는
+	것보다 훨씬 다양한 기능을 기대하는데, 컨트롤 의존성, full
+	barrier/fence, 그리고 낮은 오버헤드의 어드레스와 데이터 종속성이 여기
+	포함됩니다~\cite{PaulEMcKenney2016P0124R5-LKMM}.
 	\iffalse
 
 	According to the C standard, the effects of fetching a variable
@@ -976,6 +976,19 @@ normal loads suffice, and no special atomic instructions are required.
 	memory model than C11 atomics provide, including control
 	dependencies, full barriers/fences, and low-overhead address
 	and data dependencies~\cite{PaulEMcKenney2016P0124R5-LKMM}.
+	\fi
+
+	언젠가는 C11 어토믹 기능이 이 간극을 메우겠지만, 그 때가 오기 전까지
+	리눅스 커널은 volatile 접근, inline 어셈블리, 컴파일러 지시어, 그리고
+	코딩 표준의 조합을 사용해 공유 변수들에 안전한 접근을 할 겁니다.
+	이 방법은 리눅스 커널이 훌륭한 성능을 유지하고 C11 어토믹 기능을
+	지원하지 않는 오래된 컴파일러도 사용할 수 있게 해줍니다만, 리눅스
+	커널을 새로운 CPU 아키텍쳐로 포팅하려 할 때 노력을 필요로 하게 합니다.
+	그러나, C11 어토믹 기능이 바로 사용된다고 해도 컨텍스트 스위치,
+	인터럽트, 익셉션, MMU, 전력 효율을 위한 전력 관리, 그 외에도 여러가지를
+	다루기 위해 상당한 노력이 필요할 겁니다.
+	따라서 리눅스 커널의 C11 어토믹 기능 적용은 점진적인게 최선일 겁니다.
+	\iffalse
 
 	At some point, C11 atomics might close these gaps,
 	but until then, the Linux kernel uses a combination of
@@ -991,6 +1004,25 @@ normal loads suffice, and no special atomic instructions are required.
 	power control for energy efficiency, and much else besides.
 	It is therefore reasonable to expect that any Linux-kernel
 	adoption of C11 atomics will be incremental at best.
+	\fi
+
+	그러니 평범한 기존의 C-언어 할당문을 사용해 공유 변수에 접근하는게
+	어떻습니까?
+	문제는 컴파일러가 다른 쓰레드가 해당 변수에 접근하고 있지 않을 거라고
+	가정해도 될 권리를 가지고 있다는 겁니다.
+	따라서, 컴파일러는 평범한 기존의 C-언어 로드 명령을 가지고 한번에 한
+	바이트씩 읽기를 하거나 (``로드 티어링''), 읽기 동작을 반복하거나
+	(레지스터가 부족할 때 많이 사용되는 방법입니다), 같은 변수로부터의
+	연속적 로드를 합쳐버릴 수 있습니다.
+	이런 동작들 각각은 싱글 쓰레드 알고리즘의 정확성은 지키겠지만, 이것들
+	모두 동시성 있는 알고리즘의 정확성을 쉽게 망가트릴 수 있습니다.
+	공유 메모리 동시성의 주요한 주의사항은 그런 충돌하는 접근들을 지원하기
+	위한 것으로, 다른 쓰레드에 의해 동시에 업데이트 될 수 있는 변수들을
+	평범한 C-언어 로드와 스토어를 사용해 접근하는 것은 매우 현명치 못한
+	짓입니다.
+	더 나아가서, 현재의 C11 어토믹 기능들은 (여전히?) 리눅스 커널에 적절치
+	않으므로, 뭔가 다른게 필요합니다.
+	\iffalse
 
 	So why not just use plain old C-language assignment statements
 	to access shared variables?
@@ -1015,6 +1047,23 @@ normal loads suffice, and no special atomic instructions are required.
 	be concurrently updated by other threads.
 	Further, given that current C11 atomics are not (yet?) a good
 	match for the Linux kernel, something else is required.
+	\fi
+
+	한가지 접근법은 락킹과 같은 블록킹 동기화 기능
+	(Chapter~\ref{chp:Locking} 를 참고하세요) 을 사용해서 동시의 업데이트를
+	막는 겁니다.
+	대안적으로, 하드웨어가 하나의 메모리 레퍼런스 명령어로 그 값을 접근할
+	수 있는 경우라면 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 로 제공되는
+	volatile 접근이\footnote{
+		\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 에 대한 간단한 정의가
+		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for
+		GCC)} 에 보여져 있습니다.}
+	사용될 수 있습니다.
+	하지만, volatile 액세스는 그것 자체만으로는 고성능과 안정성 있는 동기화
+	메커니즘에 충분치 않습니다.
+	따라서 리눅스 커널은 volatile 액세스를 앞서 언급된 inline 어셈블리,
+	컴파일러 지시어, 그리고 코딩 표준과 조합해 사용하고 있습니다.
+	\iffalse
 
 	One approach is to prevent concurrent updates by using
 	blocking synchronization primitives such as locking
@@ -1024,7 +1073,6 @@ normal loads suffice, and no special atomic instructions are required.
 		Simple definitions of \co{READ_ONCE()} and
 		\co{WRITE_ONCE()} are shown in
 		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.}
-	% TODO: Apply
 	at least in cases where the hardware is capable of accessing
 	the value with a single memory-reference instruction.
 	However, volatile accesses do not by themselves suffice for
