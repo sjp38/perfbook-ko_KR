@@ -7,7 +7,7 @@
 동시적으로 수행되는 레퍼런스 카운팅에서의 문제를 해결하는 한가지 방법은
 레퍼런스 카운터들을 뒤집어서 구현하는 것으로,
 데이터 원소에 저장되어 있는 정수를 증가시키는 게 아니라, CPU 별 (또는 쓰레드별)
-리스트들에 그 데이터 원소로의 포인터를 저장해 두는 것입니다.
+리스트에 그 데이터 원소로의 포인터를 저장해 두는 것입니다.
 이런 리스트의 각 원소들은 \emph{해저드 포인터}~\cite{MagedMichael04a} 라고
 불립니다.\footnote{
 	그와 독립적으로 다른 사람들에 의해 개발된 것도
@@ -67,11 +67,12 @@ may safely be freed.
 \label{lst:defer:Hazard-Pointer Storage and Erasure}
 \end{listing}
 
-물론, 이 말은 해저드 포인터 획득은 동시의 삭제들에 의한 정리 과정의 경주들을
-막기 위해 매우 조심스럽게 행해져야만 합니다.
+물론, 이 말은 해저드 포인터 획득은 동시의 삭제들에 의한 버그 (파멸의
+경주-destructive race- 라고도 합니다)를 막기 위해 매우 조심스럽게 행해져야만
+함을 의미합니다.
 그런 한가지 구현이
-Figure~\ref{lst:defer:Hazard-Pointer Storage and Erasure} 에 보여져 있는데,
-line~1-13 에서 \co{hp_store()} 를 보이고 line~15-20 에서 \co{hp_erase()} 를
+Listing~\ref{lst:defer:Hazard-Pointer Storage and Erasure} 에 보여져 있는데,
+line~1-14 에서 \co{hp_store()} 를 보이고 line~16-21 에서 \co{hp_erase()} 를
 보이고 있습니다.
 \co{smp_mb()} 기능은
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서 자세히
@@ -80,8 +81,8 @@ Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서 자세히
 \co{hp_store()} 함수는 동시의 수정을 체크하면서 \co{p} 에 의해 레퍼런스되는
 포인터가 있는 데이터 원소를 위한 해저드 포인터를 \co{hp} 에 저장합니다.
 동시의 수정이 이뤄졌다면, \co{hp_store()} 는 해저드 포인터를 저장하는 것을
-거부하고 0을 리턴함으로써 호출자는 다시 처음부터 데이터 접근을 다시 시작해야
-함을 알립니다.
+거부하고 0을 리턴함으로써 호출자는 처음부터 데이터 접근을 다시 시작해야 함을
+알립니다.
 그렇지 않다면, \co{hp_store()} 는 해당 데이터 원소를 위한 해저드 포인터를
 성공적으로 기록했음을 알리기 위해 1을 리턴합니다.
 \iffalse
@@ -120,7 +121,7 @@ recorded a hazard pointer for the data element.
 	Why not \co{void *} instead of \co{void **}?
 	\fi
 \QuickQuizAnswer{
-	\co{hp_record()} 는 동시의 수정에 대해서 체크를 해봐야 하기 때문입니다.
+	\co{hp_store()} 는 동시의 수정에 대해서 체크를 해봐야 하기 때문입니다.
 	이 일을 하기 위해서는 그 원소로의 포인터로의 포인터가 필요한데, 그게
 	있으면 해당 원소로의 포인터로의 수정이 있었는지 검사할 수 있기
 	때문입니다.
@@ -147,7 +148,7 @@ recorded a hazard pointer for the data element.
 	어떻게 보면 좀 비효율적일 수도 있겠습니다만 분명한 사실은 정확성을 위해
 	그런 처음부터의 재시작이 반드시 필요하다는 점입니다.
 	이를 확실히 보기 위해, 원소~A, B, 그리고~C 를 가지고 있는 해저드
-	포인터로 보호되는 링크드 리스트가 다음의 일련의 이벤트들을 받는다고
+	포인터로 보호되는 링크드 리스트가 다음의 일련의 이벤트들을 겪는다고
 	생각해 봅시다:
 	\iffalse
 
@@ -194,13 +195,13 @@ recorded a hazard pointer for the data element.
 	\end{enumerate}
 
 	따라서 처음부터 다시 탐색하는게 좋은 방법인데, 이렇게 하지 않는다면
-	쓰레드~0 는 이제는 제거된 원소~C 에 액세스를 시도할 수 있는데, 이는
+	쓰레드~0 는 이제는 제거된 원소~C 에 액세스를 시도할 수 있으며, 이는
 	임의의 끔찍한 메모리 오염을 일으키는 결과를 만들어낼 수 있는데, 특히나
 	원소~C 를 위해 사용되던 메모리가 어떤 다른 목적으로 재할당 되었다면
 	특히 그럴 것이기 때문입니다.
 
 	그와는 별개로, 해저드 포인터의 재시작은 최소한의 메모리 사용량을 유지할
-	수 있도록 함을 이해하기 바랍니다.
+	수 있도록 함을 이해하시기 바랍니다.
 	현재 해저드 포인터로 레퍼런스 되고 있지 않은 오브젝트는 곧바로 해제될
 	수 있습니다.
 	대조적으로,
@@ -268,9 +269,9 @@ recorded a hazard pointer for the data element.
 	\fi
 } \QuickQuizEnd
 
-해저드 포인터들을 사용하는 알고리즘들은 데이터 구조체를 지나가는 중 어떤
+해저드 포인터들을 사용하는 알고리즘들은 데이터 구조체를 탐색하는 중 어떤
 단계에서든 재시작할 수 있으므로, 그런 알고리즘들은 모든 필요한 해저드
-포인터들을 얻어오는 작업이 끝나기 전까지는 이 데이터 구조체에 어떤 변경을
+포인터들을 얻어오는 작업이 끝나기 전까지는 이 데이터 구조체에 어떤 변경도
 가하지 않도록 특별한 주의를 반드시 기울여야만 합니다.
 \iffalse
 
@@ -281,7 +282,7 @@ structure until after they have acquired all relevant hazard pointers.
 \fi
 
 \QuickQuiz{}
-	하지만 해저드 포인터들에 있는 이런 제약사항들은 다른 형태의 레퍼런스
+	하지만 해저드 포인터에 있는 이런 제약사항들은 다른 형태의 레퍼런스
 	카운팅에도 똑같이 적용되는 거 아닌가요?
 	\iffalse
 
@@ -298,20 +299,20 @@ structure until after they have acquired all relevant hazard pointers.
 	\fi
 } \QuickQuizEnd
 
-이런 제약사항들은 읽기를 하는 쓰레드들에는 커다란 이득으로 귀결되는데, 해저드
-포인터들은 각 CPU/쓰레드에 지역적으로 저장되기 때문으로, 이에 의해 데이터
-구조체들을 횡단하는 작업은 완전히 읽기만 하면서 행해질 수 있다는 사실 덕입니다.
+이런 제약사항은 읽기를 하는 쓰레드들에는 커다란 이득이 되는데, 해저드 포인터는
+각 CPU/쓰레드에 지역적으로 저장되기 때문으로, 이에 의해 데이터 구조체를
+탐색하는 작업은 완전히 읽기만 하면서 행해질 수 있다는 사실 덕입니다.
 page~\pageref{fig:count:Optimization and the Four Parallel-Programming Tasks}
 의
 Figure~\ref{fig:count:Optimization and the Four Parallel-Programming Tasks}
-를 다시 인용하자면, 해저드 포인터들은 CPU 캐시들이 리소스 복사를 할 수 있게
-해서 병렬 액세스 컨트롤 메커니즘을 약화시키는 걸 가능하게 하고, 따라서 성능과
+를 다시 인용하자면, 해저드 포인터는 CPU 캐시들이 리소스 복사를 할 수 있게 해서
+병렬 액세스 컨트롤 메커니즘을 완화시키는 걸 가능하게 하고, 따라서 성능과
 확장성을 높여줍니다.
 다른 메커니즘들과의 성능 비교는 Chapter~\ref{chp:Data Structures} 와 다른
 출간물들~\cite{ThomasEHart2007a,McKenney:2013:SDS:2483852.2483867,MagedMichael04a}
 에서 얻을 수 있을 겁니다.
 
-해저드 포인터들은 레퍼런스 카운터들보다 훨씬 더 확장성 있습니다만 여전히 읽기를
+해저드 포인터는 레퍼런스 카운터보다 훨씬 더 확장성 있습니다만 여전히 읽기를
 하는 쓰레드들이 공유 메모리에 쓰기를 하게 합니다.
 다음 섹션의 주제인 시퀀스 카운터들은 읽기 쪽의 쓰기를 완전히 막습니다.
 \iffalse
