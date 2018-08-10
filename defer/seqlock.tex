@@ -11,11 +11,11 @@
 \label{fig:defer:Reader And Uncooperative Sequence Lock}
 \end{figure}
 
-시퀀스 락은 읽기를 하는 쓰레드들에게 일관적인 상태로 보여야만 하는 읽기가
-대부분 이루어지는 데이터를 위해 리눅스 커널에서 사용됩니다.
+시퀀스 락은 주로 읽기가 이루어지는, 그리고 읽기를 하는 쓰레드들에게 일관적인
+상태로 보여야 하는 데이터를 위해 리눅스 커널에서 사용됩니다.
 하지만, reader-writer 락킹과 달리, 읽기를 하는 쓰레드들은 쓰기를 하는
 쓰레드들을 배타시키지 않습니다.
-대신에, 해저드 포인터처럼, 시퀀스 락들은 읽기를 하는 쓰레드들이 동시에 수행중인
+대신에, 시퀀스 락들은 해저드 포인터처럼 읽기를 하는 쓰레드들이 동시에 수행중인
 쓰기를 하는 쓰레드들로부터의 동작이 탐지되면 오퍼레이션을 \emph{재시도} 하도록
 강제합니다.
 Figure~\ref{fig:defer:Reader And Uncooperative Sequence Lock} 에 보여지는
@@ -59,7 +59,7 @@ very rarely need to retry.
 	primitives.
 	\fi
 
-	하지만, 조합된 \co{write_seqlock()} 과 \co{write_sequnlock()} 기능들은
+	하지만, \co{write_seqlock()} 과 \co{write_sequnlock()} 기능의 조합은
 	리눅스 커널에서 훨씬 많이 사용됩니다.
 	더 중요한건, 더 많은 사람들이 ``시퀀스 카운트'' 라고 말하는 것보다는
 	``시퀀스 락'' 이라고 말하는 걸 더 쉽게 이해할 것이라는 점입니다.
@@ -119,15 +119,15 @@ very rarely need to retry.
 시퀀스 락킹에서의 핵심 컴포넌트는 시퀀스 넘버로, 이 수는 업데이트를 하는
 쓰레드가 존재하지 않는다면 짝수를 가지고 진행 중인 업데이트가 있다면 홀수를
 갖습니다.
-읽기를 하는 쓰레드들은 각각의 액세스 전과 후로 이 값을 스냅샷을 뜰 수 있습니다.
+읽기를 하는 쓰레드들은 각각의 액세스 전과 후로 이 값을 스냅샷 뜰 수 있습니다.
 만약 두 스냅샷 중 하나라도 홀수이거나, 두 스냅샷이 서로 다르다면, 동시에
 업데이트가 있었다는 것이고, 따라서 읽기를 한 쓰레드는 해당 액세스의 결과를
 버리고 다시 읽기를 시도해야 합니다.
 시퀀스 락으로 보호되는 데이터에 대해 읽기를 하기 위해서는 \co{read_seqbegin()}
-과 \co{read_seqretry()} 함수들이 Listing~\ref{lst:defer:Sequence-Locking Reader}
-와 같이 사용되어야 합니다.
-쓰기를 하는 쓰레드들은 각가의 업데이트 전과 후에 그 값을 증가시켜야 하는데,
-한번에 하나의 읽기 쓰레드의 수행만이 허가되어 있습니다.
+과 \co{read_seqretry()} 함수들이
+Listing~\ref{lst:defer:Sequence-Locking Reader} 와 같이 사용되어야 합니다.
+쓰기를 하는 쓰레드들은 각 업데이트 전과 후에 그 값을 증가시켜야 하는데, 한번에
+하나의 읽기 쓰레드의 수행만이 허가되어 있습니다.
 쓰기를 하는 쓰레드들은 시퀀스 락으로 보호되는 데이터를 업데이트 하기 위해서는
 \co{write_seqlock()} 과 \co{write_sequnlock()} 함수를
 Listing~\ref{lst:defer:Sequence-Locking Writer} 에 보여진 것처럼 사용합니다.
@@ -222,8 +222,8 @@ It is also used in pathname traversal to detect concurrent rename operations.
 시퀀스 락의 간단한 구현이
 Listing~\ref{lst:defer:Sequence-Locking Implementation}
 (\co{seqlock.h}) 에 있습니다.
-Line~1-4\co{seqlock_t} 데이터 구조체가 있는데, 쓰기를 하는 쓰레드들을 직렬화
-시키기 위한 락과 시퀀스 넘버를 가지고 있습니다.
+Line~1-4 에 \co{seqlock_t} 데이터 구조체가 있는데, 쓰기를 하는 쓰레드들을
+직렬화 시키기 위한 락과 시퀀스 넘버를 가지고 있습니다.
 Line~6-10 에서는 \co{seqlock_init()} 를 보이는데, 이 함수는 이름이 의미하듯이
 \co{seqlock_t} 의 초기화를 합니다.
 \iffalse
@@ -239,8 +239,8 @@ initializes a \co{seqlock_t}.
 
 Line~12-19 는 \co{read_seqbegin()} 함수로, 시퀀스 락의 read-side 크리티컬
 섹션을 시작합니다.
-Line~16 에서 시퀀스 카운터의 스냅샷을 하나 만들고, line~17 에서 이 이 스냅샷의
-만들어진 순서가 호출자의 크리티컬 섹션보다 전이 되도록 순서를 세웁니다.
+Line~16 에서 시퀀스 카운터의 스냅샷을 하나 만들고, line~17 에서 이 스냅샷이
+만들어진 순서가 호출자의 크리티컬 섹션보다 앞이 되도록 순서를 세웁니다.
 마지막으로, line~18 에서 스냅샷의 값을 (least-significant bit 를 비운 상태로)
 리턴하는데, 이 값은 호출자가 뒤의 \co{read_seqretry()} 호출에 넘겨줄 값입니다.
 \iffalse
@@ -314,7 +314,7 @@ in other words, that there has been no writer, and returns false if so.
 \QuickQuizAnswer{
 	만약 그게 없다면, 컴파일러 또는 CPU 가 이 \co{read_seqretry()} 함수
 	호출 전의 크리티컬 섹션을 이 함수 뒤로 옮겨버릴 수도 있기 때문입니다.
-	이렇게 되면 시퀀스 락이 크리티컬 섹션을 보호하지 못하게 만들어 버릴
+	그렇게 되면 시퀀스 락이 크리티컬 섹션을 보호하지 못하게 만들어 버릴
 	겁니다.
 	\co{smp_mb()} 기능은 그런 재배치를 막아줍니다.
 	\iffalse
