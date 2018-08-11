@@ -339,13 +339,11 @@ in other words, that there has been no writer, and returns false if so.
 \QuickQuizAnswer{
 	리눅스 커널의 오래된 버전들에서라면, 안됩니다.
 
-	최신의 리눅스 커널에서는, line~16 은 \co{ACCESS_ONCE()} 대신에
+	최신의 리눅스 커널에서는, line~16 은 \co{READ_ONCE()} 대신에
 	\co{smp_load_acquire()} 를 사용할 수 있고, 그렇게 되면 line~17 에서의
-	\co{smp_mb()} 는 없어질 수 있게 될겁니다.
+	\co{smp_mb()} 는 없어질 수 있을 겁니다.
 	비슷하게, line~41 은 \co{smp_store_release()} 를 사용할 수 있는데, 예를
-	들면 다음과 같은 겁니다: \\
-	\co{smp_store_release(&slp->seq, ACCESS_ONCE(slp->seq) + 1);} \\
-	이는 line~40 의 \co{smp_mb()} 를 없앨 수 있게 해줄 겁니다.
+	들면 다음과 같은 겁니다:
 	\iffalse
 
 	In older versions of the Linux kernel, no.
@@ -355,6 +353,7 @@ in other words, that there has been no writer, and returns false if so.
 	in turn would allow the \co{smp_mb()} on line~17 to be dropped.
 	Similarly, line~41 could use an \co{smp_store_release()}, for
 	example, as follows:
+	\fi
 
 \begin{minipage}[c][5ex][c]{\columnwidth}\scriptsize
 \begin{verbatim}
@@ -362,13 +361,16 @@ smp_store_release(&slp->seq, READ_ONCE(slp->seq) + 1);
 \end{verbatim}
 \end{minipage}
 
+	이는 line~40 의 \co{smp_mb()} 를 없앨 수 있게 해줄 겁니다.
+	\iffalse
+
 	This would allow the \co{smp_mb()} on line~40 to be dropped.
 	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
-	시퀀스 락킹 아래서, 업데이트 쓰레드들이 읽기 쓰레드들이
-	진행 못하게 하는걸 막는건 무엇일까요?
+	시퀀스 락킹을 사용하는 경우, 업데이트 쓰레드들이 읽기 쓰레드들이 진행
+	못하게 하는걸 막는건 무엇일까요?
 	\iffalse
 
 	What prevents sequence-locking updaters from starving readers?
@@ -415,8 +417,8 @@ increment of the sequence number on line~44, then releases the lock.
 	is not needed?
 	\fi
 \QuickQuizAnswer{
-	그런 경우라면, \co{->lock} 필드는, 리눅스 커널의 \co{seqcount_t} 가
-	그렇듯이, 사라질 수 있을겁니다.
+	그런 경우라면, 리눅스 커널의 \co{seqcount_t} 가 그렇듯이 \co{->lock}
+	필드가 사라질 수 있을겁니다.
 	\iffalse
 
 	In this case, the \co{->lock} field could be omitted, as it
@@ -482,8 +484,8 @@ increment of the sequence number on line~44, then releases the lock.
 	리눅스 커널은 매우 드물게 업데이트 되는 것들에 대해서만 시퀀스 락킹을
 	사용하는데, 하루의 시각 정보가 그런 경우입니다.
 	이 정보는 아무리 잦아도 1 밀리세컨드에 한번 업데이트 되며, 따라서
-	카운터를 오버플로우 시키는데에는 7 주일이 필요할 겁니다.
-	만약 어떤 커널 쓰레드가 7 주일간 cpu 를 빼앗겼다면, 이 리눅스 커널의
+	카운터를 오버플로우 시키는데에는 7주일이 필요할 겁니다.
+	만약 어떤 커널 쓰레드가 7주일간 cpu 를 빼앗겼다면, 이 리눅스 커널의
 	soft-lockup 코드가 그동안 2분에 한번씩 경고를 띄웠을 겁니다.
 
 	반면, 64-bit 카운터를 사용한다면 설령 업데이트가 매
