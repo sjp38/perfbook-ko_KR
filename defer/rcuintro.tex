@@ -139,17 +139,14 @@ the figure.
 레퍼런스 카운팅 방법의 경우는,
 Chapter~\ref{chp:Counting} 의
 Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem}
-가 락킹과 시퀀스 락킹처럼 긴
-딜레이를 가져올 수 있음을 보이므로 어렵습니다.
+가 락킹과 시퀀스 락킹처럼 긴 딜레이를 가져올 수 있음을 보이므로 어렵습니다.
 
-읽기 쓰레드들이 그 존재를 알리기 위한 일을 전혀 안하는,
-극단적인 상황을 생각해 봅시다.
-이는 읽기 쓰레드들에 최적의 성능을 가능하게 하겠지만
-(아무것도 안해도 되니까요), 업데이트
-쓰레드는 어떻게 모든 예전 읽기 쓰레드들의 종료를 알지에 대한 질문이
-남습니다.
-여기에 합리적 답을 하기 위해서는 추가적인 제약이 분명
-필요합니다.
+읽기 쓰레드들이 그 존재를 알리기 위한 일을 전혀 안하는, 극단적인 상황을 생각해
+봅시다.
+이는 읽기 쓰레드들에 최적의 성능을 가능하게 하겠지만 (아무것도 안해도
+되니까요), 업데이트 쓰레드는 어떻게 모든 예전 읽기 쓰레드들의 종료를 알지에
+대한 질문이 남습니다.
+여기에 합리적 답을 하기 위해서는 추가적인 제약이 분명 필요합니다.
 \iffalse
 
 But how can we tell when the readers are finished?
@@ -171,21 +168,21 @@ We clearly need some additional constraints if we are to provide
 a reasonable answer to this question.
 \fi
 
-일부 운영체제에 적합한 제약은 쓰레드가 CPU 를
-빼앗기지 않는 상황 (non-preemptible) 입니다.
-CPU 를 빼앗길 수 없는 환경에서 쓰레드는 명시적이고 자발적으로
-블락킹 되기 전까지는 수행을 계속합니다.
-즉, 블락킹 없이 반복되는 무한루프는 CPU 를
-무한루프 이외의 목적으로는 사용될 수 없게 하다는 의미입니다.\footnote{
+일부 운영체제 커널에 적합한 제약은 쓰레드가 CPU 를 빼앗기지 않는 상황
+(non-preemptible) 을 고려하는 겁니다.
+CPU 를 빼앗길 수 없는 환경에서 쓰레드는 명시적이고 자발적으로 블락킹 되기
+전까지는 수행을 계속합니다.
+즉, 블락킹 없이 반복되는 무한루프는 CPU 를 무한루프 이외의 목적으로는 사용될 수
+없게 하다는 의미입니다.\footnote{
 	반면, CPU 를 빼앗길 수 있는 환경에서의 무한루프는 여전히 CPU 시간을
 	낭비하고 있긴 하지만, 이 CPU 는 다른 일을 할 수 있을 겁니다.}
 CPU 를 뺏길 수 없다는 특성은 또한 쓰레드들이 스핀락을 잡고 있는 동안은 블락킹
 되지 않아야 할 것을 필요로 합니다.
 이런 금지사항이 없다면, 블락된 쓰레드에 의해 잡혀 있는 스핀락을 획득하려
 시도하며 루프를 도는 쓰레드들에 의해 모든 CPU 가 소모되게 될수도 있습니다.
-루프를 도는 쓰레드들은 락을 잡기 전까지는 자신들의 CPU 들을 놓지 않을 것인데,
-락을 잡고 있는 쓰레드는 이 루프를 돌고 있는 쓰레드들이 CPU 를 놓기 전까지는 그
-락을 놓을 수가 없습니다.
+루프를 도는 쓰레드는 락을 잡기 전까지는 자신의 CPU 를 놓지 않을텐데, 락을 잡고
+있는 쓰레드는 이 루프를 돌고 있는 쓰레드들이 CPU 를 놓기 전까지는 그 락을 놓을
+수가 없습니다.
 이는 고전적인 deadlock 상황입니다.
 \iffalse
 One constraint that fits well with some operating-system kernels is to
@@ -220,8 +217,8 @@ Figure~\ref{fig:defer:Deletion From Linked List With Concurrent Readers} 의
 에서 수행되던 모든 시간상 앞의 읽기 쓰레드들은 완료되었음이 보장됩니다.
 이 이야기를 다른 CPU 들에도 적용해 보자면, 각 CPU 가 일단 컨텍스트 스위칭이
 수행됨을 확인했다면, 모든 시간상 앞의 읽기 쓰레드들은 완료되었고, 더이상
-원소~\co{B} 를 레퍼런스 하고 있는 읽기 쓰레드는 더이상 없다고 보장된다고 볼 수
-있습니다.
+원소~\co{B} 를 레퍼런스 하고 있는 읽기 쓰레드는 더이상 없을 것이 보장된다고 볼
+수 있습니다.
 그렇다면 업데이트 쓰레드는 안전하게 원소~\co{B} 를 메모리 해제해서
 Figure~\ref{fig:defer:Deletion From Linked List With Concurrent Readers} 의
 가장 아래의 상태를 만들어낼 수 있습니다.
@@ -255,12 +252,12 @@ Figure~\ref{fig:defer:Deletion From Linked List With Concurrent Readers}.
 
 이런 방법은 \emph{quiescent state based
 reclamation}(QSBR)~\cite{ThomasEHart2006a} 이라 명명되어 있습니다.
-하나의 QSBR 방법이
-Figure~\ref{fig:defer:RCU QSBR: Waiting for Pre-Existing Readers},
+QSBR 방법이
+Figure~\ref{fig:defer:RCU QSBR: Waiting for Pre-Existing Readers}
 에 그림의 꼭대기부터
 바닥까지로 시간의 흐름에 따라 그려져 있습니다.
 
-이런 방법의 상품 품질 구현은 상당히 복잡할 수 있지만, 장난감 수준 구현은 상당히
+이런 방법의 제품 수준 구현은 매우 복잡할 수 있지만, 장난감 수준 구현은 상당히
 간단합니다:
 \iffalse
 
@@ -301,12 +298,12 @@ has executed a context switch, which in turn guarantees that
 all pre-existing reader threads have completed.
 \fi
 
-이 방법은 상품 수준의 품질이 \emph{아님} 을 알아 두시기 바랍니다.
-여러개의 일반적이지 않은 문제 경우의 처리와 여러개의 강력한 최적화의 필요성은
-상품 수준 품질의 구현은 상당한 추가적 복잡도를 의미합니다.
+이 방법은 제품 수준의 품질이 \emph{아님} 을 알아 두시기 바랍니다.
+일반적이지 않은 경우에서의 정확성 처리와 강력한 최적화 여럿을 필요로 하는 제품
+수준 품질의 구현의 성질은 상당한 추가적 복잡도를 의미합니다.
 또한, CPU 강탈이 가능한 환경에서의 RCU 구현은 읽기 쓰레드들이 실제로 뭔가를
 할것을 필요로 합니다.
-하지만, 이 간단한 CPU 강탈 불가한 상황의 접근법은 개념적으로는 완벽하고, 다음
+하지만, 이 간단한 CPU 강탈이 불가한 상황의 접근법은 개념적으로는 완벽하고, 다음
 섹션에서 다루어질 RCU 의 기본을 이해하기 위한 좋은 초기 토대가 될겁니다.
 \iffalse
 
