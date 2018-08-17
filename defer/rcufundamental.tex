@@ -163,7 +163,7 @@ summarizes RCU fundamentals.
 RCU 의 핵심 요소 중 하나는 데이터가 동시에 수정되고 있는데도 불구하고 안전하게
 그 데이터를 읽을 수 있는 능력입니다.
 동시의 항목 삽입에 이런 능력을 제공하기 위해, RCU 는 공개-구독
-(publish-subscribe) 메커니즘이라 생각될 수 있는 방법을 상요합니다.
+(publish-subscribe) 메커니즘이라 생각될 수 있는 방법을 사용합니다.
 예를 들어, 초기에 \co{NULL} 인 전역 포인터 \co{gp} 가 새로 할당되고 초기화된
 데이터 구조체로의 포인터로 수정되려 한다고 생각해 봅시다.
 Figure~\ref{lst:defer:Data Structure Publication (Unsafe)} 에 보이는 코드 조각
@@ -183,14 +183,15 @@ Listing~\ref{lst:defer:Data Structure Publication (Unsafe)}
 might be used for this purpose.
 \fi
 
-안타깝게도, 컴파일러와 CPU 가 마지막 네개의 할당문이 순서대로 수행하도록
+안타깝게도, 컴파일러와 CPU 가 마지막 네개의 할당문을 순서대로 수행하도록
 강제하는 것이 전혀 없습니다.
 \co{gp} 로의 할당이 \co{p} 필드들의 초기화 전에 일어난다면, 동시 수행중인 읽기
 작업들은 이 초기화되지 않은 값들을 볼 수 있을 겁니다.
 이것들이 순서를 지키도록 하기 위해 메모리 배리어들이 필요합니다만, 메모리
 배리어들은 사용하기가 어렵기로 악명높습니다.
-따라서 그것들을 공개 의미를 갖는 \co{rcu_assign_pointer()} 기능에 집어넣습니다.
-그렇게 되면 마지막 네줄은 다음과 같이 될겁니다:
+그래서 우리는 메모리 배리어들을 공개 의미를 갖는 \co{rcu_assign_pointer()}
+기능에 집어넣었습니다.
+따라서 마지막 네줄은 다음과 같이 될겁니다:
 \iffalse
 
 Unfortunately, there is nothing forcing the compiler and CPU to execute
@@ -218,7 +219,7 @@ The last four lines would then be as follows:
 \vspace{5pt}
 
 이 \co{rcu_assign_pointer()} 는 새 구조체를 \emph{공개}하고, 컴파일러와 CPU 가
-\co{gp} 로의 할당이 \co{p} 로 참조되는 필드들의 할당 \emph{후에} 수행하도록
+\co{p} 로 참조되는 필드들의 할당 \emph{후에} \co{gp} 로의 할당을 수행하도록
 강제할 겁니다.
 
 하지만, 업데이트 작업에 순서를 맞추는 것만으로는 충분치 않은데, 읽기 작업도
@@ -250,8 +251,8 @@ Consider for example the following code fragment:
 
 이 코드 조각은 잘못된 순서에 문제가 없을 것처럼 보이지만, 안타깝게도 DEC Alpha
 CPU~\cite{PaulMcKenney2005i,PaulMcKenney2005j} 와 값을 예측하는 컴파일러
-최적화는, 믿든 안믿든, \co{p->a}, \co{p->b}, 그리고 \co{p->c} 가 \co{p} 의 값
-전에 메모리로부터 가져와질 수 있게 할 수 있습니다.
+최적화는, 믿든 안믿든, \co{p->a}, \co{p->b}, 그리고 \co{p->c} 가 \co{p} 의 값을
+읽기 전에 메모리로부터 가져와질 수 있게 할 수 있습니다.
 이런 현상은 컴파일러가 \co{p} 의 값을 추측하고 \co{p->a}, \co{p->b}, 그리고
 \co{p->c} 값을 가져온 후에 그 추측이 맞았는지 보기 위해 \co{p} 의 실제 값을
 가져오는, 컴파일러의 값 추측 최적화의 경우에서 보기가 가장 쉬울 겁니다.
@@ -280,8 +281,8 @@ but does actually occur in the context of profile-driven optimization.
 	리눅스 커널에서, \co{rcu_dereference()} 는 volatile 캐스팅으로
 	구현되고, DEC Alpha 에서는 메모리 배리어 인스트럭션으로 구현됩니다.
 	C11 과 C++11 표준에서는 \co{memory_order_consume} 이
-	\co{rcu_dereference()} 지원을 제공하기 위한 의도로 만들어졌습니다만,
-	이를 native로 구현한 컴파일러는 아직 없습니다.
+	\co{rcu_dereference()} 를 위한 장기적 지원을 제공하기 위한 의도로
+	만들어졌습니다만, 이를 native로 구현한 컴파일러는 아직 없습니다.
 	(컴파일러들은 대신 \co{memory_order_consume} 을
 	\co{memory_order_acuire} 로 강화시켜서, 약한 순서 규칙의 시스템에서는
 	필요없는 메모리 배리어 인스트럭션을 만듭니다.)}
@@ -317,12 +318,12 @@ directives are required for this purpose:\footnote{
 \vspace{5pt}
 
 따라서 \co{rcu_dereference()} 함수는 특정 포인터로 주어지는 값에 대한
-\emph{구독} 으로, 뒤따르는 dereference 오퍼레이션들은 해당 포인터를 공개한,
+\emph{구독} 이고, 뒤따르는 dereference 오퍼레이션들은 해당 포인터를 공개한,
 연관된 \co{rcu_assign_pointer()} 오퍼레이션 전에 발생한 초기화 작업의 결과들을
 보게 될 것이 보장된다고 이해될 수 있습니다.
-\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 함수 호출들은 반드시 필요합니다:
+\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 함수 호출은 반드시 필요합니다:
 이것들은 RCU read-side 크리티컬 섹션을 정의합니다.
-이것들의 목적인
+이것들의 목적은
 Section~\ref{sec:defer:Wait For Pre-Existing RCU Readers to Complete} 에서
 설명됩니다만, 이것들은 결코 스피닝하거나 블락킹 하지 않고, \co{list_add_rcu()}
 가 동시에 수행되는 것을 막지도 않습니다.
@@ -361,8 +362,8 @@ absolutely no code.
 \label{fig:defer:Linux Linked List Abbreviated}
 \end{figure}
 
-이론상으로는 \co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 는 상상할 수
-있는 RCU 로 보호되는 데이터 구조는 얼마든지 만들 수 있지만, 실제로는
+이론상으로는 \co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 를 사용해 RCU
+로 보호되며, 상상할 수 있는 데이터 구조는 얼마든지 만들 수 있지만, 실제로는
 고차원의 방법을 사용하는게 나은 경우가 많이 있습니다.
 그런 이유로, \co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 함수들이
 리눅스에 있는 리스트 조정 API 의 특별한 RCU 사용 버전에 내장되어 있습니다.
@@ -490,7 +491,7 @@ this same entry.
 	값이 섞여진 값을 가져오는 일은 결코 없습니다.
 	또한, \co{list_for_each_entry_rcu()} 는 항상 리스트를 앞으로만
 	움직이지, 결코 뒤로 움직이지는 않습니다.
-	따라서, \co{list_for_each_entry_rcu()} 는 \co{list_add_rc()} 를
+	따라서, \co{list_for_each_entry_rcu()} 는 \co{list_add_rcu()} 를
 	통해 들어온 원소를 보거나 보지 않을 뿐이지만 어떤 경우든 적합하게 잘
 	형성된 리스트를 볼 겁니다.
 	\iffalse
@@ -522,7 +523,7 @@ Figure~\ref{fig:defer:Linux Linear Linked List} 에 보여진 순환 형태의
 리스트처럼 두개의 포인터가 필요하진 않습니다.
 따라서, hlist 의 사용은 해시 버킷 배열들이나 커다란 해시 테이블에서는 메모리
 사용량을 반으로 줄일 수 있습니다.
-앞에서와 같이, 이 형태는 다루기가 까다로우므로, hlist 들은
+앞에서와 같이 이 형태는 다루기가 까다로우므로, hlist 들은
 Figure~\ref{fig:defer:Linux Linked List Abbreviated} 에 보인 것과 같은 형태로
 간략화 될 겁니다.
 \iffalse
@@ -566,7 +567,7 @@ Figure~\ref{fig:defer:Linux Linked List Abbreviated}.
 \end{listing}
 
 새로운 원소를 RCU 로 보호되는 hlist 에 공개하는 건
-as shown in Figure~\ref{lst:defer:RCU hlist Publication} 에 보여진 것처럼,
+Figure~\ref{lst:defer:RCU hlist Publication} 에 보여진 것처럼,
 순환형 리스트에서 했던 것과 상당히 유사합니다.
 
 앞에서와 같이, line~15 는 예를 들면 락과 같은, 어떤 종류의 동기화 메커니즘으로
@@ -632,15 +633,15 @@ Hlists    & \parbox[c][0.5in][c]{1.3in}{
 \end{table*}
 
 RCU 공개와 구독 기능들의 집합이
-Table~\ref{tab:defer:RCU Publish and Subscribe Primitives} 에 ``구독취소'' 또는
-철회를 위한 추가적인 기능들과 함께 표시 되어 있습니다.
+Table~\ref{tab:defer:RCU Publish and Subscribe Primitives} 에 ``구독취소
+(Retract)'' 또는 철회를 위한 추가적인 기능들과 함께 표시 되어 있습니다.
 
 \co{list_replace_rcu()}, \co{list_del_rcu()},
 \co{hlist_replace_rcu()}, and \co{hlist_del_rcu()}
 API 들이 복잡도를 더함을 알아두세요.
 교체되거나 삭제된 데이터 원소를 메모리에서 해제하는데 안전한 시점은 언제일까요?
-자세히 들어가서, 모든 읽기 작업들이 특정 데이터 원소로의 레퍼런스들을
-해제한 시점을 어떻게 하면 알 수 있을까요?
+구체적으로, 모든 읽기 작업들이 특정 데이터 원소로의 레퍼런스들을 해제한 시점을
+어떻게 하면 알 수 있을까요?
 
 이 질문들은 다음의 섹션에서 다루어집니다.
 \iffalse
