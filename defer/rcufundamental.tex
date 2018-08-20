@@ -882,10 +882,10 @@ and the second example demonstrates replacement of an element.
 \label{sec:defer:Example 1: Maintaining Multiple Versions During Deletion}
 
 이제 Section~\ref{sec:defer:Introduction to RCU} 에서의 원소 삭제 예제를 다시
-들여다 보되, 이번에는 그 아래의 RCU 에 있는 기본적인 개념에 대한 확실한 이해와
-함께입니다.
+들여다 보는데, 이번에는 그 아래의 RCU 에 있는 기본적인 개념에 대한 확실한
+이해와 함께 들여다 볼 수 있을 겁니다.
 이 새로운 버전의 삭제 예제를 시작하기 위해,
-Figure~\ref{lst:defer:Canonical RCU Replacement Example} 의 line~11-21 을
+Listing~\ref{lst:defer:Canonical RCU Replacement Example} 의 line~11-21 을
 다음과 같이 보이게 수정할 겁니다:
 \iffalse
 
@@ -923,13 +923,13 @@ to read as follows:
 
 이 코드는
 Figure~\ref{fig:defer:RCU Deletion From Linked List} 에 보인 것처럼 리스트를
-업데이트 할 겁니다.
+업데이트 할겁니다.
 각 원소의 세개의 숫자는 필드 \co{a}, \co{b}, \co{c} 의 값들을 각각 나타냅니다.
 빨간색으로 칠해진 원소들은 RCU 읽기 쓰레드들이 그것들로의 레퍼런스를 가질 수
 있음을 나타내는데, 따라서 다이어그램의 꼭대기에 있는 최초의 상태에서는 모든
 원소들이 빨간색으로 칠해져 있습니다.
-뒤로의 포인터들과 리스트의 tail 로부터 head 로의 링크는 가독성을 위해 삭제해
-둔점을 알아 두시기 바랍니다.
+이전 원소로의 포인터들과 리스트의 tail 로부터 head 로의 링크는 가독성을 위해
+삭제해 두었다는 점을 알아 두시기 바랍니다.
 \iffalse
 
 This code will update the list as shown in
@@ -948,18 +948,18 @@ of the list to the head for clarity.
 Line~3 에서의 \co{list_del_rcu()} 가 완료된 후에, \co{5,6,7}~원소는
 Figure~\ref{fig:defer:RCU Deletion From Linked List} 의 두번째 줄에 보여진
 것처럼 리스트에서 삭제되어 있습니다.
-읽기 쓰레드들은 업데이트 쓰레드들과 직접적으로 동기화를 하지 않으므로, 읽기
-쓰레드들은 동시에 이 리스트를 스캔 하고 있을 수 있습니다.
-이런 동시의 읽기 쓰레드들은 이번에 삭제된 원소를 타이밍에 따라서는 볼수도, 보지
+읽기 쓰레드는 업데이트 쓰레드와 직접적으로 동기화를 하지 않으므로, 읽기
+쓰레드는 이 리스트를 동시에 스캔하고 있을 수 있습니다.
+이런 동시의 읽기 쓰레드는 이번에 삭제된 원소를 타이밍에 따라서는 볼수도, 보지
 않을 수도 있습니다.
-하지만, 이번에 삭제된 원소로의 포인터를 가져온 후에 한동안 지연된 (ex:
+하지만, 이번에 삭제된 원소로의 포인터를 가져온 후에 한동안 지연된 (예:
 인터럽트나 ECC 메모리 에러, 또는 \co{CONFIG_PREEMPT_RT} 커널에서라면 preemption
-으로 인해서) 읽기 쓰레드들은 이 삭제로부터 상당한 시간이 흐른 후에도 이
-리스트의 과거 버전을 보게 될 수도 있습니다.
-따라서, 이 리스트의 두개의 버전이 있는 셈인데, 하나는 \co{5,6,7} 원소를 가지고
-있고 또다른 하나는 가지고 있지 않습니다.
+으로 인해서) 읽기 쓰레드는 이 삭제로부터 상당한 시간이 흐른 후에도 이 리스트의
+과거 버전을 보게 될 수도 있습니다.
+따라서, 이 리스트의 두개의 버전이 존재하는 셈인데, 하나는 \co{5,6,7} 원소를
+가지고 있고 또다른 하나는 가지고 있지 않습니다.
 이 그림에서 두번째 줄의 \co{5,6,7}~원소는 노란색으로 칠해져 있는데, 오래된 읽기
-쓰레드들은 여전히 레퍼런스를 가지고 있을 수 있지만, 새로 시작된 읽기 쓰레드들은
+쓰레드는 여전히 레퍼런스를 가지고 있을 수 있지만, 새로 시작된 읽기 쓰레드는
 그로의 레퍼런스를 얻을 수 없음을 의미합니다.
 \iffalse
 
@@ -984,13 +984,13 @@ that old readers might still be referencing it, but that new
 readers cannot obtain a reference to it.
 \fi
 
-읽기 쓰레드들은 각자의 RCU read-side 크리티컬 섹션들에서 빠져나온 후에는
+읽기 쓰레드들은 각자의 RCU read-side 크리티컬 섹션에서 빠져나온 후에는
 element~\co{5,6,7} 로의 레퍼런스를 얻을 수 없음을 기억하기 바랍니다.
 따라서, 일단 line~4 에서의 \co{synchronize_rcu()} 가 완료되면, 모든 앞서
-존재하던 읽기 쓰레드들은 완료된 것이 보장되므로, 이 원소를 레퍼런스 하는 읽기
-쓰레드들은 존재할 수 없어지는데
+존재하던 읽기 쓰레드는 완료된 것이 보장되므로, 이 원소를 레퍼런스 하는 읽기
+쓰레드는 존재할 수 없어지는데
 Figure~\ref{fig:defer:RCU Deletion From Linked List} 의 세번째 줄에 녹색으로
-색칠됨으로써 이 상황이 나타내어져 있습니다.
+색칠함으로써 이 상황을 나타내었습니다.
 
 이 시점에서, \co{5,6,7}~원소는
 Figure~\ref{fig:defer:RCU Deletion From Linked List} 의 마지막 줄에 나타나
