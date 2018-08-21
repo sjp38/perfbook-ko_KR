@@ -1203,9 +1203,8 @@ Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}.
 \paragraph{Discussion}
 \label{sec:defer:Discussion}
 
-이 예제들은 모든 업데이트 오퍼레이션들에 뮤텍스가 잡혀 있다고 가정을 하고
-있는데, 이 말은 한번에 리스트의 버전은 최대 두개까지만 존재할 수 있음을
-의미합니다.
+이 예제들은 모든 업데이트 오퍼레이션이 뮤텍스를 잡고 있다고 가정을 하고 있는데,
+이 말은 리스트의 버전은 한 순간에 최대 두개까지만 존재할 수 있음을 의미합니다.
 \iffalse
 
 These examples assumed that a mutex was held across the entire
@@ -1223,7 +1222,7 @@ versions of the list active at a given time.
 	\fi
 \QuickQuizAnswer{
 	이를 가능하게 하는 한가지 방법은
-	Figure~\ref{fig:defer:Concurrent RCU Deletion} 에 보인 것처럼 하는
+	Listing~\ref{lst:defer:Concurrent RCU Deletion} 에 보인 것처럼 하는
 	것입니다.
 	\iffalse
 
@@ -1263,7 +1262,7 @@ versions of the list active at a given time.
 } \QuickQuizEnd
 
 \QuickQuiz{}
-	어떤 시점에 하나의 리스트는 RCU 버전들을 몇개까지 가질 수 있을까요?
+	하나의 리스트는 한 순간에 RCU 버전들을 몇개까지 가질 수 있을까요?
 	\iffalse
 
 	How many RCU versions of a given list can be
@@ -1276,7 +1275,7 @@ versions of the list active at a given time.
 
 	하지만, 검색, 업데이트, 그리고 \co{list_replace_rcu()} 만이 락으로
 	보호되고 있어서
-	Figure~\ref{fig:defer:Concurrent RCU Deletion} 보인 코드에서처럼
+	Listing~\ref{lst:defer:Concurrent RCU Deletion} 보인 코드에서처럼
 	\co{synchronize_rcu()} 가 락의 바깥에 있다고 생각해 봅시다.
 	더 나아가서 수많은 쓰레드들이 거의 동시에 RCU 교체 기능을 수행했고, 이
 	읽기 쓰레드들은 또한 데이터 구조를 계속해서 지나다니고 있다고 생각해
@@ -1308,19 +1307,19 @@ versions of the list active at a given time.
 	\fi
 
 	\begin{enumerate}
-	\item	쓰레드~A 가 리스트를 지나가면서 5,2,3 원소로의 레퍼런스를
+	\item	쓰레드~A 가 리스트를 횡단하면서 5,2,3 원소로의 레퍼런스를
 		얻습니다.
 	\item	쓰레드~B 가 5,2,3 원소를 새로운 5,2,4 원소로 교체하고, 자신의
 		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
-	\item	쓰레드~C 가 리스트를 지나가면서 5,2,4 원소로의 레퍼런스를
+	\item	쓰레드~C 가 리스트를 횡단하면서 5,2,4 원소로의 레퍼런스를
 		얻습니다.
 	\item	쓰레드~D 가 5,2,4 원소를 새로운 5,2,5 원소로 교체하고, 자신의
 		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
-	\item	쓰레드~E 가 리스트를 지나가면서 5,2,5 원소로의 레퍼런스를
+	\item	쓰레드~E 가 리스트를 횡단하면서 5,2,5 원소로의 레퍼런스를
 		얻습니다.
 	\item	쓰레드~F 가 5,2,5 원소를 새로운 5,2,6 원소로 교체하고, 자신의
 		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
-	\item	쓰레드~G 가 리스트를 지나가면서 5,2,6 원소로의 레퍼런스를
+	\item	쓰레드~G 가 리스트를 횡단하면서 5,2,6 원소로의 레퍼런스를
 		얻습니다.
 	\item	그리고 앞의 두 스텝들이 빠르게 계속해서 반복되어서 모든
 		쓰레드들이 \co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
@@ -1350,7 +1349,7 @@ versions of the list active at a given time.
 	\end{enumerate}
 	\fi
 
-	따라서, 얼마든지 많은 버전들이 존재할 수 있는데, 다만 메모리 크기와
+	따라서, 얼마든지 많은 버전들이 존재할 수 있습니다만, 메모리 크기와
 	얼마나 많은 업데이트들이 하나의 grace period 안에 완료될 수 있느냐에 그
 	수가 제한됩니다.
 	하지만 그렇게 자주 업데이트 되는 데이터 구조체들은 RCU 를 사용하기에
@@ -1368,8 +1367,8 @@ versions of the list active at a given time.
 	\fi
 } \QuickQuizEnd
 
-이 일련의 이벤트들은 RCU 업데이트들이 어떻게 여러 버전들을 사용해 동시에
-수행중인 읽기 작업들에도 불구하고 안전하게 변경을 처리하는지 보입니다.
+이 일련의 이벤트들은 RCU 업데이트가 어떻게 여러 버전들을 사용해 동시에 수행중인
+읽기 작업들에도 불구하고 안전하게 변경을 처리하는지 보입니다.
 물론, 일부 알고리즘들은 여러 버전들을 잘 처리하지 못합니다.
 그런 알고리즘을 RCU 에 적용하는 테크닉~\cite{PaulEdwardMcKenneyPhD} 들이
 있지만, 이것들은 이 섹션의 범위를 넘어섭니다.
