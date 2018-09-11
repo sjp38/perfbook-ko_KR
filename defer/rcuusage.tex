@@ -1808,12 +1808,12 @@ Simpler is after all almost always better!
 \subsubsection{RCU is a Way of Waiting for Things to Finish}
 \label{sec:defer:RCU is a Way of Waiting for Things to Finish}
 
-Section~\ref{sec:defer:RCU Fundamentals} 에서 이야기했듯이, RCU 의 중요한
-요소는, RCU 읽기 쓰레드들이 끝나기를 기다리는 방법입니다.
-RCU 의 큰 장점 가운데 하나는 수천개의 서로 다른 것들이 각자 끝나기를 명시적으로
-그것들 각각의 정보를 추적할 필요없이, 그리고 명시적인 정보 추적 방식에서 심각한
-성능 저하, 확장성 제한, 복잡한 데드락 시나리오, 그리고 메모리 누수 문제를
-걱정할 필요 없이 기다릴 수 있다는 것입니다.
+Section~\ref{sec:defer:RCU Fundamentals} 에서 이야기했듯이, RCU 의 중요한 부분
+중 하나는 RCU 읽기 쓰레드들이 끝나기를 기다리는 방법입니다.
+RCU 의 큰 장점 가운데 하나는 수천개의 서로 다른 것들이 각자 끝나기를 기다리면서
+그것들 각각의 정보를 명시적으로 추적할 필요가 없고, 명시적인 정보 추적
+방식에서는 심각한 성능 저하, 확장성 제한, 복잡한 데드락 시나리오, 그리고 메모리
+누수 문제를 걱정할 필요도 없다는 겁니다.
 \iffalse
 
 As noted in Section~\ref{sec:defer:RCU Fundamentals}
@@ -1852,13 +1852,13 @@ The basic form of such ``Pure RCU'' designs is as follows:
 \fi
 
 \begin{enumerate}
-\item	예를들어 OS 가 NMI 에 반응하는 것과 같은 방식으로 변경을 만듭니다.
+\item	예를들면 OS 가 NMI 에 반응하는 것과 같은 방식으로 변경을 만듭니다.
 \item	모든 앞서 존재한 read-side 크리티컬 섹션들이 완전히 종료되기를
 	기다립니다 (예를 들어, \co{synchronize_sched()} 기능을 사용해서).
 	여기서의 핵심은 뒤따르는 RCU read-side 크리티컬 섹션들은 만들어진
 	변경을 볼 수 있게 보장된다는 것입니다.
-\item	예를 들어 변경이 성공적으로 만들어졌음을 알리는 상태를 반환하는 식으로
-	정리를 합니다.
+\item	예를 들어 메모리를 반환하는 작업은 변경이 성공적으로 만들어졌음을
+	알리는 상태를 반환합니다.
 \iffalse
 
 \item	Make a change, for example, to the way that the OS reacts to an NMI.
@@ -1877,7 +1877,7 @@ The basic form of such ``Pure RCU'' designs is as follows:
 반환하기 전에 완료되었음을 보장하기 위해 \co{synchronize_sched()} 를
 사용합니다.
 이 코드의 간략화된 버전이
-Figure~\ref{lst:defer:Using RCU to Wait for NMIs to Finish} 에 있습니다.
+Listing~\ref{lst:defer:Using RCU to Wait for NMIs to Finish} 에 있습니다.
 \iffalse
 
 The remainder of this section presents example code adapted from
@@ -1945,8 +1945,8 @@ Line~7-16 은 NMI 핸들러 안에서 호출되는 \co{nmi_profile()} 함수를 
 핸들러에 인터럽트될 수도 없습니다만, 캐시 미스, ECC 에러, 그리고 같은 코어에
 위치한 다른 하드웨어 쓰레드에 의한 cycle stealing 에는 취약합니다.
 Line~9 는 DEC Alpha 에서도 메모리 순서를 강제하기 위해 \co{rcu_dereference()}
-함수를 이용해 profile buffer 로의 지역 포인터를 가져오고, line~11 과 12 에서
-현재 할당된 profile buffer 가 없다면 이 함수에서 빠져나가며, line~13 과 14
+함수를 이용해 profile buffer 로의 지역 포인터를 가져오고, line~11 과~12 에서
+현재 할당된 profile buffer 가 없다면 이 함수에서 빠져나가며, line~13 과~14
 에서는 \co{pcvalue} 인자가 범위 밖이라면 이 함수에서 빠져나갑니다.
 그렇지 않다면, line~15 에서  \co{pcvalue} 인자로 색인된 profile-buffer 원소의
 값을 증가시킵니다.
@@ -1976,7 +1976,7 @@ replaced by a smaller one.
 
 Line~18-27 은 \co{nmi_stop()} 을 정의하는데, 이 함수의 호출자는 알아서 상호
 배제를 지켜야 합니다 (예를 들면, 올바른 락을 잡는식으로).
-Line~20 은 profile buffer 로의 포인터를 가져오고, line~22 와 23 은 버퍼가
+Line~20 은 profile buffer 로의 포인터를 가져오고, line~22 와~23 은 버퍼가
 없다면 이 함수를 빠져나갑니다.
 그렇지 않다면, line~24 는 profile-buffer 포인터를 \co{NULL} 로 만들고 (완화된
 순서규칙의 기계에서 메모리 순서를 유지하기 위해 \co{rcu_assign_pointer()} 를
@@ -2019,7 +2019,7 @@ It is therefore safe to free the buffer, in this case using the
 	한가지 가능한 방법은 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을
 	\co{nmi_profile()} 내에서 사용하고, \co{synchronize_sched()} 를
 	\co{synchronize_rcu()} 로 바꾸는 것으로, 아마도
-	Figure~\ref{lst:defer:Using RCU to Wait for Mythical Preemptible NMIs to Finish}
+	Listing~\ref{lst:defer:Using RCU to Wait for Mythical Preemptible NMIs to Finish}
 	와 같은 모습이 될겁니다.
 	\iffalse
 
