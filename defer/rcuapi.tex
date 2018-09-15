@@ -130,8 +130,8 @@ Non-\tco{PREEMPT_RT} implementation &
 \end{tabularx}
 \end{sidewaystable*}
 
-``RCU 는 무엇인가'' 에 대한 가장 직접적인 답변은 RCU 는 리눅스 커널에서
-사용되는 API 라는 것으로, 각각 잠들 수 없는 버전과 잠들 수 있는 버전 API 들의
+``RCU 는 무엇인가'' 에 대한 가장 단순한 답변은 RCU 는 리눅스 커널에서
+사용되는 API 라는 것으로, 각각 잠들 수 없는 버전과 잠들 수 있는 버전 API 의
 RCU 읽기 쓰레드 기다리기 부분을 보이는
 Table~\ref{tab:defer:RCU Wait-to-Finish APIs},
 그리고 그 API 의 publish-subscribe 부분을 보이는
@@ -154,13 +154,13 @@ Table~\ref{tab:defer:RCU Wait-to-Finish APIs} 의 행들 중 하나에만 집중
 것을 고려해 볼만 한데, 각각의 행은 리눅스 커널의 RCU API 패밀리 중 하나의
 멤버를 요약하고 있습니다.
 예를 들어, 리눅스 커널에서 RCU 가 어떻게 사용되는지를 이해하고자 하는게 주된
-목표라면, ``RCU Classic'' 가장 자주 사용되므로 여기서부터 시작하는게 좋을
+목표라면, ``RCU Classic'' 이 가장 자주 사용되므로 여기서부터 시작하는게 좋을
 것입니다.
 반면에, 자신의 이익을 위해 RCU 를 이해하고자 한다면 ``SRCU'' 가 가장 간단한 API
 를 제공합니다.
 나중에도 언제든 다른 행을 볼 수 있습니다.
 
-이미 RCU 에 친숙하다면, 이 표들은 유용한 레퍼런스로 사용될 수 있을 겁니다.
+이미 RCU 에 친숙하다면, 이 표는 유용한 레퍼런스로 사용될 수 있을 겁니다.
 \iffalse
 
 If you are new to RCU, you might consider focusing on just one
@@ -188,10 +188,10 @@ serve as a useful reference.
 	have exclamation marks (``!'')?
 	\fi
 \QuickQuizAnswer{
-	느낌표와 함께 표시된 API 멤버들 (\co{rcu_read_lock()},
+	느낌표와 함께 표시된 API 멤버 (\co{rcu_read_lock()},
 	\co{rcu_read_unlock()}, 그리고 \co{call_rcu()}) 만이 과거 90년대 중반에
-	Paul E. McKenney 가 신경썼던 리눅스 RCU API 의 멤버들입니다.
-	이 시절에는, 그는 그가 RCU 에 대해 알아야 할 것들을 모두 알고 있다는
+	Paul E. McKenney 가 신경썼던 리눅스 RCU API 의 멤버입니다.
+	이 시절에, 그는 그가 RCU 에 대해 알아야 할 것들을 모두 알고 있다는
 	잘못된 인상을 가지고 있었습니다.
 	\iffalse
 
@@ -211,8 +211,8 @@ serve as a useful reference.
 같은 의미인 \co{synchronize_net()} 은 동시에 실행중인 RCU read-side 크리티컬
 섹션들이 모두 완료되기를 기다립니다.
 이 기다림의 길이는 ``grace period'' 라고 알려져 있습니다.
-비동기적인 업데이트 쪽 기능인 \co{call_rcu()} 는 뒤따르는 grace period 후에
-특정 함수를 특정 인자와 함께 호출해 줍니다.
+비동기적 업데이트 쪽 기능인 \co{call_rcu()} 는 뒤따르는 grace period 후에 특정
+함수를 특정 인자와 함께 호출해 줍니다.
 예를 들어, \co{call_rcu(p,f);} 는 다음의 grace period 후에 ``RCU callback''
 \co{f(p)} 의 호출이 이뤄지게 합니다.
 \co{call_rcu()} 를 사용하는 리눅스 커널 모듈을 언로딩 한다던가 해서 모든 RCU
@@ -264,7 +264,7 @@ RCU 기반의 type-safe 메모리를 사용하기 위해서는 \co{SLAB_DESTROY_
 대신, \co{SLAB_DESTROY_BY_RCU} 는 RCU grace period 가 끝나기 전까지는
 \co{kmem_cache_free()} 가 완전히 해제된 데이터 구조체들의 slab 을 시스템에
 반납하는 것을 방지해 줍니다.
-짧게 말해서, 비록 데이터 원소가 굉장히 자주 해제되고 재할당될 수 있지만, 최소한
+요약해서, 비록 데이터 원소가 굉장히 자주 해제되고 재할당될 수 있지만, 최소한
 그것의 타입은 똑같이 남아있을 겁니다.
 \iffalse
 
@@ -332,8 +332,9 @@ often, at least its type will remain the same.
 \QuickQuizAnswer{
 	전혀 그렇지 않아요!
 	그리고 preemption 가능한 RCU 를 사용하고 있다면 특히나 그렇지 않습니다!
-	대안으로, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 를
-	\co{synchronize_rcu()} 기다리기를 바라는 인터럽트 핸들러 안에 위치시킬
+	그러고 싶다면 \co{synchronize_irq()} 를 사용해야 합니다.
+	또는, 대안적으로 \co{synchronize_rcu()} 가 기다리기를 바라는 인터럽트
+	핸들러 안에 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 를위치시킬
 	수 있겠습니다.
 	\iffalse
 
@@ -507,15 +508,15 @@ community, APIs are added on an as-needed basis.
 	\fi
 \QuickQuizAnswer{
 	맞습니다!
-	-rt 리눅스는 쓰레드로 도는 인터럽트 핸들러들을 사용하기 때문에,
-	인터럽트 핸들러 내부에서의 컨텍스트 스위치가 있을 수 있습니다.
+	-rt 리눅스는 쓰레드로 도는 인터럽트 핸들러를 사용하기 때문에, 인터럽트
+	핸들러 내부에서의 컨텍스트 스위치가 있을 수 있습니다.
 	\co{synchronize_sched()} 는 각 CPU 가 컨텍스트 스위치를 할 때까지만
 	기다리기 때문에, 특정 인터럽트 핸들러가 완료되기 전에 리턴을 할수도
 	있습니다.
 
 	특정 인터럽트 핸들러가 완료되기까지 기다려야 한다면, 그대신
-	\co{synchronize_irq()} 를 사용하거나 명시적으로 RCU read-side 크리티컬
-	섹션들을 기다리기 원하는 인터럽트 핸들러들 안에 위치시켜야 합니다.
+	\co{synchronize_irq()} 를 사용하거나 기다리기 원하는 인터럽트 핸들러
+	안에 명시적으로 RCU read-side 크리티컬 섹션을 넣어야 합니다.
 	\iffalse
 
 	That is correct!
@@ -551,10 +552,10 @@ read-side 크리티컬 섹션들 안에서 일반적인 잠들기를 허용하�
 보입니다~\cite{PaulEMcKenney2006c}.
 물론, SRCU read-side 크리티컬 섹션 안에서의 \co{synchronize_srcu()} 사용은
 스스로의 deadlock 을 유발할 수 있으므로, 반드시 피해져야 합니다.
-SRCU 의 앞의 RCU 구현들과의 차이점은 각각의 별개의 SRCU 사용처마다 호출자가
+앞의 RCU 구현들과 SRCU 의 차이점은 각각의 별개의 SRCU 사용처마다 호출자가
 \co{srcu_struct} 를 할당해야 한다는 겁니다.
-이 방법은 SRCU read-side 크리티컬 섹션들이 연관되지 않은
-\co{synchronize_srcu()} 실행을 블록하는 것을 방지합니다.
+이 방법은 SRCU read-side 크리티컬 섹션이 연관되지 않은 \co{synchronize_srcu()}
+실행을 블록하는 것을 방지합니다.
 또한, 이 RCU 변종에서는 \co{srcu_read_lock()} 이 연관된 \co{srcu_read_unlock()}
 에 전달되어야 하는 값을 리턴합니다.
 \iffalse
@@ -579,13 +580,13 @@ returns a value that must be passed into the corresponding
 \fi
 
 \QuickQuiz{}
-	\co{call_srcu()} 사용에 있어 조심해야 하는 이유는 무엇일까요?
+	\co{call_srcu()} 사용을 조심해야 하는 이유는 무엇일까요?
 	\iffalse
 
 	Why should you be careful with \co{call_srcu()}?
 	\fi
 \QuickQuizAnswer{
-	하나의 테스크는 SRC 콜백들을 매우 빠르게 등록할 수 있습니다.
+	하나의 태스크는 SRCU 콜백들을 매우 빠르게 등록할 수 있습니다.
 	SRCU 가 읽기 쓰레드들이 임의의 기간동안 블록될 수 있도록 허용함을
 	생각하면, 이는 임의의 커다란 양의 메모리를 소모할 것을 알 수 있습니다.
 	반대로, 동기적인 \co{synchronize_srcu()} 인터페이스에서는 주어진
@@ -653,15 +654,14 @@ returns a value that must be passed into the corresponding
 } \QuickQuizEnd
 
 리눅스 커널은 분명히 놀랍도록 많은 RCU API 와 구현을 가지고 있습니다.
-이 수를 줄이려는 희망이 있는데, 리눅스 커널의 특정 빌드는 현재 세개의 API 들
-뒤에 최대 네개의 구현들을 가지고 있다는 사실 (RCU Classic 과 Realtime RCU 는
-같은 API 를 공유합니다) 이 그 증거입니다.
-하지만, 충분한 조사와 분석이 필요할텐데, 많은 락킹 API 들 가운데 하나를
-제거하려면 필요한 것처럼 말입니다.
+이 수를 줄였으면 하는 바람이 있는데, 리눅스 커널의 특정 빌드는 현재 세개의
+API 뒤에 최대 네개의 구현을 가지고 있다는 사실 (RCU Classic 과 Realtime
+RCU 는 같은 API 를 공유합니다) 이 그 증거입니다.
+하지만,많은 락킹 API 가운데 하나를 제거하려면 필요한 것처럼 충분한 조사와
+분석이 필요할 겁니다.
 
 이 다양한 RCU API 들은 RCU read-side 크리티컬 섹션들이 반드시 제공해야 하는
-forward-progress 보장사항으로 차별화 되고 그 범위로도 차별화되는데, 다음과
-같습니다:
+forward-progress 보장사항과 그 범위로 차별화되는데, 다음과 같습니다:
 \iffalse
 
 The Linux kernel currently has a surprising number of RCU APIs and
@@ -679,11 +679,11 @@ and also by their scope, as follows:
 \fi
 
 \begin{enumerate}
-\item	RCU BH: read-side 크리티컬 섹션들은 NMI 와 인터럽트 핸들러들을 제외한
+\item	RCU BH: read-side 크리티컬 섹션들은 NMI 와 인터럽트 핸들러를 제외한
 	모든 것에 대해 forward progress 를 보장해야만 합니다만
-	software-interrupt (\co{softirq}) 핸들러들은 제외입니다.
+	software-interrupt (\co{softirq}) 핸들러는 제외입니다.
 	RCU BH 는 범위내에서 글로벌 합니다.
-\item	RCU Sched: read-side 크리티컬 섹션들은 NMI 와 \co{softirq} 핸들러들을
+\item	RCU Sched: read-side 크리티컬 섹션들은 NMI 와 \co{softirq} 핸들러를
 	포함한 \IRQ\ 핸들러들을 제외한 모든것들에 forward progress 를 보장해야
 	합니다.
 	RCU Sched 는 범위내에서 글로벌합니다.
@@ -692,10 +692,11 @@ and also by their scope, as follows:
 	높은 우선순위의 real-time task 를 제외한 모든 것에 forward progress 를
 	보장해야 합니다.
 	RCU 는 범위내에서 글로벌합니다.
-\item	SRCU: read-side 크리티컬 섹션들은 다른 태스크가 연관된 grace
-	period 가 완료되기를 기다리고 있지 않다면 forward progress 를 보장하지
-	않아도 됩니다. 이런 상황에서 이 read-side 크리티컬 섹션들은 수초
-	이내에는 완료되어야 합니다 (그리고 더 빠르면 더 좋습니다).\footnote{
+\item	SRCU: read-side 크리티컬 섹션은 다른 태스크가 연관된 grace period 가
+	완료되기를 기다리고 있지 않다면 forward progress 를 보장하지 않아도
+	됩니다.
+	이런 상황에서 이 read-side 크리티컬 섹션들은 수초 이내에는 완료되어야
+	합니다 (그리고 더 빠르면 더 좋습니다).\footnote{
 		단순히 forward-progress guarantee 가 없다고 말하는 대신 이런
 		명확한 설명을 하도록 재촉해준 James Bottomley 에게 감사의
 		말씀을 드립니다.}
