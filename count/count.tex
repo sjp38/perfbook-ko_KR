@@ -297,24 +297,8 @@ are more appropriate for advanced students.
 \section{Why Isn't Concurrent Counting Trivial?}
 \label{sec:count:Why Isn't Concurrent Counting Trivial?}
 
-\begin{listing}[bp]
-{ \scriptsize
-\begin{verbbox}
-  1 long counter = 0;
-  2 
-  3 void inc_count(void)
-  4 {
-  5   counter++;
-  6 }
-  7 
-  8 long read_count(void)
-  9 {
- 10   return counter;
- 11 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\begin{listing}[tbp]
+\input{CodeSamples/count/count_nonatomic@inc-read.fcv}
 \caption{Just Count!}
 \label{lst:count:Just Count!}
 \end{listing}
@@ -333,9 +317,11 @@ Listing~\ref{lst:count:Just Count!} (\path{count_nonatomic.c})
 Let's start with something simple, for example, the straightforward
 use of arithmetic shown in
 Listing~\ref{lst:count:Just Count!} (\path{count_nonatomic.c}).
-Here, we have a counter on line~1, we increment it on line~5, and we
-read out its value on line~10.
+\begin{lineref}[ln:count:count_nonatomic:inc-read]
+Here, we have a counter on line~\lnref{counter}, we increment it on
+line~\lnref{inc}, and we read out its value on line~\lnref{read}.
 What could be simpler?
+\end{lineref}
 
 This approach has the additional advantage of being blazingly fast if
 you are doing lots of reading and almost no incrementing, and on small
@@ -364,9 +350,13 @@ accuracies far greater than 50\,\% are almost always necessary.
 	그리고 CPU 캐시는 그걸 어토믹하게 수행하지 않나요?
 	\iffalse
 
-	But doesn't the \co{++} operator produce an x86 add-to-memory
-	instruction?
-	And won't the CPU cache cause this to be atomic?
+	% TODO: Apply
+	But can't a smart compiler prove
+	line~\ref{ln:count:count_nonatomic:inc-read:inc}
+	of 
+	Listing~\ref{lst:count:Just Count!}
+	is equivalent to the \co{++} operator and produce an x86
+	add-to-memory instruction?
 	\fi
 \QuickQuizAnswer{
 	\co{++} 연산자는 어토믹할 수\emph{도 있지만}, 그래야만 한다는 규칙은
@@ -382,6 +372,15 @@ accuracies far greater than 50\,\% are almost always necessary.
 	chooses to load the value to a register, increment
 	the register, then store the value to memory, which is
 	decidedly non-atomic.
+
+	% TODO: Apply
+	Furthermore, note the volatile casts in
+	\co{READ_ONCE()} and \co{WRITE_ONCE()}, which tell
+	the compiler that the location might well be an MMIO
+	device register.
+	Because MMIO registers are not cached, it would be unwise
+	for the compiler to assume that the increment operation would in
+	fact be way atomic.
 	\fi
 } \QuickQuizEnd
 
@@ -434,23 +433,7 @@ accuracies far greater than 50\,\% are almost always necessary.
 } \QuickQuizEnd
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 atomic_t counter = ATOMIC_INIT(0);
-  2 
-  3 void inc_count(void)
-  4 {
-  5   atomic_inc(&counter);
-  6 }
-  7 
-  8 long read_count(void)
-  9 {
- 10   return atomic_read(&counter);
- 11 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_atomic@inc-read.fcv}
 \caption{Just Count Atomically!}
 \label{lst:count:Just Count Atomically!}
 \end{listing}
@@ -458,8 +441,8 @@ accuracies far greater than 50\,\% are almost always necessary.
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{CodeSamples/count/atomic}}
-\caption{Atomic Increment Scalability on Nehalem}
-\label{fig:count:Atomic Increment Scalability on Nehalem}
+\caption{Atomic Increment Scalability on Kaby Lake}
+\label{fig:count:Atomic Increment Scalability on Kaby Lake}
 \end{figure}
 
 정확하게 카운트를 하는 직관적 방법은
@@ -484,8 +467,11 @@ Listing~\ref{lst:count:Just Count Atomically!} (\path{count_atomic.c})
 The straightforward way to count accurately is to use atomic operations,
 as shown in
 Listing~\ref{lst:count:Just Count Atomically!} (\path{count_atomic.c}).
-Line~1 defines an atomic variable, line~5 atomically increments it, and
-line~10 reads it out.
+\begin{lineref}[ln:count:count_atomic:inc-read]
+Line~\lnref{counter} defines an atomic variable,
+line~\lnref{inc} atomically increments it, and
+line~\lnref{read} reads it out.
+\end{lineref}
 Because this is atomic, it keeps perfect count.
 However, it is slower: on a Intel Core Duo laptop, it is about
 six times slower than non-atomic increment
@@ -519,7 +505,7 @@ This poor performance should not be a surprise, given the discussion in
 Chapter~\ref{chp:Hardware and its Habits},
 nor should it be a surprise that the performance of atomic increment
 gets slower as the number of CPUs and threads increase, as shown in
-Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem}.
+Figure~\ref{fig:count:Atomic Increment Scalability on Kaby Lake}.
 In this figure, the horizontal dashed line resting on the x~axis
 is the ideal performance that would be achieved
 by a perfectly scalable algorithm: with such an algorithm, a given
@@ -638,7 +624,7 @@ global variable, the cache line containing that variable must
 circulate among all the CPUs, as shown by the red arrows.
 Such circulation will take significant time, resulting in
 the poor performance seen in
-Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem},
+Figure~\ref{fig:count:Atomic Increment Scalability on Kaby Lake},
 which might be thought of as shown in
 Figure~\ref{fig:count:Waiting to Count}.
 
@@ -1766,41 +1752,42 @@ comes at the cost of the additional thread running \co{eventual()}.
   5 
   6 void inc_count(void)
   7 {
-  8   counter++;
-  9 }
- 10 
- 11 long read_count(void)
- 12 {
- 13   int t;
- 14   long sum;
- 15 
- 16   spin_lock(&final_mutex);
- 17   sum = finalcount;
- 18   for_each_thread(t)
- 19     if (counterp[t] != NULL)
- 20       sum += *counterp[t];
- 21   spin_unlock(&final_mutex);
- 22   return sum;
- 23 }
- 24 
- 25 void count_register_thread(void)
- 26 {
- 27   int idx = smp_thread_id();
- 28 
- 29   spin_lock(&final_mutex);
- 30   counterp[idx] = &counter;
- 31   spin_unlock(&final_mutex);
- 32 }
- 33 
- 34 void count_unregister_thread(int nthreadsexpected)
- 35 {
- 36   int idx = smp_thread_id();
- 37 
- 38   spin_lock(&final_mutex);
- 39   finalcount += counter;
- 40   counterp[idx] = NULL;
- 41   spin_unlock(&final_mutex);
- 42 }
+  8   WRITE_ONCE(counter,
+  9              READ_ONCE(counter) + 1);counter++;
+ 10 }
+ 11 
+ 12 long read_count(void)
+ 13 {
+ 14   int t;
+ 15   long sum;
+ 16 
+ 17   spin_lock(&final_mutex);
+ 18   sum = finalcount;
+ 19   for_each_thread(t)
+ 20     if (counterp[t] != NULL)
+ 21       sum += *counterp[t];
+ 22   spin_unlock(&final_mutex);
+ 23   return sum;
+ 24 }
+ 25 
+ 26 void count_register_thread(void)
+ 27 {
+ 28   int idx = smp_thread_id();
+ 29 
+ 30   spin_lock(&final_mutex);
+ 31   counterp[idx] = &counter;
+ 32   spin_unlock(&final_mutex);
+ 33 }
+ 34 
+ 35 void count_unregister_thread(int nthreadsexpected)
+ 36 {
+ 37   int idx = smp_thread_id();
+ 38 
+ 39   spin_lock(&final_mutex);
+ 40   finalcount += counter;
+ 41   counterp[idx] = NULL;
+ 42   spin_unlock(&final_mutex);
+ 43 }
 \end{verbbox}
 }
 \centering
@@ -1941,15 +1928,16 @@ value of the counter and exiting threads.
 \iffalse
 
 The \co{inc_count()} function used by updaters is quite simple, as can
-be seen on lines~6-9.
+be seen on lines~6-10.
 
 The \co{read_count()} function used by readers is a bit more complex.
-Line~16 acquires a lock to exclude exiting threads, and line~21 releases
+Line~17 acquires a lock to exclude exiting threads, and line~22 releases
 it.
-Line~17 initializes the sum to the count accumulated by those threads that
-have already exited, and lines~18-20 sum the counts being accumulated
+Line~18 initializes the sum to the count accumulated by those threads that
+have already exited, and lines~19-21 sum the counts being accumulated
 by threads currently running.
-Finally, line~22 returns the sum.
+% TODO: Apply
+Finally, line~23 returns the sum.
 \fi
 
 \QuickQuiz{}
@@ -1959,7 +1947,8 @@ Finally, line~22 returns the sum.
 	\co{NULL} 로 만드는 대신 그 변수로 향하게 하는게 어떤가요?
 	\iffalse
 
-	Doesn't the check for \co{NULL} on line~19 of
+	% TODO: Apply
+	Doesn't the check for \co{NULL} on line~20 of
 	Listing~\ref{lst:count:Per-Thread Statistical Counters}
 	add extra branch mispredictions?
 	Why not have a variable set permanently to zero, and point
@@ -2041,7 +2030,8 @@ Finally, line~22 returns the sum.
 쓰레드별 \co{counter} 변수를 가리키도록 만듭니다.
 \iffalse
 
-Lines~25-32 show the \co{count_register_thread()} function, which
+% TODO: Apply
+Lines~26-33 show the \co{count_register_thread()} function, which
 must be called by each thread before its first use of this counter.
 This function simply sets up this thread's element of the \co{counterp[]}
 array to point to its per-thread \co{counter} variable.
@@ -2092,14 +2082,15 @@ array to point to its per-thread \co{counter} variable.
 것입니다.
 \iffalse
 
-Lines~34-42 show the \co{count_unregister_thread()} function, which
+% TODO: Apply
+Lines~35-43 show the \co{count_unregister_thread()} function, which
 must be called prior to exit by each thread that previously called
 \co{count_register_thread()}.
-Line~38 acquires the lock, and line~41 releases it, thus excluding any
+Line~39 acquires the lock, and line~42 releases it, thus excluding any
 calls to \co{read_count()} as well as other calls to
 \co{count_unregister_thread()}.
-Line~39 adds this thread's \co{counter} to the global \co{finalcount},
-and then line~40 \co{NULL}s out its \co{counterp[]} array entry.
+Line~40 adds this thread's \co{counter} to the global \co{finalcount},
+and then line~41 \co{NULL}s out its \co{counterp[]} array entry.
 A subsequent call to \co{read_count()} will see the exiting thread's
 count in the global \co{finalcount}, and will skip the exiting thread
 when sequencing through the \co{counterp[]} array, thus obtaining
@@ -5806,7 +5797,7 @@ courtesy of eventual consistency.
 	``Use the right tool for the job.''
 
 	As can be seen from
-	Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem},
+	Figure~\ref{fig:count:Atomic Increment Scalability on Kaby Lake},
 	single-variable atomic increment need not apply for any job
 	involving heavy use of parallel updates.
 	In contrast, the algorithms shown in
@@ -6346,7 +6337,7 @@ Summarizing the summary:
 \item	Different levels of performance and scalability will affect
 	algorithm and data-structure design, as do a large number of
 	other factors.
-	Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem}
+	Figure~\ref{fig:count:Atomic Increment Scalability on Kaby Lake}
 	illustrates this point:  Atomic increment might be completely
 	acceptable for a two-CPU system, but be completely inadequate for an
 	eight-CPU system.

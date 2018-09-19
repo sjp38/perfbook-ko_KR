@@ -21,23 +21,25 @@
 
 #include "../api.h"
 
-unsigned long counter = 0;
+//\begin{snippet}[labelbase=ln:count:count_nonatomic:inc-read,commandchars=\\\[\]]
+unsigned long counter = 0;				//\lnlbl{counter}
 
-void inc_count(void)
+static __inline__ void inc_count(void)
 {
-	counter++;
+	WRITE_ONCE(counter, READ_ONCE(counter) + 1);	//\lnlbl{inc}
 }
 
-unsigned long read_count(void)
+static __inline__ unsigned long read_count(void)
 {
-	return counter;
+	return READ_ONCE(counter);			//\lnlbl{read}
+}
+//\end{snippet}
+
+static __inline__ void count_init(void)
+{
 }
 
-void count_init(void)
-{
-}
-
-void count_cleanup(void)
+static __inline__ void count_cleanup(void)
 {
 }
 

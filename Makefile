@@ -3,6 +3,7 @@ LATEXSOURCES = \
 	legal.tex \
 	glossary.tex \
 	qqz.sty origpub.sty \
+	noindentafter.sty \
 	pfbook.cls \
 	ushyphex.tex pfhyphex.tex \
 	*/*.tex \
@@ -82,6 +83,9 @@ A2PING_GSCNFL := 0
 endif
 endif
 
+SOURCES_OF_SNIPPET := $(shell grep -r -l -F '\begin{snippet}' CodeSamples)
+GEN_SNIPPET_D  = utilities/gen_snippet_d.pl utilities/gen_snippet_d.sh
+
 default = $(PERFBOOK_DEFAULT)
 
 ifeq ($(default),)
@@ -92,6 +96,13 @@ endif
 
 .PHONY: all touchsvg clean distclean neatfreak 2c ls-unused $(ABBREVTARGETS) mslm perfbook-mslm.pdf mslmmsg help
 all: $(targ)
+
+ifeq ($(MAKECMDGOALS),clean)
+else ifeq ($(MAKECMDGOALS),distclean)
+else ifeq ($(MAKECMDGOALS),neatfreak)
+else
+-include CodeSamples/snippets.d
+endif
 
 2c: perfbook.pdf
 
@@ -112,10 +123,10 @@ $(PDFTARGETS:.pdf=.bbl): %.bbl: %.aux $(BIBSOURCES)
 $(PDFTARGETS:.pdf=.aux): $(LATEXGENERATED) $(LATEXSOURCES)
 	sh utilities/runfirstlatex.sh $(basename $@)
 
-autodate.tex: perfbook.tex $(LATEXSOURCES) $(BIBSOURCES) $(SVGSOURCES) $(FIGSOURCES) $(DOTSOURCES) $(EPSORIGIN)
+autodate.tex: perfbook.tex $(LATEXSOURCES) $(BIBSOURCES) $(SVGSOURCES) $(FIGSOURCES) $(DOTSOURCES) $(EPSORIGIN) $(SOURCES_OF_SNIPPET) utilities/fcvextract.pl
 	sh utilities/autodate.sh >autodate.tex
 
-perfbook_flat.tex: autodate.tex $(PDFTARGETS_OF_EPS) $(TARGETS_OF_SVG)
+perfbook_flat.tex: autodate.tex $(PDFTARGETS_OF_EPS) $(TARGETS_OF_SVG) $(FCVSNIPPETS)
 ifndef LATEXPAND
 	$(error --> $@: latexpand not found. Please install it)
 endif
@@ -248,6 +259,13 @@ endif
 	@inkscape --export-dpi=200 --export-png=$@ $<i > /dev/null 2>&1
 	@rm -f $<i
 
+CodeSamples/snippets.d: $(SOURCES_OF_SNIPPET) $(GEN_SNIPPET_D)
+	sh ./utilities/gen_snippet_d.sh
+
+$(FCVSNIPPETS):
+	@echo "$< --> $@"
+	@utilities/fcvextract.pl $< $(subst @,:,$(basename $(notdir $@))) > $@
+
 help:
 	@echo "Official targets (Latin Modern Typewriter for monospace font):"
 	@echo "  Full,              Abbr."
@@ -277,11 +295,13 @@ help:
 clean:
 	find . -name '*.aux' -o -name '*.blg' \
 		-o -name '*.dvi' -o -name '*.log' \
-		-o -name '*.qqz' -o -name '*.toc' -o -name '*.bbl' | xargs rm -f
+		-o -name '*.qqz' -o -name '*.toc' -o -name '*.bbl' \
+		-o -name '*.fcv' | xargs rm -f
 	rm -f perfbook_flat.tex perfbook*.out perfbook-*.tex
 	rm -f $(LATEXGENERATED)
 	rm -f $(SVG_LARGE_BITMAP:%.svg=%.pdf) $(PNGTARGETS_OF_SVG)
 	rm -f extraction
+	rm -f CodeSamples/snippets.mk CodeSamples/snippets.d
 
 distclean: clean
 	sh utilities/cleanpdf.sh

@@ -981,7 +981,10 @@ reflection of the perils of interacting with execs in real life.
 That said, the two options prohibiting \co{exec()} within transactions
 are perhaps the most logical of the group.
 
-Similar issues surround the \co{exit()} and \co{kill()} system calls.
+% TODO: Apply
+Similar issues surround the \co{exit()} and \co{kill()} system calls,
+as well as a \co{longjmp()} or an exception that would exit the transaction.
+(Where did the \co{longjmp()} or exception come from?)
 \fi
 
 \subsubsection{Dynamic Linking and Loading}
@@ -1582,8 +1585,14 @@ combining TM with reader-writer locking, as there in fact were with
 exclusive locking.
 \fi
 
-\subsubsection{RCU}
-\label{sec:future:RCU}
+\subsubsection{Deferred Reclamation}
+\label{sec:future:Deferred Reclamation}
+
+This section focuses mainly on RCU.
+Similar issues and possible resolutions arise when combining TM with
+other deferred-reclamation mechanisms such as reference counters and
+hazard pointers.
+In the text below, known differences are specifically called out.
 
 Read-copy update (RCU) 는 리눅스 커널에서 주로 사용되기 대문에, RCU 와 TM 을
 조합하려는 학계에서의 시도는 없었을 거라고 생각할 수 있을 겁니다.\footnote{
@@ -1739,6 +1748,10 @@ Some possibilities are as follows:
 	Furthermore, this approach is infeasible in cases where any of
 	the RCU read-side critical sections contains operations that
 	the TM implementation in question is incapable of handling.
+	% TODO: Apply
+	This approach is more difficult to apply to hazard pointers,
+	which do not have a sharply defined notion of a reader as
+	a section of code.
 \fi
 \item	RCU 의 많은 update-side 사용들이 새로운 데이터 구조를 공개하기 위해
 	하나의 포인터를 수정합니다.
@@ -1779,7 +1792,8 @@ Some possibilities are as follows:
 \iffalse
 
 It seems likely that additional approaches will be uncovered, especially
-given the advent of user-level RCU implementations.\footnote{
+given the advent of user-level RCU and hazard-pointer
+implementations.\footnote{
 	Kudos to the TxLinux group, Maged Michael, and Josh Triplett
 	for coming up with a number of the above alternatives.}
 \fi
@@ -1851,7 +1865,8 @@ Here are some extra-transactional options:
 	single variable by multiple transactions.
 \item	Introduce weak semantics to transactional memory.
 	One approach is the combination with RCU described in
-	Section~\ref{sec:future:RCU}, while Gramoli and Guerraoui
+	Section~\ref{sec:future:Deferred Reclamation},
+	while Gramoli and Guerraoui
 	survey a number of other weak-transaction
 	approaches~\cite{Gramoli:2014:DTP:2541883.2541900}, for example,
 	restricted partitioning of large
