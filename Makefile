@@ -75,15 +75,16 @@ STEELFONTID := $(shell fc-list | grep -i steel | grep -c Steel)
 ifdef A2PING
 A2PING_277P := $(shell a2ping --help 2>&1 | grep -c "2.77p,")
 ifeq ($(A2PING_277P),1)
-GS_VER := $(shell gs --version)
-A2PING_GSCNFL := $(shell env printf "%05.2f\n%05.2f\n" $(GS_VER) 9.22 | \
-	sort | head -1 | grep -c "09.22")
+A2PING_GSCNFL := 1
 else
 A2PING_GSCNFL := 0
 endif
 endif
 
-SOURCES_OF_SNIPPET := $(shell grep -r -l -F '\begin{snippet}' CodeSamples)
+SOURCES_OF_SNIPPET_ALL := $(shell grep -r -l -F '\begin{snippet}' CodeSamples)
+SOURCES_OF_LITMUS      := $(shell grep -r -l -F '\begin[snippet]' CodeSamples)
+SOURCES_OF_LTMS        := $(patsubst %.litmus,&.ltms,$(SOURCES_OF_LITMUS))
+SOURCES_OF_SNIPPET     := $(filter-out $(SOURCES_OF_LTMS),$(SOURCES_OF_SNIPPET_ALL)) $(SOURCES_OF_LITMUS)
 GEN_SNIPPET_D  = utilities/gen_snippet_d.pl utilities/gen_snippet_d.sh
 
 default = $(PERFBOOK_DEFAULT)
@@ -126,7 +127,7 @@ $(PDFTARGETS:.pdf=.aux): $(LATEXGENERATED) $(LATEXSOURCES)
 autodate.tex: perfbook.tex $(LATEXSOURCES) $(BIBSOURCES) $(SVGSOURCES) $(FIGSOURCES) $(DOTSOURCES) $(EPSORIGIN) $(SOURCES_OF_SNIPPET) utilities/fcvextract.pl
 	sh utilities/autodate.sh >autodate.tex
 
-perfbook_flat.tex: autodate.tex $(PDFTARGETS_OF_EPS) $(TARGETS_OF_SVG) $(FCVSNIPPETS)
+perfbook_flat.tex: autodate.tex $(PDFTARGETS_OF_EPS) $(TARGETS_OF_SVG) $(FCVSNIPPETS) $(FCVSNIPPETS_VIA_LTMS)
 ifndef LATEXPAND
 	$(error --> $@: latexpand not found. Please install it)
 endif
@@ -213,7 +214,7 @@ ifndef A2PING
 	$(error $< --> $@: a2ping not found. Please install it)
 endif
 ifeq ($(A2PING_GSCNFL),1)
-	$(error a2ping version conflict. See #7 in FAQ-BUILD.txt)
+	$(error You need to update a2ping. See #7 in FAQ-BUILD.txt)
 endif
 	@cp $< $<i
 	@sh $(FIXANEPSFONTS) $<i
@@ -264,7 +265,15 @@ CodeSamples/snippets.d: $(SOURCES_OF_SNIPPET) $(GEN_SNIPPET_D)
 
 $(FCVSNIPPETS):
 	@echo "$< --> $@"
-	@utilities/fcvextract.pl $< $(subst @,:,$(basename $(notdir $@))) > $@
+	utilities/fcvextract.pl $< $(subst +,\\+,$(subst @,:,$(basename $(notdir $@)))) > $@
+
+$(FCVSNIPPETS_VIA_LTMS):
+	@echo "$< --> $@"
+	utilities/fcvextract.pl $< $(subst +,\\+,$(subst @,:,$(basename $(notdir $@)))) > $@
+
+$(FCVSNIPPETS_LTMS):
+	@echo "$< --> $@"
+	utilities/reorder_ltms.pl $< > $@
 
 help:
 	@echo "Official targets (Latin Modern Typewriter for monospace font):"
@@ -296,7 +305,7 @@ clean:
 	find . -name '*.aux' -o -name '*.blg' \
 		-o -name '*.dvi' -o -name '*.log' \
 		-o -name '*.qqz' -o -name '*.toc' -o -name '*.bbl' \
-		-o -name '*.fcv' | xargs rm -f
+		-o -name '*.fcv' -o -name '*.ltms' | xargs rm -f
 	rm -f perfbook_flat.tex perfbook*.out perfbook-*.tex
 	rm -f $(LATEXGENERATED)
 	rm -f $(SVG_LARGE_BITMAP:%.svg=%.pdf) $(PNGTARGETS_OF_SVG)
