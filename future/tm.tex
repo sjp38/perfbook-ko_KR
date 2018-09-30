@@ -971,7 +971,9 @@ from within a transaction?
 그렇다곤 하나, 트랜잭션 내에서의 \co{exec()} 를 금지시키는 두가지 방법은 그나마
 가장 논리적일 겁니다.
 
-비슷한 문제들이 \co{exit()} 과 \co{kill()} 시스템 콜에 대해서도 존재합니다.
+비슷한 문제들이 \co{exit()} 과 \co{kill()} 시스템 콜, \co{longjmp()} 나
+트랜잭션 밖으로 빠져나갈 수 있는 exception 들에 대해서도 존재합니다.
+(\co{longjmp()} 나 exception 은 어디서 올까요?)
 \iffalse
 
 The \co{exec()} system call is perhaps the strangest example of an
@@ -981,7 +983,6 @@ reflection of the perils of interacting with execs in real life.
 That said, the two options prohibiting \co{exec()} within transactions
 are perhaps the most logical of the group.
 
-% TODO: Apply
 Similar issues surround the \co{exit()} and \co{kill()} system calls,
 as well as a \co{longjmp()} or an exception that would exit the transaction.
 (Where did the \co{longjmp()} or exception come from?)
@@ -1588,11 +1589,18 @@ exclusive locking.
 \subsubsection{Deferred Reclamation}
 \label{sec:future:Deferred Reclamation}
 
+이 섹션은 RCU 에 주로 집중합니다.
+TM 을 레퍼런스 카운터나 해저드 포인터 같은 다른 deferred-reclamation 메커니즘과
+조합할 때에도 비슷한 문제나 해결책이 존재합니다.
+아래에서, 알려진 차이점은 명시적으로 이야기될 겁니다.
+\iffalse
+
 This section focuses mainly on RCU.
 Similar issues and possible resolutions arise when combining TM with
 other deferred-reclamation mechanisms such as reference counters and
 hazard pointers.
 In the text below, known differences are specifically called out.
+\fi
 
 Read-copy update (RCU) 는 리눅스 커널에서 주로 사용되기 대문에, RCU 와 TM 을
 조합하려는 학계에서의 시도는 없었을 거라고 생각할 수 있을 겁니다.\footnote{
@@ -1738,6 +1746,8 @@ Some possibilities are as follows:
 	더 나아가서, 이 방법은 RCU read-side 크리티컬 섹션들 가운데 하나라도
 	사용되는 TM 구현이 처리할 수 없는 오퍼레이션들을 포함하고 있는 경우에
 	대해서는 적절치 못합니다.
+	이 방법은 읽기 쓰레드의 코드 섹션을 명시적으로 정의하지 않는 해저드
+	포인터에 적용하기에는 더 어렵습니다.
 \iffalse
 
 \item	RCU readers are converted to transactions.
@@ -1748,7 +1758,6 @@ Some possibilities are as follows:
 	Furthermore, this approach is infeasible in cases where any of
 	the RCU read-side critical sections contains operations that
 	the TM implementation in question is incapable of handling.
-	% TODO: Apply
 	This approach is more difficult to apply to hazard pointers,
 	which do not have a sharply defined notion of a reader as
 	a section of code.
@@ -1786,7 +1795,7 @@ Some possibilities are as follows:
 \end{enumerate}
 
 추가적인 방법들 역시 모습을 드러내게 될 것으로 보이는데, 특히나 user-level RCU
-구현의 발전에 따라서 특히 그렇습니다.\footnote{
+와 해저드 포인터의 구현의 발전에 따라서 특히 그렇습니다.\footnote{
 	여러개의 앞의 대안들을 가져와준 TxLinux 그룹, Maged Michael, 그리고
 	Josh Triplett 에게 감사를.}
 \iffalse
@@ -1844,9 +1853,9 @@ Here are some extra-transactional options:
 	오퍼레이션 (예를 들면, 더하기) 이 가능하게 하는 하드웨어 확장장치를
 	만듭니다.
 \item	트랜잭셔널 메모리에 완화된 semantic 을 가져옵니다.
-	한가지 방법은 Section~\ref{sec:future:RCU} 에서 설명된 RCU 와의
-	조합으로, Gramoli 와 Guerraoui 가 예를 들면 커다란 ``신축성 있는''
-	트랜잭션들을 작은 트랜잭션들로의 제한적 분할로 (맥빠지는 성능과
+	한가지 방법은 Section~\ref{sec:future:Deferred Reclamation} 에서 설명된
+	RCU 와의 조합으로, Gramoli 와 Guerraoui 가 예를 들면 커다란 ``신축성
+	있는'' 트랜잭션들을 작은 트랜잭션들로의 제한적 분할로 (맥빠지는 성능과
 	확장성에도 불구하고) 충돌 가능성을 줄이는 식의 많은 수의 완화된
 	트랜잭션 방법을 연구했습니다~\cite{Gramoli:2014:DTP:2541883.2541900}.
 \iffalse
