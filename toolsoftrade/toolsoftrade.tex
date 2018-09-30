@@ -366,24 +366,26 @@ if (pid == 0) {%lnlbl[if]
 \label{lst:toolsoftrade:Using the fork() Primitive}
 \end{listing}
 
+\begin{lineref}[ln:toolsoftrade:forkjoin:main]
 \co{fork()} 가 성공하면, \co{fork()}는 한번은 부모에게, 또한번은 자식에게 두번
 리턴합니다.
 \co{fork()} 가 리턴하는 값은
 Listing~\ref{lst:toolsoftrade:Using the fork() Primitive}
 (\path{forkjoin.c}) 에 보여진 것처럼 호출자가 그 차이를 알 수 있게 합니다.
-라인~1 은 \co{fork()} 함수를 실행하고, 그 리턴값을 지역 변수 \co{pid} 에
-저장합니다.
-라인~2 에서는 \co{pid} 가 0인지 체크하는데, 만약 맞다면 자신은 자식
-프로세스라는 뜻이며, 이 경우 코드 실행은 라인~3으로 이어집니다.
+라인~\lnref{fork} 는\co{fork()} 함수를 실행하고, 그 리턴값을 지역 변수 \co{pid}
+에 저장합니다.
+라인~\lnref{if} 에서는 \co{pid} 가 0인지 체크하는데, 만약 맞다면 자신은 자식
+프로세스라는 뜻이며, 이 경우 코드 실행은 라인~\lnref{child} 으로 이어집니다.
 앞서 이야기 했듯, 자식 프로세스는 \co{exit()} 기능을 통해 종료될 수 있습니다.
-만약 \co{fork()} 리턴값이 0이 아니어서 자신이 부모 프로세스라면, 라인~4 에서
-얻은 \co{fork()} 리턴값을 가지고 에러가 있었는지 확인하고, 에러가 있었다면
-라인~5-7 에서 에러를 화면에 출력하고 종료합니다.
+만약 \co{fork()} 리턴값이 0이 아니어서 자신이 부모 프로세스라면,
+라인~\lnref{else} 에서 얻은 \co{fork()} 리턴값을 가지고 에러가 있었는지
+확인하고, 에러가 있었다면 라인~\lnref{errora}-\lnref{errorb} 에서 에러를
+화면에 출력하고 종료합니다.
 그렇지 않고 \co{fork()} 가 성공적으로 수행되었다면, 자식 프로세스의 프로세스 ID
-값을 가지고 있는 변수 \co{pid} 와 함께 라인~9로 넘어갑니다.
+값을 가지고 있는 변수 \co{pid} 와 함께 라인~\lnref{parent}로 넘어갑니다.
+\end{lineref}
 \iffalse
 
-%TODO: apply
 \begin{lineref}[ln:toolsoftrade:forkjoin:main]
 If \co{fork()} succeeds, it returns twice, once for the parent
 and again for the child.
@@ -400,7 +402,6 @@ Otherwise, this is the parent, which checks for an error return from
 the \co{fork()} primitive on line~\lnref{else}, and prints an error
 and exits on lines~\lnref{errora}-\lnref{errorb} if so.
 Otherwise, the \co{fork()} has executed successfully, and the parent
-% TODO: apply
 therefore executes line~\lnref{parent} with the variable \co{pid}
 containing the process ID of the child.
 \end{lineref}
@@ -412,6 +413,7 @@ containing the process ID of the child.
 \label{lst:toolsoftrade:Using the wait() Primitive}
 \end{listing}
 
+\begin{lineref}[ln:api-pthreads:api-pthreads:waitall]
 부모 프로세스는 자식 프로세스가 완료될 때까지 \co{wait()} 함수를 이용해 기다릴
 수도 있습니다.
 하지만, 하나의 \co{wait()} 호출은 오로지 한개의 자식 프로세스만 기다리기
@@ -422,19 +424,21 @@ Listing~\ref{lst:toolsoftrade:Using the wait() Primitive}
 (\path{api-pthread.h})
 에서 보여진, 셸 스크립트 에서의 \co{wait} 명령과 유사한 의미를 가진,
 \co{waitall()} 함수와 비슷한 함수로 \co{wait()} 를 감싸는게 일반적입니다.
-라인~6-15 에서의 루프의 각 패스에서는 한개 자식 프로세스를 기다립니다.
-라인~7 에서는 \co{wait()} 함수를 호출하는데, 이 함수는 자식 프로세스 하나가
-종료될 때까지 부모 프로세스를 블록시키고, 자식 프로세스가 종료된 후 자식
+라인~\lnref{loopa}-\lnref{loopb} 에서의 루프의 각 패스에서는 한개 자식
+프로세스를 기다립니다.
+라인~\lnref{wait} 에서는 \co{wait()} 함수를 호출하는데, 이 함수는 자식 프로세스
+하나가 종료될 때까지 부모 프로세스를 블록시키고, 자식 프로세스가 종료된 후 자식
 프로세스의 프로세스 ID 를 리턴합니다.
 만약 프로세스 ID 가 아니라 $-1$ 이 리턴된다면, 이는 \co{wait()} 함수가 자식
 프로세스를 기다릴 수 없었음을 의미합니다.
-만약 그렇다면, 라인~9 에서 errno 가 \co{ECHILD} 로 되었는지 여부를 체크하는데,
-만약 그렇다면 더이상 자식 프로세스가 존재하지 않는다는 의미로, 이 때엔 라인~10
-에서 루프를 빠져나옵니다.
-그렇지 않다면, 라인~11 과~12 에서 에러를 출력하고 종료합니다.
+만약 그렇다면, 라인~\lnref{ECHILD} 에서 errno 가 \co{ECHILD} 로 되었는지 여부를
+체크하는데, 만약 그렇다면 더이상 자식 프로세스가 존재하지 않는다는 의미로, 이
+때엔 라인~\lnref{break} 에서 루프를 빠져나옵니다.
+그렇지 않다면, 라인~\lnref{perror} 과~\lnref{exit} 에서 에러를 출력하고
+종료합니다.
+\end{lineref}
 \iffalse
 
-% TODO: apply
 \begin{lineref}[ln:api-pthreads:api-pthreads:waitall]
 The parent process may use the \co{wait()} primitive to wait for its children
 to complete.
@@ -453,7 +457,6 @@ Line~\lnref{wait} invokes the \co{wait()} primitive, which blocks
 until a child process exits, and returns that child's process ID.
 If the process ID is instead $-1$, this indicates that the \co{wait()}
 primitive was unable to wait on a child.
-% TODO: Apply
 If so, line~\lnref{ECHILD} checks for the \co{ECHILD} errno, which
 indicates that there are no more child processes, so that
 line~\lnref{break} exits the loop.
@@ -500,19 +503,20 @@ Otherwise, lines~\lnref{perror} and~\lnref{exit} print an error and exit.
 \label{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
 \end{listing}
 
+\begin{lineref}[ln:toolsoftrade:forkjoinvar:main]
 부모와 자식 프로세스가 메모리를 공유하지 \emph{않는}다는 점은 매우 중요하므로
 반드시 기억해야 합니다.
 이는
 Listing~\ref{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
-(\path{forkjoinvar.c}) 의 프로그램으로 보여지는데, 자식 프로세스는 라인~6 에서
-전역 변수 \co{x} 를 1로 만들고 라인~7 에서 메세지를 프린트한 후, 라인~8 에서
-종료합니다.
-부모는 라인~14에서 실행 흐름을 이어서 자식 프로세스를 기다리고 라인~15 에서
-변수 \co{x} 의 값을 보지만 여전히 그 값은 0입니다.
+(\path{forkjoinvar.c}) 의 프로그램으로 보여지는데, 자식 프로세스는
+라인~\lnref{setx} 에서 전역 변수 \co{x} 를 1로 만들고 라인~\lnref{print:c} 에서
+메세지를 프린트한 후, 라인~\lnref{exit:s} 에서 종료합니다.
+부모는 라인~\lnref{waitall} 에서 실행 흐름을 이어서 자식 프로세스를 기다리고
+라인~\lnref{print:p} 에서 변수 \co{x} 의 값을 보지만 여전히 그 값은 0입니다.
 따라서 이 프로그램의 출력은 다음과 같습니다:
+\end{lineref}
 \iffalse
 
-% TODO: Apply
 \begin{lineref}[ln:toolsoftrade:forkjoinvar:main]
 It is critically important to note that the parent and child do \emph{not}
 share memory.
@@ -670,8 +674,9 @@ call \co{pthread_exit()}.
 	\fi
 } \QuickQuizEnd
 
-라인~20 에 있는 \co{pthread_join()} 함수는 fork-join 에서의 \co{wait()} 함수와
-유사합니다.
+\begin{lineref}[ln:toolsoftrade:pcreate:mythread]
+라인~\lnref{join} 에 있는 \co{pthread_join()} 함수는 fork-join 에서의
+\co{wait()} 함수와 유사합니다.
 이 함수는 \co{tid} 변수로 명시된 쓰레드가 \co{pthread_exit()} 함수를 통해서,
 또는 쓰레드의 탑 레벨 함수가 리턴을 해서 실행을 완료할 때까지 기다립니다.
 쓰레드의 종료 값은 \co{pthread_join()} 함수에 두번째 인자로 넘겨진 포인터를
@@ -679,13 +684,13 @@ call \co{pthread_exit()}.
 쓰레드의 종료 값은 쓰레드가 어떻게 종료되었는지에 따라 다른데,
 \co{pthread_exit()} 함수에 넘겨진 값이거나 쓰레드의 탑 레벨 함수에서 리턴한
 값입니다.
+\end{lineref}
 
 Listing~\ref{lst:toolsoftrade:Threads Created Via pthread-create() Share Memory}
 에 보여진 프로그램은 다음과 같이 결과를 내놓는데, 이는 두 쓰레드 간에 메모리가 
 공유됨을 보여줍니다:
 \iffalse
 
-% TODO: Apply
 \begin{lineref}[ln:toolsoftrade:pcreate:mythread]
 The \co{pthread_join()} primitive, shown on line~\lnref{join},
 is analogous to
