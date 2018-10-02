@@ -1,3 +1,5 @@
+SHELL = /bin/bash
+
 LATEXSOURCES = \
 	perfbook.tex \
 	legal.tex \
@@ -49,10 +51,7 @@ PDFTARGETS_OF_EPSOTHER := $(filter-out $(PDFTARGETS_OF_EPSORIG),$(PDFTARGETS_OF_
 BIBSOURCES := bib/*.bib alphapf.bst
 
 SVGSOURCES := $(wildcard */*.svg)
-SVG_LARGE_BITMAP := future/ibmqx2-labeled.svg
-PDFTARGETS_OF_SVG := $(filter-out $(SVG_LARGE_BITMAP:%.svg=%.pdf),$(SVGSOURCES:%.svg=%.pdf))
-PNGTARGETS_OF_SVG := $(SVG_LARGE_BITMAP:%.svg=%.png)
-TARGETS_OF_SVG :=  $(PDFTARGETS_OF_SVG) $(PNGTARGETS_OF_SVG)
+PDFTARGETS_OF_SVG := $(SVGSOURCES:%.svg=%.pdf)
 
 DOT := $(shell which dot 2>/dev/null)
 FIG2EPS := $(shell which fig2eps 2>/dev/null)
@@ -83,7 +82,7 @@ endif
 
 SOURCES_OF_SNIPPET_ALL := $(shell grep -r -l -F '\begin{snippet}' CodeSamples)
 SOURCES_OF_LITMUS      := $(shell grep -r -l -F '\begin[snippet]' CodeSamples)
-SOURCES_OF_LTMS        := $(patsubst %.litmus,&.ltms,$(SOURCES_OF_LITMUS))
+SOURCES_OF_LTMS        := $(patsubst %.litmus,%.ltms,$(SOURCES_OF_LITMUS))
 SOURCES_OF_SNIPPET     := $(filter-out $(SOURCES_OF_LTMS),$(SOURCES_OF_SNIPPET_ALL)) $(SOURCES_OF_LITMUS)
 GEN_SNIPPET_D  = utilities/gen_snippet_d.pl utilities/gen_snippet_d.sh
 
@@ -127,7 +126,7 @@ $(PDFTARGETS:.pdf=.aux): $(LATEXGENERATED) $(LATEXSOURCES)
 autodate.tex: perfbook.tex $(LATEXSOURCES) $(BIBSOURCES) $(SVGSOURCES) $(FIGSOURCES) $(DOTSOURCES) $(EPSORIGIN) $(SOURCES_OF_SNIPPET) utilities/fcvextract.pl
 	sh utilities/autodate.sh >autodate.tex
 
-perfbook_flat.tex: autodate.tex $(PDFTARGETS_OF_EPS) $(TARGETS_OF_SVG) $(FCVSNIPPETS) $(FCVSNIPPETS_VIA_LTMS)
+perfbook_flat.tex: autodate.tex $(PDFTARGETS_OF_EPS) $(PDFTARGETS_OF_SVG) $(FCVSNIPPETS) $(FCVSNIPPETS_VIA_LTMS)
 ifndef LATEXPAND
 	$(error --> $@: latexpand not found. Please install it)
 endif
@@ -247,19 +246,6 @@ endif
 	@inkscape --export-pdf=$@ $<i > /dev/null 2>&1
 	@rm -f $<i
 
-$(PNGTARGETS_OF_SVG): %.png: %.svg
-	@echo "$< --> $@"
-ifndef INKSCAPE
-	$(error $< --> $@: inkscape not found. Please install it)
-endif
-ifeq ($(STEELFONTID),0)
-	@sh $(FIXSVGFONTS) < $< | sed -e 's/Steel City Comic/Test/g' > $<i
-else
-	@sh $(FIXSVGFONTS) < $< > $<i
-endif
-	@inkscape --export-dpi=200 --export-png=$@ $<i > /dev/null 2>&1
-	@rm -f $<i
-
 CodeSamples/snippets.d: $(SOURCES_OF_SNIPPET) $(GEN_SNIPPET_D)
 	sh ./utilities/gen_snippet_d.sh
 
@@ -308,7 +294,6 @@ clean:
 		-o -name '*.fcv' -o -name '*.ltms' | xargs rm -f
 	rm -f perfbook_flat.tex perfbook*.out perfbook-*.tex
 	rm -f $(LATEXGENERATED)
-	rm -f $(SVG_LARGE_BITMAP:%.svg=%.pdf) $(PNGTARGETS_OF_SVG)
 	rm -f extraction
 	rm -f CodeSamples/snippets.mk CodeSamples/snippets.d
 
