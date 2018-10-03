@@ -346,11 +346,13 @@ accuracies far greater than 50\,\% are almost always necessary.
 \fi
 
 \QuickQuiz{}
-	하지만 \co{++} 연산자는 x86 의 add-to-memory 명령어를 만들지 않나요?
-	그리고 CPU 캐시는 그걸 어토믹하게 수행하지 않나요?
+	하지만 영리한 컴파일러는
+	Listing~\ref{lst:count:Just Count!} 의
+	라인~\ref{ln:count:count_nonatomic:inc-read:inc} 이 \co{++} 연산자와
+	동일함을 증명하고 x86 add-to-memory 인스트럭션을 만들어 낼 수 있지
+	않나요?
 	\iffalse
 
-	% TODO: Apply
 	But can't a smart compiler prove
 	line~\ref{ln:count:count_nonatomic:inc-read:inc}
 	of 
@@ -372,8 +374,15 @@ accuracies far greater than 50\,\% are almost always necessary.
 	chooses to load the value to a register, increment
 	the register, then store the value to memory, which is
 	decidedly non-atomic.
+	\fi
 
-	% TODO: Apply
+	더 나아가서, \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 안의 volatile
+	캐스팅을 알아두시기 바라는데, 이는 해당 위치가 MMIO 장치 레지스터로도
+	사용될 수 있음을 컴파일러에게 이야기 합니다.
+	MMIO 레지스터는 캐시되지 않기 때문에, 증가 연산자가 실제로 어토믹할
+	거라 컴파일러가 생각하는건 현명하지 못한 일일 겁니다.
+	\iffalse
+
 	Furthermore, note the volatile casts in
 	\co{READ_ONCE()} and \co{WRITE_ONCE()}, which tell
 	the compiler that the location might well be an MMIO
@@ -1571,7 +1580,6 @@ comes at the cost of the additional thread running \co{eventual()}.
 	That said, the \co{READ_ONCE()} macro is used to prevent
 	compiler optimizations that might otherwise prevent the
 	counter updates from becoming visible to
-	% TODO: Apply
 	\co{eventual()}.\footnote{
 		A simple definition of \co{READ_ONCE()} is shown in
 		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.}
@@ -1915,16 +1923,16 @@ value of the counter and exiting threads.
 	\fi
 } \QuickQuizEnd
 
-업데이트 쓰레드들에 의해 사용되는 \co{inc_count()} 함수는 라인~6-9 에서 볼 수
+업데이트 쓰레드들에 의해 사용되는 \co{inc_count()} 함수는 라인~6-10 에서 볼 수
 있듯이 상당히 간단합니다.
 
 읽기 쓰레드에 의해 사용되는 \co{read_count()} 함수는 약간 복잡합니다.
-라인~16 에서 종료되는 쓰레드들을 배제하기 위해 락을 획득하고, 라인~21 에서 이
+라인~17 에서 종료되는 쓰레드들을 배제하기 위해 락을 획득하고, 라인~22 에서 이
 락을 풉니다.
-라인~17 에서는 이미 종료한 쓰레드들에 의해 계산된 카운트 값으로 카운트의 합을
-초기화 하고, 라인~18-20 에서 현재 동작 중인 쓰레드들에서 얻어온 카운트 값을
+라인~18 에서는 이미 종료한 쓰레드들에 의해 계산된 카운트 값으로 카운트의 합을
+초기화 하고, 라인~19-21 에서 현재 동작 중인 쓰레드들에서 얻어온 카운트 값을
 더합니다.
-마지막으로, 라인~22 에서 그 합을 리턴합니다.
+마지막으로, 라인~23 에서 그 합을 리턴합니다.
 \iffalse
 
 The \co{inc_count()} function used by updaters is quite simple, as can
@@ -1936,18 +1944,16 @@ it.
 Line~18 initializes the sum to the count accumulated by those threads that
 have already exited, and lines~19-21 sum the counts being accumulated
 by threads currently running.
-% TODO: Apply
 Finally, line~23 returns the sum.
 \fi
 
 \QuickQuiz{}
-	Listing~\ref{lst:count:Per-Thread Statistical Counters} 의 라인~19
+	Listing~\ref{lst:count:Per-Thread Statistical Counters} 의 라인~20
 	에서의 \co{NULL} 체크는 브랜치 예측 실패를 가져오지 않나요?
 	항상 0인 변수 집합을 두고 더이상 사용되지 않는 카운터로의 포인터를
 	\co{NULL} 로 만드는 대신 그 변수로 향하게 하는게 어떤가요?
 	\iffalse
 
-	% TODO: Apply
 	Doesn't the check for \co{NULL} on line~20 of
 	Listing~\ref{lst:count:Per-Thread Statistical Counters}
 	add extra branch mispredictions?
@@ -2024,13 +2030,12 @@ Finally, line~23 returns the sum.
 	\fi
 } \QuickQuizEnd
 
-라인~25-32 는 \co{count_register_thread()} 함수를 보여주는데, 각 쓰레드는
+라인~26-33 는 \co{count_register_thread()} 함수를 보여주는데, 각 쓰레드는
 자신의 카운터를 처음 사용하기 전에 이 함수를 반드시 호출해야 합니다.
 이 함수는 단순히 해당 쓰레드를 위한 \co{counterp[]} 배열의 원소가 자신의
 쓰레드별 \co{counter} 변수를 가리키도록 만듭니다.
 \iffalse
 
-% TODO: Apply
 Lines~26-33 show the \co{count_register_thread()} function, which
 must be called by each thread before its first use of this counter.
 This function simply sets up this thread's element of the \co{counterp[]}
@@ -2070,19 +2075,18 @@ array to point to its per-thread \co{counter} variable.
 	\fi
 } \QuickQuizEnd
 
-라인~34-42 는 \co{count_unregister_thread()} 함수를 보이는데, 각 쓰레드는
+라인~35-43 는 \co{count_unregister_thread()} 함수를 보이는데, 각 쓰레드는
 종료되기 직전에 반드시 이 함수를 호출해야 합니다.
-라인~38 에서는 락을 잡고, 라인~41 에서 푸는데, 이로써 \co{read_count()} 호출과
+라인~39 에서는 락을 잡고, 라인~42 에서 푸는데, 이로써 \co{read_count()} 호출과
 다른 \co{count_unregister_thread()} 호출을 배제시킵니다.
-라인~39 에서는 이 쓰레드의 \co{counter} 를 글로벌 \co{finalcount} 에 더하고, 그
-후 라인~40 에서 자신의 \co{counterp[]} 배열에서의 원소를 \co{NULL} 로 만듭니다.
+라인~40 에서는 이 쓰레드의 \co{counter} 를 글로벌 \co{finalcount} 에 더하고, 그
+후 라인~41 에서 자신의 \co{counterp[]} 배열에서의 원소를 \co{NULL} 로 만듭니다.
 이후의 \co{read_count()} 호출은 종료된 쓰레드의 카운트는 글로벌 변수
 \co{finalcount} 에서 볼 수 있을 것이고, 종료된 쓰레드의 카운터는
 \co{counterp[]} 배열을 통해 무시할 수 있으므로 올바른 전체 값을 얻을 수 있을
 것입니다.
 \iffalse
 
-% TODO: Apply
 Lines~35-43 show the \co{count_unregister_thread()} function, which
 must be called prior to exit by each thread that previously called
 \co{count_register_thread()}.
