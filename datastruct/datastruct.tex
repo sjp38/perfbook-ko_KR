@@ -1145,8 +1145,8 @@ Figure~\ref{fig:datastruct:Read-Only RCU-Protected Hash-Table Performance For Sc
 버전과 비교해 보이고 있습니다.
 볼 수 있듯이, RCU 와 해저드 포인터 둘 다 큰 수의 쓰레드들 에서는 NUMA 영향을
 받기는 하지만 이상적인 경우에 가까운 성능과 확장성을 보이고 있습니다.
-테이블 전체를 하나의 락으로 보호하는 구현의 결과도 보이고 있는데, 기대된 대로
-그런 상황에서의 성능 결과는 bucket 별 락킹 구현 버전에 비해서조차도 나쁨을 볼
+테이블 전체를 하나의 락으로 보호하는 구현의 결과도 보이고 있는데, 그런
+상황에서의 성능은 기대된 대로 bucket 별 락킹 구현 버전에 비해서조차도 나쁨을 볼
 수 있습니다.
 RCU 는 해저드 포인터보다 아주 약간 좋은 성능을 보이기는 하지만, 그 차이는 이
 로그스케일 그림에서는 거의 보이지도 않을 정도입니다.
@@ -1171,17 +1171,17 @@ readily visible in this log-scale plot.
 \end{figure}
 
 Figure~\ref{fig:datastruct:Read-Only RCU-Protected Hash-Table Performance For Schroedinger's Zoo, Linear Scale}
-는 같은 데이터를 linear scale 로 보입니다.
+는 같은 데이터를 로그스케일이 아닌 리니어스케일 (linear scale) 로 보입니다.
 여기서는 테이블 전체를 하나의 락으로 보호하는 구현의 경우는 x 축에 붙어버려
 제대로 볼수가 없지만, RCU 와 해저드 포인터 사이의 상대적 성능 차이를 좀 더
 분간할 수 있습니다.
 둘 다 32 CPU 를 넘어가면서 성능 증가정도가 떨어지기 시작하는 걸 볼 수 있는데,
 이는 하드웨어 멀티쓰레딩 때문입니다.
 32개 이하의 CPU 에서, 각각의 쓰레드는 각각의 코어를 갖고 있습니다.
-이 수전에서, RCU 는 해저드 포인터보다 좋은 성능을 보이는데 이는 해저드 포인터의
+이 버전에서, RCU 는 해저드 포인터보다 좋은 성능을 보이는데 이는 해저드 포인터의
 read-side 메모리 배리어가 해당 코어 내에서의 시간을 잡아먹기 때문입니다.
-짧게 말해, RCU 는 하나의 하드웨어 쓰레드를 가지고 있을 때에는 해저드 포인터보다
-코어를 더 잘 활용합니다.
+요약하자면, RCU 는 하나의 하드웨어 쓰레드를 가지고 있을 때에는 해저드
+포인터보다 코어를 더 잘 활용합니다.
 \iffalse
 
 Figure~\ref{fig:datastruct:Read-Only RCU-Protected Hash-Table Performance For Schroedinger's Zoo, Linear Scale}
@@ -1201,14 +1201,14 @@ thread than is hazard pointers.
 
 이 상황은 32개보다 많은 CPU 들의 상황에서 변합니다.
 RCU 는 각 코어의 반이 넘는 리소스를 하나의 하드웨어 쓰레드에서 사용하므로, RCU
-각 코어에 두개의 하드웨어 쓰레드가 존재하게 되면 그 성능 이득이 상대적으로
-적어지게 됩니다.
+를 수행하는 코어 각각에 두개의 하드웨어 쓰레드가 존재하게 되면 그 성능 이득이
+상대적으로 적어지게 됩니다.
 해저드 포인터의 성능 그림에서의 경사도 역시 32 CPU 를 넘어서면서 줄어듭니다만,
 RCU 에 비해서는 좀 덜 극적으로 줄어들고 있는데, 이는 두번째 하드웨어 쓰레드는
 첫번째 하드웨어 쓰레드가 메모리 배리어 대기시간으로 멈춰서 있는 사이의 시간을
 활용할 수 있기 때문입니다.
 뒤의 섹션에서 보게 되겠지만, 하드웨어 포인터의 두번째 하드웨어 쓰레드
-사황에서의 이득은 워크로드의 특성에 종속적입니다.
+상황에서의 이득은 워크로드의 특성에 종속적입니다.
 \iffalse
 
 This situation changes above 32 CPUs.
@@ -1236,8 +1236,8 @@ advantage depends on the workload.
 Figure~\ref{fig:datastruct:Read-Side Cat-Only RCU-Protected Hash-Table Performance For Schroedinger's Zoo at 60 CPUs}
 는 60-CPU 가 동작하는 상황에서 고양이를 검색하는 CPU 의 숫자를 바꿔가면서 성능
 결과를 비교해 봅니다.
-RCU 와 해저드 포인터 모두 이 상황에 잘 동작합니다만, bucket 락킹은 오히려
-성능이 떨어지는데, 결국에는 심지어 하나의 락을 사용하는 경우보다도 나쁜 결과를
+RCU 와 해저드 포인터 모두 이 상황에 잘 동작하지만 bucket 락킹은 오히려 성능이
+떨어지는데, 결국에는 심지어 하나의 락을 사용하는 경우보다도 나쁜 결과를
 보입니다.
 만약 모든 CPU 가 고양이만을 검색하고 있다면 그 고양이의 bucket 에 연관된 락에
 모두가 매이게 될테고 이는 하나의 락을 사용하는 것과 같으므로 그다지 놀라운 일도
@@ -1262,8 +1262,8 @@ is for all intents and purposes a global lock.
 잠재적 문제를 보이고 있습니다.
 이 고양이의 파티션에 연관된 CPU 만이 그 고양이에 접근할 수 있게 되어서,
 고양이만 검색될 때의 성능을 제한하게 됩니다.
-물론, 수많은 어플리케이션들은 로드 오퍼레이션을 다양하게 흩뿌리는 특성을 가지고
-있고, 그런 어플리케이션들에서 샤딩 방법은 상당히 잘 동작할 것입니다.
+물론, 수많은 어플리케이션이 로드 오퍼레이션을 다양하게 흩뿌리는 특성을 가지고
+있고, 그런 어플리케이션들에서 샤딩 방법은 매우 잘 동작할 겁니다.
 하지만, 샤딩은 ``핫 스팟'' 을 아주 잘 처리하지는 못하고, Schr\"odiger 의 고양이
 예제는 그런 하나의 케이스를 보이고 있습니다.
 \iffalse
@@ -1289,13 +1289,13 @@ in point.
 \end{figure}
 
 물론, 데이터를 읽기만 할 셈이라면, 애초에 동시성 제어가 필요하지도 않을 겁니다.
-Figure~\ref{fig:datastruct:Read-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo at 60 CPUs}
-는 따라서, 업데이트의 영향을 보입니다.
+따라서, Figure~\ref{fig:datastruct:Read-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo at 60 CPUs}
+는 업데이트의 영향을 보입니다.
 이 그래프의 왼쪽 끝에서는 60 개의 모든 CPU 들이 검색만을 하고, 오른쪽 끝에서는
 모든 60개의 CPU 들이 업데이트만을 합니다.
 네개의 구현 모두, 밀리세컨드당 검색의 수는 업데이트를 하는 CPU 들의 수가
 늘어날수록 감소되고, 60개의 모든 CPU 들이 업데이트를 하게 될 때에는
-밀리세컨드당 검색의 수는 0이 되어버립니다.
+밀리세컨드당 검색의 수가 0이 되어버립니다.
 RCU 는 해저드 포인터에 비해 상대적으로 좋은 결과를 보이는데 해저드 포인터의
 read-side 메모리 배리어는 업데이트가 증가함에 따라 더 커다란 오버헤드를 내기
 때문입니다.
@@ -1386,7 +1386,7 @@ not recommended for production use.
 	해보는건 상당히 위험함이
 	Section~\ref{sec:datastruct:Hash-Table Performance} 에서
 	드러났었습니다.
-	하지만 60 CPU 를 가지고 더 많은 CPU 상황을 시뮬레이션 해보는건 왜
+	하지만 60 CPU 를 가지고 더 많은 CPU 상황을 시뮬레이션 해보는건 보다
 	안전할 수 있을까요?
 	\iffalse
 
@@ -1396,10 +1396,10 @@ not recommended for production use.
 	But why should extrapolating up from 60 CPUs be any safer?
 	\fi
 \QuickQuizAnswer{
-	그건 안전하지 않고, 유용한 방법은 그런 프로그램은 더 큰 시스템에서
+	그건 보다 안전하지 않고, 유용한 방법은 이 프로그램들을 더 큰 시스템에서
 	돌리는 것입니다.
-	그렇다고는 하나, 다른 테스트는 RCU read-side 기능들은 1024 쓰레드까지도
-	일관된 성능과 확장성을 제공하는 것을 보였습니다.
+	하지만, 다른 테스트는 RCU read-side 기능들은 1024 쓰레드까지도 일관된
+	성능과 확장성을 제공하는 것을 보였습니다.
 	\iffalse
 
 	It isn't any safer, and a useful exercise would be to run these
