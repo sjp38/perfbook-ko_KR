@@ -776,7 +776,8 @@ posed in \QuickQuizRef{\QcountQstatcnt}.
 
 Statistical counting is typically handled by providing a counter per
 thread (or CPU, when running in the kernel), so that each thread
-updates its own counter.
+updates its own counter, as was foreshadowed in
+Section~\ref{sec:toolsoftrade:Per-CPU Variables}.
 The aggregate value of the counters is read out by simply summing up
 all of the threads' counters,
 relying on the commutative and associative properties of addition.
@@ -867,28 +868,7 @@ thread (presumably cache aligned and padded to avoid false sharing).
 } \QuickQuizEnd
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 DEFINE_PER_THREAD(long, counter);
-  2 
-  3 void inc_count(void)
-  4 {
-  5   __get_thread_var(counter)++;
-  6 }
-  7 
-  8 long read_count(void)
-  9 {
- 10   int t;
- 11   long sum = 0;
- 12 
- 13   for_each_thread(t)
- 14     sum += per_thread(counter, t);
- 15   return sum;
- 16 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_stat@inc-read.fcv}
 \caption{Array-Based Per-Thread Statistical Counters}
 \label{lst:count:Array-Based Per-Thread Statistical Counters}
 \end{listing}
@@ -915,50 +895,34 @@ Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
 Such an array can be wrapped into per-thread primitives, as shown in
 Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
 (\path{count_stat.c}).
-Line~1 defines an array containing a set of per-thread counters of
-type \co{long} named, creatively enough, \co{counter}.
+\begin{lineref}[ln:count:count_stat:inc-read]
+Line~\lnref{define} defines an array containing a set of per-thread counters of
+type \co{unsigned long} named, creatively enough, \co{counter}.
 
-Lines~3-6 show a function that increments the counters, using the
+Lines~\lnref{inc:b}-\lnref{inc:e}
+show a function that increments the counters, using the
 \co{__get_thread_var()} primitive to locate the currently running
 thread's element of the \co{counter} array.
 Because this element is modified only by the corresponding thread,
 non-atomic increment suffices.
-
-Lines~8-16 show a function that reads out the aggregate value of the counter,
-using the \co{for_each_thread()} primitive to iterate over the list of
-currently running threads, and using the \co{per_thread()} primitive
-to fetch the specified thread's counter.
-Because the hardware can fetch and store a properly aligned \co{long}
-atomically, and because \GCC\ is kind enough to make use of this capability,
-normal loads suffice, and no special atomic instructions are required.
+%TODO: Apply
+However, this code uses \co{WRITE_ONCE()} to prevent destructive compiler
+optimizations.
+For but one example, the compiler is within its rights to use a
+to-be-stored-to location as temporary storage, thus writing what
+would be for all intents and purposes garbage to that location
+just before doing the desired store.
+This could of course be rather confusing to anything attempting to
+read out the count.
+The use of \co{WRITE_ONCE()} prevents this optimization and others besides.
 \fi
 
 \QuickQuiz{}
-	근데, 그 외에 \GCC\ 가 어떤 짓을 할 수 있죠???
-	\iffalse
-
-	What other choice does \GCC\ have, anyway???
-	\fi
+	What other nasty optimizations could \GCC\ apply?
 \QuickQuizAnswer{
-	C 표준대로라면, 다른 쓰레드에 의해 동시에 수정되고 있을 수 있는 변수를
-	읽어들이는 행동의 효과에 대해선 정의되어 있지 않습니다.
-	C 는 어토믹하게 \co{long} 타입 변수를 읽어들일 수가 없는 (예를
-	들면) 8-비트 아키텍쳐를 지원해야만 했기에 C 표준은 다른 선택의 여지가
-	없었습니다.
-	최신 버전의 C 표준은 이 간극을 매우기 위한 의도로 atomic 기능을
-	추가했습니다.
-	하지만, 이것들을 리눅스 커널에 적용하려는 시도는 뭐가 뭔지 모를 결과를
-	내놓았는데~\cite{JonathanCorbet2016C11atomics}, 이는 부분적으로는
-	atomic 기능이 만들어내는 코드의 낮은 품질 때문이기도 합니다.
-	또한, 리눅스 커널은 스스로의 메모리 모델에서 C11 어토믹 기능이 제공하는
-	것보다 훨씬 다양한 기능을 기대하는데, 컨트롤 의존성, full
-	barrier/fence, 그리고 낮은 오버헤드의 어드레스와 데이터 종속성이 여기
-	포함됩니다~\cite{PaulEMcKenney2016P0124R5-LKMM}.
-	\iffalse
-
-	According to the C standard, the effects of fetching a variable
-	that might be concurrently modified by some other thread are
-	undefined.
+	According to the C standard, the effects of doing a normal store
+	to a variable that might be concurrently loaded by some other
+	thread are undefined.
 	It turns out that the C standard really has no other choice,
 	given that C must support (for example) eight-bit architectures
 	which are incapable of atomically loading a \co{long}.
@@ -971,7 +935,6 @@ normal loads suffice, and no special atomic instructions are required.
 	memory model than C11 atomics provide, including control
 	dependencies, full barriers/fences, and low-overhead address
 	and data dependencies~\cite{PaulEMcKenney2016P0124R5-LKMM}.
-	\fi
 
 	언젠가는 C11 어토믹 기능이 이 간극을 메우겠지만, 그 때가 오기 전까지
 	리눅스 커널은 volatile 접근, inline 어셈블리, 컴파일러 지시어, 그리고
@@ -1019,8 +982,10 @@ normal loads suffice, and no special atomic instructions are required.
 	않으므로, 뭔가 다른게 필요합니다.
 	\iffalse
 
-	So why not just use plain old C-language assignment statements
-	to access shared variables?
+	But if the code is doing loads and stores that the underlying
+	hardware can implement with single instructions, why not just
+	use plain old C-language assignment statements to access shared
+	variables?
 	The problem is that the compiler is within its rights to assume
 	that no other thread is modifying the variable being accessed.
 	Given a plain old C-language load, the compiler would therefore
@@ -1077,6 +1042,22 @@ normal loads suffice, and no special atomic instructions are required.
 	coding standards.
 	\fi
 } \QuickQuizEnd
+
+Lines~\lnref{read:b}-\lnref{read:e}
+show a function that reads out the aggregate value of the counter,
+using the \co{for_each_thread()} primitive to iterate over the list of
+currently running threads, and using the \co{per_thread()} primitive
+to fetch the specified thread's counter.
+This code also uses \co{READ_ONCE()} to ensure that the compiler doesn't
+optimize these loads into oblivion.
+For but one example, a pair of consecutive calls to \co{read_count()}
+might be inlined, and an intrepid optimizer might notice that the same
+locations were being summed and thus incorrectly conclude that it would
+be simply wonderful to sum them once and use the resulting value twice.
+This sort of optimization might be rather frustrating to people expecting
+later \co{read_count()} calls to return larger values.
+The use of \co{READ_ONCE()} prevents this optimization and others besides.
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters} 의
@@ -1434,64 +1415,7 @@ eventually consistent.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
- 1 DEFINE_PER_THREAD(unsigned long, counter);
- 2 unsigned long global_count;
- 3 int stopflag;
- 4
- 5 void inc_count(void)
- 6 {
- 7   WRITE_ONCE(__get_thread_var(counter),
- 8              READ_ONCE(__get_thread_var(counter)) + 1);
- 9 }
-10
-11 unsigned long read_count(void)
-12 {
-13   return READ_ONCE(global_count);
-14 }
-15
-16 void *eventual(void *arg)
-17 {
-18   int t;
-19   unsigned long sum;
-20
-21   while (READ_ONCE(stopflag) < 3) {
-22     sum = 0;
-23     for_each_thread(t)
-24       sum += READ_ONCE(per_thread(counter, t));
-25     WRITE_ONCE(global_count, sum);
-26     poll(NULL, 0, 1);
-27     if (READ_ONCE(stopflag)) {
-28       smp_mb();
-29       WRITE_ONCE(stopflag, READ_ONCE(stopflag) + 1);
-30     }
-31   }
-32   return NULL;
-33 }
-34
-35 void count_init(void)
-36 {
-37   int en;
-38   thread_id_t tid;
-39
-40   if ((en = pthread_create(&tid, NULL, eventual, NULL)) != 0) {
-41     fprintf(stderr, "pthread_create: %s\n", strerror(en));
-42     exit(-1);
-43   }
-44 }
-45
-46 void count_cleanup(void)
-47 {
-48   WRITE_ONCE(stopflag, 1);
-49   while (READ_ONCE(stopflag) < 3)
-50     poll(NULL, 0, 1);
-51   smp_mb();
-52 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_stat_eventual@whole.fcv}
 \caption{Array-Based Per-Thread Eventually Consistent Counters}
 \label{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 \end{listing}
@@ -1508,17 +1432,22 @@ Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters} 의 것과
 리턴합니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:count:count_stat_eventual:whole]
 The implementation is shown in
 Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 (\path{count_stat_eventual.c}).
-Lines~1-2 show the per-thread variable and the global variable that
-track the counter's value, and line three shows \co{stopflag}
+Lines~\lnref{per_thr_cnt}-\lnref{glb_cnt}
+show the per-thread variable and the global variable that
+track the counter's value, and line~\lnref{stopflag} shows \co{stopflag}
 which is used to coordinate termination (for the case where we want
 to terminate the program with an accurate counter value).
-The \co{inc_count()} function shown on lines~5-9 is similar to its
+The \co{inc_count()} function shown on
+lines~\lnref{inc:b}-\lnref{inc:e} is similar to its
 counterpart in
 Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}.
-The \co{read_count()} function shown on lines~11-14 simply returns the
+The \co{read_count()} function shown on
+lines~\lnref{read:b}-\lnref{read:e} simply returns the
 value of the \co{global_count} variable.
 \fi
 
@@ -1535,19 +1464,24 @@ value of the \co{global_count} variable.
 추가된 쓰레드의 수행이라는 비용을 가집니다.
 \iffalse
 
-However, the \co{count_init()} function on lines~35-44
-creates the \co{eventual()} thread shown on lines~16-33, which
+However, the \co{count_init()} function on
+lines~\lnref{init:b}-\lnref{init:e}
+creates the \co{eventual()} thread shown on
+lines~\lnref{eventual:b}-\lnref{eventual:e}, which
 cycles through all the threads,
 summing the per-thread local \co{counter} and storing the
 sum to the \co{global_count} variable.
 The \co{eventual()} thread waits an arbitrarily chosen one millisecond
 between passes.
-The \co{count_cleanup()} function on lines~46-52 coordinates termination.
+The \co{count_cleanup()} function on
+lines~\lnref{cleanup:b}-\lnref{cleanup:e} coordinates termination.
 
 This approach gives extremely fast counter read-out while still
 supporting linear counter-update performance.
 However, this excellent read-side performance and update-side scalability
 comes at the cost of the additional thread running \co{eventual()}.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -1751,55 +1685,7 @@ comes at the cost of the additional thread running \co{eventual()}.
 \label{sec:count:Per-Thread-Variable-Based Implementation}
 
 \begin{listing}[tb]
-{ \scriptsize
-\begin{verbbox}
-  1 long __thread counter = 0;
-  2 long *counterp[NR_THREADS] = { NULL };
-  3 long finalcount = 0;
-  4 DEFINE_SPINLOCK(final_mutex);
-  5 
-  6 void inc_count(void)
-  7 {
-  8   WRITE_ONCE(counter,
-  9              READ_ONCE(counter) + 1);counter++;
- 10 }
- 11 
- 12 long read_count(void)
- 13 {
- 14   int t;
- 15   long sum;
- 16 
- 17   spin_lock(&final_mutex);
- 18   sum = finalcount;
- 19   for_each_thread(t)
- 20     if (counterp[t] != NULL)
- 21       sum += *counterp[t];
- 22   spin_unlock(&final_mutex);
- 23   return sum;
- 24 }
- 25 
- 26 void count_register_thread(void)
- 27 {
- 28   int idx = smp_thread_id();
- 29 
- 30   spin_lock(&final_mutex);
- 31   counterp[idx] = &counter;
- 32   spin_unlock(&final_mutex);
- 33 }
- 34 
- 35 void count_unregister_thread(int nthreadsexpected)
- 36 {
- 37   int idx = smp_thread_id();
- 38 
- 39   spin_lock(&final_mutex);
- 40   finalcount += counter;
- 41   counterp[idx] = NULL;
- 42   spin_unlock(&final_mutex);
- 43 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_end@whole.fcv}
 \caption{Per-Thread Statistical Counters}
 \label{lst:count:Per-Thread Statistical Counters}
 \end{listing}
@@ -1828,11 +1714,15 @@ a statistical counter that not only scales, but that also incurs little
 or no performance penalty to incrementers compared to simple non-atomic
 increment.
 
-Lines~1-4 define needed variables: \co{counter} is the per-thread counter
+\begin{lineref}[ln:count:count_end:whole]
+Lines~\lnref{var:b}-\lnref{var:e} define needed variables:
+\co{counter} is the per-thread counter
 variable, the \co{counterp[]} array allows threads to access each others'
 counters, \co{finalcount} accumulates the total as individual threads exit,
 and \co{final_mutex} coordinates between threads accumulating the total
 value of the counter and exiting threads.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -1935,16 +1825,23 @@ value of the counter and exiting threads.
 마지막으로, 라인~23 에서 그 합을 리턴합니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:count:count_end:whole:inc]
 The \co{inc_count()} function used by updaters is quite simple, as can
-be seen on lines~6-10.
+be seen on lines~\lnref{b}-\lnref{e}.
+\end{lineref}
 
+\begin{lineref}[ln:count:count_end:whole:read]
 The \co{read_count()} function used by readers is a bit more complex.
-Line~17 acquires a lock to exclude exiting threads, and line~22 releases
-it.
-Line~18 initializes the sum to the count accumulated by those threads that
-have already exited, and lines~19-21 sum the counts being accumulated
+Line~\lnref{acquire} acquires a lock to exclude exiting threads, and
+line~\lnref{release} releases it.
+Line~\lnref{sum:init} initializes the sum to the count accumulated by those threads that
+have already exited, and
+lines~\lnref{loop:b}-\lnref{loop:e} sum the counts being accumulated
 by threads currently running.
-Finally, line~23 returns the sum.
+Finally, line~\lnref{return} returns the sum.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -1954,12 +1851,14 @@ Finally, line~23 returns the sum.
 	\co{NULL} 로 만드는 대신 그 변수로 향하게 하는게 어떤가요?
 	\iffalse
 
-	Doesn't the check for \co{NULL} on line~20 of
+	\begin{lineref}[ln:count:count_end:whole:read]
+	Doesn't the check for \co{NULL} on line~\lnref{check} of
 	Listing~\ref{lst:count:Per-Thread Statistical Counters}
 	add extra branch mispredictions?
 	Why not have a variable set permanently to zero, and point
 	unused counter-pointers to that variable rather than setting
 	them to \co{NULL}?
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	말 되는 이야기입니다.
@@ -2036,10 +1935,14 @@ Finally, line~23 returns the sum.
 쓰레드별 \co{counter} 변수를 가리키도록 만듭니다.
 \iffalse
 
-Lines~26-33 show the \co{count_register_thread()} function, which
+%TODO: Apply
+\begin{lineref}[ln:count:count_end:whole:reg]
+Lines~\lnref{b}-\lnref{e} show the \co{count_register_thread()}
+function, which
 must be called by each thread before its first use of this counter.
 This function simply sets up this thread's element of the \co{counterp[]}
 array to point to its per-thread \co{counter} variable.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -2087,18 +1990,25 @@ array to point to its per-thread \co{counter} variable.
 것입니다.
 \iffalse
 
-Lines~35-43 show the \co{count_unregister_thread()} function, which
+%TODO: Apply
+\begin{lineref}[ln:count:count_end:whole:unreg]
+Lines~\lnref{b}-\lnref{e} show the \co{count_unregister_thread()}
+function, which
 must be called prior to exit by each thread that previously called
 \co{count_register_thread()}.
-Line~39 acquires the lock, and line~42 releases it, thus excluding any
+Line~\lnref{acquire} acquires the lock, and
+line~\lnref{release} releases it, thus excluding any
 calls to \co{read_count()} as well as other calls to
 \co{count_unregister_thread()}.
-Line~40 adds this thread's \co{counter} to the global \co{finalcount},
-and then line~41 \co{NULL}s out its \co{counterp[]} array entry.
+Line~\lnref{add} adds this thread's \co{counter} to the global
+\co{finalcount},
+and then line~\lnref{NULL} \co{NULL}s out its \co{counterp[]} array entry.
 A subsequent call to \co{read_count()} will see the exiting thread's
 count in the global \co{finalcount}, and will skip the exiting thread
 when sequencing through the \co{counterp[]} array, thus obtaining
 the correct total.
+%TODO: Apply
+\end{lineref}
 \fi
 
 이 방법은 업데이트 쓰레드에 어토믹하지 않은 더하기와 거의 똑같은 성능을
@@ -2144,50 +2054,7 @@ variables vanish when that thread exits.
 	\fi
 
 \begin{listing}[tb]
-{ \scriptsize
-\begin{verbbox}
-  1 long __thread counter = 0;
-  2 long *counterp[NR_THREADS] = { NULL };
-  3 int finalthreadcount = 0;
-  4 DEFINE_SPINLOCK(final_mutex);
-  5 
-  6 void inc_count(void)
-  7 {
-  8   counter++;
-  9 }
- 10 
- 11 long read_count(void)
- 12 {
- 13   int t;
- 14   long sum = 0;
- 15 
- 16   for_each_thread(t)
- 17     if (counterp[t] != NULL)
- 18       sum += *counterp[t];
- 19   return sum;
- 20 }
- 21 
- 22 void count_init(void)
- 23 {
- 24 }
- 25 
- 26 void count_register_thread(void)
- 27 {
- 28   counterp[smp_thread_id()] = &counter;
- 29 }
- 30 
- 31 void count_unregister_thread(int nthreadsexpected)
- 32 {
- 33   spin_lock(&final_mutex);
- 34   finalthreadcount++;
- 35   spin_unlock(&final_mutex);
- 36   while (finalthreadcount < nthreadsexpected)
- 37     poll(NULL, 0, 1);
- 38 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_tstat@whole.fcv}
 \caption{Per-Thread Statistical Counters With Lockless Summation}
 \label{lst:count:Per-Thread Statistical Counters With Lockless Summation}
 \end{listing}
@@ -2209,9 +2076,9 @@ variables vanish when that thread exits.
 	Listing~\ref{lst:count:Per-Thread Statistical Counters With Lockless Summation}
 	(\path{count_tstat.c}).
 	Analysis of this code is left as an exercise to the reader,
-	however, please note that it does not fit well into the
+	however, please note that it requires tweaks in the
 	\path{counttorture.h} counter-evaluation scheme.
-	(Why not?)
+	(Hint: See \co{#ifndef KEEP_GCC_THREAD_LOCAL}.)
 	Chapter~\ref{chp:Deferred Processing} will introduce 
 	synchronization mechanisms that handle this situation in a much
 	more graceful manner.
@@ -2559,19 +2426,7 @@ Section~\ref{sec:SMPdesign:Parallel Fastpath}.
 \label{sec:count:Simple Limit Counter Implementation}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 unsigned long __thread counter = 0;
-  2 unsigned long __thread countermax = 0;
-  3 unsigned long globalcountmax = 10000;
-  4 unsigned long globalcount = 0;
-  5 unsigned long globalreserve = 0;
-  6 unsigned long *counterp[NR_THREADS] = { NULL };
-  7 DEFINE_SPINLOCK(gblcnt_mutex);
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim@variable.fcv}
 \caption{Simple Limit Counter Variables}
 \label{lst:count:Simple Limit Counter Variables}
 \end{listing}
@@ -2598,19 +2453,24 @@ Figure~\ref{fig:count:Simple Limit Counter Variable Relationships} 에 나타나
 있습니다:
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim:variable]
 Listing~\ref{lst:count:Simple Limit Counter Variables}
 shows both the per-thread and global variables used by this
 implementation.
 The per-thread \co{counter} and \co{countermax} variables are the
 corresponding thread's local counter and the upper bound on that
 counter, respectively.
-The \co{globalcountmax} variable on line~3 contains the upper
+The \co{globalcountmax} variable on
+line~\lnref{globalcountmax} contains the upper
 bound for the aggregate counter, and the \co{globalcount} variable
-on line~4 is the global counter.
+on line~\lnref{globalcount} is the global counter.
 The sum of \co{globalcount} and each thread's \co{counter} gives
 the aggregate value of the overall counter.
-The \co{globalreserve} variable on line~5 is the sum of all of the
+The \co{globalreserve} variable on
+line~\lnref{globalreserve} is the sum of all of the
 per-thread \co{countermax} variables.
+\end{lineref}
 The relationship among these variables is shown by
 Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}:
 \fi
@@ -2646,62 +2506,7 @@ has acquired \co{gblcnt_mutex}.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 int add_count(unsigned long delta)
-  2 {
-  3   if (countermax - counter >= delta) {
-  4     counter += delta;
-  5     return 1;
-  6   }
-  7   spin_lock(&gblcnt_mutex);
-  8   globalize_count();
-  9   if (globalcountmax -
- 10       globalcount - globalreserve < delta) {
- 11     spin_unlock(&gblcnt_mutex);
- 12     return 0;
- 13   }
- 14   globalcount += delta;
- 15   balance_count();
- 16   spin_unlock(&gblcnt_mutex);
- 17   return 1;
- 18 }
- 19 
- 20 int sub_count(unsigned long delta)
- 21 {
- 22   if (counter >= delta) {
- 23     counter -= delta;
- 24     return 1;
- 25   }
- 26   spin_lock(&gblcnt_mutex);
- 27   globalize_count();
- 28   if (globalcount < delta) {
- 29     spin_unlock(&gblcnt_mutex);
- 30     return 0;
- 31   }
- 32   globalcount -= delta;
- 33   balance_count();
- 34   spin_unlock(&gblcnt_mutex);
- 35   return 1;
- 36 }
- 37 
- 38 unsigned long read_count(void)
- 39 {
- 40   int t;
- 41   unsigned long sum;
- 42 
- 43   spin_lock(&gblcnt_mutex);
- 44   sum = globalcount;
- 45   for_each_thread(t)
- 46     if (counterp[t] != NULL)
- 47       sum += *counterp[t];
- 48   spin_unlock(&gblcnt_mutex);
- 49   return sum;
- 50 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim@add_sub_read.fcv}
 \caption{Simple Limit Counter Add, Subtract, and Read}
 \label{lst:count:Simple Limit Counter Add, Subtract, and Read}
 \end{listing}
@@ -2753,12 +2558,19 @@ functions (\path{count_lim.c}).
 않으며, 쓰레드별 변수만 참조하므로 어떤 캐시 미스도 만들지 않을 겁니다.
 \iffalse
 
-Lines~1-18 show \co{add_count()}, which adds the specified value \co{delta}
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim:add_sub_read:add]
+Lines~\lnref{b}-\lnref{e} show \co{add_count()},
+which adds the specified value \co{delta}
 to the counter.
-Line~3 checks to see if there is room for \co{delta} on this thread's
-\co{counter}, and, if so, line~4 adds it and line~6 returns success.
+Line~\lnref{checklocal} checks to see if there is room for
+\co{delta} on this thread's
+\co{counter}, and, if so,
+line~\lnref{add} adds it and line~\lnref{return:ls} returns success.
 This is the \co{add_counter()} fastpath, and it does no atomic operations,
 references only per-thread variables, and should not incur any cache misses.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -2767,22 +2579,19 @@ references only per-thread variables, and should not incur any cache misses.
 	왜 다음과 같이 더 직관적인 형태의 빠른 수행경로를 사용하지 않는거죠?
 	\iffalse
 
-	What is with the strange form of the condition on line~3 of
+	What is with the strange form of the condition on
+	line~\ref{ln:count:count_lim:add_sub_read:add:checklocal} of
 	Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}?
 	Why not the following more intuitive form of the fastpath?
 	\fi
 
-	\vspace{5pt}
-	\begin{minipage}[t]{\columnwidth}
-	\small
-	\begin{verbatim}
-  3 if (counter + delta <= countermax) {
-  4   counter += delta;
-  5   return 1;
-  6 }
-	\end{verbatim}
-	\end{minipage}
-	\vspace{5pt}
+\begin{VerbatimN}[firstnumber=3]
+if (counter + delta <= countermax) {
+	counter += delta;
+	return 1;
+}
+\end{VerbatimN}
+\vspace{-9pt}
 \QuickQuizAnswer{
 	두단어로 설명하죠.
 	``인티저 오버플로우 (Integer overflow).''
@@ -2831,20 +2640,26 @@ Listing~\ref{fig:count:Simple Limit Counter Variable Relationships} 에서 가�
 \co{gblcnt_mutex} 를 풀고 라인~12 에서 실패를 알리는 리턴을 합니다.
 \iffalse
 
-If the test on line~3 fails, we must access global variables, and thus
-must acquire \co{gblcnt_mutex} on line~7, which we release on line~11
-in the failure case or on line~16 in the success case.
-Line~8 invokes \co{globalize_count()}, shown in
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim:add_sub_read:add]
+If the test on
+line~\lnref{checklocal} fails, we must access global variables, and thus
+must acquire \co{gblcnt_mutex} on
+line~\lnref{acquire}, which we release on line~\lnref{release:f}
+in the failure case or on line~\lnref{release:s} in the success case.
+Line~\lnref{globalize} invokes \co{globalize_count()}, shown in
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions},
 which clears the thread-local variables, adjusting the global variables
 as needed, thus simplifying global processing.
 (But don't take \emph{my} word for it, try coding it yourself!)
-Lines~9 and~10 check to see if addition of \co{delta} can be accommodated,
+Lines~\lnref{checkglb:b} and~\lnref{checkglb:e} check to see
+if addition of \co{delta} can be accommodated,
 with the meaning of the expression preceding the less-than sign shown in
 Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
 as the difference in height of the two red (leftmost) bars.
 If the addition of \co{delta} cannot be accommodated, then
-line~11 (as noted earlier) releases \co{gblcnt_mutex} and line~12
+line~\lnref{release:f} (as noted earlier) releases \co{gblcnt_mutex} and
+line~\lnref{return:gf}
 returns indicating failure.
 \fi
 
@@ -2860,15 +2675,17 @@ returns indicating failure.
 \iffalse
 
 Otherwise, we take the slowpath.
-Line~14 adds \co{delta} to \co{globalcount}, and then
-line~15 invokes \co{balance_count()} (shown in
+Line~\lnref{addglb} adds \co{delta} to \co{globalcount}, and then
+line~\lnref{balance} invokes \co{balance_count()} (shown in
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions})
 in order to update both the global and the per-thread variables.
 This call to \co{balance_count()}
 will usually set this thread's \co{countermax} to re-enable the fastpath.
-Line~16 then releases
+Line~\lnref{release:s} then releases
 \co{gblcnt_mutex} (again, as noted earlier), and, finally,
-line~17 returns indicating success.
+%TODO: Apply
+line~\lnref{return:gs} returns indicating success.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -2906,11 +2723,14 @@ line~17 returns indicating success.
 수행경로로, 이 경로에서는 비용이 심한 동작은 하지 않습니다.
 \iffalse
 
-Lines~20-36 show \co{sub_count()}, which subtracts the specified
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim:add_sub_read:sub]
+Lines~\lnref{b}-\lnref{e} show \co{sub_count()},
+which subtracts the specified
 \co{delta} from the counter.
-Line~22 checks to see if the per-thread counter can accommodate
-this subtraction, and, if so, line~23 does the subtraction and
-line~24 returns success.
+Line~\lnref{checklocal} checks to see if the per-thread counter can accommodate
+this subtraction, and, if so, line~\lnref{sub} does the subtraction and
+line~\lnref{return:ls} returns success.
 These lines form \co{sub_count()}'s fastpath, and, as with
 \co{add_count()}, this fastpath executes no costly operations.
 \fi
@@ -2929,17 +2749,20 @@ These lines form \co{sub_count()}'s fastpath, and, as with
 \iffalse
 
 If the fastpath cannot accommodate subtraction of \co{delta},
-execution proceeds to the slowpath on lines~26-35.
-Because the slowpath must access global state, line~26
-acquires \co{gblcnt_mutex}, which is released either by line~29
-(in case of failure) or by line~34 (in case of success).
-Line~27 invokes \co{globalize_count()}, shown in
+execution proceeds to the slowpath on
+lines~\lnref{acquire}-\lnref{return:gs}.
+Because the slowpath must access global state, line~\lnref{acquire}
+acquires \co{gblcnt_mutex}, which is released either by line~\lnref{release:f}
+(in case of failure) or by line~\lnref{release:s} (in case of success).
+Line~\lnref{globalize} invokes \co{globalize_count()}, shown in
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions},
 which again clears the thread-local variables, adjusting the global variables
 as needed.
-Line~28 checks to see if the counter can accommodate subtracting
-\co{delta}, and, if not, line~29 releases \co{gblcnt_mutex}
-(as noted earlier) and line~30 returns failure.
+%TODO: Apply
+Line~\lnref{checkglb} checks to see if the counter can accommodate subtracting
+\co{delta}, and, if not, line~\lnref{release:f} releases \co{gblcnt_mutex}
+(as noted earlier) and line~\lnref{return:gf} returns failure.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -3017,14 +2840,19 @@ Line~28 checks to see if the counter can accommodate subtracting
 라인~34 에서는 \co{gblcnt_mutex} 를 해제하고, 라인~35 에서 성공을 리턴합니다.
 \iffalse
 
-If, on the other hand, line~28 finds that the counter \emph{can}
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim:add_sub_read:sub]
+If, on the other hand, line~\lnref{checkglb} finds that the counter \emph{can}
 accommodate subtracting \co{delta}, we complete the slowpath.
-Line~32 does the subtraction and then
-line~33 invokes \co{balance_count()} (shown in
+Line~\lnref{subglb} does the subtraction and then
+line~\lnref{balance} invokes \co{balance_count()} (shown in
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions})
 in order to update both global and per-thread variables
 (hopefully re-enabling the fastpath).
-Then line~34 releases \co{gblcnt_mutex}, and line~35 returns success.
+%TODO: Apply
+Then line~\lnref{release:s} releases \co{gblcnt_mutex}, and
+line~\lnref{return:gs} returns success.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -3064,62 +2892,26 @@ Then line~34 releases \co{gblcnt_mutex}, and line~35 returns success.
 그러고나서 라인~49 에서 합을 리턴합니다.
 \iffalse
 
-Lines~38-50 show \co{read_count()}, which returns the aggregate value
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim:add_sub_read:read]
+Lines~\lnref{b}-\lnref{e} show \co{read_count()},
+which returns the aggregate value
 of the counter.
-It acquires \co{gblcnt_mutex} on line~43 and releases it on line~48,
+It acquires \co{gblcnt_mutex} on line~\lnref{acquire}
+and releases it on line~\lnref{release},
 excluding global operations from \co{add_count()} and \co{sub_count()},
 and, as we will see, also excluding thread creation and exit.
-Line~44 initializes local variable \co{sum} to the value of
-\co{globalcount}, and then the loop spanning lines~45-47 sums the
+Line~\lnref{initsum} initializes local variable \co{sum} to the value of
+\co{globalcount}, and then the loop spanning
+lines~\lnref{loop:b}-\lnref{loop:e} sums the
 per-thread \co{counter} variables.
-Line~49 then returns the sum.
+%TODO: Apply
+Line~\lnref{return} then returns the sum.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 static void globalize_count(void)
-  2 {
-  3   globalcount += counter;
-  4   counter = 0;
-  5   globalreserve -= countermax;
-  6   countermax = 0;
-  7 }
-  8 
-  9 static void balance_count(void)
- 10 {
- 11   countermax = globalcountmax -
- 12                globalcount - globalreserve;
- 13   countermax /= num_online_threads();
- 14   globalreserve += countermax;
- 15   counter = countermax / 2;
- 16   if (counter > globalcount)
- 17     counter = globalcount;
- 18   globalcount -= counter;
- 19 }
- 20 
- 21 void count_register_thread(void)
- 22 {
- 23   int idx = smp_thread_id();
- 24 
- 25   spin_lock(&gblcnt_mutex);
- 26   counterp[idx] = &counter;
- 27   spin_unlock(&gblcnt_mutex);
- 28 }
- 29 
- 30 void count_unregister_thread(int nthreadsexpected)
- 31 {
- 32   int idx = smp_thread_id();
- 33 
- 34   spin_lock(&gblcnt_mutex);
- 35   globalize_count();
- 36   counterp[idx] = NULL;
- 37   spin_unlock(&gblcnt_mutex);
- 38 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim@utility.fcv}
 \caption{Simple Limit Counter Utility Functions}
 \label{lst:count:Simple Limit Counter Utility Functions}
 \end{listing}
@@ -3147,18 +2939,22 @@ shows a number of utility functions used by the \co{add_count()},
 \co{sub_count()}, and \co{read_count()} primitives shown in
 Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}.
 
-Lines~1-7 show \co{globalize_count()}, which zeros the current thread's
+\begin{lineref}[ln:count:count_lim:utility:globalize]
+Lines~\lnref{b}-\lnref{e} show \co{globalize_count()},
+which zeros the current thread's
 per-thread counters, adjusting the global variables appropriately.
 It is important to note that this function does not change the aggregate
 value of the counter, but instead changes how the counter's current value
 is represented.
-Line~3 adds the thread's \co{counter} variable to \co{globalcount},
-and line~4 zeroes \co{counter}.
-Similarly, line~5 subtracts the per-thread \co{countermax} from
-\co{globalreserve}, and line~6 zeroes \co{countermax}.
+Line~\lnref{add} adds the thread's \co{counter} variable to \co{globalcount},
+and line~\lnref{zero} zeroes \co{counter}.
+Similarly, line~\lnref{sub} subtracts the per-thread \co{countermax} from
+\co{globalreserve}, and line~\lnref{zeromax} zeroes \co{countermax}.
 It is helpful to refer to
 Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
 when reading both this function and \co{balance_count()}, which is next.
+%TODO: Apply
+\end{lineref}
 \fi
 
 라인~9-19 는 \co{balance_count()} 함수를 보이는데, 이 함수는 간단히 말해서
@@ -3176,7 +2972,9 @@ Figure~\ref{fig:count:Simple Limit Counter Variable Relationships} 에서 보여
 바꾸지 못합니다.
 \iffalse
 
-Lines~9-19 show \co{balance_count()}, which is roughly speaking
+\begin{lineref}[ln:count:count_lim:utility:balance]
+Lines~\lnref{b}-\lnref{e} show \co{balance_count()},
+which is roughly speaking
 the inverse of \co{globalize_count()}.
 This function's job is to set the current thread's
 \co{countermax} variable to the largest value that avoids the risk
@@ -3203,18 +3001,23 @@ to change the aggregate value of the counter.
 조정합니다.
 \iffalse
 
-Lines~11-13 compute this thread's share of that portion of
+Lines~\lnref{share:b}-\lnref{share:e} compute this thread's share of
+that portion of
 \co{globalcountmax} that is not already covered by either
 \co{globalcount} or \co{globalreserve}, and assign the
 computed quantity to this thread's \co{countermax}.
-Line~14 makes the corresponding adjustment to \co{globalreserve}.
-Line~15 sets this thread's \co{counter} to the middle of the range
+Line~\lnref{adjreserve} makes the corresponding adjustment to \co{globalreserve}.
+Line~\lnref{middle} sets this thread's \co{counter} to the middle of the range
 from zero to \co{countermax}.
-Line~16 checks to see whether \co{globalcount} can in fact accommodate
-this value of \co{counter}, and, if not, line~17 decreases \co{counter}
+Line~\lnref{check} checks to see whether \co{globalcount} can in fact accommodate
+this value of \co{counter}, and, if not,
+line~\lnref{adjcounter} decreases \co{counter}
 accordingly.
-Finally, in either case, line~18 makes the corresponding adjustment to
+Finally, in either case,
+line~\lnref{adjglobal} makes the corresponding adjustment to
 \co{globalcount}.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -3223,7 +3026,9 @@ Finally, in either case, line~18 makes the corresponding adjustment to
 	그냥 \co{countermax} 값을 가져오는게 더 간단하지 않나요?
 	\iffalse
 
-	Why set \co{counter} to \co{countermax / 2} in line~15 of
+	%TODO: Apply
+	Why set \co{counter} to \co{countermax / 2} in
+	line~\ref{ln:count:count_lim:utility:balance:middle} of
 	Listing~\ref{lst:count:Simple Limit Counter Utility Functions}?
 	Wouldn't it be simpler to just take \co{countermax} counts?
 	\fi
@@ -3240,7 +3045,7 @@ Finally, in either case, line~18 makes the corresponding adjustment to
 	\iffalse
 
 	First, it really is reserving \co{countermax} counts
-	(see line~14), however,
+	(see line~\ref{ln:count:count_lim:utility:balance:adjreserve}), however,
 	it adjusts so that only half of these are actually in use
 	by the thread at the moment.
 	This allows the thread to carry out at least \co{countermax / 2}
@@ -3396,19 +3201,29 @@ thread~0 can once again increment the counter locally.
 정리합니다.
 \iffalse
 
-Lines~21-28 show \co{count_register_thread()}, which sets up state for
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim:utility:register]
+Lines~\lnref{b}-\lnref{e} show \co{count_register_thread()},
+which sets up state for
 newly created threads.
 This function simply installs
 a pointer to the newly created thread's \co{counter} variable into
 the corresponding entry of the \co{counterp[]} array under the protection
 of \co{gblcnt_mutex}.
+\end{lineref}
 
-Finally, lines~30-38 show \co{count_unregister_thread()}, which tears down
+\begin{lineref}[ln:count:count_lim:utility:unregister]
+Finally, lines~\lnref{b}-\lnref{e} show \co{count_unregister_thread()},
+which tears down
 state for a soon-to-be-exiting thread.
-Line~34 acquires \co{gblcnt_mutex} and line~37 releases it.
-Line~35 invokes \co{globalize_count()} to clear out this thread's
-counter state, and line~36 clears this thread's entry in the
+Line~\lnref{acquire} acquires \co{gblcnt_mutex} and
+line~\lnref{release} releases it.
+Line~\lnref{globalize} invokes \co{globalize_count()}
+to clear out this thread's
+counter state, and line~\lnref{clear} clears this thread's entry in the
 \co{counterp[]} array.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \subsection{Simple Limit Counter Discussion}
@@ -3450,44 +3265,13 @@ This task is undertaken in the next section.
 \label{sec:count:Approximate Limit Counter Implementation}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 unsigned long __thread counter = 0;
-  2 unsigned long __thread countermax = 0;
-  3 unsigned long globalcountmax = 10000;
-  4 unsigned long globalcount = 0;
-  5 unsigned long globalreserve = 0;
-  6 unsigned long *counterp[NR_THREADS] = { NULL };
-  7 DEFINE_SPINLOCK(gblcnt_mutex);
-  8 #define MAX_COUNTERMAX 100
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_app@variable.fcv}
 \caption{Approximate Limit Counter Variables}
 \label{lst:count:Approximate Limit Counter Variables}
 \end{listing}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 static void balance_count(void)
-  2 {
-  3   countermax = globalcountmax -
-  4                globalcount - globalreserve;
-  5   countermax /= num_online_threads();
-  6   if (countermax > MAX_COUNTERMAX)
-  7     countermax = MAX_COUNTERMAX;
-  8   globalreserve += countermax;
-  9   counter = countermax / 2;
- 10   if (counter > globalcount)
- 11     counter = globalcount;
- 12   globalcount -= counter;
- 13 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_app@balance.fcv}
 \caption{Approximate Limit Counter Balancing}
 \label{lst:count:Approximate Limit Counter Balancing}
 \end{listing}
@@ -3522,12 +3306,16 @@ Listing~\ref{lst:count:Simple Limit Counter Variables},
 with the addition of \co{MAX_COUNTERMAX}, which sets the maximum
 permissible value of the per-thread \co{countermax} variable.
 
+\begin{lineref}[ln:count:count_lim_app:balance]
 Similarly,
 Listing~\ref{lst:count:Approximate Limit Counter Balancing}
 is identical to the \co{balance_count()} function in
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions},
-with the addition of lines~6 and~7, which enforce the
+with the addition of
+lines~\lnref{enforce:b} and~\lnref{enforce:e}, which enforce the
 \co{MAX_COUNTERMAX} limit on the per-thread \co{countermax} variable.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \subsection{Approximate Limit Counter Discussion}
@@ -3670,45 +3458,7 @@ represent \co{counter} and the low-order 16 bits to represent
 } \QuickQuizEnd
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 atomic_t __thread ctrandmax = ATOMIC_INIT(0);
-  2 unsigned long globalcountmax = 10000;
-  3 unsigned long globalcount = 0;
-  4 unsigned long globalreserve = 0;
-  5 atomic_t *counterp[NR_THREADS] = { NULL };
-  6 DEFINE_SPINLOCK(gblcnt_mutex);
-  7 #define CM_BITS (sizeof(atomic_t) * 4)
-  8 #define MAX_COUNTERMAX ((1 << CM_BITS) - 1)
-  9 
- 10 static void
- 11 split_ctrandmax_int(int cami, int *c, int *cm)
- 12 {
- 13   *c = (cami >> CM_BITS) & MAX_COUNTERMAX;
- 14   *cm = cami & MAX_COUNTERMAX;
- 15 }
- 16 
- 17 static void
- 18 split_ctrandmax(atomic_t *cam, int *old,
- 19                     int *c, int *cm)
- 20 {
- 21   unsigned int cami = atomic_read(cam);
- 22 
- 23   *old = cami;
- 24   split_ctrandmax_int(cami, c, cm);
- 25 }
- 26 
- 27 static int merge_ctrandmax(int c, int cm)
- 28 {
- 29   unsigned int cami;
- 30 
- 31   cami = (c << CM_BITS) | cm;
- 32   return ((int)cami);
- 33 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_atomic@var_access.fcv}
 \caption{Atomic Limit Counter Variables and Access Functions}
 \label{lst:count:Atomic Limit Counter Variables and Access Functions}
 \end{listing}
@@ -3730,25 +3480,29 @@ Listing~\ref{lst:count:Approximate Limit Counter Variables} 에 있는 것들과
 최대값을 나타내는 \co{MAX_COUNTERMAX} 를 정의합니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_atomic:var_access:var]
 The variables and access functions for a simple atomic limit counter
 are shown in
 Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
 (\path{count_lim_atomic.c}).
 The \co{counter} and \co{countermax} variables in earlier algorithms
-are combined into the single variable \co{ctrandmax} shown on
-line~1, with \co{counter} in the upper half and \co{countermax} in
+are combined into the single variable \co{counterandmax} shown on
+line~\lnref{candmax}, with \co{counter} in the upper half and \co{countermax} in
 the lower half.
 This variable is of type \co{atomic_t}, which has an underlying
 representation of \co{int}.
 
-Lines~2-6 show the definitions for \co{globalcountmax}, \co{globalcount},
+Lines~\lnref{def:b}-\lnref{def:e} show the definitions for \co{globalcountmax}, \co{globalcount},
 \co{globalreserve}, \co{counterp}, and \co{gblcnt_mutex}, all of which
 take on roles similar to their counterparts in
 Listing~\ref{lst:count:Approximate Limit Counter Variables}.
-Line~7 defines \co{CM_BITS}, which gives the number of bits in each half
-of \co{ctrandmax}, and line~8 defines \co{MAX_COUNTERMAX}, which
+Line~\lnref{CM_BITS} defines \co{CM_BITS}, which gives the number of bits in each half
+of \co{counterandmax}, and line~\lnref{MAX_CMAX} defines \co{MAX_COUNTERMAX}, which
 gives the maximum value that may be held in either half of
-\co{ctrandmax}.
+%TODO: Apply
+\co{counterandmax}.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -3756,7 +3510,9 @@ gives the maximum value that may be held in either half of
 	의 라인~7 에서는 C 표준을 어기는거 아닌가요?
 	\iffalse
 
-	In what way does line~7 of
+	%TODO: Apply
+	In what way does
+        line~\ref{ln:count:count_lim_atomic:var_access:var:CM_BITS} of
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
 	violate the C standard?
 	\fi
@@ -3791,20 +3547,28 @@ gives the maximum value that may be held in either half of
 작업을 합니다.
 \iffalse
 
-Lines~10-15 show the \co{split_ctrandmax_int()} function, which,
-when given the underlying \co{int} from the \co{atomic_t
-ctrandmax} variable, splits it into its \co{counter} (\co{c})
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_atomic:var_access:split_int]
+Lines~\lnref{b}-\lnref{e} show the \co{split_counterandmax_int()}
+function, which,
+when given the underlying \co{int} from the
+\co{atomic_t counterandmax} variable, splits it into its
+\co{counter} (\co{c})
 and \co{countermax} (\co{cm}) components.
-Line~13 isolates the most-significant half of this \co{int},
+Line~\lnref{msh} isolates the most-significant half of this \co{int},
 placing the result as specified by argument \co{c},
-and line~14 isolates the least-significant half of this \co{int},
+and line~\lnref{lsh} isolates the least-significant half of this \co{int},
 placing the result as specified by argument \co{cm}.
+\end{lineref}
 
-Lines~17-25 show the \co{split_ctrandmax()} function, which
+\begin{lineref}[ln:count:count_lim_atomic:var_access:split]
+Lines~\lnref{b}-\lnref{e} show the \co{split_counterandmax()} function, which
 picks up the underlying \co{int} from the specified variable
-on line~21, stores it as specified by the \co{old} argument on
-line~23, and then invokes \co{split_ctrandmax_int()} to split
-it on line~24.
+%TODO: Apply
+on line~\lnref{int}, stores it as specified by the \co{old} argument on
+line~\lnref{old}, and then invokes \co{split_counterandmax_int()} to split
+it on line~\lnref{split_int}.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -3813,8 +3577,10 @@ it on line~24.
 	의 라인~18에서는 왜 굳이 포인터로 받는거죠?
 	\iffalse
 
-	Given that there is only one \co{ctrandmax} variable,
-	why bother passing in a pointer to it on line~18 of
+	%TODO: Apply
+	Given that there is only one \co{counterandmax} variable,
+	why bother passing in a pointer to it on
+        line~\ref{ln:count:count_lim_atomic:var_access:split:func} of
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}?
 	\fi
 \QuickQuizAnswer{
@@ -3823,9 +3589,10 @@ it on line~24.
 	\co{split_ctrandmax()} 에 넘기는 코드도 보게 될겁니다.
 	\iffalse
 
-	There is only one \co{ctrandmax} variable \emph{per thread}.
+	%TODO: Apply
+	There is only one \co{counterandmax} variable \emph{per thread}.
 	Later, we will see code that needs to pass other threads'
-	\co{ctrandmax} variables to \co{split_ctrandmax()}.
+	\co{counterandmax} variables to \co{split_counterandmax()}.
 	\fi
 } \QuickQuizEnd
 
@@ -3835,24 +3602,21 @@ it on line~24.
 합쳐서 그 결과값을 리턴합니다.
 \iffalse
 
-Lines~27-33 show the \co{merge_ctrandmax()} function, which
-can be thought of as the inverse of \co{split_ctrandmax()}.
-Line~31 merges the \co{counter} and \co{countermax}
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_atomic:var_access:merge]
+Lines~\lnref{b}-\lnref{e} show the \co{merge_counterandmax()} function, which
+can be thought of as the inverse of \co{split_counterandmax()}.
+Line~\lnref{merge} merges the \co{counter} and \co{countermax}
 values passed in \co{c} and \co{cm}, respectively, and returns
 the result.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
-	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
-	의 \co{merge_ctrandmax()} 는 왜 바로 \co{atomic_t} 에 값을 저장하지
-	않고 \co{int} 값을 리턴하는 거죠?
-	\iffalse
-
-	Why does \co{merge_ctrandmax()} in
+	Why does \co{merge_counterandmax()} in
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
 	return an \co{int} rather than storing directly into an
 	\co{atomic_t}?
-	\fi
 \QuickQuizAnswer{
 	나중에, \co{atomic_cmpxchg()} 함수에 넘기기 위해 \co{int} 리턴이 필요한
 	부분을 보게 될 겁니다.
@@ -3864,75 +3628,7 @@ the result.
 } \QuickQuizEnd
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 int add_count(unsigned long delta)
-  2 {
-  3   int c;
-  4   int cm;
-  5   int old;
-  6   int new;
-  7 
-  8   do {
-  9     split_ctrandmax(&ctrandmax, &old, &c, &cm);
- 10     if (delta > MAX_COUNTERMAX || c + delta > cm)
- 11       goto slowpath;
- 12     new = merge_ctrandmax(c + delta, cm);
- 13   } while (atomic_cmpxchg(&ctrandmax,
- 14                           old, new) != old);
- 15   return 1;
- 16 slowpath:
- 17   spin_lock(&gblcnt_mutex);
- 18   globalize_count();
- 19   if (globalcountmax - globalcount -
- 20       globalreserve < delta) {
- 21     flush_local_count();
- 22     if (globalcountmax - globalcount -
- 23         globalreserve < delta) {
- 24       spin_unlock(&gblcnt_mutex);
- 25       return 0;
- 26     }
- 27   }
- 28   globalcount += delta;
- 29   balance_count();
- 30   spin_unlock(&gblcnt_mutex);
- 31   return 1;
- 32 }
- 33 
- 34 int sub_count(unsigned long delta)
- 35 {
- 36   int c;
- 37   int cm;
- 38   int old;
- 39   int new;
- 40 
- 41   do {
- 42     split_ctrandmax(&ctrandmax, &old, &c, &cm);
- 43     if (delta > c)
- 44       goto slowpath;
- 45     new = merge_ctrandmax(c - delta, cm);
- 46   } while (atomic_cmpxchg(&ctrandmax,
- 47                           old, new) != old);
- 48   return 1;
- 49 slowpath:
- 50   spin_lock(&gblcnt_mutex);
- 51   globalize_count();
- 52   if (globalcount < delta) {
- 53     flush_local_count();
- 54     if (globalcount < delta) {
- 55       spin_unlock(&gblcnt_mutex);
- 56       return 0;
- 57     }
- 58   }
- 59   globalcount -= delta;
- 60   balance_count();
- 61   spin_unlock(&gblcnt_mutex);
- 62   return 1;
- 63 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_atomic@add_sub.fcv}
 \caption{Atomic Limit Counter Add and Subtract}
 \label{lst:count:Atomic Limit Counter Add and Subtract}
 \end{listing}
@@ -3962,24 +3658,31 @@ Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 는
 Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
 shows the \co{add_count()} and \co{sub_count()} functions.
 
-Lines~1-32 show \co{add_count()}, whose fastpath spans lines~8-15,
+\begin{lineref}[ln:count:count_lim_atomic:add_sub:add]
+Lines~\lnref{b}-\lnref{e} show \co{add_count()}, whose fastpath spans
+lines~\lnref{fast:b}-\lnref{return:fs},
 with the remainder of the function being the slowpath.
-Lines~8-14 of the fastpath form a compare-and-swap (CAS) loop, with
-the \co{atomic_cmpxchg()} primitives on lines~13-14 performing the
+Lines~\lnref{fast:b}-\lnref{loop:e} of the fastpath form a compare-and-swap
+(CAS) loop, with
+the \co{atomic_cmpxchg()} primitives on
+lines~\lnref{atmcmpex}-\lnref{loop:e} performing the
 actual CAS.
-Line~9 splits the current thread's \co{ctrandmax} variable into its
+Line~\lnref{split} splits the current thread's \co{counterandmax} variable into its
 \co{counter} (in \co{c}) and \co{countermax} (in \co{cm}) components,
 while placing the underlying \co{int} into \co{old}.
-Line~10 checks whether the amount \co{delta} can be accommodated
+Line~\lnref{check} checks whether the amount \co{delta} can be accommodated
 locally (taking care to avoid integer overflow), and if not,
-line~11 transfers to the slowpath.
-Otherwise, line~12 combines an updated \co{counter} value with the
+line~\lnref{goto} transfers to the slowpath.
+Otherwise, line~\lnref{merge} combines an updated \co{counter} value with the
 original \co{countermax} value into \co{new}.
-The \co{atomic_cmpxchg()} primitive on lines~13-14 then atomically
-compares this thread's \co{ctrandmax} variable to \co{old},
+The \co{atomic_cmpxchg()} primitive on
+lines~\lnref{atmcmpex}-\lnref{loop:e} then atomically
+compares this thread's \co{counterandmax} variable to \co{old},
 updating its value to \co{new} if the comparison succeeds.
-If the comparison succeeds, line~15 returns success, otherwise,
-execution continues in the loop at line~9.
+%TODO: Apply
+If the comparison succeeds, line~\lnref{return:fs} returns success, otherwise,
+execution continues in the loop at line~\lnref{fast:b}.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -3990,7 +3693,8 @@ execution continues in the loop at line~9.
 	\iffalse
 
 	Yecch!
-	Why the ugly \co{goto} on line~11 of
+	Why the ugly \co{goto} on
+        line~\ref{ln:count:count_lim_atomic:add_sub:add:goto} of
 	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}?
 	Haven't you heard of the \co{break} statement???
 	\fi
@@ -4005,7 +3709,9 @@ execution continues in the loop at line~9.
 	\iffalse
 
 	Replacing the \co{goto} with a \co{break} would require keeping
-	a flag to determine whether or not line~15 should return, which
+	a flag to determine whether or not
+        line~\ref{ln:count:count_lim_atomic:add_sub:add:return:fs}
+        should return, which
 	is not the sort of thing you want on a fastpath.
 	If you really hate the \co{goto} that much, your best bet would
 	be to pull the fastpath into a separate function that returned
@@ -4021,11 +3727,15 @@ execution continues in the loop at line~9.
 	우린 이전 값을 라인~9 에서 가져오고 나서 바꾼 적 없잖아요!
 	\iffalse
 
-	Why would the \co{atomic_cmpxchg()} primitive at lines~13-14 of
+	%TODO: Apply
+        \begin{lineref}[ln:count:count_lim_atomic:add_sub:add]
+	Why would the \co{atomic_cmpxchg()} primitive at
+        lines~\lnref{atmcmpex}-\lnref{loop:e} of
 	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
 	ever fail?
-	After all, we picked up its old value on line~9 and have not
+	After all, we picked up its old value on line~\lnref{split} and have not
 	changed it!
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	나중에, Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}
@@ -4035,11 +3745,15 @@ execution continues in the loop at line~9.
 	겁니다.
 	\iffalse
 
+	%TODO: Apply
+	\begin{lineref}[ln:count:count_lim_atomic:add_sub:add]
 	Later, we will see how the \co{flush_local_count()} function in
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}
-	might update this thread's \co{ctrandmax} variable concurrently
-	with the execution of the fastpath on lines~8-14 of
+	might update this thread's \co{counterandmax} variable concurrently
+	with the execution of the fastpath on
+        lines~\lnref{fast:b}-\lnref{loop:e} of
 	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}.
+	\end{lineref}
 	\fi
 } \QuickQuizEnd
 
@@ -4056,20 +3770,27 @@ Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 의 라인~16-31 �
 해제하고 라인~25 에서 실패를 리턴합니다.
 \iffalse
 
-Lines~16-31 of
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_atomic:add_sub:add]
+Lines~\lnref{slow:b}-\lnref{return:ss} of
 Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
 show \co{add_count()}'s slowpath, which is protected by \co{gblcnt_mutex},
-which is acquired on line~17 and released on lines~24 and~30.
-Line~18 invokes \co{globalize_count()}, which moves this thread's
+which is acquired on line~\lnref{acquire} and released on
+lines~\lnref{release:f} and~\lnref{release:s}.
+Line~\lnref{globalize} invokes \co{globalize_count()},
+which moves this thread's
 state to the global counters.
-Lines~19-20 check whether the \co{delta} value can be accommodated by
-the current global state, and, if not, line~21 invokes
+Lines~\lnref{checkglb:b}-\lnref{checkglb:e} check whether
+the \co{delta} value can be accommodated by
+the current global state, and, if not, line~\lnref{flush} invokes
 \co{flush_local_count()} to flush all threads' local state to the
-global counters, and then lines~22-23 recheck whether \co{delta} can
+global counters, and then
+lines~\lnref{checkglb:nb}-\lnref{checkglb:ne} recheck whether \co{delta} can
 be accommodated.
 If, after all that, the addition of \co{delta} still cannot be accommodated,
-then line~24 releases \co{gblcnt_mutex} (as noted earlier), and
-then line~25 returns failure.
+%TODO: Apply
+then line~\lnref{release:f} releases \co{gblcnt_mutex} (as noted earlier), and
+then line~\lnref{return:sf} returns failure.
 \fi
 
 그렇지 않다면, 라인~28 에서 \co{delta} 를 글로벌 카운터에 더하고, 라인~29 에서
@@ -4083,45 +3804,28 @@ Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 의 라인~34-63
 이 함수의 각 라인별 분석은 독자 여러분의 연습문제로 남겨두겠습니다.
 \iffalse
 
-Otherwise, line~28 adds \co{delta} to the global counter, line~29
-spreads counts to the local state if appropriate, line~30 releases
-\co{gblcnt_mutex} (again, as noted earlier), and finally, line~31
+Otherwise, line~\lnref{addglb} adds \co{delta} to the global counter,
+line~\lnref{balance}
+spreads counts to the local state if appropriate, line~\lnref{release:s} releases
+\co{gblcnt_mutex} (again, as noted earlier), and finally,
+line~\lnref{return:ss}
 returns success.
+\end{lineref}
 
-Lines~34-63 of
+\begin{lineref}[ln:count:count_lim_atomic:add_sub:sub]
+Lines~\lnref{b}-\lnref{e} of
 Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
 show \co{sub_count()}, which is structured similarly to
-\co{add_count()}, having a fastpath on lines~41-48 and a slowpath on
-lines~49-62.
+\co{add_count()}, having a fastpath on
+lines~\lnref{fast:b}-\lnref{fast:e} and a slowpath on
+lines~\lnref{slow:b}-\lnref{slow:e}.
 A line-by-line analysis of this function is left as an exercise to
 the reader.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 unsigned long read_count(void)
-  2 {
-  3   int c;
-  4   int cm;
-  5   int old;
-  6   int t;
-  7   unsigned long sum;
-  8 
-  9   spin_lock(&gblcnt_mutex);
- 10   sum = globalcount;
- 11   for_each_thread(t)
- 12     if (counterp[t] != NULL) {
- 13       split_ctrandmax(counterp[t], &old, &c, &cm);
- 14       sum += c;
- 15     }
- 16   spin_unlock(&gblcnt_mutex);
- 17   return sum;
- 18 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_atomic@read.fcv}
 \caption{Atomic Limit Counter Read}
 \label{lst:count:Atomic Limit Counter Read}
 \end{listing}
@@ -4135,106 +3839,29 @@ Listing~\ref{lst:count:Atomic Limit Counter Read} 는 \co{read_count()} 함수�
 마지막으로, 라인~17 에서 아까 만든 합을 리턴합니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_atomic:read]
 Listing~\ref{lst:count:Atomic Limit Counter Read} shows \co{read_count()}.
-Line~9 acquires \co{gblcnt_mutex} and line~16 releases it.
-Line~10 initializes local variable \co{sum} to the value of
-\co{globalcount}, and the loop spanning lines~11-15 adds the
+Line~\lnref{acquire} acquires \co{gblcnt_mutex} and
+line~\lnref{release} releases it.
+Line~\lnref{initsum} initializes local variable \co{sum} to the value of
+\co{globalcount}, and the loop spanning
+lines~\lnref{loop:b}-\lnref{loop:e} adds the
 per-thread counters to this sum, isolating each per-thread counter
-using \co{split_ctrandmax} on line~13.
-Finally, line~17 returns the sum.
+%TODO: Apply
+using \co{split_counterandmax} on line~\lnref{split}.
+Finally, line~\lnref{return} returns the sum.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 static void globalize_count(void)
-  2 {
-  3   int c;
-  4   int cm;
-  5   int old;
-  6 
-  7   split_ctrandmax(&ctrandmax, &old, &c, &cm);
-  8   globalcount += c;
-  9   globalreserve -= cm;
- 10   old = merge_ctrandmax(0, 0);
- 11   atomic_set(&ctrandmax, old);
- 12 }
- 13 
- 14 static void flush_local_count(void)
- 15 {
- 16   int c;
- 17   int cm;
- 18   int old;
- 19   int t;
- 20   int zero;
- 21 
- 22   if (globalreserve == 0)
- 23     return;
- 24   zero = merge_ctrandmax(0, 0);
- 25   for_each_thread(t)
- 26     if (counterp[t] != NULL) {
- 27       old = atomic_xchg(counterp[t], zero);
- 28       split_ctrandmax_int(old, &c, &cm);
- 29       globalcount += c;
- 30       globalreserve -= cm;
- 31     }
- 32 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_atomic@utility1.fcv}
 \caption{Atomic Limit Counter Utility Functions 1}
 \label{lst:count:Atomic Limit Counter Utility Functions 1}
 \end{listing}
 
 \begin{listing}[tb]
-{ \scriptsize
-\begin{verbbox}
-  1 static void balance_count(void)
-  2 {
-  3   int c;
-  4   int cm;
-  5   int old;
-  6   unsigned long limit;
-  7 
-  8   limit = globalcountmax - globalcount -
-  9           globalreserve;
- 10   limit /= num_online_threads();
- 11   if (limit > MAX_COUNTERMAX)
- 12     cm = MAX_COUNTERMAX;
- 13   else
- 14     cm = limit;
- 15   globalreserve += cm;
- 16   c = cm / 2;
- 17   if (c > globalcount)
- 18     c = globalcount;
- 19   globalcount -= c;
- 20   old = merge_ctrandmax(c, cm);
- 21   atomic_set(&ctrandmax, old);
- 22 }
- 23 
- 24 void count_register_thread(void)
- 25 {
- 26   int idx = smp_thread_id();
- 27 
- 28   spin_lock(&gblcnt_mutex);
- 29   counterp[idx] = &ctrandmax;
- 30   spin_unlock(&gblcnt_mutex);
- 31 }
- 32 
- 33 void count_unregister_thread(int nthreadsexpected)
- 34 {
- 35   int idx = smp_thread_id();
- 36 
- 37   spin_lock(&gblcnt_mutex);
- 38   globalize_count();
- 39   counterp[idx] = NULL;
- 40   spin_unlock(&gblcnt_mutex);
- 41 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_atomic@utility2.fcv}
 \caption{Atomic Limit Counter Utility Functions 2}
 \label{lst:count:Atomic Limit Counter Utility Functions 2}
 \end{listing}
@@ -4261,11 +3888,15 @@ shows the utility functions
 \co{balance_count()},
 \co{count_register_thread()}, and
 \co{count_unregister_thread()}.
-The code for \co{globalize_count()} is shown on lines~1-12,
+\begin{lineref}[ln:count:count_lim_atomic:utility1:globalize]
+The code for \co{globalize_count()} is shown on
+lines~\lnref{b}-\lnref{e},
 of Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1} and
 is similar to that of previous algorithms, with the addition of
-line~7, which is now required to split out \co{counter} and
-\co{countermax} from \co{ctrandmax}.
+%TODO: Apply
+line~\lnref{split}, which is now required to split out \co{counter} and
+\co{countermax} from \co{counterandmax}.
+\end{lineref}
 \fi
 
 모든 쓰레드의 로컬 카운터 상태를 글로벌 카운터로 옮기는,
@@ -4284,21 +3915,30 @@ line~7, which is now required to split out \co{counter} and
 에서 이 쓰레드의 \co{countermax} 를 \co{globalreserve} 에서 뺍니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_atomic:utility1:flush]
 The code for \co{flush_local_count()}, which moves all threads' local
-counter state to the global counter, is shown on lines~14-32.
-Line~22 checks to see if the value of \co{globalreserve} permits
-any per-thread counts, and, if not, line~23 returns.
-Otherwise, line~24 initializes local variable \co{zero} to a combined
+counter state to the global counter, is shown on
+lines~\lnref{b}-\lnref{e}.
+Line~\lnref{checkrsv} checks to see if the value of
+\co{globalreserve} permits
+any per-thread counts, and, if not, line~\lnref{return:n} returns.
+Otherwise, line~\lnref{initzero} initializes local variable \co{zero} to a combined
 zeroed \co{counter} and \co{countermax}.
-The loop spanning lines~25-31 sequences through each thread.
-Line~26 checks to see if the current thread has counter state,
-and, if so, lines~27-30 move that state to the global counters.
-Line~27 atomically fetches the current thread's state
+The loop spanning lines~\lnref{loop:b}-\lnref{loop:e} sequences
+through each thread.
+Line~\lnref{checkp} checks to see if the current thread has counter state,
+and, if so, lines~\lnref{atmxchg}-\lnref{glbrsv} move that state
+to the global counters.
+Line~\lnref{atmxchg} atomically fetches the current thread's state
 while replacing it with zero.
-Line~28 splits this state into its \co{counter} (in local variable \co{c})
+Line~\lnref{split} splits this state into its \co{counter}
+(in local variable \co{c})
 and \co{countermax} (in local variable \co{cm}) components.
-Line~29 adds this thread's \co{counter} to \co{globalcount}, while
-line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
+%TODO: Apply
+Line~\lnref{glbcnt} adds this thread's \co{counter} to \co{globalcount}, while
+line~\lnref{glbrsv} subtracts this thread's \co{countermax} from \co{globalreserve}.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -4308,8 +3948,9 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 	\iffalse
 
 	What stops a thread from simply refilling its
-	\co{ctrandmax} variable immediately after
-	\co{flush_local_count()} on line~14 of
+	\co{counterandmax} variable immediately after
+	\co{flush_local_count()} on
+        line~\ref{ln:count:count_lim_atomic:utility1:flush:b} of
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}
 	empties it?
 	\fi
@@ -4323,7 +3964,8 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 	가정 하에서요.
 	\iffalse
 
-	This other thread cannot refill its \co{ctrandmax}
+	%TODO: Apply
+	This other thread cannot refill its \co{counterandmax}
 	until the caller of \co{flush_local_count()} releases the
 	\co{gblcnt_mutex}.
 	By that time, the caller of \co{flush_local_count()} will have
@@ -4342,8 +3984,9 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 
 	What prevents concurrent execution of the fastpath of either
 	\co{add_count()} or \co{sub_count()} from interfering with
-	the \co{ctrandmax} variable while
-	\co{flush_local_count()} is accessing it on line~27 of
+	the \co{counterandmax} variable while
+	\co{flush_local_count()} is accessing it on
+        line~\ref{ln:count:count_lim_atomic:utility1:flush:atmxchg} of
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}
 	empties it?
 	\fi
@@ -4374,12 +4017,12 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 	Consider the following three cases:
 	\begin{enumerate}
 	\item	If \co{flush_local_count()}'s \co{atomic_xchg()} executes
-		before the \co{split_ctrandmax()} of either fastpath,
+		before the \co{split_counterandmax()} of either fastpath,
 		then the fastpath will see a zero \co{counter} and
 		\co{countermax}, and will thus transfer to the slowpath
 		(unless of course \co{delta} is zero).
 	\item	If \co{flush_local_count()}'s \co{atomic_xchg()} executes
-		after the \co{split_ctrandmax()} of either fastpath,
+		after the \co{split_counterandmax()} of either fastpath,
 		but before that fastpath's \co{atomic_cmpxchg()},
 		then the \co{atomic_cmpxchg()} will fail, causing the
 		fastpath to restart, which reduces to case~1 above.
@@ -4387,7 +4030,7 @@ line~30 subtracts this thread's \co{countermax} from \co{globalreserve}.
 		after the \co{atomic_cmpxchg()} of either fastpath,
 		then the fastpath will (most likely) complete successfully
 		before \co{flush_local_count()} zeroes the thread's
-		\co{ctrandmax} variable.
+		\co{counterandmax} variable.
 	\end{enumerate}
 	Either way, the race is resolved correctly.
 	\fi
@@ -4403,16 +4046,20 @@ Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 2} 의 라인~1-22
 여러분의 연습문제로 남겨두겠습니다.
 \iffalse
 
-Lines~1-22 on
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_atomic:utility2]
+Lines~\lnref{balance:b}-\lnref{balance:e} on
 Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 2}
 show the code for \co{balance_count()}, which refills
-the calling thread's local \co{ctrandmax} variable.
+the calling thread's local \co{counterandmax} variable.
 This function is quite similar to that of the preceding algorithms,
-with changes required to handle the merged \co{ctrandmax} variable.
+with changes required to handle the merged \co{counterandmax} variable.
 Detailed analysis of the code is left as an exercise for the reader,
 as it is with the \co{count_register_thread()} function starting on
-line~24 and the \co{count_unregister_thread()} function starting on
-line~33.
+%TODO: Apply
+line~\lnref{register:b} and the \co{count_unregister_thread()} function starting on
+line~\lnref{unregister:b}.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -4425,7 +4072,8 @@ line~33.
 	\iffalse
 
 	Given that the \co{atomic_set()} primitive does a simple
-	store to the specified \co{atomic_t}, how can line~21 of
+	store to the specified \co{atomic_t}, how can
+        line~\ref{ln:count:count_lim_atomic:utility2:balance:atmcset} of
 	\co{balance_count()} in
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 2}
 	work correctly in face of concurrent \co{flush_local_count()}
@@ -4687,33 +4335,12 @@ The slowpath then sets that thread's \co{theft} state to IDLE.
 \label{sec:count:Signal-Theft Limit Counter Implementation}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 #define THEFT_IDLE  0
-  2 #define THEFT_REQ   1
-  3 #define THEFT_ACK   2
-  4 #define THEFT_READY 3
-  5 
-  6 int __thread theft = THEFT_IDLE;
-  7 int __thread counting = 0;
-  8 unsigned long __thread counter = 0;
-  9 unsigned long __thread countermax = 0;
- 10 unsigned long globalcountmax = 10000;
- 11 unsigned long globalcount = 0;
- 12 unsigned long globalreserve = 0;
- 13 unsigned long *counterp[NR_THREADS] = { NULL };
- 14 unsigned long *countermaxp[NR_THREADS] = { NULL };
- 15 int *theftp[NR_THREADS] = { NULL };
- 16 DEFINE_SPINLOCK(gblcnt_mutex);
- 17 #define MAX_COUNTERMAX 100
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_sig@data.fcv}
 \caption{Signal-Theft Limit Counter Data}
 \label{lst:count:Signal-Theft Limit Counter Data}
 \end{listing}
 
+\begin{lineref}[ln:count:count_lim_sig:data]
 Listing~\ref{lst:count:Signal-Theft Limit Counter Data}
 (\path{count_lim_sig.c})
 는 signal-theft based counter 구현에 사용되는 데이터 구조를 보입니다.
@@ -4728,87 +4355,24 @@ Listing~\ref{lst:count:Signal-Theft Limit Counter Data}
 (\path{count_lim_sig.c})
 shows the data structures used by the signal-theft based counter
 implementation.
-Lines~1-7 define the states and values for the per-thread theft state machine
+Lines~\lnref{value:b}-\lnref{value:e} define the states and values
+for the per-thread theft state machine
 described in the preceding section.
-Lines~8-17 are similar to earlier implementations, with the addition of
-lines~14 and~15 to allow remote access to a thread's \co{countermax}
+Lines~\lnref{var:b}-\lnref{var:e} are similar to earlier implementations,
+with the addition of
+lines~\lnref{maxp} and~\lnref{theftp} to allow remote access to a
+thread's \co{countermax}
 and \co{theft} variables, respectively.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 static void globalize_count(void)
-  2 {
-  3   globalcount += counter;
-  4   counter = 0;
-  5   globalreserve -= countermax;
-  6   countermax = 0;
-  7 }
-  8 
-  9 static void flush_local_count_sig(int unused)
- 10 {
- 11   if (READ_ONCE(theft) != THEFT_REQ)
- 12     return;
- 13   smp_mb();
- 14   WRITE_ONCE(theft, THEFT_ACK);
- 15   if (!counting) {
- 16     WRITE_ONCE(theft, THEFT_READY);
- 17   }
- 18   smp_mb();
- 19 }
- 20 
- 21 static void flush_local_count(void)
- 22 {
- 23   int t;
- 24   thread_id_t tid;
- 25 
- 26   for_each_tid(t, tid)
- 27     if (theftp[t] != NULL) {
- 28       if (*countermaxp[t] == 0) {
- 29         WRITE_ONCE(*theftp[t], THEFT_READY);
- 30         continue;
- 31       }
- 32       WRITE_ONCE(*theftp[t], THEFT_REQ);
- 33       pthread_kill(tid, SIGUSR1);
- 34     }
- 35   for_each_tid(t, tid) {
- 36     if (theftp[t] == NULL)
- 37       continue;
- 38     while (READ_ONCE(*theftp[t]) != THEFT_READY) {
- 39       poll(NULL, 0, 1);
- 40       if (READ_ONCE(*theftp[t]) == THEFT_REQ)
- 41         pthread_kill(tid, SIGUSR1);
- 42     }
- 43     globalcount += *counterp[t];
- 44     *counterp[t] = 0;
- 45     globalreserve -= *countermaxp[t];
- 46     *countermaxp[t] = 0;
- 47     WRITE_ONCE(*theftp[t], THEFT_IDLE);
- 48   }
- 49 }
- 50 
- 51 static void balance_count(void)
- 52 {
- 53   countermax = globalcountmax -
- 54     globalcount - globalreserve;
- 55   countermax /= num_online_threads();
- 56   if (countermax > MAX_COUNTERMAX)
- 57     countermax = MAX_COUNTERMAX;
- 58   globalreserve += countermax;
- 59   counter = countermax / 2;
- 60   if (counter > globalcount)
- 61     counter = globalcount;
- 62   globalcount -= counter;
- 63 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_sig@migration.fcv}
 \caption{Signal-Theft Limit Counter Value-Migration Functions}
 \label{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
 \end{listing}
 
+\begin{lineref}[ln:count:count_lim_sig:migration:globalize]
 Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
 는 쓰레드별 변수와 전역 변수 사이에 카운트를 옮겨주는 함수를 보입니다.
 라인~1-7 은 \co{globalize_count()} 함수를 보이는데, 이 함수는 앞의 구현과
@@ -4826,17 +4390,25 @@ Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
 Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
 shows the functions responsible for migrating counts between per-thread
 variables and the global variables.
-Lines~1-7 shows \co{globalize_count()}, which is identical to earlier
+Lines~\lnref{b}-\lnref{e} shows \co{globalize_count()},
+which is identical to earlier
 implementations.
-Lines~9-19 shows \co{flush_local_count_sig()}, which is the signal
+\end{lineref}
+\begin{lineref}[ln:count:count_lim_sig:migration:flush_sig]
+Lines~\lnref{b}-\lnref{e} shows \co{flush_local_count_sig()},
+which is the signal
 handler used in the theft process.
-Lines~11 and~12 check to see if the \co{theft} state is REQ, and, if not
+Lines~\lnref{check:REQ} and~\lnref{return:n} check to see if
+the \co{theft} state is REQ, and, if not
 returns without change.
-Line~13 executes a memory barrier to ensure that the sampling of the
+Line~\lnref{mb:1} executes a memory barrier to ensure that the sampling of the
 theft variable happens before any change to that variable.
-Line~14 sets the \co{theft} state to ACK, and, if line~15 sees that
-this thread's fastpaths are not running, line~16 sets the \co{theft}
+Line~\lnref{set:ACK} sets the \co{theft} state to ACK, and, if
+line~\lnref{check:fast} sees that
+this thread's fastpaths are not running, line~\lnref{set:READY} sets the \co{theft}
 state to READY.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -4852,38 +4424,24 @@ state to READY.
 	\co{theft} per-thread variable?
 	\fi
 \QuickQuizAnswer{
-	첫번째 \co{ACCESS_ONCE} 사용은 (라인~11) 은 필요 없는 것이라 주장할
-	수도 있습니다.
-	다음의 두 군데 사용은 (라인~14 와 16) 중요합니다.
-	이것들이 없어지면, 컴파일러는 라인~14-17 을 다음과 같이 바꿀 수도
-	있습니다:
-	\iffalse
-
-	The first one (on line~11) can be argued to be unnecessary.
-	The last two (lines~14 and~16) are important.
+	%TODO: Apply
+	\begin{lineref}[ln:count:count_lim_sig:migration:flush_sig]
+	The first one (on line~\lnref{check:REQ}) can be argued to be unnecessary.
+	The last two (lines~\lnref{set:ACK} and~\lnref{set:READY}) are important.
 	If these are removed, the compiler would be within its rights
-	to rewrite lines~14-17 as follows:
-	\fi
+	to rewrite lines~\lnref{set:ACK}-\lnref{set:READY} as follows:
+	\end{lineref}
 
-	\vspace{5pt}
-	\begin{minipage}[t]{\columnwidth}
-	\small
-	\begin{verbatim}
- 14   theft = THEFT_READY;
- 15   if (counting) {
- 16     theft = THEFT_ACK;
- 17   }
-	\end{verbatim}
-	\end{minipage}
-	\vspace{5pt}
-	느린 수행 경로는 잠깐 들어오는 값인 \co{THEFT_READY} 를 보고서 연관된
-	쓰레드가 준비되기도 전에 값을 훔쳐가기 시작할테니 위험합니다.
-	\iffalse
+\begin{VerbatimN}[firstnumber=14]
+theft = THEFT_READY;
+if (counting) {
+	theft = THEFT_ACK;
+}
+\end{VerbatimN}
 
 	This would be fatal, as the slowpath might see the transient
 	value of \co{THEFT_READY}, and start stealing before the
 	corresponding thread was ready.
-	\fi
 } \QuickQuizEnd
 
 라인~21-49 는 \co{flush_local_count()} 를 보이는데, 이 함수는 느린 수행
@@ -4898,16 +4456,22 @@ state to READY.
 쓰레드의 \co{theft} 상태를 REQ 로 바꾸고, 라인~33 에서 시그널을 날립니다.
 \iffalse
 
-Lines~21-49 shows \co{flush_local_count()}, which is called from the
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_sig:migration:flush]
+Lines~\lnref{b}-\lnref{e} shows \co{flush_local_count()}, which is called from the
+>>>>>>> paul/master
 slowpath to flush all threads' local counts.
-The loop spanning lines~26-34 advances the \co{theft} state for each
+The loop spanning
+lines~\lnref{loop:b}-\lnref{loop:e} advances the \co{theft} state for each
 thread that has local count, and also sends that thread a signal.
-Line~27 skips any non-existent threads.
-Otherwise, line~28 checks to see if the current thread holds any local
-count, and, if not, line~29 sets the thread's \co{theft} state to READY
-and line~30 skips to the next thread.
-Otherwise, line~32 sets the thread's \co{theft} state to REQ and
-line~33 sends the thread a signal.
+%TODO: Apply
+Line~\lnref{skip} skips any non-existent threads.
+Otherwise, line~\lnref{checkmax} checks to see if the current thread holds any local
+count, and, if not, line~\lnref{READY} sets the thread's \co{theft} state to READY
+and line~\lnref{next} skips to the next thread.
+Otherwise, line~\lnref{REQ} sets the thread's \co{theft} state to REQ and
+line~\lnref{signal} sends the thread a signal.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -4917,7 +4481,9 @@ line~33 sends the thread a signal.
 	\iffalse
 
 	In Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions},
-	why is it safe for line~28 to directly access the other thread's
+	why is it safe for
+        line~\ref{ln:count:count_lim_sig:migration:flush:checkmax}
+        to directly access the other thread's
 	\co{countermax} variable?
 	\fi
 \QuickQuizAnswer{
@@ -4946,7 +4512,9 @@ line~33 sends the thread a signal.
 	\iffalse
 
 	In Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions},
-	why doesn't line~33 check for the current thread sending itself
+	why doesn't
+        line~\ref{ln:count:count_lim_sig:migration:flush:signal}
+        check for the current thread sending itself
 	a signal?
 	\fi
 \QuickQuizAnswer{
@@ -4998,25 +4566,27 @@ line~33 sends the thread a signal.
 라인~47 은 해당 쓰레드의 \co{theft} 상태를 다시 IDLE 로 되돌립니다.
 \iffalse
 
-The loop spanning lines~35-48 waits until each thread reaches READY state,
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_sig:migration:flush]
+The loop spanning lines~\lnref{loop2:b}-\lnref{loop2:e} waits until each
+thread reaches READY state,
 then steals that thread's count.
-Lines~36-37 skip any non-existent threads, and the loop spanning
-lines~38-42 wait until the current thread's \co{theft} state becomes READY.
-Line~39 blocks for a millisecond to avoid priority-inversion problems,
-and if line~40 determines that the thread's signal has not yet arrived,
-line~41 resends the signal.
-Execution reaches line~43 when the thread's \co{theft} state becomes
-READY, so lines~43-46 do the thieving.
-Line~47 then sets the thread's \co{theft} state back to IDLE.
-\fi
+Lines~\lnref{skip:nonexist}-\lnref{next2} skip any non-existent threads,
+and the loop spanning
+lines~\lnref{loop3:b}-\lnref{loop3:e} wait until the current
+thread's \co{theft} state becomes READY.
+Line~\lnref{block} blocks for a millisecond to avoid priority-inversion problems,
+and if line~\lnref{check:REQ} determines that the thread's signal has not yet arrived,
+line~\lnref{signal2} resends the signal.
+Execution reaches line~\lnref{thiev:b} when the thread's \co{theft} state becomes
+READY, so lines~\lnref{thiev:b}-\lnref{thiev:e} do the thieving.
+Line~\lnref{IDLE} then sets the thread's \co{theft} state back to IDLE.
+\end{lineref}
 
 \QuickQuiz{}
-	Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
-	의 라인~41 에서는 왜 시그널을 다시 보내죠?
-	\iffalse
-
-	In Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}, why does line~41 resend the signal?
-	\fi
+	In Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions},
+        why does line~\ref{ln:count:count_lim_sig:migration:flush:signal2}
+        resend the signal?
 \QuickQuizAnswer{
 	지난 수십년간 많은 운영 체제는 갑자기 시그널을 잃어버리는 특성을 가졌기
 	때문입니다.
@@ -5041,98 +4611,21 @@ Line~47 then sets the thread's \co{theft} state back to IDLE.
 라인~51-63 에서는 \co{balance_count()} 함수를 보이는데, 앞의 예제와 비슷합니다.
 \iffalse
 
-Lines~51-63 show \co{balance_count()}, which is similar to that of
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_sig:migration:balance]
+Lines~\lnref{b}-\lnref{e} show \co{balance_count()}, which is similar to that of
 earlier examples.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 int add_count(unsigned long delta)
-  2 {
-  3   int fastpath = 0;
-  4 
-  5   counting = 1;
-  6   barrier();
-  7   if (countermax - counter >= delta &&
-  8       READ_ONCE(theft) <= THEFT_REQ) {
-  9     counter += delta;
- 10     fastpath = 1;
- 11   }
- 12   barrier();
- 13   counting = 0;
- 14   barrier();
- 15   if (READ_ONCE(theft) == THEFT_ACK) {
- 16     smp_mb();
- 17     WRITE_ONCE(theft, THEFT_READY);
- 18   }
- 19   if (fastpath)
- 20     return 1;
- 21   spin_lock(&gblcnt_mutex);
- 22   globalize_count();
- 23   if (globalcountmax - globalcount -
- 24       globalreserve < delta) {
- 25     flush_local_count();
- 26     if (globalcountmax - globalcount -
- 27         globalreserve < delta) {
- 28       spin_unlock(&gblcnt_mutex);
- 29       return 0;
- 30     }
- 31   }
- 32   globalcount += delta;
- 33   balance_count();
- 34   spin_unlock(&gblcnt_mutex);
- 35   return 1;
- 36 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_sig@add.fcv}
 \caption{Signal-Theft Limit Counter Add Function}
 \label{lst:count:Signal-Theft Limit Counter Add Function}
 \end{listing}
 
 \begin{listing}[tb]
-{ \scriptsize
-\begin{verbbox}
- 38 int sub_count(unsigned long delta)
- 39 {
- 40   int fastpath = 0;
- 41 
- 42   counting = 1;
- 43   barrier();
- 44   if (counter >= delta &&
- 45       READ_ONCE(theft) <= THEFT_REQ) {
- 46     counter -= delta;
- 47     fastpath = 1;
- 48   }
- 49   barrier();
- 50   counting = 0;
- 51   barrier();
- 52   if (READ_ONCE(theft) == THEFT_ACK) {
- 53     smp_mb();
- 54     WRITE_ONCE(theft, THEFT_READY);
- 55   }
- 56   if (fastpath)
- 57     return 1;
- 58   spin_lock(&gblcnt_mutex);
- 59   globalize_count();
- 60   if (globalcount < delta) {
- 61     flush_local_count();
- 62     if (globalcount < delta) {
- 63       spin_unlock(&gblcnt_mutex);
- 64       return 0;
- 65     }
- 66   }
- 67   globalcount -= delta;
- 68   balance_count();
- 69   spin_unlock(&gblcnt_mutex);
- 70   return 1;
- 71 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_sig@sub.fcv}
 \caption{Signal-Theft Limit Counter Subtract Function}
 \label{lst:count:Signal-Theft Limit Counter Subtract Function}
 \end{listing}
@@ -5150,18 +4643,23 @@ Listing~\ref{lst:count:Signal-Theft Limit Counter Add Function} 는
 수행하고 라인~10 에서 빠른 수행 경로가 진행됨을 알립니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_sig:add]
 Listing~\ref{lst:count:Signal-Theft Limit Counter Add Function}
 shows the \co{add_count()} function.
-The fastpath spans lines~5-20, and the slowpath lines~21-35.
-Line~5 sets the per-thread \co{counting} variable to 1 so that
+The fastpath spans lines~\lnref{fast:b}-\lnref{return:fs}, and the slowpath
+lines~\lnref{acquire}-\lnref{return:ss}.
+Line~\lnref{fast:b} sets the per-thread \co{counting} variable to 1 so that
 any subsequent signal handlers interrupting this thread will
 set the \co{theft} state to ACK rather than READY, allowing this
 fastpath to complete properly.
-Line~6 prevents the compiler from reordering any of the fastpath body
+Line~\lnref{barrier:1} prevents the compiler from reordering any of the fastpath body
 to precede the setting of \co{counting}.
-Lines~7 and~8 check to see if the per-thread data can accommodate
+Lines~\lnref{check:b} and~\lnref{check:e} check to see
+if the per-thread data can accommodate
 the \co{add_count()} and if there is no ongoing theft in progress,
-and if so line~9 does the fastpath addition and line~10 notes that
+and if so line~\lnref{add:f} does the fastpath addition and
+line~\lnref{fasttaken} notes that
 the fastpath was taken.
 \fi
 
@@ -5174,38 +4672,23 @@ the fastpath was taken.
 리턴합니다.
 \iffalse
 
-In either case, line~12 prevents the compiler from reordering the
-fastpath body to follow line~13, which permits any subsequent signal
+In either case, line~\lnref{barrier:2} prevents the compiler from reordering the
+fastpath body to follow line~\lnref{clearcnt}, which permits any subsequent signal
 handlers to undertake theft.
-Line~14 again disables compiler reordering, and then line~15
+Line~\lnref{barrier:3} again disables compiler reordering, and then
+line~\lnref{check:ACK}
 checks to see if the signal handler deferred the \co{theft}
-state-change to READY, and, if so, line~16 executes a memory
-barrier to ensure that any CPU that sees line~17 setting state to
-READY also sees the effects of line~9.
-If the fastpath addition at line~9 was executed, then line~20 returns
+state-change to READY, and, if so, line~\lnref{mb} executes a memory
+barrier to ensure that any CPU that sees line~\lnref{READY} setting state to
+READY also sees the effects of line~\lnref{add:f}.
+If the fastpath addition at line~\lnref{add:f} was executed, then
+line~\lnref{return:fs} returns
 success.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 unsigned long read_count(void)
-  2 {
-  3   int t;
-  4   unsigned long sum;
-  5 
-  6   spin_lock(&gblcnt_mutex);
-  7   sum = globalcount;
-  8   for_each_thread(t)
-  9     if (counterp[t] != NULL)
- 10       sum += *counterp[t];
- 11   spin_unlock(&gblcnt_mutex);
- 12   return sum;
- 13 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_sig@read.fcv}
 \caption{Signal-Theft Limit Counter Read Function}
 \label{lst:count:Signal-Theft Limit Counter Read Function}
 \end{listing}
@@ -5219,9 +4702,12 @@ success.
 의 \co{read_count()} 와 함께 그 분석을 독자 여러분의 몫으로 남겨 두겠습니다.
 \iffalse
 
-Otherwise, we fall through to the slowpath starting at line~21.
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_sig:add]
+Otherwise, we fall through to the slowpath starting at line~\lnref{acquire}.
 The structure of the slowpath is similar to those of earlier examples,
 so its analysis is left as an exercise to the reader.
+\end{lineref}
 Similarly, the structure of \co{sub_count()} on
 Listing~\ref{lst:count:Signal-Theft Limit Counter Subtract Function}
 is the same
@@ -5232,47 +4718,7 @@ Listing~\ref{lst:count:Signal-Theft Limit Counter Read Function}.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 void count_init(void)
-  2 {
-  3   struct sigaction sa;
-  4 
-  5   sa.sa_handler = flush_local_count_sig;
-  6   sigemptyset(&sa.sa_mask);
-  7   sa.sa_flags = 0;
-  8   if (sigaction(SIGUSR1, &sa, NULL) != 0) {
-  9     perror("sigaction");
- 10     exit(-1);
- 11   }
- 12 }
- 13 
- 14 void count_register_thread(void)
- 15 {
- 16   int idx = smp_thread_id();
- 17 
- 18   spin_lock(&gblcnt_mutex);
- 19   counterp[idx] = &counter;
- 20   countermaxp[idx] = &countermax;
- 21   theftp[idx] = &theft;
- 22   spin_unlock(&gblcnt_mutex);
- 23 }
- 24 
- 25 void count_unregister_thread(int nthreadsexpected)
- 26 {
- 27   int idx = smp_thread_id();
- 28 
- 29   spin_lock(&gblcnt_mutex);
- 30   globalize_count();
- 31   counterp[idx] = NULL;
- 32   countermaxp[idx] = NULL;
- 33   theftp[idx] = NULL;
- 34   spin_unlock(&gblcnt_mutex);
- 35 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/count/count_lim_sig@initialization.fcv}
 \caption{Signal-Theft Limit Counter Initialization Functions}
 \label{lst:count:Signal-Theft Limit Counter Initialization Functions}
 \end{listing}
@@ -5286,7 +4732,9 @@ Listing~\ref{lst:count:Signal-Theft Limit Counter Initialization Functions}
 독자의 몫으로 남겨 두겠습니다.
 \iffalse
 
-Lines~1-12 of
+%TODO: Apply
+\begin{lineref}[ln:count:count_lim_sig:initialization:init]
+Lines~\lnref{b}-\lnref{e} of
 Listing~\ref{lst:count:Signal-Theft Limit Counter Initialization Functions}
 show \co{count_init()}, which set up \co{flush_local_count_sig()}
 as the signal handler for \co{SIGUSR1},
@@ -5295,6 +4743,7 @@ to invoke \co{flush_local_count_sig()}.
 The code for thread registry and unregistry is similar to that of
 earlier examples, so its analysis is left as an exercise for the
 reader.
+\end{lineref}
 \fi
 
 \subsection{Signal-Theft Limit Counter Discussion}
@@ -5475,41 +4924,34 @@ lock when checking the counter.
 Code for doing I/O might be as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
-  1 read_lock(&mylock);
-  2 if (removing) {
-  3   read_unlock(&mylock);
-  4   cancel_io();
-  5 } else {
-  6   add_count(1);
-  7   read_unlock(&mylock);
-  8   do_io();
-  9   sub_count(1);
- 10 }
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+%TODO: Apply
+\begin{linelabel}[ln:count:inline:I/O]
+\begin{VerbatimN}[commandchars=\\\[\]]
+read_lock(&mylock);		\lnlbl[acq]
+if (removing) {			\lnlbl[check]
+	read_unlock(&mylock);	\lnlbl[rel1]
+	cancel_io();		\lnlbl[cancel]
+} else {
+	add_count(1);		\lnlbl[inc]
+	read_unlock(&mylock);	\lnlbl[rel2]
+	do_io();		\lnlbl[do]
+	sub_count(1);		\lnlbl[dec]
+}
+\end{VerbatimN}
+\end{linelabel}
 
-라인~1 에서 락을 이용해 읽기 권한을 획득하고, 라인~3 이나~7 에서 이를
-해제합니다.
-라인~2 에서는 디바이스가 삭제되는 중인지 확인하고, 그렇다면 라인~3 에서 락을
-해제하고 라인~4 에서 I/O 를 취소하거나, 디바이스가 삭제될 예정일 때 해야 할
-무슨 일이든 합니다.
-디바이스가 삭제중인지 않다면 라인~6 에서 액세스 카운트를 증가시키고 라인~7 에서
-락을 해제하고, 라인~8 에서 I/O를 수행한 후, 라인~9 에서 액세스 카운트를
-낮춥니다.
-\iffalse
-
-Line~1 read-acquires the lock, and either line~3 or~7 releases it.
-Line~2 checks to see if the device is being removed, and, if so,
-line~3 releases the lock and line~4 cancels the I/O, or takes whatever
+\begin{lineref}[ln:count:inline:I/O]
+Line~\lnref{acq} read-acquires the lock, and either
+line~\lnref{rel1} or~\lnref{rel2} releases it.
+Line~\lnref{check} checks to see if the device is being removed, and, if so,
+line~\lnref{rel1} releases the lock and
+line~\lnref{cancel} cancels the I/O, or takes whatever
 action is appropriate given that the device is to be removed.
-Otherwise, line~6 increments the access count, line~7 releases the
-lock, line~8 performs the I/O, and line~9 decrements the access count.
-\fi
+Otherwise, line~\lnref{inc} increments the access count,
+line~\lnref{rel2} releases the
+lock, line~\lnref{do} performs the I/O, and
+line~\lnref{dec} decrements the access count.
+\end{lineref}
 
 \QuickQuiz{}
 	이거 참 웃기네요!
@@ -5541,34 +4983,28 @@ lock, line~8 performs the I/O, and line~9 decrements the access count.
 The code to remove the device might be as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
-  1 write_lock(&mylock);
-  2 removing = 1;
-  3 sub_count(mybias);
-  4 write_unlock(&mylock);
-  5 while (read_count() != 0) {
-  6   poll(NULL, 0, 1);
-  7 }
-  8 remove_device();
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+%TODO: Apply
+\begin{linelabel}[ln:count:inline:remove]
+\begin{VerbatimN}[commandchars=\\\[\]]
+write_lock(&mylock);		\lnlbl[acq]
+removing = 1;			\lnlbl[note]
+sub_count(mybias);
+write_unlock(&mylock);		\lnlbl[rel]
+while (read_count() != 0) {	\lnlbl[loop:b]
+	poll(NULL, 0, 1);
+}				\lnlbl[loop:e]
+remove_device();		\lnlbl[remove]
+\end{VerbatimN}
+\end{linelabel}
 
-라인~1 에서는 락의 쓰기-획득을 하고 라인~4 에서 해제합니다.
-라인~2 에서 디바이스가 제거되는 중임을 알리고, 라인~5-7 에서 존재하는 I/O
-오퍼레이션들이 끝나길 기다립니다.
-마지막으로, 라인~8 에서 디바이스 제거에 필요한 작업을 진행합니다.
-\iffalse
-
-Line~1 write-acquires the lock and line~4 releases it.
-Line~2 notes that the device is being removed, and the loop spanning
-lines~5-7 wait for any I/O operations to complete.
-Finally, line~8 does any additional processing needed to prepare for
+\begin{lineref}[ln:count:inline:remove]
+Line~\lnref{acq} write-acquires the lock and
+line~\lnref{rel} releases it.
+Line~\lnref{note} notes that the device is being removed, and the loop spanning
+lines~\lnref{loop:b}-\lnref{loop:e} wait for any I/O operations to complete.
+Finally, line~\lnref{remove} does any additional processing needed to prepare for
 device removal.
-\fi
+\end{lineref}
 
 \QuickQuiz{}
 	실제 시스템에 적용하려면 해결해야할 문제들이 또 뭐가 있을 수 있을까요?

@@ -22,35 +22,36 @@
 
 #include "../api.h"
 
+//\begin{snippet}[labelbase=ln:count:count_tstat:whole,commandchars=\\\@\$]
 unsigned long __thread counter = 0;
 unsigned long *counterp[NR_THREADS] = { NULL };
 int finalthreadcount = 0;
 DEFINE_SPINLOCK(final_mutex);
 
-void inc_count(void)
+static __inline__ void inc_count(void)
 {
-	WRITE_ONCE(counter,
-		   READ_ONCE(counter) + 1);
+	WRITE_ONCE(counter, counter + 1);
 }
 
-unsigned long read_count(void)  /* known failure with counttorture! */
+static __inline__ unsigned long read_count(void)
+                  /* need to tweak counttorture! */
 {
 	int t;
 	unsigned long sum = 0;
 
 	for_each_thread(t)
-		if (counterp[t] != NULL)
-			sum += *counterp[t];
+		if (READ_ONCE(counterp[t]) != NULL)
+			sum += READ_ONCE(*counterp[t]);
 	return sum;
 }
 
-void count_init(void)
-{
-}
-
+void count_init(void)		//\fcvexclude
+{				//\fcvexclude
+}				//\fcvexclude
+				//\fcvexclude
 void count_register_thread(unsigned long *p)
 {
-	counterp[smp_thread_id()] = &counter;
+	WRITE_ONCE(counterp[smp_thread_id()], &counter);
 }
 
 void count_unregister_thread(int nthreadsexpected)
@@ -58,13 +59,15 @@ void count_unregister_thread(int nthreadsexpected)
 	spin_lock(&final_mutex);
 	finalthreadcount++;
 	spin_unlock(&final_mutex);
-	while (finalthreadcount < nthreadsexpected)
+	while (READ_ONCE(finalthreadcount) < nthreadsexpected)
 		poll(NULL, 0, 1);
 }
+//\end{snippet}
 
 void count_cleanup(void)
 {
 }
 
 #define NEED_REGISTER_THREAD
+#define KEEP_GCC_THREAD_LOCAL
 #include "counttorture.h"

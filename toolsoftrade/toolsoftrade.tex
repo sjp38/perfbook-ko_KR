@@ -167,14 +167,9 @@ of \co{cat} execute sequentially.
 	One straightforward approach is the shell pipeline:
 	\fi
 
-\begin{minipage}[t]{\columnwidth}
-\vspace{0.1ex}
-\small
-\begin{verbatim}
+\begin{VerbatimU}
 grep $pattern1 | sed -e 's/a/b/' | sort
-\end{verbatim}
-\vspace{0.1ex}
-\end{minipage}
+\end{verbatimU}
 	충분히 커다란 입력 파일에 대해서, \co{grep} 의 패턴 매칭, \co{sed} 의
 	수정과 \co{sort} 의 입력물 처리는 병렬적으로 수행될 겁니다.
 	\path{parallel.sh} 파일에 셸 스크립트 병렬성과 파이프라인에 대한 데모가
@@ -872,61 +867,7 @@ lock~\cite{Hoare74}.
 } \QuickQuizEnd
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 pthread_mutex_t lock_a = PTHREAD_MUTEX_INITIALIZER;
-  2 pthread_mutex_t lock_b = PTHREAD_MUTEX_INITIALIZER;
-  3 int x = 0;
-  4 
-  5 void *lock_reader(void *arg)
-  6 {
-  7   int i;
-  8   int newx = -1;
-  9   int oldx = -1;
- 10   pthread_mutex_t *pmlp = (pthread_mutex_t *)arg;
- 11 
- 12   if (pthread_mutex_lock(pmlp) != 0) {
- 13     perror("lock_reader:pthread_mutex_lock");
- 14     exit(EXIT_FAILURE);
- 15   }
- 16   for (i = 0; i < 100; i++) {
- 17     newx = READ_ONCE(x);
- 18     if (newx != oldx) {
- 19       printf("lock_reader(): x = %d\n", newx);
- 20     }
- 21     oldx = newx;
- 22     poll(NULL, 0, 1);
- 23   }
- 24   if (pthread_mutex_unlock(pmlp) != 0) {
- 25     perror("lock_reader:pthread_mutex_unlock");
- 26     exit(EXIT_FAILURE);
- 27   }
- 28   return NULL;
- 29 }
- 30 
- 31 void *lock_writer(void *arg)
- 32 {
- 33   int i;
- 34   pthread_mutex_t *pmlp = (pthread_mutex_t *)arg;
- 35 
- 36   if (pthread_mutex_lock(pmlp) != 0) {
- 37     perror("lock_writer:pthread_mutex_lock");
- 38     exit(EXIT_FAILURE);
- 39   }
- 40   for (i = 0; i < 3; i++) {
- 41     WRITE_ONCE(x, READ_ONCE(x) + 1);
- 42     poll(NULL, 0, 5);
- 43   }
- 44   if (pthread_mutex_unlock(pmlp) != 0) {
- 45     perror("lock_writer:pthread_mutex_unlock");
- 46     exit(EXIT_FAILURE);
- 47   }
- 48   return NULL;
- 49 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/toolsoftrade/lock@reader_writer.fcv}
 \caption{Demonstration of Exclusive Locks}
 \label{lst:toolsoftrade:Demonstration of Exclusive Locks}
 \end{listing}
@@ -943,19 +884,25 @@ Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 함수에 사용하기 위해 \co{pthread_mutex_t} 포인터로 캐스팅 합니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:toolsoftrade:lock:reader_writer]
 This exclusive-locking property is demonstrated using the code shown in
 Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 (\path{lock.c}).
-Line~1 defines and initializes a POSIX lock named \co{lock_a}, while
-line~2 similarly defines and initializes a lock named \co{lock_b}.
-Line~3 defines and initializes a shared variable~\co{x}.
+Line~\lnref{lock_a} defines and initializes a POSIX lock named \co{lock_a}, while
+line~\lnref{lock_b} similarly defines and initializes a lock named \co{lock_b}.
+Line~\lnref{x} defines and initializes a shared variable~\co{x}.
+\end{lineref}
 
-Lines~5-28 defines a function \co{lock_reader()} which repeatedly
+\begin{lineref}[ln:toolsoftrade:lock:reader_writer:reader]
+Lines~\lnref{b}-\lnref{e} defines a function \co{lock_reader()} which repeatedly
 reads the shared variable \co{x} while holding
 the lock specified by \co{arg}.
-Line~10 casts \co{arg} to a pointer to a \co{pthread_mutex_t}, as
+Line~\lnref{cast} casts \co{arg} to a pointer to a \co{pthread_mutex_t}, as
 required by the \co{pthread_mutex_lock()} and \co{pthread_mutex_unlock()}
 primitives.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -965,7 +912,7 @@ primitives.
 	\iffalse
 
 	Why not simply make the argument to \co{lock_reader()}
-	on line~5 of
+	on line~\ref{ln:toolsoftrade:lock:reader_writer:reader:b} of
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 	be a pointer to a \co{pthread_mutex_t}?
 	\fi
@@ -990,9 +937,13 @@ primitives.
 	뭔가요?
 	\iffalse
 
-	What is the \co{READ_ONCE()} on lines~17 and~41 and the
-	\co{WRITE_ONCE()} on line~41 of
+%TODO: Apply
+	\begin{lineref}[ln:toolsoftrade:lock:reader_writer]
+	What is the \co{READ_ONCE()} on
+        lines~\lnref{reader:read_x} and~\lnref{writer:inc} and the
+	\co{WRITE_ONCE()} on line~\lnref{writer:inc} of
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}?
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	이 매크로들은 컴파일러가 동시다발적으로 접근되는 공유 변수에 문제를
@@ -1042,16 +993,22 @@ primitives.
 맞춰주기 위해 \co{NULL} 을 리턴합니다.
 \iffalse
 
-Lines~12-15 acquire the specified \co{pthread_mutex_t}, checking
+%TODO: Apply
+\begin{lineref}[ln:toolsoftrade:lock:reader_writer:reader]
+Lines~\lnref{acq:b}-\lnref{acq:e} acquire the specified
+\co{pthread_mutex_t}, checking
 for errors and exiting the program if any occur.
-Lines~16-23 repeatedly check the value of \co{x}, printing the new value
+Lines~\lnref{loop:b}-\lnref{loop:e} repeatedly check the value of \co{x},
+printing the new value
 each time that it changes.
-Line~22 sleeps for one millisecond, which allows this demonstration
+Line~\lnref{sleep} sleeps for one millisecond, which allows this demonstration
 to run nicely on a uniprocessor machine.
-Lines~24-27 release the \co{pthread_mutex_t}, again checking for
+Lines~\lnref{rel:b}-\lnref{rel:e} release the \co{pthread_mutex_t},
+again checking for
 errors and exiting the program if any occur.
-Finally, line~28 returns \co{NULL}, again to match the function type
+Finally, line~\lnref{return} returns \co{NULL}, again to match the function type
 required by \co{pthread_create()}.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -1093,49 +1050,32 @@ Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks} 의 라인~31-49
 마지막으로 라인~44-47 에서는 락을 놓아줍니다.
 \iffalse
 
-Lines~31-49 of
+%TODO: Apply
+\begin{lineref}[ln:toolsoftrade:lock:reader_writer:writer]
+Lines~\lnref{b}-\lnref{e} of
 Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 shows \co{lock_writer()}, which
 periodically update the shared variable \co{x} while holding the
 specified \co{pthread_mutex_t}.
-As with \co{lock_reader()}, line~34 casts \co{arg} to a pointer
-to \co{pthread_mutex_t}, lines~36-39 acquires the specified lock,
-and lines~44-47 releases it.
-While holding the lock, lines~40-43 increment the shared variable \co{x},
+As with \co{lock_reader()}, line~\lnref{cast} casts \co{arg} to a pointer
+to \co{pthread_mutex_t},
+lines~\lnref{acq:b}-\lnref{acq:e} acquires the specified lock,
+and lines~\lnref{rel:b}-\lnref{rel:e} releases it.
+While holding the lock, lines~\lnref{loop:b}-\lnref{loop:e}
+increment the shared variable \co{x},
 sleeping for five milliseconds between each increment.
-Finally, lines~44-47 release the lock.
+Finally, lines~\lnref{rel:b}-\lnref{rel:e} release the lock.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1   printf("Creating two threads using same lock:\n");
-  2   if (pthread_create(&tid1, NULL,
-  3                      lock_reader, &lock_a) != 0) {
-  4     perror("pthread_create");
-  5     exit(EXIT_FAILURE);
-  6   }
-  7   if (pthread_create(&tid2, NULL,
-  8                      lock_writer, &lock_a) != 0) {
-  9     perror("pthread_create");
- 10     exit(EXIT_FAILURE);
- 11   }
- 12   if (pthread_join(tid1, &vp) != 0) {
- 13     perror("pthread_join");
- 14     exit(EXIT_FAILURE);
- 15   }
- 16   if (pthread_join(tid2, &vp) != 0) {
- 17     perror("pthread_join");
- 18     exit(EXIT_FAILURE);
- 19   }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/toolsoftrade/lock@same_lock.fcv}
 \caption{Demonstration of Same Exclusive Lock}
 \label{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
 \end{listing}
 
+\begin{lineref}[ln:toolsoftrade:lock:same_lock]
 Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
 는 같은 락인 \co{lock_a} 사용하도록 하면서 \co{lock_reader()} 와
 \co{lock_writer()} 를 쓰레드로 실행시키는 코드를 보여줍니다.
@@ -1148,21 +1088,20 @@ Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
 Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
 shows a code fragment that runs \co{lock_reader()} and
 \co{lock_writer()} as threads using the same lock, namely, \co{lock_a}.
-Lines~2-6 create a thread running \co{lock_reader()}, and then
-Lines~7-11 create a thread running \co{lock_writer()}.
-Lines~12-19 wait for both threads to complete.
+Lines~\lnref{cr:reader:b}-\lnref{cr:reader:e} create a thread
+running \co{lock_reader()}, and then
+Lines~\lnref{cr:writer:b}-\lnref{cr:writer:e} create a thread
+running \co{lock_writer()}.
+Lines~\lnref{wait:b}-\lnref{wait:e} wait for both threads to complete.
 The output of this code fragment is as follows:
+%TODO: Apply
+\end{lineref}
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
+\begin{VerbatimU}
 Creating two threads using same lock:
 lock_reader(): x = 0
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{VerbatimU}
 
 두 쓰레드가 모두 같은 락을 사용하기 때문에, \co{lock_reader()} 쓰레드는
 \co{lock_writer()} 가 락을 잡고서 만들어내는 \co{x} 의 중간 값들을 볼 수
@@ -1214,32 +1153,7 @@ by \co{lock_writer()} while holding the lock.
 } \QuickQuizEnd
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1   printf("Creating two threads w/different locks:\n");
-  2   x = 0;
-  3   if (pthread_create(&tid1, NULL,
-  4                      lock_reader, &lock_a) != 0) {
-  5     perror("pthread_create");
-  6     exit(EXIT_FAILURE);
-  7   }
-  8   if (pthread_create(&tid2, NULL,
-  9                      lock_writer, &lock_b) != 0) {
- 10     perror("pthread_create");
- 11     exit(EXIT_FAILURE);
- 12   }
- 13   if (pthread_join(tid1, &vp) != 0) {
- 14     perror("pthread_join");
- 15     exit(EXIT_FAILURE);
- 16   }
- 17   if (pthread_join(tid2, &vp) != 0) {
- 18     perror("pthread_join");
- 19     exit(EXIT_FAILURE);
- 20   }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/toolsoftrade/lock@diff_lock.fcv}
 \caption{Demonstration of Different Exclusive Locks}
 \label{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
 \end{listing}
@@ -1258,18 +1172,13 @@ shows a similar code fragment, but this time using different locks:
 The output of this code fragment is as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
+\begin{VerbatimU}
 Creating two threads w/different locks:
 lock_reader(): x = 0
 lock_reader(): x = 1
 lock_reader(): x = 2
 lock_reader(): x = 3
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{VerbatimU}
 
 두 쓰레드가 다른 락을 사용하기 때문에, 서로를 배제하지 않고, 동시에 수행됩니다.
 그래서 \co{lock_reader()} 함수는 \co{lock_writer()} 가 저장한 \co{x} 중간값을
@@ -1374,7 +1283,8 @@ values of \co{x} stored by \co{lock_writer()}.
 	는 그 다음에 돌았기 때문에, \co{x} 를 다시 초기화 해야 합니다.
 	\iffalse
 
-	See line~3 of
+	%TODO: Apply
+	See line~\ref{ln:toolsoftrade:lock:reader_writer:x} of
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}.
 	Because the code in
 	Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
@@ -1448,57 +1358,12 @@ provided by reader-writer locks.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 pthread_rwlock_t rwl = PTHREAD_RWLOCK_INITIALIZER;
-  2 int holdtime = 0;
-  3 int thinktime = 0;
-  4 long long *readcounts;
-  5 int nreadersrunning = 0;
-  6 
-  7 #define GOFLAG_INIT 0
-  8 #define GOFLAG_RUN  1
-  9 #define GOFLAG_STOP 2
- 10 char goflag = GOFLAG_INIT;
- 11 
- 12 void *reader(void *arg)
- 13 {
- 14   int i;
- 15   long long loopcnt = 0;
- 16   long me = (long)arg;
- 17 
- 18   __sync_fetch_and_add(&nreadersrunning, 1);
- 19   while (READ_ONCE(goflag) == GOFLAG_INIT) {
- 20     continue;
- 21   }
- 22   while (READ_ONCE(goflag) == GOFLAG_RUN) {
- 23     if (pthread_rwlock_rdlock(&rwl) != 0) {
- 24       perror("pthread_rwlock_rdlock");
- 25       exit(EXIT_FAILURE);
- 26     }
- 27     for (i = 1; i < holdtime; i++) {
- 28       barrier();
- 29     }
- 30     if (pthread_rwlock_unlock(&rwl) != 0) {
- 31       perror("pthread_rwlock_unlock");
- 32       exit(EXIT_FAILURE);
- 33     }
- 34     for (i = 1; i < thinktime; i++) {
- 35       barrier();
- 36     }
- 37     loopcnt++;
- 38   }
- 39   readcounts[me] = loopcnt;
- 40   return NULL;
- 41 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/toolsoftrade/rwlockscale@reader.fcv}
 \caption{Measuring Reader-Writer Lock Scalability}
 \label{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
 \end{listing}
 
+\begin{lineref}[ln:toolsoftrade:rwlockscale:reader]
 Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
 (\path{rwlockscale.c})
 는 리더-라이터 락의 확장성을 측정하는 한가지 방법을 보여줍니다.
@@ -1514,14 +1379,14 @@ Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
 Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
 (\path{rwlockscale.c})
 shows one way of measuring reader-writer lock scalability.
-Line~1 shows the definition and initialization of the reader-writer
-lock, line~2 shows the \co{holdtime} argument controlling the
+Line~\lnref{rwlock} shows the definition and initialization of the reader-writer
+lock, line~\lnref{holdtm} shows the \co{holdtime} argument controlling the
 time each thread holds the reader-writer lock,
-line~3 shows the \co{thinktime} argument controlling the time between
+line~\lnref{thinktm} shows the \co{thinktime} argument controlling the time between
 the release of the reader-writer lock and the next acquisition,
-line~4 defines the \co{readcounts} array into which each reader thread
+line~\lnref{rdcnts} defines the \co{readcounts} array into which each reader thread
 places the number of times it acquired the lock, and
-line~5 defines the \co{nreadersrunning} variable, which
+line~\lnref{nrdrun} defines the \co{nreadersrunning} variable, which
 determines when all reader threads have started running.
 \fi
 
@@ -1531,11 +1396,14 @@ determines when all reader threads have started running.
 \co{GOFLAG_STOP} 으로 값을 바꿉니다.
 \iffalse
 
-Lines~7-10 define \co{goflag}, which synchronizes the start and the
+Lines~\lnref{goflag:b}-\lnref{goflag:e} define \co{goflag},
+which synchronizes the start and the
 end of the test.
 This variable is initially set to \co{GOFLAG_INIT}, then set to
 \co{GOFLAG_RUN} after all the reader threads have started, and finally
 set to \co{GOFLAG_STOP} to terminate the test run.
+%TODO: Apply
+\end{lineref}
 \fi
 
 라인~12-41 은 리더 쓰레드인 \co{reader()} 함수를 정의합니다.
@@ -1546,13 +1414,17 @@ set to \co{GOFLAG_STOP} to terminate the test run.
 않을 거라고 가정하고 동작하는 권리를 행사할 수도 있습니다.
 \iffalse
 
-Lines~12-41 define \co{reader()}, which is the reader thread.
-Line~18 atomically increments the \co{nreadersrunning} variable
+%TODO: Apply
+\begin{lineref}[ln:toolsoftrade:rwlockscale:reader:reader]
+Lines~\lnref{b}-\lnref{e} define \co{reader()}, which is the reader thread.
+Line~\lnref{atmc_inc} atomically increments the \co{nreadersrunning} variable
 to indicate that this thread is now running, and
-lines~19-21 wait for the test to start.
+lines~\lnref{wait:b}-\lnref{wait:e} wait for the test to start.
 The \co{READ_ONCE()} primitive forces the compiler to fetch \co{goflag}
 on each pass through the loop---the compiler would otherwise be within its
 rights to assume that the value of \co{goflag} would never change.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -1562,7 +1434,8 @@ rights to assume that the value of \co{goflag} would never change.
 	\iffalse
 
 	Instead of using \co{READ_ONCE()} everywhere, why not just
-	declare \co{goflag} as \co{volatile} on line~10 of
+	declare \co{goflag} as \co{volatile} on
+        line~\ref{ln:toolsoftrade:rwlockscale:reader:goflag:e} of
 	Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}?
 	\fi
 \QuickQuizAnswer{
@@ -1700,16 +1573,24 @@ rights to assume that the value of \co{goflag} would never change.
 할당된 원소에 저장하고, 라인~40 에서는 리턴해서 쓰레드를 종료합니다.
 \iffalse
 
-The loop spanning lines~22-38 carries out the performance test.
-Lines~23-26 acquire the lock, lines~27-29 hold the lock for the specified
+%TODO: Apply
+\begin{lineref}[ln:toolsoftrade:rwlockscale:reader:reader]
+The loop spanning lines~\lnref{loop:b}-\lnref{loop:e} carries out the performance test.
+Lines~\lnref{acq:b}-\lnref{acq:e} acquire the lock,
+lines~\lnref{hold:b}-\lnref{hold:e} hold the lock for the specified
+>>>>>>> paul/master
 duration (and the \co{barrier()} directive prevents the compiler from
-optimizing the loop out of existence), lines~30-33 release the lock,
-and lines~34-36 wait for the specified duration before re-acquiring the
+optimizing the loop out of existence),
+lines~\lnref{rel:b}-\lnref{rel:e} release the lock,
+and lines~\lnref{think:b}-\lnref{think:e} wait for the specified
+duration before re-acquiring the
 lock.
-Line~37 counts this lock acquisition.
+Line~\lnref{count} counts this lock acquisition.
 
-Line~39 moves the lock-acquisition count to this thread's element of the
-\co{readcounts[]} array, and line~40 returns, terminating this thread.
+Line~\lnref{mov_cnt} moves the lock-acquisition count to this thread's element of the
+\co{readcounts[]} array, and line~\lnref{return} returns, terminating this thread.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \begin{figure}[tb]
@@ -2040,16 +1921,11 @@ If you instead need the new value, you can instead use the
 	in terms of \co{__sync_fetch_and_nand()} as follows:
 	\fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
+\begin{VerbatimU}
 tmp = v;
 ret = __sync_fetch_and_nand(p, tmp);
 ret = ~ret & tmp;
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{VerbatimU}
 
 	비슷하게 \co{__sync_fetch_and_add()}, \co{__sync_fetch_and_sub()},
 	그리고 \co{__sync_fetch_and_xor()} 를 그들의 나중값 리턴하는 대응
@@ -2162,21 +2038,14 @@ Similarly, the \co{WRITE_ONCE()} primitive may be used to prevent the
 compiler from optimizing away a given memory write.
 These last three primitives are not provided directly by \GCC,
 but may be implemented straightforwardly as shown in
-Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.
+%TODO: Apply
+Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)},
+and all three are discussed at length in
+Section~\ref{sec:toolsoftrade:Accessing Shared Variables}.
 \fi
 
 \begin{listing}[tb]
-{ \scriptsize
-\begin{verbbox}
-#define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
-#define READ_ONCE(x) \
-            ({ typeof(x) ___x = ACCESS_ONCE(x); ___x; })
-#define WRITE_ONCE(x, val) ({ ACCESS_ONCE(x) = (val); })
-#define barrier() __asm__ __volatile__("": : :"memory")
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/api-pthreads/api-pthreads@compiler_barrier.fcv}
 \caption{Compiler Barrier Primitive (for \GCC)}
 \label{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
 \end{listing}
@@ -2290,6 +2159,9 @@ C11 어토믹 오퍼레이션들의 한가지 한계점은 특수한 어토믹 �
 타입이 아닌 평범한 객체에 대해서도 사용될 수도 있습니다.
 이 기능들 중 일부는 이 목록의 메모리 순서 인자를 받을 수도 있습니다:
 \iffalse
+
+\subsection{Atomic Operations (Modern \GCC)}
+\label{sec:toolsoftrade:Atomic Operations (Modern gcc)}
 
 One restriction of the C11 atomics is that they apply only to special
 atomic types, which can be problematic.
@@ -2486,22 +2358,18 @@ Listing~\ref{lst:toolsoftrade:Thread API}, and members are described in the
 following sections.
 \fi
 
-\begin{listing*}[tbp]
-{ \scriptsize
-\begin{verbbox}
+\begin{listing}[tbp]
+\begin{VerbatimL}[numbers=none,xleftmargin=2pt]
 int smp_thread_id(void)
 thread_id_t create_thread(void *(*func)(void *), void *arg)
 for_each_thread(t)
 for_each_running_thread(t)
 void *wait_thread(thread_id_t tid)
 void wait_all_threads(void)
-\end{verbbox}
-}
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Thread API}
 \label{lst:toolsoftrade:Thread API}
-\end{listing*}
+\end{listing}
 
 \subsubsection{\tco{create_thread()}}
 
@@ -2626,32 +2494,21 @@ Line~7 의 \co{return} 문은 쓰레드를 종료시키고, 누구든 이 쓰레
 \co{wait_thread()} 를 호출한 쪽에 \co{NULL} 을 리턴함을 알아두시기 바랍니다.
 \iffalse
 
-Listing~\ref{lst:toolsoftrade:Example Child Thread}
+%TODO: Apply
+Listing~\ref{lst:toolsoftrade:Example Child Thread} (\path{threadcreate.c})
 shows an example hello-world-like child thread.
 As noted earlier, each thread is allocated its own stack, so
 each thread has its own private \co{arg} argument and \co{myarg} variable.
 Each child simply prints its argument and its \co{smp_thread_id()}
 before exiting.
-Note that the \co{return} statement on line~7 terminates the thread,
+Note that the \co{return} statement on
+line~\ref{ln:intro:threadcreate:thread_test:return} terminates the thread,
 returning a \co{NULL} to whoever invokes \co{wait_thread()} on this
 thread.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 void *thread_test(void *arg)
-  2 {
-  3   int myarg = (int)arg;
-  4
-  5   printf("child thread %d: smp_thread_id() = %d\n",
-  6          myarg, smp_thread_id());
-  7   return NULL;
-  8 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/intro/threadcreate@thread_test.fcv}
 \caption{Example Child Thread}
 \label{lst:toolsoftrade:Example Child Thread}
 \end{listing}
@@ -2668,45 +2525,25 @@ Listing~\ref{lst:toolsoftrade:Example Parent Thread}
 쓰레드들이 리턴하는 값들을 무시함을 알아두시기 바랍니다.
 \iffalse
 
+%TODO: Apply
+\begin{lineref}[ln:intro:threadcreate:main]
 The parent program is shown in
 Listing~\ref{lst:toolsoftrade:Example Parent Thread}.
 It invokes \co{smp_init()} to initialize the threading system on
-line~6,
-parses arguments on lines~7-14, and announces its presence on line~15.
-It creates the specified number of child threads on lines~16-17,
-and waits for them to complete on line~18.
+line~\lnref{smp_init},
+parses arguments on lines~\lnref{parse:b}-\lnref{parse:e},
+and announces its presence on line~\lnref{announce}.
+It creates the specified number of child threads on
+lines~\lnref{create:b}-\lnref{create:e},
+and waits for them to complete on line~\lnref{wait}.
 Note that \co{wait_all_threads()} discards the threads return values,
 as in this case they are all \co{NULL}, which is not very interesting.
+%TODO: Apply
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 int main(int argc, char *argv[])
-  2 {
-  3   int i;
-  4   int nkids = 1;
-  5
-  6   smp_init();
-  7   if (argc > 1) {
-  8     nkids = strtoul(argv[1], NULL, 0);
-  9     if (nkids > NR_THREADS) {
- 10       fprintf(stderr, "nkids=%d too big, max=%d\n",
- 11         nkids, NR_THREADS);
- 12       usage(argv[0]);
- 13     }
- 14   }
- 15   printf("Parent spawning %d threads.\n", nkids);
- 16   for (i = 0; i < nkids; i++)
- 17     create_thread(thread_test, (void *)i);
- 18   wait_all_threads();
- 19   printf("All threads completed.\n", nkids);
- 20   return EXIT_SUCCESS;
- 21 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/intro/threadcreate@main.fcv}
 \caption{Example Parent Thread}
 \label{lst:toolsoftrade:Example Parent Thread}
 \end{listing}
@@ -2747,16 +2584,12 @@ This book's CodeSamples locking API closely follows that of the Linux kernel.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
+\begin{VerbatimL}[numbers=none]
 void spin_lock_init(spinlock_t *sp);
 void spin_lock(spinlock_t *sp);
 int spin_trylock(spinlock_t *sp);
 void spin_unlock(spinlock_t *sp);
-\end{verbbox}
-}
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Locking API}
 \label{lst:toolsoftrade:Locking API}
 \end{listing}
@@ -2829,16 +2662,11 @@ A spinlock named \co{mutex} may be used to protect a variable
 \co{counter} as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
+\begin{VerbatimU}
 spin_lock(&mutex);
 counter++;
 spin_unlock(&mutex);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{VerbatimU}
 
 \QuickQuiz{}
 	변수 {\tt counter} 의 값이 {\tt mutex} 의 보호 없이 증가된다면 어떤
@@ -2857,16 +2685,11 @@ spin_unlock(&mutex);
 	might compile into something like the following:
 	\fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
+\begin{VerbatimU}
 LOAD counter,r0
 INC r0
 STORE r0,counter
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{VerbatimU}
 
 	그런 기계에서라면, 두개의 쓰레드가 동시에 {\tt counter} 의 값을
 	읽어오고, 각자 그 값을 증가시킨 후, 각각 그 결과를 저장할 수 있습니다.
@@ -2888,8 +2711,734 @@ Section~\ref{sec:toolsoftrade:Performance} 에서 다루어집니다.
 
 However, the \co{spin_lock()} and \co{spin_unlock()} primitives
 do have performance consequences, as will be seen in
-Section~\ref{sec:toolsoftrade:Performance}.
+%TODO: Apply
+Chapter~\ref{chp:Data Structures}.
 \fi
+
+\subsection{Accessing Shared Variables}
+\label{sec:toolsoftrade:Accessing Shared Variables}
+
+The C standard defined semantics for concurrent read/write access to
+shared variables only in 2011, but concurrent C code was being
+written at least a quarter century earlier~\cite{Beck85,Inman85}.
+This raises the question as to what today's greybeards did back
+in long-past pre-C11 days.
+A short answer to this question is ``they lived dangerously''.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Living Dangerously Early 1990s Style]
+\begin{VerbatimL}[commandchars=\\\{\}]
+ptr = global_ptr;\lnlbl{temp}
+if (ptr != NULL && ptr < high_address)
+	do_low(ptr);
+\end{VerbatimL}
+\end{linelabel}
+\caption{Living Dangerously Early 1990s Style}
+\label{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+\end{listing}
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:C Compilers Can Invent Loads]
+\begin{VerbatimL}[commandchars=\\\{\}]
+if (global_ptr != NULL &&\lnlbl{if:a}
+    global_ptr < high_address)\lnlbl{if:b}
+	do_low(global_ptr);\lnlbl{do_low}
+\end{VerbatimL}
+\end{linelabel}
+\caption{C Compilers Can Invent Loads}
+\label{lst:toolsoftrade:C Compilers Can Invent Loads}
+\end{listing}
+
+At least they would have been living dangerously had they been using
+2018 compilers.
+In (say) the early 1990s, compilers were less capable in part because
+much less work had been done on them and in part because they were
+confined to the relatively small memories of the day.
+Nevertheless, problems did arise, as shown in
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style},
+which the compiler is within its rights to transform into
+Listing~\ref{lst:toolsoftrade:C Compilers Can Invent Loads}.
+As you can, the temporary on
+line~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} of
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+has been optimized away, so that \co{global_ptr} will been loaded
+up to three times.
+
+\QuickQuiz{}
+	What is wrong with loading
+	Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}'s
+	\co{global_ptr} up to three times?
+\QuickQuizAnswer{
+	Suppose that \co{global_ptr} is initially non-\co{NULL},
+	but that some other thread sets \co{global_ptr} to \co{NULL}.
+	\begin{lineref}[ln:toolsoftrade:C Compilers Can Invent Loads]
+	Suppose further that line~\lnref{if:a} of the transformed code
+	(Listing~\ref{lst:toolsoftrade:C Compilers Can Invent Loads})
+	executes just before \co{global_ptr} is set to \co{NULL} and
+	line~\lnref{if:b} just after.
+	Then line~\lnref{if:a} will conclude that
+        \co{global_ptr} is non-\co{NULL},
+	line~\lnref{if:b} will conclude that it is less than
+        \co{high_address},
+	so that line~\lnref{do_low} passes \co{do_low()} a \co{NULL} pointer,
+	which \co{do_low()} just might not be prepared to deal with.
+	\end{lineref}
+} \QuickQuizEnd
+
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+describes additional problems caused by plain accesses,
+Sections~\ref{sec:toolsoftrade:A Volatile Solution}
+and~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}
+describe some pre-C11 solutions.
+Of course, where practical, the primitives described in
+Section~\ref{sec:toolsoftrade:Atomic Operations (gcc Classic)}
+or (especially)
+Section~\ref{sec:toolsoftrade:Atomic Operations (C11)}
+should be instead be used to avoid data races, that is, to ensure
+that if there are multiple concurrent accesses to a given
+variable, all of those accesses are loads.
+
+\subsubsection{Shared-Variable Shenanigans}
+\label{sec:toolsoftrade:Shared-Variable Shenanigans}
+
+Given code that does plain loads and stores,\footnote{
+	That is, normal loads and stores instead of C11 atomics, inline
+	assembly, or volatile accesses.}
+the compiler is within
+its rights to assume that the affected variables are neither accessed
+nor modified by any other thread.
+This assumption allows the compiler to carry out a large number of
+transformations, including load tearing, store tearing,
+load fusing, store fusing, code reordering, invented loads, and
+invented stores, all of which work just fine in single-threaded code.
+But concurrent code can be broken by each of these transformations,
+or shared-variable shenanigans, as described below.
+
+{\bf Load tearing} occurs when the compiler uses multiple load
+instructions for a single access.
+For example, the compiler could in theory compile the load from
+\co{global_ptr} (see
+line~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} of
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style})
+as a series of one-byte loads.
+If some other thread was concurrently setting \co{global_ptr} to
+\co{NULL}, the result might have all but one byte of the pointer
+set to zero, thus forming a ``wild pointer''.
+Stores using such a wild pointer could corrupt arbitrary
+regions of memory, resulting in rare and difficult-to-debug crashes.
+
+Worse yet, on (say) an 8-bit system with 16-bit pointers, the compiler
+might have no choice but to use a pair of 8-bit instructions to access
+a given pointer.
+Because the C standard must support all manner of systems, the standard
+cannot rule out load tearing in the general case.
+
+{\bf Store tearing} occurs when the compiler uses multiple store
+instructions for a single access.
+For example, one thread might store \co{0x1234} to a four-byte integer
+variable at the same time another thread stored \co{0xabcd}.
+If the compiler used 16-bit stores for either access, the result
+might well be \co{0x12cd}, which could come as quite a surprise to
+code loading from this integer.
+Again, the C standard simply has no choice in the general case, given
+the possibility of code using 32-bit integers running on a 16-bit system.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:C Compilers Can Fuse Loads]
+\begin{VerbatimL}[commandchars=\\\[\]]
+if (!need_to_stop)
+	for (;;) {\lnlbl[loop:b]
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+		do_something_quickly();
+	}\lnlbl[loop:e]
+\end{VerbatimL}
+\end{linelabel}
+\caption{C Compilers Can Fuse Loads}
+\label{lst:toolsoftrade:C Compilers Can Fuse Loads}
+\end{listing}
+
+{\bf Load fusing} occurs when the compiler uses the result of a
+prior load from a given variable instead of repeating the load.
+Not only is this sort of optimization just fine in single-threaded
+code, it is often just fine in multithreaded code.
+Unfortunately, the word ``often'' hides some truly annoying exceptions.
+
+For example, suppose that a real-time system needs to invoke a
+function named \co{do_something_quickly()} repeatedly until the
+variable \co{need_to_stop} was set, and that the compiler can see
+that \co{do_something_quickly()} does not store to \co{need_to_stop}.
+The compiler might reasonably unroll this loop sixteen times in order
+to reduce the per-invocation of the backwards branch at the end of the
+loop.
+Worse yet, because the compiler knows that \co{do_something_quickly()}
+does not store to \co{need_to_stop}, the compiler could quite reasonably
+decide to check this variable only once, resulting in the code shown in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads}.
+\begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Loads]
+Once entered, the loop on
+lines~\lnref{loop:b}-\lnref{loop:e} will never stop, regardless of how
+many times some other thread stores a non-zero value to \co{need_to_stop}.
+\end{lineref}
+The result will at best be disappointment, and might well also
+include severe physical damage.
+
+{\bf Store fusing} can occur when the compiler notices a pair of successive
+stores to a given variable with no intervening loads from that variable.
+In this case, the compiler is within its rights to omit the first store.
+This is never a problem in single-threaded code, and in fact it is usually
+the case that it is not a problem in correctly written concurrent code.
+After all, if the two stores are executed in quick succession, there is
+very little chance that some other thread could load the value from the
+first store.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:C Compilers Can Fuse Stores]
+\begin{VerbatimL}[commandchars=\\\[\]]
+void shut_it_down(void)
+{
+	status = SHUTTING_DOWN; /* BUGGY!!! */\lnlbl[store:a]
+	start_shutdown();
+	while (!other_task_ready) /* BUGGY!!! */\lnlbl[loop:b]
+		continue;\lnlbl[loop:e]
+	finish_shutdown();\lnlbl[finish]
+	status = SHUT_DOWN; /* BUGGY!!! */\lnlbl[store:b]
+	do_something_else();
+}
+
+void work_until_shut_down(void)
+{
+	while (status != SHUTTING_DOWN) /* BUGGY!!! */\lnlbl[until:loop:b]
+		do_more_work();\lnlbl[until:loop:e]
+	other_task_ready = 1; /* BUGGY!!! */\lnlbl[other:store]
+}
+\end{VerbatimL}
+\end{linelabel}
+\caption{C Compilers Can Fuse Stores}
+\label{lst:toolsoftrade:C Compilers Can Fuse Stores}
+\end{listing}
+
+However, there are exceptions, for example as shown in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}.
+\begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
+The function \co{shut_it_down(void)()} stores to the shared
+variable \co{status} on lines~\lnref{store:a} and~\lnref{store:b},
+and so assuming that neither
+\co{start_shutdown()} nor \co{finish_shutdown()} access \co{status},
+the compiler could reasonably remove the store to \co{status} on
+line~\lnref{store:a}.
+Unfortunately, this would mean that \co{work_until_shut_down()} would
+never exit its loop spanning
+lines~\lnref{until:loop:b} and~\lnref{until:loop:e}, and thus would never set
+\co{other_task_ready}, which would in turn mean that \co{shut_it_down()}
+would never exit its loop spanning
+lines~\lnref{loop:b} and~\lnref{loop:e}, even if
+the compiler chooses not to fuse the successive loads from
+\co{other_task_ready} on line~\lnref{loop:b}.
+
+And there are more problems with the code in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores},
+including code reordering.
+
+{\bf Code reordering} is a common compilation technique used to
+combine common subexpressions, reduce register pressure, and
+improve utilization of the many functional units available on
+modern superscalar microprocessors.
+It is also another reason why the code in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
+is buggy.
+For example, suppose that the \co{do_more_work()} function on
+line~\lnref{until:loop:e}
+does not access \co{other_task_ready}.
+Then the compiler would be within its rights to move the assignment
+to \co{other_task_ready} on
+line~\lnref{other:store} to precede line~\lnref{until:loop:b}, which might
+be a great disappointment for anyone hoping that the last call to
+\co{do_more_work()} on line~\lnref{until:loop:e} happens before the call to
+\co{finish_shutdown()} on line~\lnref{finish}.
+\end{lineref}
+
+{\bf Invented loads} were illustrated by the code in
+Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+and~\ref{lst:toolsoftrade:C Compilers Can Invent Loads},
+in which the compiler optimized away a temporary variable,
+thus loading from a shared variable more often than intended.
+
+Invented loads can also be a performance hazard.
+These hazards can occur when a load of variable in a ``hot''
+cacheline is hoisted out of an \co{if} statement.
+These hoisting optimizations are not uncommon, and can cause significant
+increases in cache misses, and thus significant degradation of
+both performance and scalability.
+
+\begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
+{\bf Invented stores} can occur in a number of situations.
+For example, a compiler emitting code for \co{work_until_shut_down()} in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
+might notice that \co{other_task_ready} is not accessed by
+\co{do_more_work()}, and stored to on line~\lnref{other:store}.
+If \co{do_more_work()} was a complex inline function, it might be
+necessary to do a register spill, in which case one attractive
+place to use for temporary storage is \co{other_task_ready}.
+After all, there are no accesses to it, so what is the harm?
+
+Of course, a non-zero store to this variable at just the wrong time
+would result in the \co{while} loop on
+line~\lnref{loop:b} terminating
+prematurely, again allowing \co{finish_shutdown()} to run
+concurrently with \co{do_more_work()}.
+Given that the entire point of this \co{while} appears to be to
+prevent such concurrency, this is not a good thing.
+\end{lineref}
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Inviting an Invented Store]
+\begin{VerbatimL}[commandchars=\\\{\}]
+if (condition)
+	a = 1;
+else
+	do_a_bunch_of_stuff();
+\end{VerbatimL}
+\end{linelabel}
+\caption{Inviting an Invented Store}
+\label{lst:toolsoftrade:Inviting an Invented Store}
+\end{listing}
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Compiler Invents an Invited Store]
+\begin{VerbatimL}[commandchars=\\\[\]]
+a = 1;\lnlbl[store:uncond]
+if (!condition) {
+	a = 0;\lnlbl[store:cond]
+	do_a_bunch_of_stuff();
+}
+\end{VerbatimL}
+\end{linelabel}
+\caption{Compiler Invents an Invited Store}
+\label{lst:toolsoftrade:Compiler Invents an Invited Store}
+\end{listing}
+
+Using a stored-to variable as a temporary might seem outlandish,
+but it is permitted by the standard.
+Nevertheless, readers might be justified in wanting a less
+outlandish example, which is provided by
+Listings~\ref{lst:toolsoftrade:Inviting an Invented Store}
+and~\ref{lst:toolsoftrade:Compiler Invents an Invited Store}.
+
+A compiler emitting code for
+Listing~\ref{lst:toolsoftrade:Inviting an Invented Store}
+might know that the value of \co{a} is initially zero,
+which might be a strong temptation to optimize away one branch
+by transforming this code to that in
+Listing~\ref{lst:toolsoftrade:Compiler Invents an Invited Store}.
+\begin{lineref}[ln:toolsoftrade:Compiler Invents an Invited Store]
+Here, line~\lnref{store:uncond} unconditionally stores \co{1} to \co{a}, then
+resets the value back to zero on
+line~\lnref{store:cond} if \co{condition} was not set.
+This transforms the if-then-else into an if-then, saving one branch.
+\end{lineref}
+
+Finally, pre-C11 compilers could invent writes to unrelated
+variables that happened to be adjacent to written-to
+variables~\cite[Section 4.2]{Boehm:2005:TCI:1064978.1065042}.
+This variant of invented stores has been outlawed by the prohibition
+against compiler optimizations that invent data races.
+
+Reliable concurrent code clearly needs a way to cause the compiler to
+preserve both the number and order of important accesses, a topic taken
+up by
+Sections~\ref{sec:toolsoftrade:A Volatile Solution}
+and~\ref{sec:toolsoftrade:Assembling the Rest of a Solution},
+which are up next.
+
+\subsubsection{A Volatile Solution}
+\label{sec:toolsoftrade:A Volatile Solution}
+
+Although it is now much maligned, before the advent of C11 and
+C++11~\cite{PeteBecker2011N3242}, the \co{volatile} keyword was an
+indispensible tool in the parallel programmer's toolbox.
+This raises the question of exactly what \co{volatile} means,
+a question that is not answered with excessive precision even
+by more recent versions of this standard~\cite{RichardSmith2018N4762}.
+This version guarantees that ``Accesses through \co{volatile}
+\co{glvalues} are evaluated strictly according to the rules of the
+abstract machine'',
+that \co{volatile} accesses are side effects,
+that they are one of the four forward-progress indicators,
+and that their exact semantics are implementation-defined.
+Perhaps the most clear guidance is provided by this non-normative note:
+
+\begin{quote}
+	\co{volatile} is a hint to the implementation to avoid
+	aggressive optimization involving the object because the value
+	of the object might be changed by means undetectable by an
+	implementation.
+	Furthermore, for some implementations, volatile might indicate
+	that special hardware instructions are required to access
+	the object.
+	See 6.8.1 for detailed semantics.
+	In general, the semantics of \co{volatile} are intended to be the
+	same in C++ as they are in C.
+\end{quote}
+
+This wording might be reassuring to those writing low-level code, except
+for the fact that compiler writers are free to completely ignore
+non-normative notes.
+Parallel programmers might instead reassure themselves that compiler
+writers would like to avoid breaking device drivers (though perhaps
+only after a few ``frank and open'' discussions with device-driver
+developers), and device drivers impose at least the following
+constraints~\cite{PaulEMcKenney2016P0124R6-LKMM}:
+
+\begin{enumerate}
+\item	Implementations are forbidden from tearing an aligned volatile
+	access when machine instructions of the access's size and type
+	are available.\footnote{
+		Note that this leaves unspecified what to do with 128-bit
+		loads and stores on CPUs having 128-bit CAS but not
+		128-bit loads and stores.}
+	Concurrent code relies on this constraint to avoid unnecessary
+	load and store tearing.
+\item	Implementations must not assume anything about the semantics of
+	a volatile access, nor, for any volatile access that returns a
+	value, about the possible set of values that might be
+	returned.\footnote{
+		This is strongly implied by the implementation-defined
+		semantics called out above.}
+	Concurrent code relies on this constraint to avoid optimizations
+	that are inapplicable given that other processors might be
+	concurrently accessing the location in question.
+\item	Aligned machine-sized non-mixed-size volatile accesses interact
+	naturally with volatile assembly-code sequences before and after.
+	This is necessary because some devices must be accessed using
+	a combination of volatile MMIO accesses and special-purpose
+	assembly-language instructions.
+	Concurrent code relies on this constraint in order to achieve
+	the desired ordering properties from combinations of volatile
+	accesses and other means discussed in
+	Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}.
+\end{enumerate}
+
+Concurrent code also relies on the first two constraints to avoid
+undefined behavior that could result due to data races if any of the
+accesses to a given object was either non-atomic or non-volatile,
+assuming that all accesses are aligned and machine-sized.
+The semantics of mixed-size accesses to the same locations are more
+complex, and are left aside for the time being.
+
+So how does \co{volatile} stack up against the earlier examples?
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Avoiding Danger, 2018 Style]
+\begin{VerbatimL}[commandchars=\\\{\}]
+ptr = READ_ONCE(global_ptr);\lnlbl{temp}
+if (ptr != NULL && ptr < high_address)
+	do_low(ptr);
+\end{VerbatimL}
+\end{linelabel}
+\caption{Avoiding Danger, 2018 Style}
+\label{lst:toolsoftrade:Avoiding Danger, 2018 Style}
+\end{listing}
+
+Using \co{READ_ONCE()} on
+line~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} of
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+avoids invented loads,
+resulting in the code shown in
+Listing~\ref{lst:toolsoftrade:Avoiding Danger, 2018 Style}.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Preventing Load Fusing]
+\begin{VerbatimL}[commandchars=\\\{\}]
+while (!READ_ONCE((!need_to_stop))
+	do_something_quickly();
+\end{VerbatimL}
+\end{linelabel}
+\caption{Preventing Load Fusing}
+\label{lst:toolsoftrade:Preventing Load Fusing}
+\end{listing}
+
+As shown in
+Listing~\ref{lst:toolsoftrade:Preventing Load Fusing},
+\co{READ_ONCE()} can also prevent the loop unrolling in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads}.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Preventing Store Fusing and Invented Stores]
+\begin{VerbatimL}[commandchars=\\\[\]]
+void shut_it_down(void)
+{
+	WRITE_ONCE(status, SHUTTING_DOWN); /* BUGGY!!! */\lnlbl[store:a]
+	start_shutdown();
+	while (!READ_ONCE(other_task_ready)) /* BUGGY!!! */\lnlbl[loop:b]
+		continue;\lnlbl[loop:e]
+	finish_shutdown();\lnlbl[finish]
+	WRITE_ONCE(status, SHUT_DOWN); /* BUGGY!!! */\lnlbl[store:b]
+	do_something_else();
+}
+
+void work_until_shut_down(void)
+{
+	while (READ_ONCE(status) != SHUTTING_DOWN) /* BUGGY!!! */\lnlbl[until:loop:b]
+		do_more_work();\lnlbl[until:loop:e]
+	WRITE_ONCE(other_task_ready, 1); /* BUGGY!!! */\lnlbl[other:store]
+}
+\end{VerbatimL}
+\end{linelabel}
+\caption{Preventing Store Fusing and Invented Stores}
+\label{lst:toolsoftrade:Preventing Store Fusing and Invented Stores}
+\end{listing}
+
+\co{READ_ONCE()} and \co{WRITE_ONCE()} can also be used to prevent the
+store fusing and invented stores that were shown in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores},
+with the result shown in
+Listing~\ref{lst:toolsoftrade:Preventing Store Fusing and Invented Stores}.
+However, this does nothing to prevent code reordering, which requires
+some additional tricks taught in
+Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Disinviting an Invented Store]
+\begin{VerbatimL}[commandchars=\\\{\}]
+if (condition)
+	WRITE_ONCE(a, 1);
+else
+	do_a_bunch_of_stuff();
+\end{VerbatimL}
+\end{linelabel}
+\caption{Disinviting an Invented Store}
+\label{lst:toolsoftrade:Disinviting an Invented Store}
+\end{listing}
+
+Finally, \co{WRITE_ONCE()} can be used to prevent the store invention
+shown in
+Listing~\ref{lst:toolsoftrade:Inviting an Invented Store},
+with the resulting code shown in
+Listing~\ref{lst:toolsoftrade:Disinviting an Invented Store}.
+
+To summarize, the \co{volatile} keyword can prevent load
+tearing and store tearing in cases where the loads and stores are
+machine-sized and properly aligned.
+It can also prevent load fusing, store fusing, invented loads, and
+invented stores.
+However, although it does prevent the compiler from reordering \co{volatile}
+accesses with each other, does nothing to prevent the CPU from reordering
+these accesses.
+Furthermore, it does nothing to prevent either compiler or CPU from
+reordering non-\co{volatile} accesses with each other or with
+\co{volatile} accesses.
+Preventing these types of reordering requires the techniques described
+in the next section.
+
+\subsubsection{Assembling the Rest of a Solution}
+\label{sec:toolsoftrade:Assembling the Rest of a Solution}
+
+Additional ordering has traditionally been provided by recourse to
+assembly language, for example, \GCC\ asm directives.
+Oddly enough, these directives need not actually contain assembly language,
+as exemplified by the \co{barrier()} macro shown in
+Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Preventing C Compilers From Fusing Loads]
+\begin{VerbatimL}[commandchars=\\\[\]]
+while (!need_to_stop) {
+	barrier(); \lnlbl[b1]
+	do_something_quickly();
+	barrier(); \lnlbl[b2]
+}
+\end{VerbatimL}
+\end{linelabel}
+\caption{Preventing C Compilers From Fusing Loads}
+\label{lst:toolsoftrade:Preventing C Compilers From Fusing Loads}
+\end{listing}
+
+In the \co{barrier()} macro, the \co{__asm__} introduces the asm
+directive, the \co{__volatile__} prevents the compiler from optimizing
+the asm away, the empty string specifies that no actual instructions
+are to be emitted, and the final \co{"memory"} tells the compiler that
+this do-nothing asm can arbitrarily change memory.
+In response, the compiler will avoid moving any memory references across
+the \co{barrier()} macro.
+This means that the real-time-destroying loop unrolling shown in
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads}
+can be prevented by adding \co{barrier()} calls as shown on
+lines~\ref{ln:toolsoftrade:Preventing C Compilers From Fusing Loads:b1}
+and~\ref{ln:toolsoftrade:Preventing C Compilers From Fusing Loads:b2}
+of
+Listing~\ref{lst:toolsoftrade:Preventing C Compilers From Fusing Loads}.
+These two lines of code prevent the compiler from pushing the load from
+\co{need_to_stop} into or past \co{do_something_quickly()} from either
+direction.
+
+\begin{listing}[tbp]
+\begin{linelabel}[ln:toolsoftrade:Preventing Reordering]
+\begin{VerbatimL}[commandchars=\\\[\]]
+void shut_it_down(void)
+{
+	WRITE_ONCE(status, SHUTTING_DOWN);
+	smp_mb(); \lnlbl[mb1]
+	start_shutdown();
+	while (!READ_ONCE(other_task_ready))\lnlbl[loop:b]
+		continue;
+	smp_mb(); \lnlbl[mb2]
+	finish_shutdown();
+	smp_mb(); \lnlbl[mb3]
+	WRITE_ONCE(status, SHUT_DOWN);
+	do_something_else();
+}
+
+void work_until_shut_down(void)
+{
+	while (READ_ONCE(status) != SHUTTING_DOWN) {
+		smp_mb(); \lnlbl[mb4]
+		do_more_work();
+	}
+	smp_mb(); \lnlbl[mb5]
+	WRITE_ONCE(other_task_ready, 1);\lnlbl[other:store]
+}
+\end{VerbatimL}
+\end{linelabel}
+\caption{Preventing Reordering}
+\label{lst:toolsoftrade:Preventing Reordering}
+\end{listing}
+
+However, this does nothing to prevent the CPU from reordering the
+references.
+In many cases, this is not a problem because the hardware can only do
+a certain amount of reordering.
+However, there are cases such as
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores} where the
+hardware must be constrained.
+Listing~\ref{lst:toolsoftrade:Preventing Store Fusing and Invented Stores}
+prevented store fusing and invention, and
+Listing~\ref{lst:toolsoftrade:Preventing Reordering}
+further prevents the remaining reordering by addition of
+\co{smp_mb()} on
+\begin{lineref}[ln:toolsoftrade:Preventing Reordering]
+lines~\lnref{mb1}, \lnref{mb2}, \lnref{mb3}, \lnref{mb4},
+and~\lnref{mb5}.
+\end{lineref}
+The \co{smp_mb()} macro is similar to \co{barrier()} shown in
+Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)},
+but with the empty string replaced by a string containing the
+instruction for a full memory barrier, for example, \co{"mfence"}
+on x86 or \co{"sync"} on PowerPC.
+
+\QuickQuiz{}
+	But aren't full memory barriers very heavyweight?
+	Isn't there a cheaper way to enforce the ordering needed in
+	Listing~\ref{lst:toolsoftrade:Preventing Reordering}?
+\QuickQuizAnswer{
+	As is often the case, the answer is ``it depends''.
+	However, if only two threads are accessing the \co{status}
+	and \co{other_task_ready} variables, then the
+	\co{smp_store_release()} and \co{smp_load_acquire()}
+	functions discussed in
+	Section~\ref{sec:toolsoftrade:Atomic Operations}
+	will suffice.
+} \QuickQuizEnd
+
+Ordering is also provided by some read-modify-write atomic
+operations, some of which are presented in
+Section~\ref{sec:toolsoftrade:Atomic Operations}.
+In the general case, memory ordering can be quite subtle, as
+discussed in
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}.
+The next section covers an alternative to memory ordering, namely
+limiting or even entirely avoiding data races.
+
+\subsubsection{Avoiding Data Races}
+\label{sec:toolsoftrade:Avoiding Data Races}
+
+``Doctor, it hurts my head when I think about concurrently accessing
+shared variables!''
+
+``Then stop concurrently accessing shared variables!!!''
+
+The doctor's advice might seem unhelpful, but simplification is often
+a very good thing.
+And one time-tested way to avoid concurrently accessing shared variables
+is to use locking, as will be discussed in
+Chapter~\ref{chp:Locking}.
+Another way is to access a given ``shared'' variable from only one
+CPU or thread, as will be discussed in
+Chapter~\ref{chp:Data Ownership}.
+It is possible to combine these, for example, a given variable might
+be modified only by one CPU or thread while holding a particular lock,
+and might be read either from that same CPU or thread on the one hand,
+or while holding that same lock on the other.
+
+In the spirit of ``every little bit helps'', here is a list of
+ways of allowing plain loads and stores in some cases, while requiring
+markings (such as \co{READ_ONCE()} and \co{WRITE_ONCE()}) for other
+cases:
+
+\begin{enumerate}
+\item	If a shared variable is only modified while holding a given
+	lock by a given owning CPU or thread, then all stores must use
+	\co{WRITE_ONCE()} and non-owning CPUs or threads that
+	are not holding the lock must use \co{READ_ONCE()} for loads.
+	The owning CPU or thread may use plain loads, as may any
+	CPU or thread holding the lock.
+\item	If a shared variable is only modified while holding a given
+	lock, then all stores must use \co{WRITE_ONCE()}.
+	CPUs or threads not holding the lock must use \co{READ_ONCE()}
+	for loads.
+	CPUs or threads holding the lock may use plain loads.
+\item	If a shared variable is only modified by a given owning CPU or
+	thread, then all stores must use \co{WRITE_ONCE()} and non-owning
+	CPUs or threads must use \co{READ_ONCE()} for loads.
+	The owning CPU or thread may use plain loads.
+\end{enumerate}
+
+In most other cases, loads from and stores to a shared variable must
+use \co{READ_ONCE()} and \co{WRITE_ONCE()} or stronger, respectively.
+But it bears repeating that neither \co{READ_ONCE()} nor \co{WRITE_ONCE()}
+provide any ordering guarantees.
+See the above
+Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution} or
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+for information on providing ordering guarantees.
+
+One important special case is when a given variable is shared by
+process-level code on the one hand and by an interrupt or signal handler
+on the other, but is never accessed concurrently by some other CPU or
+thread.
+In this case, the process-level code must use \co{READ_ONCE()} and
+\co{WRITE_ONCE()} or stronger to access this variable.
+
+\QuickQuiz{}
+	What needs to happen if a given interrupt or signal handler
+	might itself be interrupted?
+\QuickQuizAnswer{
+	Then that interruptible handler must also use \co{READ_ONCE()} and
+	\co{WRITE_ONCE()} or stronger to access any variable that
+	might be accessed by the interrupting handler.
+	Only those handlers that cannot be themselves interrupted
+	or that access no variables shared with an interrupting handler
+	may safely use plain accesses, and even then only if those
+	variables cannot be concurrently accessed by some other CPU or
+	thread.
+} \QuickQuizEnd
+
+Examples of many of these data-race-avoidance patterns are presented in
+Chapter~\ref{chp:Counting}.
+>>>>>>> paul/master
 
 \subsection{Atomic Operations}
 \label{sec:toolsoftrade:Atomic Operations}
@@ -2987,18 +3536,14 @@ Although this API is, strictly speaking, not necessary\footnote{
 it can provide a good userspace analogy to Linux kernel code.
 \fi
 
-\begin{listing}[htbp]
-{ \scriptsize
-\begin{verbbox}
+\begin{listing}[tbp]
+\begin{VerbatimL}[numbers=none]
 DEFINE_PER_THREAD(type, name)
 DECLARE_PER_THREAD(type, name)
 per_thread(name, thread)
 __get_thread_var(name)
 init_per_thread(name, v)
-\end{verbbox}
-}
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Per-Thread-Variable API}
 \label{lst:toolsoftrade:Per-Thread-Variable API}
 \end{listing}
@@ -3115,19 +3660,14 @@ per-thread 변수를 사용해 구현하는게 좋습니다.
 Suppose that we have a counter that is incremented very frequently
 but read out quite rarely.
 As will become clear in
-Section~\ref{sec:toolsoftrade:Performance},
+Section~\ref{sec:count:Statistical Counters},
 it is helpful to implement such a counter using a per-thread variable.
 Such a variable can be defined as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
+\begin{VerbatimU}
 DEFINE_PER_THREAD(int, counter);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{VerbatimU}
 
 이 카운터는 다음과 같이 초기화 되어야 합니다:
 \iffalse
@@ -3135,14 +3675,9 @@ DEFINE_PER_THREAD(int, counter);
 The counter must be initialized as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
+\begin{VerbatimU}
 init_per_thread(counter, 0);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\end{VerbatimU}
 
 쓰레드는 이 카운터의 자신에게 할당된 인스턴스의 값을 다음과 같이 증가시킬 수
 있습니다:
@@ -3151,14 +3686,10 @@ init_per_thread(counter, 0);
 A thread can increment its instance of this counter as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
-__get_thread_var(counter)++;
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{VerbatimU}
+p_counter = &__get_thread_var(counter);
+WRITE_ONCE(*p_counter, *p_counter + 1);
+\end{VerbatimU}
 
 이 카운터의 값은 그 인스턴스들의 값의 합입니다.
 따라서 이 카운터의 값의 스냅샷은 다음과 같이 얻어질 수 있습니다:
@@ -3169,61 +3700,20 @@ A snapshot of the value of the counter can thus be collected
 as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\small
-\begin{verbatim}
-for_each_thread(i)
-  sum += per_thread(counter, i);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{VerbatimU}
+for_each_thread(t)
+  sum += READ_ONCE(per_thread(counter, t));
+\end{VerbatimU}
 
 다시 말하지만, 다른 메커니즘을 사용해서도 비슷한 효과를 얻을 수 있습니다만,
 per-thread 변수들은 높은 성능과 편리성을 함께 제공합니다.
 \iffalse
 
+%TODO: Apply
 Again, it is possible to gain a similar effect using other mechanisms,
-but per-thread variables combine convenience and high performance.
-\fi
-
-\subsection{Performance}
-\label{sec:toolsoftrade:Performance}
-
-Section~\ref{sec:toolsoftrade:Atomic Operations}
-에서 보여진, 락으로 보호되는 값 증가 오퍼레이션의 성능을 per-CPU (또는
-per-thread) 변수 사용 방법
-(Section~\ref{sec:toolsoftrade:Per-CPU Variables} 을 참고하세요), 그리고
-통념적인 값 증가 방법 (``\co{counter++}'') 과 비교해 보는게 유익할 겁니다.
-\iffalse
-
-It is instructive to compare the performance of the locked increment
-shown in
-Section~\ref{sec:toolsoftrade:Atomic Operations}
-to that of per-CPU (or per-thread) variables
-(see Section~\ref{sec:toolsoftrade:Per-CPU Variables}),
-as well as to conventional increment (as in ``\co{counter++}'').
-\fi
-
-% \emph{@@@ need parable on cache thrashing.}
-
-% \emph{@@@ more here using performance results from a modest multiprocessor.}
-
-% \emph{@@@ Also work in something about critical-section size? Or put later?}
-
-삼가 말하자면, 성능의 차이는 상당히 큽니다.
-이 책의 목표는 여러분이 필요하다면 realtime 반응속도와 함께 이러한 성능상의
-문제를 막으면서 SMP 프로그램을 작성하는 것을 돕는 것입니다.
-Chapter~\ref{chp:Counting} 는 몇가지 병렬 카운팅 알고리즘들을 설명하는 것으로
-이 일을 시작합니다.
-\iffalse
-
-The difference in performance is quite large, to put it mildly.
-The purpose of this book is to help you write SMP programs,
-perhaps with realtime response, while avoiding such performance
-pitfalls.
-Chapter~\ref{chp:Counting}
-starts this process by describing a few parallel counting algorithms.
+but per-thread variables combine convenience and high performance,
+as will be shown in more detail in
+Section~\ref{sec:count:Statistical Counters}.
 \fi
 
 \section{The Right Tool for the Job: How to Choose?}
@@ -3260,8 +3750,14 @@ locking and/or atomic-operation primitives.
 If the overhead of the POSIX threading primitives (typically sub-microsecond)
 is too great, then the primitives introduced in
 Chapter~\ref{chp:Deferred Processing} may be required.
-Always remember that inter-process communication and message-passing
-can be good alternatives to shared-memory multithreaded execution.
+%TODO: Apply
+Of course, the actual overheads will depend not only on your hardware,
+but most critically on the manner in which you use the primitives.
+Furthermore, always remember that inter-process communication and
+message-passing can be good alternatives to shared-memory multithreaded
+execution, especially when your code makes good use of the design
+principles called out in
+Chapter~\ref{cha:Partitioning and Synchronization Design}.
 \fi
 
 \QuickQuiz{}
@@ -3296,14 +3792,34 @@ can be good alternatives to shared-memory multithreaded execution.
 설계를 하는 것이 중요합니다.
 \iffalse
 
-Of course, the actual overheads will depend not only on your hardware,
-but most critically on the manner in which you use the primitives.
-In particular, randomly hacking multi-threaded code is a spectacularly
-bad idea, especially given that shared-memory parallel systems use
-your own intelligence against you:
+%TODO: Apply
+Because concurrency was added to the C standard several decades after
+the C language was first used to build concurrent systems, there are
+a number of ways of concurrently accessing shared variables.
+All else being equal, the C11 standard operations described in
+Section~\ref{sec:toolsoftrade:Atomic Operations (C11)}
+should be your first stop.
+If you need to access a given shared variable both with plain accesses
+and atomically, then the modern \GCC\ atomics described in
+Section~\ref{sec:toolsoftrade:Atomic Operations (Modern gcc)}
+might work well for you.
+If you are working on an old code base that uses the classic \GCC\ \co{__sync}
+API, then you should review
+Section~\ref{sec:toolsoftrade:Atomic Operations (gcc Classic)}
+as well as the relevant \GCC\ documentation.
+If you are working on the Linux kernel or similar code base that
+combines use of the \co{volatile} keyword with inline assembly,
+or if you need dependencies to provide ordering, look at the material
+presented in Section~\ref{sec:toolsoftrade:Accessing Shared Variables}
+as well as that in
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}.
+
+Whatever approach you take, please keep in mind that randomly hacking
+multi-threaded code is a spectacularly bad idea, especially given that
+shared-memory parallel systems use your own intelligence against you:
 The smarter you are, the deeper a hole you will dig for yourself before
 you realize that you are in trouble~\cite{DeadlockEmpire2016}.
 Therefore, it is necessary to make the right design choices as well as
 the correct choice of individual primitives,
-as is discussed at length in subsequent chapters.
+as will be discussed at length in subsequent chapters.
 \fi
