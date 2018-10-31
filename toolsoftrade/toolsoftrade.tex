@@ -872,38 +872,40 @@ lock~\cite{Hoare74}.
 \label{lst:toolsoftrade:Demonstration of Exclusive Locks}
 \end{listing}
 
+\begin{lineref}[ln:toolsoftrade:lock:reader_writer]
 Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 (\path{lock.c}) 에 명시적 락킹의 사용 예가 있습니다.
-라인~1 은 \co{lock_a} 라는 이름의 POSIX 락을 정의와 함께 초기화 하고,
-라인~2 에서는 비슷하게 \co{lock_b} 라는 이름의 락을 정의하고 초기화 합니다.
-라인~3 에서는 공유 변수 ~\co{x} 를 정의와 함께 초기화 합니다.
-
-라인~5-28 은 \co{arg} 로 가리켜진 락을 잡고서 공유 변수 \co{x} 를 반복적으로
-읽는 \co{lock_reader()} 함수를 정의합니다.
-라인~10 은 \co{arg} 를 \co{pthread_mutex_lock()} 과 \co{pthread_mutex_unlock()}
-함수에 사용하기 위해 \co{pthread_mutex_t} 포인터로 캐스팅 합니다.
+라인~\lnref{lock_a} 은 \co{lock_a} 라는 이름의 POSIX 락을 정의와 함께 초기화
+하고, 라인~\lnref{lock_b} 에서는 비슷하게 \co{lock_b} 라는 이름의 락을 정의하고
+초기화 합니다.
+라인~\lnref{x} 에서는 공유 변수 ~\co{x} 를 정의와 함께 초기화 합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:toolsoftrade:lock:reader_writer]
 This exclusive-locking property is demonstrated using the code shown in
 Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 (\path{lock.c}).
 Line~\lnref{lock_a} defines and initializes a POSIX lock named \co{lock_a}, while
 line~\lnref{lock_b} similarly defines and initializes a lock named \co{lock_b}.
 Line~\lnref{x} defines and initializes a shared variable~\co{x}.
+\fi
 \end{lineref}
 
 \begin{lineref}[ln:toolsoftrade:lock:reader_writer:reader]
+라인~\lnref{b}-\lnref{e} 은 \co{arg} 로 가리켜진 락을 잡고서 공유 변수 \co{x}
+를 반복적으로 읽는 \co{lock_reader()} 함수를 정의합니다.
+라인~\lnref{cast} 은 \co{arg} 를 \co{pthread_mutex_lock()} 과
+\co{pthread_mutex_unlock()} 함수에 사용하기 위해 \co{pthread_mutex_t} 포인터로
+캐스팅 합니다.
+\iffalse
+
 Lines~\lnref{b}-\lnref{e} defines a function \co{lock_reader()} which repeatedly
 reads the shared variable \co{x} while holding
 the lock specified by \co{arg}.
 Line~\lnref{cast} casts \co{arg} to a pointer to a \co{pthread_mutex_t}, as
 required by the \co{pthread_mutex_lock()} and \co{pthread_mutex_unlock()}
 primitives.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	왜 그냥 Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
@@ -932,23 +934,22 @@ primitives.
 } \QuickQuizEnd
 
 \QuickQuiz{}
-	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
-	의 line~17 의 \co{READ_ONCE()} 와 line~41 의 \co{WRITE_ONCE()} 는
-	뭔가요?
-	\iffalse
-
-%TODO: Apply
 	\begin{lineref}[ln:toolsoftrade:lock:reader_writer]
-	What is the \co{READ_ONCE()} on
-        lines~\lnref{reader:read_x} and~\lnref{writer:inc} and the
-	\co{WRITE_ONCE()} on line~\lnref{writer:inc} of
-	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}?
-	\end{lineref}
-	\fi
+	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+	의 line~\lnref{reader:read_x} 의 \co{READ_ONCE()} 와
+	line~\lnref{writer:inc} 의 \co{WRITE_ONCE()} 는 뭔가요?
+\iffalse
+
+What is the \co{READ_ONCE()} on
+lines~\lnref{reader:read_x} and~\lnref{writer:inc} and the
+\co{WRITE_ONCE()} on line~\lnref{writer:inc} of
+Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}?
+\fi
+\end{lineref}
 \QuickQuizAnswer{
-	이 매크로들은 컴파일러가 동시다발적으로 접근되는 공유 변수에 문제를
-	일으킬 수 있는 최적화를 하지 못하게 제한합니다.
-	이것들은 CPU 에 대해선 아무 일도 하지 않아서, 단일 변수에 가해지는
+이 매크로들은 컴파일러가 동시다발적으로 접근되는 공유 변수에 문제를
+일으킬 수 있는 최적화를 하지 못하게 제한합니다.
+이것들은 CPU 에 대해선 아무 일도 하지 않아서, 단일 변수에 가해지는
 	접근의 순서를 바꾸는 행위를 막거나 하지 않습니다.
 	이 단일 변수 제한은
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
@@ -981,20 +982,19 @@ primitives.
 	\fi
 } \QuickQuizEnd
 
-라인~12-15 는 명시된 \co{pthread_mutex_t} 를 획득하고, 에러를 체크한 후 만약
-에러가 있었다면 프로그램을 종료합니다.
-라인~16-23 은 반복적으로 \co{x} 의 값을 체크하고, 그 값이 바뀔 때마다 새로운
-값을 화면에 출력합니다.
-라인~22 는 이 예제가 싱글 프로세서 머신에서도 잘 돌아가도록 1 밀리세컨드씩 잠을
-잡니다.
-라인~24-27 에서는 \co{pthread_mutex_t} 를 해제하고, 다시 에러를 체크한 후
-에러가 났다면 프로그램을 종료합니다.
-마지막으로, 라인~28 에서는 \co{pthread_create()} 에서 요구된 함수 타입을
-맞춰주기 위해 \co{NULL} 을 리턴합니다.
+\begin{lineref}[ln:toolsoftrade:lock:reader_writer:reader]
+라인~\lnref{acq:b}-\lnref{acq:e} 는 명시된 \co{pthread_mutex_t} 를 획득하고,
+에러를 체크한 후 만약 에러가 있었다면 프로그램을 종료합니다.
+라인~\lnref{loop:b}-\lnref{loop:e} 은 반복적으로 \co{x} 의 값을 체크하고, 그
+값이 바뀔 때마다 새로운 값을 화면에 출력합니다.
+라인~\lnref{sleep} 는 이 예제가 싱글 프로세서 머신에서도 잘 돌아가도록 1
+밀리세컨드씩 잠을 잡니다.
+라인~\lnref{rel:b}-\lnref{rel:e} 에서는 \co{pthread_mutex_t} 를 해제하고, 다시
+에러를 체크한 후 에러가 났다면 프로그램을 종료합니다.
+마지막으로, 라인~\lnref{return} 에서는 \co{pthread_create()} 에서 요구된 함수
+타입을 맞춰주기 위해 \co{NULL} 을 리턴합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:toolsoftrade:lock:reader_writer:reader]
 Lines~\lnref{acq:b}-\lnref{acq:e} acquire the specified
 \co{pthread_mutex_t}, checking
 for errors and exiting the program if any occur.
@@ -1008,8 +1008,8 @@ again checking for
 errors and exiting the program if any occur.
 Finally, line~\lnref{return} returns \co{NULL}, again to match the function type
 required by \co{pthread_create()}.
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	\co{pthread_mutex_t} 의 획득과 해제에 매번 4줄이나 써야한다니 좀
@@ -1039,19 +1039,18 @@ required by \co{pthread_create()}.
 	\fi
 } \QuickQuizEnd
 
-Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks} 의 라인~31-49
-는 주기적으로 명시된 \co{pthread_mutex_t} 를 잡고서 공유 변수 \co{x} 를
-업데이트 하는 \co{lock_writer()} 함수를 보여줍니다.
-\co{lock_reader()} 에서처럼 라인~34 에서는 \co{arg} 를 \co{pthread_mutex_t}
-포인터로 캐스팅 하고 라인~36-39 에서 해당 락을 얻어오고, 라인~44-47 에서 락을
-놓아줍니다.
-락을 잡고 있는 동안, 라인~40-43 에서는 5~밀리세컨드 씩 자면서 공유 변수 \co{x}
-를 자면서 증가시킵니다.
-마지막으로 라인~44-47 에서는 락을 놓아줍니다.
+\begin{lineref}[ln:toolsoftrade:lock:reader_writer:writer]
+Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks} 의
+라인~\lnref{b}-\lnref{e} 는 주기적으로 명시된 \co{pthread_mutex_t} 를 잡고서
+공유 변수 \co{x} 를 업데이트 하는 \co{lock_writer()} 함수를 보여줍니다.
+\co{lock_reader()} 에서처럼 라인~\lnref{cast} 에서는 \co{arg} 를
+\co{pthread_mutex_t} 포인터로 캐스팅 하고 라인~\lnref{acq:b}-\lnref{acq:e} 에서
+해당 락을 얻어오고, 라인~\lnref{rel:b}-\lnref{rel:e} 에서 락을 놓아줍니다.
+락을 잡고 있는 동안, 라인~\lnref{loop:b}-\lnref{loop:e} 에서는 5~밀리세컨드 씩
+자면서 공유 변수 \co{x} 를 자면서 증가시킵니다.
+마지막으로 라인~\lnref{rel:b}-\lnref{rel:e} 에서는 락을 놓아줍니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:toolsoftrade:lock:reader_writer:writer]
 Lines~\lnref{b}-\lnref{e} of
 Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 shows \co{lock_writer()}, which
@@ -1065,9 +1064,8 @@ While holding the lock, lines~\lnref{loop:b}-\lnref{loop:e}
 increment the shared variable \co{x},
 sleeping for five milliseconds between each increment.
 Finally, lines~\lnref{rel:b}-\lnref{rel:e} release the lock.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \begin{listing}[tbp]
 \input{CodeSamples/toolsoftrade/lock@same_lock.fcv}
@@ -1094,9 +1092,8 @@ Lines~\lnref{cr:writer:b}-\lnref{cr:writer:e} create a thread
 running \co{lock_writer()}.
 Lines~\lnref{wait:b}-\lnref{wait:e} wait for both threads to complete.
 The output of this code fragment is as follows:
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \begin{VerbatimU}
 Creating two threads using same lock:
@@ -1275,15 +1272,15 @@ values of \co{x} stored by \co{lock_writer()}.
 	\fi
 \QuickQuizAnswer{
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks} 의
-	라인~3 을 보세요.
+	line~\ref{ln:toolsoftrade:lock:reader_writer:x} 을 보세요.
 	Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock} 의
 	코드는 먼저 수행되었기 때문에, \co{x} 의 컴파일 타임 초기화에 의존할
 	수도 있었습니다.
 	Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
-	는 그 다음에 돌았기 때문에, \co{x} 를 다시 초기화 해야 합니다.
+	의 코드는 그 다음에 수행되었기 때문에, \co{x} 를 다시 초기화 해야
+	합니다.
 	\iffalse
 
-	%TODO: Apply
 	See line~\ref{ln:toolsoftrade:lock:reader_writer:x} of
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}.
 	Because the code in
@@ -1402,20 +1399,19 @@ end of the test.
 This variable is initially set to \co{GOFLAG_INIT}, then set to
 \co{GOFLAG_RUN} after all the reader threads have started, and finally
 set to \co{GOFLAG_STOP} to terminate the test run.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
-라인~12-41 은 리더 쓰레드인 \co{reader()} 함수를 정의합니다.
-라인~18 은 이 쓰레드가 이제 수행됨을 알리기 위해 \co{nreadersrunning} 변수의
-값을 어토믹하게 증가시키고, 라인~19-21 은 테스트가 시작되길 기다립니다.
+\begin{lineref}[ln:toolsoftrade:rwlockscale:reader:reader]
+라인~\lnref{b}-\lnref{e} 은 리더 쓰레드인 \co{reader()} 함수를 정의합니다.
+라인~\lnref{atmc_inc} 은 이 쓰레드가 이제 수행됨을 알리기 위해
+\co{nreadersrunning} 변수의 값을 어토믹하게 증가시키고,
+라인~\lnref{wait:b}-\lnref{wait:e} 은 테스트가 시작되길 기다립니다.
 \co{READ_ONCE()} 함수는 컴파일러가 루프의 매 수행마다 \co{goflag} 를 실제로
 읽어오도록 합니다---그러지 않으면 컴파일러는 \co{goflag} 의 값이 영영 변하지
 않을 거라고 가정하고 동작하는 권리를 행사할 수도 있습니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:toolsoftrade:rwlockscale:reader:reader]
 Lines~\lnref{b}-\lnref{e} define \co{reader()}, which is the reader thread.
 Line~\lnref{atmc_inc} atomically increments the \co{nreadersrunning} variable
 to indicate that this thread is now running, and
@@ -1423,14 +1419,14 @@ lines~\lnref{wait:b}-\lnref{wait:e} wait for the test to start.
 The \co{READ_ONCE()} primitive forces the compiler to fetch \co{goflag}
 on each pass through the loop---the compiler would otherwise be within its
 rights to assume that the value of \co{goflag} would never change.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	여기 저기 모든 곳에서 \co{READ_ONCE()} 를 쓰는 대신에,
 	Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
-	의 라인~10에서 \co{goflag} 를 \co{volatile} 로 선언하는게 어때요?
+	의 line~\ref{ln:toolsoftrade:rwlockscale:reader:goflag:e} 에서
+	\co{goflag} 를 \co{volatile} 로 선언하는게 어때요?
 	\iffalse
 
 	Instead of using \co{READ_ONCE()} everywhere, why not just
@@ -1562,23 +1558,24 @@ rights to assume that the value of \co{goflag} would never change.
 	\fi
 } \QuickQuizEnd
 
-루프가 선언된 라인~22-38 은 성능 테스트를 합니다.
-라인~23-26 은 락을 얻어오고, 라인~27-29 는 정해진 시간동안 락을 쥐고 있고
-(그리고 \co{barrier()} 지시어를 통해 컴파일러가 루프를 없애는 것을 막습니다),
-라인~30-33 에서 락을 풀어주고, 라인~34-36 에서 락을 다시 얻어오기 전에 특정
-시간동안 기다립니다.
-라인~37 은 이 락 획득 횟수를 셉니다.
+\begin{lineref}[ln:toolsoftrade:rwlockscale:reader:reader]
+루프가 선언된 라인~\lnref{loop:b}-\lnref{loop:e} 은 성능 테스트를 합니다.
+라인~\lnref{acq:b}-\lnref{acq:e} 은 락을 얻어오고,
+라인~\lnref{hold:b}-\lnref{hold:e} 는 정해진 시간동안 락을 쥐고 있고 (그리고
+\co{barrier()} 지시어를 통해 컴파일러가 루프를 없애는 것을 막습니다),
+라인~\lnref{rel:b}-\lnref{rel:e} 에서 락을 풀어주고,
+라인~\lnref{think:b}-\lnref{think:e} 에서 락을 다시 얻어오기 전에 특정 시간동안
+기다립니다.
+라인~\lnref{count} 은 이 락 획득 횟수를 셉니다.
 
-라인~39 에서는 해당 락 획득 횟수를 \co{readcounts[]} 배열에서 해당 쓰레드에
-할당된 원소에 저장하고, 라인~40 에서는 리턴해서 쓰레드를 종료합니다.
+라인~\lnref{mov_cnt} 에서는 해당 락 획득 횟수를 \co{readcounts[]} 배열에서 해당
+쓰레드에 할당된 원소에 저장하고, 라인~\lnref{return} 에서는 리턴해서 쓰레드를
+종료합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:toolsoftrade:rwlockscale:reader:reader]
 The loop spanning lines~\lnref{loop:b}-\lnref{loop:e} carries out the performance test.
 Lines~\lnref{acq:b}-\lnref{acq:e} acquire the lock,
 lines~\lnref{hold:b}-\lnref{hold:e} hold the lock for the specified
->>>>>>> paul/master
 duration (and the \co{barrier()} directive prevents the compiler from
 optimizing the loop out of existence),
 lines~\lnref{rel:b}-\lnref{rel:e} release the lock,
@@ -1589,9 +1586,8 @@ Line~\lnref{count} counts this lock acquisition.
 
 Line~\lnref{mov_cnt} moves the lock-acquisition count to this thread's element of the
 \co{readcounts[]} array, and line~\lnref{return} returns, terminating this thread.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \begin{figure}[tb]
 \centering
@@ -2016,9 +2012,11 @@ Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks} 의 라인~17
 에서처럼 \co{READ_ONCE()} 함수가 사용될 수 있을 겁니다.
 비슷하게, 컴파일러가 특정 메모리로의 쓰기를 최적화해 버리는 것을 막기 위해
 \co{WRITE_ONCE()} 기능이 사용될 수 있습니다.
-이 마지막 두개의 함수들은 \GCC 에 의해 제공되지는 않습니다만,
+이 마지막 세개의 함수들은 \GCC 에 의해 제공되지는 않습니다만,
 Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
-에 보인 것처럼 단순하게 구현될 수도 있을 겁니다.
+에 보인 것처럼 단순하게 구현될 수도 있고, 이 세가지 모두
+Section~\ref{sec:toolsoftrade:Accessing Shared Variables} 에서 어느정도씩
+이야기 됩니다.
 \iffalse
 
 The \co{__sync_synchronize()} primitive issues a ``memory barrier'',
@@ -2038,7 +2036,6 @@ Similarly, the \co{WRITE_ONCE()} primitive may be used to prevent the
 compiler from optimizing away a given memory write.
 These last three primitives are not provided directly by \GCC,
 but may be implemented straightforwardly as shown in
-%TODO: Apply
 Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)},
 and all three are discussed at length in
 Section~\ref{sec:toolsoftrade:Accessing Shared Variables}.
@@ -2484,18 +2481,17 @@ a run, so such synchronization is normally not needed.
 
 \subsubsection{Example Usage}
 
-Listing~\ref{lst:toolsoftrade:Example Child Thread}
+Listing~\ref{lst:toolsoftrade:Example Child Thread} (\path{threadcreate.c})
 는 hello-world 같은 자식 쓰레드의 예제를 보입니다.
 앞서서 이야기 되었듯, 각각의 쓰레드는 자신의 스택을 할당받고, 따라서 각각의
 쓰레드는 자신만의 \co{arg} 인자와 \co{myarg} 변수를 갖습니다.
 각각의 자식은 단순히 각자의 인자와 각자의 \co{smp_thread_id()} 를 종료되기 전에
 출력합니다.
-Line~7 의 \co{return} 문은 쓰레드를 종료시키고, 누구든 이 쓰레드에 대해
-\co{wait_thread()} 를 호출한 쪽에 \co{NULL} 을 리턴함을 알아두시기 바랍니다.
+라인~\ref{ln:intro:threadcreate:thread_test:return} 의 \co{return} 문은
+쓰레드를 종료시키고, 누구든 이 쓰레드에 대해 \co{wait_thread()} 를 호출한 쪽에
+\co{NULL} 을 리턴함을 알아두시기 바랍니다.
 \iffalse
 
-%TODO: Apply
-Listing~\ref{lst:toolsoftrade:Example Child Thread} (\path{threadcreate.c})
 shows an example hello-world-like child thread.
 As noted earlier, each thread is allocated its own stack, so
 each thread has its own private \co{arg} argument and \co{myarg} variable.
@@ -2513,20 +2509,20 @@ thread.
 \label{lst:toolsoftrade:Example Child Thread}
 \end{listing}
 
+\begin{lineref}[ln:intro:threadcreate:main]
 그 부모 프로그램이
 Listing~\ref{lst:toolsoftrade:Example Parent Thread}
 에 보여져 있습니다.
-이 프로그램은 line~6 에서 쓰레드 시스템을 초기화 하기 위해 \co{smp_init()} 를
-호출하고, line~7-14 에서 인자들을 분석한 후, line~15 에서 자신의 존재를
-공지합니다.
-이 프로그램은 이어서 지정된 수의 자식 쓰레드들을 line~16-17 에서 생성하고,
-그것들이 완료되기를 line~18 에서 기다립니다.
+이 프로그램은 line~\lnref{smp_init} 에서 쓰레드 시스템을 초기화 하기 위해
+\co{smp_init()} 를 호출하고, line~\lnref{parse:b}-\lnref{parse:e} 에서 인자들을
+분석한 후, line~\lnref{announce} 에서 자신의 존재를 공지합니다.
+이 프로그램은 이어서 지정된 수의 자식 쓰레드들을
+line~\lnref{create:b}-\lnref{create:e} 에서 생성하고, 그것들이 완료되기를
+line~\lnref{wait} 에서 기다립니다.
 \co{wait_all_threads()} 는 여기선 그 값이 \co{NULL} 로써 큰 의미가 없는,
 쓰레드들이 리턴하는 값들을 무시함을 알아두시기 바랍니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:intro:threadcreate:main]
 The parent program is shown in
 Listing~\ref{lst:toolsoftrade:Example Parent Thread}.
 It invokes \co{smp_init()} to initialize the threading system on
@@ -2538,9 +2534,8 @@ lines~\lnref{create:b}-\lnref{create:e},
 and waits for them to complete on line~\lnref{wait}.
 Note that \co{wait_all_threads()} discards the threads return values,
 as in this case they are all \co{NULL}, which is not very interesting.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \begin{listing}[tbp]
 \input{CodeSamples/intro/threadcreate@main.fcv}
