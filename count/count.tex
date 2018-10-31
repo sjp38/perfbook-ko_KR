@@ -876,13 +876,14 @@ thread (presumably cache aligned and padded to avoid false sharing).
 그런 배열은
 Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
 (\path{count_stat.c}) 에 보여진 것처럼 per-thread 기능을 사용할 수도 있습니다.
-라인~1 은 \co{long} 타입의 쓰레드별 카운터들을 담는, \co{counter} 라는 이름의
-배열을 정의합니다.
+\begin{lineref}[ln:count:count_stat:inc-read]
+라인~\lnref{define} 은 \co{long} 타입의 쓰레드별 카운터들을 담는, \co{counter}
+라는 이름의 배열을 정의합니다.
 
-라인~3-6 은 이 카운터를 증가시키는 함수로, \co{__get_thread_var()} 함수를
-사용해 \co{counter} 배열에서 현재 수행중인 쓰레드의 원소를 얻어옵니다.
-이 원소는 연관된 쓰레드에 의해서만 수정되므로, 어토믹하지 않은 방식으로도
-충분합니다.
+라인~\lnref{inc:b}-\lnref{inc:e} 은 이 카운터를 증가시키는 함수로,
+\co{__get_thread_var()} 함수를 사용해 \co{counter} 배열에서 현재 수행중인
+쓰레드의 원소를 얻어옵니다.  이 원소는 연관된 쓰레드에 의해서만 수정되므로,
+어토믹하지 않은 방식으로도 충분합니다.
 
 라인~8-16 은 카운터의 전체 값을 얻어오는 함수로, \co{for_each_thread()} 를
 이용해 현재 돌고 있는 쓰레드들의 리스트를 순회하면서 \co{per_thread()} 를
@@ -1420,20 +1421,19 @@ eventually consistent.
 \label{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 \end{listing}
 
+\begin{lineref}[ln:count:count_stat_eventual:whole]
 Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 (\path{count_stat_eventual.c}) 에 그 구현이 있습니다.
-라인~1-2 는 카운터의 값을 갖는 쓰레드별 변수와 글로벌 변수를 보여주며, 세번째
-라인은 프로그램을 정확한 카운터 값과 함께 종료하고자 할 경우를 위해 종료 조건을
-알리는 \co{stopflag} 를 보입니다.
-라인~5-9 의 \co{inc_count()} 함수는
+라인~\lnref{per_thr_cnt}-\lnref{glb_cnt} 는 카운터의 값을 갖는 쓰레드별 변수와
+글로벌 변수를 보여주며, 라인~\lnref{stopflag} 는 프로그램을 정확한 카운터 값과
+함께 종료하고자 할 경우를 위해 종료 조건을 알리는 \co{stopflag} 를 보입니다.
+라인~\lnref{inc:b}-\lnref{inc:e} 의 \co{inc_count()} 함수는
 Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters} 의 것과
 비슷합니다.
-라인~11-14 의 \co{read_count()} 함수는 단순히 \co{global_count} 변수의 값을
-리턴합니다.
+라인~\lnref{read:b}-\lnref{inc:e} 의 \co{read_count()} 함수는 단순히
+\co{global_count} 변수의 값을 리턴합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_stat_eventual:whole]
 The implementation is shown in
 Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 (\path{count_stat_eventual.c}).
@@ -1451,12 +1451,14 @@ lines~\lnref{read:b}-\lnref{read:e} simply returns the
 value of the \co{global_count} variable.
 \fi
 
-하지만, 라인~35-43 의 \co{count_init()} 함수는 라인~16-33 의 \co{eventual()}
-쓰레드를 생성하는데, 이 쓰레드는 모든 쓰레드를 순회하며 쓰레드별 로컬
-\co{counter} 를 더해서 \co{global_count} 변수에 저장하는 일을 반복합니다.
+하지만, 라인~\lnref{init:b}-\lnref{init:e} 의 \co{count_init()} 함수는
+라인~\lnref{eventual:b}-\lnref{eventual:e} 의 \co{eventual()} 쓰레드를
+생성하는데, 이 쓰레드는 모든 쓰레드를 순회하며 쓰레드별 로컬 \co{counter} 를
+더해서 \co{global_count} 변수에 저장하는 일을 반복합니다.
 \co{eventual()} 쓰레드는 일의 반복 사이에 임의로 선택된 1 밀리세컨드 동안
 기다립니다.
-라인~45-51 의 \co{count_cleanup()} 함수는 프로그램 종료를 관장합니다.
+라인~\lnref{cleanup:b}-\lnref{cleanup:e} 의 \co{count_cleanup()} 함수는
+프로그램 종료를 관장합니다.
 
 이 방법은 여전히 선형적인 카운터 업데이트 성능을 유지하면서 극단적으로 빠른
 카운터 읽기 속도를 보입니다.
@@ -1480,9 +1482,8 @@ This approach gives extremely fast counter read-out while still
 supporting linear counter-update performance.
 However, this excellent read-side performance and update-side scalability
 comes at the cost of the additional thread running \co{eventual()}.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
@@ -1697,12 +1698,6 @@ Listing~\ref{lst:count:Per-Thread Statistical Counters} (\path{count_end.c})
 에 보여진 것처럼 확장성 있을 뿐만 아니라, 간단하고 어토믹하지 않은 증가 방법에
 비해 카운트를 증가시키는 쪽에 거의 성능 페널티를 주지 않는 통계적 카운터를
 구현하는데 사용될 수 있습니다.
-
-라인~1-4 는 필요한 변수들을 정의합니다: \co{counter} 는 쓰레드별 카운터
-변수이고, \co{counterp[]} 배열은 쓰레드들이 다른 쓰레드의 카운터들을 볼 수 있게
-하며, \co{finalcount} 는 개별 쓰레드가 끝날 때마다 전체 카운트를 계산해 가지고
-있으며, \co{final_mutex} 는 쓰레드들 사이에서 전체 카운트를 계산하는 작업과
-종료되는 쓰레드의 종료 작업 사이 동기화를 조정합니다.
 \iffalse
 
 Fortunately, \GCC\ provides an \co{__thread} storage class that provides
@@ -1713,17 +1708,24 @@ to implement
 a statistical counter that not only scales, but that also incurs little
 or no performance penalty to incrementers compared to simple non-atomic
 increment.
+\fi
 
 \begin{lineref}[ln:count:count_end:whole]
+라인~\lnref{var:b}-\lnref{var:e} 는 필요한 변수들을 정의합니다: \co{counter} 는
+쓰레드별 카운터 변수이고, \co{counterp[]} 배열은 쓰레드들이 다른 쓰레드의
+카운터들을 볼 수 있게 하며, \co{finalcount} 는 개별 쓰레드가 끝날 때마다 전체
+카운트를 계산해 가지고 있으며, \co{final_mutex} 는 쓰레드들 사이에서 전체
+카운트를 계산하는 작업과 종료되는 쓰레드의 종료 작업 사이 동기화를 조정합니다.
+\iffalse
+
 Lines~\lnref{var:b}-\lnref{var:e} define needed variables:
 \co{counter} is the per-thread counter
 variable, the \co{counterp[]} array allows threads to access each others'
 counters, \co{finalcount} accumulates the total as individual threads exit,
 and \co{final_mutex} coordinates between threads accumulating the total
 value of the counter and exiting threads.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	다른 쓰레드의 카운터를 찾는데 왜 별개의 배열이 필요하죠?
@@ -1813,25 +1815,26 @@ value of the counter and exiting threads.
 	\fi
 } \QuickQuizEnd
 
-업데이트 쓰레드들에 의해 사용되는 \co{inc_count()} 함수는 라인~6-10 에서 볼 수
-있듯이 상당히 간단합니다.
-
-읽기 쓰레드에 의해 사용되는 \co{read_count()} 함수는 약간 복잡합니다.
-라인~17 에서 종료되는 쓰레드들을 배제하기 위해 락을 획득하고, 라인~22 에서 이
-락을 풉니다.
-라인~18 에서는 이미 종료한 쓰레드들에 의해 계산된 카운트 값으로 카운트의 합을
-초기화 하고, 라인~19-21 에서 현재 동작 중인 쓰레드들에서 얻어온 카운트 값을
-더합니다.
-마지막으로, 라인~23 에서 그 합을 리턴합니다.
+\begin{lineref}[ln:count:count_end:whole:inc]
+업데이트 쓰레드들에 의해 사용되는 \co{inc_count()} 함수는
+라인~\lnref{b}-\lnref{e} 에서 볼 수 있듯이 상당히 간단합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_end:whole:inc]
 The \co{inc_count()} function used by updaters is quite simple, as can
 be seen on lines~\lnref{b}-\lnref{e}.
 \end{lineref}
+\fi
 
 \begin{lineref}[ln:count:count_end:whole:read]
+읽기 쓰레드에 의해 사용되는 \co{read_count()} 함수는 약간 복잡합니다.
+라인~\lnref{acquire} 에서 종료되는 쓰레드들을 배제하기 위해 락을 획득하고,
+라인~\lnref{release} 에서 이 락을 풉니다.
+라인~\lnref{sum:init} 에서는 이미 종료한 쓰레드들에 의해 계산된 카운트 값으로
+카운트의 합을 초기화 하고, 라인~\lnref{loop:b}-\lnref{loop:e} 에서 현재 동작
+중인 쓰레드들에서 얻어온 카운트 값을 더합니다.
+마지막으로, 라인~\lnref{return} 에서 그 합을 리턴합니다.
+\iffalse
+
 The \co{read_count()} function used by readers is a bit more complex.
 Line~\lnref{acquire} acquires a lock to exclude exiting threads, and
 line~\lnref{release} releases it.
@@ -1840,26 +1843,26 @@ have already exited, and
 lines~\lnref{loop:b}-\lnref{loop:e} sum the counts being accumulated
 by threads currently running.
 Finally, line~\lnref{return} returns the sum.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
-	Listing~\ref{lst:count:Per-Thread Statistical Counters} 의 라인~20
-	에서의 \co{NULL} 체크는 브랜치 예측 실패를 가져오지 않나요?
+	\begin{lineref}[ln:count:count_end:whole:read]
+	Listing~\ref{lst:count:Per-Thread Statistical Counters} 의
+	라인~\lnref{check} 에서의 \co{NULL} 체크는 브랜치 예측 실패를 가져오지
+	않나요?
 	항상 0인 변수 집합을 두고 더이상 사용되지 않는 카운터로의 포인터를
 	\co{NULL} 로 만드는 대신 그 변수로 향하게 하는게 어떤가요?
 	\iffalse
 
-	\begin{lineref}[ln:count:count_end:whole:read]
 	Doesn't the check for \co{NULL} on line~\lnref{check} of
 	Listing~\ref{lst:count:Per-Thread Statistical Counters}
 	add extra branch mispredictions?
 	Why not have a variable set permanently to zero, and point
 	unused counter-pointers to that variable rather than setting
 	them to \co{NULL}?
-	\end{lineref}
 	\fi
+	\end{lineref}
 \QuickQuizAnswer{
 	말 되는 이야기입니다.
 	다만 성능이 어떻게 달라지는지 확인하는 건 독자 여러분의 몫으로
@@ -1929,21 +1932,20 @@ Finally, line~\lnref{return} returns the sum.
 	\fi
 } \QuickQuizEnd
 
-라인~26-33 는 \co{count_register_thread()} 함수를 보여주는데, 각 쓰레드는
-자신의 카운터를 처음 사용하기 전에 이 함수를 반드시 호출해야 합니다.
+\begin{lineref}[ln:count:count_end:whole:reg]
+라인~\lnref{b}-\lnref{e} 는 \co{count_register_thread()} 함수를 보여주는데, 각
+쓰레드는 자신의 카운터를 처음 사용하기 전에 이 함수를 반드시 호출해야 합니다.
 이 함수는 단순히 해당 쓰레드를 위한 \co{counterp[]} 배열의 원소가 자신의
 쓰레드별 \co{counter} 변수를 가리키도록 만듭니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_end:whole:reg]
 Lines~\lnref{b}-\lnref{e} show the \co{count_register_thread()}
 function, which
 must be called by each thread before its first use of this counter.
 This function simply sets up this thread's element of the \co{counterp[]}
 array to point to its per-thread \co{counter} variable.
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	대체 왜 Listing~\ref{lst:count:Per-Thread Statistical Counters} 의
@@ -1978,20 +1980,21 @@ array to point to its per-thread \co{counter} variable.
 	\fi
 } \QuickQuizEnd
 
-라인~35-43 는 \co{count_unregister_thread()} 함수를 보이는데, 각 쓰레드는
-종료되기 직전에 반드시 이 함수를 호출해야 합니다.
-라인~39 에서는 락을 잡고, 라인~42 에서 푸는데, 이로써 \co{read_count()} 호출과
-다른 \co{count_unregister_thread()} 호출을 배제시킵니다.
-라인~40 에서는 이 쓰레드의 \co{counter} 를 글로벌 \co{finalcount} 에 더하고, 그
-후 라인~41 에서 자신의 \co{counterp[]} 배열에서의 원소를 \co{NULL} 로 만듭니다.
+\begin{lineref}[ln:count:count_end:whole:unreg]
+라인~\lnref{b}-\lnref{e} 는 \co{count_unregister_thread()} 함수를 보이는데, 각
+쓰레드는 종료되기 직전에 반드시 이 함수를 호출해야 합니다.
+라인~\lnref{acquire} 에서는 락을 잡고, 라인~\lnref{release} 에서 푸는데, 이로써
+\co{read_count()} 호출과 다른 \co{count_unregister_thread()} 호출을
+배제시킵니다.
+라인~\lnref{add} 에서는 이 쓰레드의 \co{counter} 를 글로벌 \co{finalcount} 에
+더하고, 그 후 라인~\lnref{NULL} 에서 자신의 \co{counterp[]} 배열에서의 원소를
+\co{NULL} 로 만듭니다.
 이후의 \co{read_count()} 호출은 종료된 쓰레드의 카운트는 글로벌 변수
 \co{finalcount} 에서 볼 수 있을 것이고, 종료된 쓰레드의 카운터는
 \co{counterp[]} 배열을 통해 무시할 수 있으므로 올바른 전체 값을 얻을 수 있을
 것입니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_end:whole:unreg]
 Lines~\lnref{b}-\lnref{e} show the \co{count_unregister_thread()}
 function, which
 must be called prior to exit by each thread that previously called
@@ -2007,9 +2010,8 @@ A subsequent call to \co{read_count()} will see the exiting thread's
 count in the global \co{finalcount}, and will skip the exiting thread
 when sequencing through the \co{counterp[]} array, thus obtaining
 the correct total.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 이 방법은 업데이트 쓰레드에 어토믹하지 않은 더하기와 거의 똑같은 성능을
 주면서도 선형적 확장성을 갖습니다.
@@ -2438,23 +2440,20 @@ Section~\ref{sec:SMPdesign:Parallel Fastpath}.
 \label{fig:count:Simple Limit Counter Variable Relationships}
 \end{figure}
 
+\begin{lineref}[ln:count:count_lim:variable]
 Listing~\ref{lst:count:Simple Limit Counter Variables} 는 이 구현에서 사용되는
 쓰레드별 변수들과 글로벌 변수를 보여줍니다.
 쓰레드별 \co{counter} 와 \co{countermax} 변수들은 각각 연관되는 쓰레드의 로컬
 카운터와 그 카운터의 최대 허용값입니다.
-라인~3 의 \co{globalcountmax} 변수는 합계 카운터의 최대값을 가지며, 라인~4 의
-\co{globalcount} 변수는 글로벌 카운터 입니다.
+라인~\lnref{globalcountmax} 의 \co{globalcountmax} 변수는 합계 카운터의
+최대값을 가지며, 라인~\lnref{globalcount} 의 \co{globalcount} 변수는 글로벌
+카운터 입니다.
 \co{globalcount} 와 각 쓰레드의 \co{counter} 의 합은 전체 카운터의 합산 값이
 됩니다.
-라인~5 의 \co{globalreserve} 변수는 모든 쓰레드별 \co{countermax} 변수의 값의
-합입니다.
-이 변수들 간의 관계가
-Figure~\ref{fig:count:Simple Limit Counter Variable Relationships} 에 나타나
-있습니다:
+라인~\lnref{globalreserve} 의 \co{globalreserve} 변수는 모든 쓰레드별
+\co{countermax} 변수의 값의 합입니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim:variable]
 Listing~\ref{lst:count:Simple Limit Counter Variables}
 shows both the per-thread and global variables used by this
 implementation.
@@ -2470,7 +2469,13 @@ the aggregate value of the overall counter.
 The \co{globalreserve} variable on
 line~\lnref{globalreserve} is the sum of all of the
 per-thread \co{countermax} variables.
+\fi
 \end{lineref}
+이 변수들 간의 관계가
+Figure~\ref{fig:count:Simple Limit Counter Variable Relationships} 에 나타나
+있습니다:
+\iffalse
+
 The relationship among these variables is shown by
 Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}:
 \fi
@@ -2549,17 +2554,16 @@ functions (\path{count_lim.c}).
 	\fi
 } \QuickQuizEnd
 
-라인~1-18 은 \co{add_count()} 를 보여주는데, 이 함수는 특정값 \co{delta} 를
-카운터에 더합니다.
-라인~3 에서는 \co{delta} 를 위한 공간이 이 쓰레드의 \co{counter} 에 남아 있는지
-확인하고, 만약 그렇다면 라인~4 에서 그 값을 더하고 라인~6 에서 성공했음을
-리턴합니다.
+\begin{lineref}[ln:count:count_lim:add_sub_read:add]
+라인~\lnref{b}-\lnref{e} 은 \co{add_count()} 를 보여주는데, 이 함수는 특정값
+\co{delta} 를 카운터에 더합니다.
+라인~\lnref{checklocal} 에서는 \co{delta} 를 위한 공간이 이 쓰레드의
+\co{counter} 에 남아 있는지 확인하고, 만약 그렇다면 라인~\lnref{add} 에서 그
+값을 더하고 라인~\lnref{return:ls}에서 성공했음을 리턴합니다.
 이게 \co{add_counter()} 의 가장 빠른 수행경로로, 어토믹 오퍼레이션을 하지
 않으며, 쓰레드별 변수만 참조하므로 어떤 캐시 미스도 만들지 않을 겁니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim:add_sub_read:add]
 Lines~\lnref{b}-\lnref{e} show \co{add_count()},
 which adds the specified value \co{delta}
 to the counter.
@@ -2569,13 +2573,13 @@ Line~\lnref{checklocal} checks to see if there is room for
 line~\lnref{add} adds it and line~\lnref{return:ls} returns success.
 This is the \co{add_counter()} fastpath, and it does no atomic operations,
 references only per-thread variables, and should not incur any cache misses.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}
-	라인~3 의 저 이상한 조건문은 뭔가요?
+	line~\ref{ln:count:count_lim:add_sub_read:add:checklocal}
+	의 저 이상한 조건문은 뭔가요?
 	왜 다음과 같이 더 직관적인 형태의 빠른 수행경로를 사용하지 않는거죠?
 	\iffalse
 
@@ -2626,22 +2630,25 @@ if (counter + delta <= countermax) {
 	\fi
 } \QuickQuizEnd
 
-라인~3 에서의 테스트가 실패한다면, 글로벌 변수들에 접근해야 하므로, 라인~7 의
-\co{gblcnt_mutex} 를 반드시 잡아야 하고, 이 락은 실패하는 경우 라인~11 에서,
-성공하는 경우는 라인~16 에서 놓아집니다.
-라인~8 에서는 Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
+\begin{lineref}[ln:count:count_lim:add_sub_read:add]
+라인~\lnref{checklocal} 에서의 테스트가 실패한다면, 글로벌 변수들에 접근해야
+하므로, 라인~\lnref{acquire} 의 \co{gblcnt_mutex} 를 반드시 잡아야 하고, 이
+락은 실패하는 경우 라인~\lnref{release:s} 에서, 성공하는 경우는
+라인~\lnref{release:f} 에서 놓아집니다.
+라인~\lnref{globalize} 에서는
+Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
 \co{globalize_count()} 를 호출하는데, 이 함수는 쓰레드 로컬 변수들을 초기화
 하고, 글로벌 변수들을 필요한 대로 맞춰줘서 전역적인 처리를 단순화 시킵니다.
 (하지만 \emph{제} 말을 믿지만 말고, 직접 코딩해보세요!)
-라인~9 와~10 에서는 \co{delta} 를 더하는 것이 합법적인지
-Listing~\ref{fig:count:Simple Limit Counter Variable Relationships} 에서 가장
-왼쪽 두 빨간 막대의 높이 차이로 나타난 크기 규칙이 지켜지는지로 체크합니다.
-\co{delta} 의 합이 이루어져선 안된다면, 라인~11 은 (앞서 이야기했듯)
-\co{gblcnt_mutex} 를 풀고 라인~12 에서 실패를 알리는 리턴을 합니다.
+라인~\lnref{checkglb:b} 와~\lnref{checkglb:e} 에서는 \co{delta} 를 더하는 것이
+합법적인지 Listing~\ref{fig:count:Simple Limit Counter Variable Relationships}
+에서 가장 왼쪽 두 빨간 막대의 높이 차이로 나타난 크기 규칙이 지켜지는지로
+체크합니다.
+\co{delta} 의 합이 이루어져선 안된다면, 라인~\lnref{release:f} 은 (앞서
+이야기했듯) \co{gblcnt_mutex} 를 풀고 라인~\lnref{return:gf} 에서 실패를 알리는
+리턴을 합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim:add_sub_read:add]
 If the test on
 line~\lnref{checklocal} fails, we must access global variables, and thus
 must acquire \co{gblcnt_mutex} on
@@ -2664,14 +2671,16 @@ returns indicating failure.
 \fi
 
 만약 아니라면, 느린 수행경로를 실행하게 됩니다.
-라인~14 는 \co{delta} 를 \co{globalcount} 에 더하고, 라인~15 에서 글로벌
-변수들과 쓰레드별 변수들을 모두 업데이트 하기 위해
+라인~\lnref{addglb} 는 \co{delta} 를 \co{globalcount} 에 더하고,
+라인~\lnref{balance} 에서 글로벌 변수들과 쓰레드별 변수들을 모두 업데이트 하기
+위해
 (Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에서 나왔던)
 \co{balance_count()} 를 호출합니다.
 이 \co{balance_count()} 호출은 대부분의 경우 이 쓰레드가 다음엔 빠른 수행경로로
 수행되도록 \co{countermax} 를 조정할 것입니다.
-그러고나서 라인~16 에서 \co{gblcnt_mutex} 를 (역시 앞에서 언급했듯) 놓아주고,
-마지막으로 라인~17 에서 성공을 의미하는 값을 리턴 합니다.
+그러고나서 라인~\lnref{release:s}16 에서 \co{gblcnt_mutex} 를 (역시 앞에서
+언급했듯) 놓아주고, 마지막으로 라인~\lnref{return:gs} 에서 성공을 의미하는 값을
+리턴 합니다.
 \iffalse
 
 Otherwise, we take the slowpath.
@@ -2683,10 +2692,9 @@ This call to \co{balance_count()}
 will usually set this thread's \co{countermax} to re-enable the fastpath.
 Line~\lnref{release:s} then releases
 \co{gblcnt_mutex} (again, as noted earlier), and, finally,
-%TODO: Apply
 line~\lnref{return:gs} returns indicating success.
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}
@@ -2715,16 +2723,16 @@ line~\lnref{return:gs} returns indicating success.
 	\fi
 } \QuickQuizEnd
 
-라인~20-36 은 \co{sub_count()} 함수를 보여주는데, 이 함수는 \co{delta} 만큼을
-카운터에서 제거합니다.
-라인~22 는 쓰레드별 카운터를 체크해서 이 빼기를 해도 되는지 보고, 만약 그렇다면
-라인~23 에서 그 빼기를 수행한 후 라인~24 에서 성공을 리턴합니다.
+\begin{lineref}[ln:count:count_lim:add_sub_read:sub]
+라인~\lnref{b}-\lnref{e} 은 \co{sub_count()} 함수를 보여주는데, 이 함수는
+\co{delta} 만큼을 카운터에서 제거합니다.
+라인~\lnref{checklocal} 는 쓰레드별 카운터를 체크해서 이 빼기를 해도 되는지
+보고, 만약 그렇다면 라인~\lnref{sub} 에서 그 빼기를 수행한 후 라인~24 에서
+성공을 리턴합니다.
 이 부분들이 \co{add_count()} 에서의 그것과 같은 \co{sub_count()} 의 빠른
 수행경로로, 이 경로에서는 비용이 심한 동작은 하지 않습니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim:add_sub_read:sub]
 Lines~\lnref{b}-\lnref{e} show \co{sub_count()},
 which subtracts the specified
 \co{delta} from the counter.
@@ -2736,16 +2744,17 @@ These lines form \co{sub_count()}'s fastpath, and, as with
 \fi
 
 빠른 수행경로에서 \co{delta} 의 빼기가 적절치 못하다고 판단된다면, 실행은
-라인~26-35 의 느린 실행경로로 이어집니다.
-느린 실행 경로는 글로벌 상태에 접근해야 하기 때문에, 라인~26 에서
-\co{gblcnt_mutex} 를 잡고, 이 락은 (실패의 경우) 라인~29 에서, 또는 (성공의
-경우) 라인~34 에서 해제됩니다.
-라인~27 은 Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
+라인~\lnref{acquire}-\lnref{return:gs} 의 느린 실행경로로 이어집니다.
+느린 실행 경로는 글로벌 상태에 접근해야 하기 때문에, 라인~\lnref{acquire} 에서
+\co{gblcnt_mutex} 를 잡고, 이 락은 (실패의 경우) 라인~\lnref{release:f} 에서,
+또는 (성공의 경우) 라인~\lnref{release:s} 에서 해제됩니다.
+라인~\lnref{globalize} 은
+Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
 \co{globalize_count()} 를 실행하는데, 앞서 설명했듯 쓰레드 로컬 변수의 값을
 지우고, 글로벌 변수들을 적당한 값으로 설정합니다.
-라인~28 은 카운터가 \co{delta} 의 빼기를 해도 좋을지 보고, 좋지 않다면 라인~29
-에서 \co{gblcnt_mutex} 를 (앞서 설명했듯) 해제하고 라인~30 에서 실패를
-리턴합니다.
+라인~\lnref{checkglb} 은 카운터가 \co{delta} 의 빼기를 해도 좋을지 보고, 좋지
+않다면 라인~\lnref{release:f} 에서 \co{gblcnt_mutex} 를 (앞서 설명했듯)
+해제하고 라인~\lnref{return:gf} 에서 실패를 리턴합니다.
 \iffalse
 
 If the fastpath cannot accommodate subtraction of \co{delta},
@@ -2758,12 +2767,11 @@ Line~\lnref{globalize} invokes \co{globalize_count()}, shown in
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions},
 which again clears the thread-local variables, adjusting the global variables
 as needed.
-%TODO: Apply
 Line~\lnref{checkglb} checks to see if the counter can accommodate subtracting
 \co{delta}, and, if not, line~\lnref{release:f} releases \co{gblcnt_mutex}
 (as noted earlier) and line~\lnref{return:gf} returns failure.
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}
@@ -2831,17 +2839,17 @@ Line~\lnref{checkglb} checks to see if the counter can accommodate subtracting
 	\fi
 } \QuickQuizEnd
 
-한편, 만약 라인~28 에서 카운터가 \co{delta} 빼기를 해도 \emph{적합}하다고
-판단되면, 느린 수행경로를 걷게 됩니다.
-라인~32 에서 실제 빼기를 행하게 되고, 이후 라인~33 에서
-(Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에 나온)
+\begin{lineref}[ln:count:count_lim:add_sub_read:sub]
+한편, 만약 라인~\lnref{checkglb} 에서 카운터가 \co{delta} 빼기를 해도
+\emph{적합}하다고 판단되면, 느린 수행경로를 걷게 됩니다.
+라인~\lnref{subglb} 에서 실제 빼기를 행하게 되고, 이후 라인~\lnref{balance}
+에서 (Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에 나온)
 \co{balance_count()} 를 호출해서 글로벌 변수들과 쓰레드별 변수들을 모두
 (가능하면 다음엔 빠른 수행경로로 돌 수 있도록) 업데이트 합니다.
-라인~34 에서는 \co{gblcnt_mutex} 를 해제하고, 라인~35 에서 성공을 리턴합니다.
+라인~\lnref{release:s} 에서는 \co{gblcnt_mutex} 를 해제하고,
+라인~\lnref{return:gs} 에서 성공을 리턴합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim:add_sub_read:sub]
 If, on the other hand, line~\lnref{checkglb} finds that the counter \emph{can}
 accommodate subtracting \co{delta}, we complete the slowpath.
 Line~\lnref{subglb} does the subtraction and then
@@ -2849,11 +2857,10 @@ line~\lnref{balance} invokes \co{balance_count()} (shown in
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions})
 in order to update both global and per-thread variables
 (hopefully re-enabling the fastpath).
-%TODO: Apply
 Then line~\lnref{release:s} releases \co{gblcnt_mutex}, and
 line~\lnref{return:gs} returns success.
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}
@@ -2882,18 +2889,19 @@ line~\lnref{return:gs} returns success.
 	\fi
 } \QuickQuizEnd
 
-라인~38-50 은 \co{read_count()} 를 보이는데, 이 함수는 카운터의 합산된 값을
-리턴합니다.
-먼저 라인~48 에서 해제하는 \co{gblcnt_mutex} 를 라인~43 에서 잡는데, 이 락으로
-\co{add_count()} 와 \co{sub_count()} 의 글로벌한 동작들을 배제시키고, 또한
-쓰레드 생성과 종료 역시 배제시킵니다.
-라인~44 는 로컬 변수 \co{sum} 을 \co{globalcount} 의 값으로 초기화 하고,
-라인~45-47 의 루프는 쓰레드별 \co{counter} 변수의 합을 구합니다.
-그러고나서 라인~49 에서 합을 리턴합니다.
+\begin{lineref}[ln:count:count_lim:add_sub_read:read]
+라인~\lnref{b}-\lnref{e} 은 \co{read_count()} 를 보이는데, 이 함수는 카운터의
+합산된 값을 리턴합니다.
+먼저 라인~\lnref{release} 에서 해제하는 \co{gblcnt_mutex} 를
+라인~\lnref{acquire} 에서 잡는데, 이 락으로 \co{add_count()} 와
+\co{sub_count()} 의 글로벌한 동작들을 배제시키고, 또한 쓰레드 생성과 종료 역시
+배제시킵니다.
+라인~\lnref{initsum} 는 로컬 변수 \co{sum} 을 \co{globalcount} 의 값으로 초기화
+하고, 라인~\lnref{loop:b}-\lnref{loop:e} 의 루프는 쓰레드별 \co{counter} 변수의
+합을 구합니다.
+그러고나서 라인~\lnref{return} 에서 합을 리턴합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim:add_sub_read:read]
 Lines~\lnref{b}-\lnref{e} show \co{read_count()},
 which returns the aggregate value
 of the counter.
@@ -2905,10 +2913,9 @@ Line~\lnref{initsum} initializes local variable \co{sum} to the value of
 \co{globalcount}, and then the loop spanning
 lines~\lnref{loop:b}-\lnref{loop:e} sums the
 per-thread \co{counter} variables.
-%TODO: Apply
 Line~\lnref{return} then returns the sum.
-\end{lineref}
 \fi
+\end{lineref}
 
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim@utility.fcv}
@@ -2920,26 +2927,29 @@ Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에서는
 Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read} 에서 봤던 
 \co{add_count()}, \co{sub_count()}, and \co{read_count()} 에서 사용하던
 함수들을 보입니다.
-
-라인~1-7 은 \co{globalize_count()} 함수인데, 이 함수는 현 쓰레드의 쓰레드별
-카운터를 0으로 만들고, 글로벌 변수들을 적당한 값으로 만듭니다.
-이 함수는 카운터의 합산값을 바꾸진 않지만 어떻게 카운터의 현재 값이 보여야
-하는지를 바꾼다는 점이 중요합니다.
-라인~3 은 쓰레드의 \co{counter} 변수를 \co{globalcount} 에 더하고 라인~4 는
-\co{counter} 를 0으로 만듭니다.
-비슷하게, 라인~5 는 쓰레드별 \co{countermax} 를 \co{globalreserve} 에서 빼고,
-라인~6 은 \co{countermax} 를 0으로 만듭니다.
-이어서 설명될 \co{balance_count()} 함수와 이 함수를 함께 이해하려면
-Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
-를 참고하는게 도움이 될겁니다.
 \iffalse
 
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions}
 shows a number of utility functions used by the \co{add_count()},
 \co{sub_count()}, and \co{read_count()} primitives shown in
 Listing~\ref{lst:count:Simple Limit Counter Add, Subtract, and Read}.
+\fi
 
 \begin{lineref}[ln:count:count_lim:utility:globalize]
+라인~\lnref{b}-\lnref{e} 은 \co{globalize_count()} 함수인데, 이 함수는 현
+쓰레드의 쓰레드별 카운터를 0으로 만들고, 글로벌 변수들을 적당한 값으로
+만듭니다.
+이 함수는 카운터의 합산값을 바꾸진 않지만 어떻게 카운터의 현재 값이 보여야
+하는지를 바꾼다는 점이 중요합니다.
+라인~\lnref{add} 은 쓰레드의 \co{counter} 변수를 \co{globalcount} 에 더하고
+라인~\lnref{zero} 는 \co{counter} 를 0으로 만듭니다.
+비슷하게, 라인~\lnref{sub} 는 쓰레드별 \co{countermax} 를 \co{globalreserve}
+에서 빼고, 라인~\lnref{zeromax} 은 \co{countermax} 를 0으로 만듭니다.
+이어서 설명될 \co{balance_count()} 함수와 이 함수를 함께 이해하려면
+Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
+를 참고하는게 도움이 될겁니다.
+\iffalse
+
 Lines~\lnref{b}-\lnref{e} show \co{globalize_count()},
 which zeros the current thread's
 per-thread counters, adjusting the global variables appropriately.
@@ -2953,12 +2963,12 @@ Similarly, line~\lnref{sub} subtracts the per-thread \co{countermax} from
 It is helpful to refer to
 Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
 when reading both this function and \co{balance_count()}, which is next.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
-라인~9-19 는 \co{balance_count()} 함수를 보이는데, 이 함수는 간단히 말해서
-\co{globalize_count()} 의 반대입니다.
+\begin{lineref}[ln:count:count_lim:utility:balance]
+라인~\lnref{b}-\lnref{e} 는 \co{balance_count()} 함수를 보이는데, 이 함수는
+간단히 말해서 \co{globalize_count()} 의 반대입니다.
 이 함수가 하는일은 현 쓰레드의 \co{countermax} 변수를 카운터가
 \co{globalcountmax} 한계치를 넘지 않는 한계에서 가장 큰 값을 갖도록 하는
 것입니다.
@@ -2972,7 +2982,6 @@ Figure~\ref{fig:count:Simple Limit Counter Variable Relationships} 에서 보여
 바꾸지 못합니다.
 \iffalse
 
-\begin{lineref}[ln:count:count_lim:utility:balance]
 Lines~\lnref{b}-\lnref{e} show \co{balance_count()},
 which is roughly speaking
 the inverse of \co{globalize_count()}.
@@ -2989,16 +2998,17 @@ As with \co{globalize_count()}, \co{balance_count()} is not permitted
 to change the aggregate value of the counter.
 \fi
 
-라인~11-13 은 \co{globalcount} 나 \co{globalreserve} 로 다뤄지지 않은
-\co{globalcountmax} 에서 이 쓰레드의 지분을 계산하고, 계산된 값을 이 쓰레드의
-\co{countermax} 에 대입합니다.
-라인~14 는 \co{globalreserve} 를 올바르게 조정합니다.
-라인~15 는 이 쓰레드의 \co{counter} 를 \co{countermax} 절반으로 만듭니다.
-라인~16 은 이 \co{counter} 값이 규칙을 깨지 않는 선에서 가능한 값인지
-\co{globalcount} 를 보고, 그렇지 않다면 라인~17 에서 \co{counter} 를 적절하게
-감소시킵니다.
-앞의 조건과 관계없이 마지막으로, 라인~18 에서는 \co{globalcount} 를 적절하게
-조정합니다.
+라인~\lnref{share:b}-\lnref{share:e} 은 \co{globalcount} 나 \co{globalreserve}
+로 다뤄지지 않은 \co{globalcountmax} 에서 이 쓰레드의 지분을 계산하고, 계산된
+값을 이 쓰레드의 \co{countermax} 에 대입합니다.
+라인~\lnref{adjreserve} 는 \co{globalreserve} 를 올바르게 조정합니다.
+라인~\lnref{middle} 는 이 쓰레드의 \co{counter} 를 \co{countermax} 절반으로
+만듭니다.
+라인~\lnref{check} 은 이 \co{counter} 값이 규칙을 깨지 않는 선에서 가능한
+값인지 \co{globalcount} 를 보고, 그렇지 않다면 라인~\lnref{adjcounter} 에서
+\co{counter} 를 적절하게 감소시킵니다.
+앞의 조건과 관계없이 마지막으로, 라인~\lnref{adjglobal} 에서는 \co{globalcount}
+를 적절하게 조정합니다.
 \iffalse
 
 Lines~\lnref{share:b}-\lnref{share:e} compute this thread's share of
@@ -3016,17 +3026,16 @@ accordingly.
 Finally, in either case,
 line~\lnref{adjglobal} makes the corresponding adjustment to
 \co{globalcount}.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
-	라인~15 에서는 왜 \co{counter} 를 \co{countermax / 2} 로 만들죠?
+	라인~\ref{ln:count:count_lim:utility:balance:middle}
+	에서는 왜 \co{counter} 를 \co{countermax / 2} 로 만들죠?
 	그냥 \co{countermax} 값을 가져오는게 더 간단하지 않나요?
 	\iffalse
 
-	%TODO: Apply
 	Why set \co{counter} to \co{countermax / 2} in
 	line~\ref{ln:count:count_lim:utility:balance:middle} of
 	Listing~\ref{lst:count:Simple Limit Counter Utility Functions}?
@@ -3188,21 +3197,13 @@ thread~0 can once again increment the counter locally.
 	\fi
 } \QuickQuizEnd
 
-라인~21-28 은 \co{count_register_thread()} 함수인데, 이 함수는 새로 생성된
-쓰레드를 위한 상태를 만듭니다.
+\begin{lineref}[ln:count:count_lim:utility:register]
+라인~\lnref{b}-\lnref{e} 은 \co{count_register_thread()} 함수인데, 이 함수는
+새로 생성된 쓰레드를 위한 상태를 만듭니다.
 이 함수는 단순히 새로 생성된 쓰레드의 \co{counter} 변수로의 포인터를 상응하는
 \co{counterp[]} 배열에서의 원소에 \co{gblcnt_mutex} 의 보호 아래 설정합니다.
-
-마지막으로, 라인~30-38 은 \co{count_unregister_thread()} 함수를 보여주는데, 이
-함수는 곧 종료될 쓰레드를 위해 상태를 정리합니다.
-라인~34 에서는 라인~37 에서 해제될 \co{gblcnt_mutex} 를 잡습니다.
-라인~35 에서는 \co{globalize_count()} 를 호출해서 이 쓰레드의 카운터 상태를
-정리하고, 라인~36 에서 이 쓰레드의 \co{counterp[]} 배열에서의 상응하는 원소를
-정리합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim:utility:register]
 Lines~\lnref{b}-\lnref{e} show \co{count_register_thread()},
 which sets up state for
 newly created threads.
@@ -3210,9 +3211,19 @@ This function simply installs
 a pointer to the newly created thread's \co{counter} variable into
 the corresponding entry of the \co{counterp[]} array under the protection
 of \co{gblcnt_mutex}.
+\fi
 \end{lineref}
 
 \begin{lineref}[ln:count:count_lim:utility:unregister]
+마지막으로, 라인~\lnref{b}-\lnref{e} 은 \co{count_unregister_thread()} 함수를
+보여주는데, 이 함수는 곧 종료될 쓰레드를 위해 상태를 정리합니다.
+라인~\lnref{acquire} 에서는 라인~\lnref{release} 에서 해제될 \co{gblcnt_mutex}
+를 잡습니다.
+라인~\lnref{globalize} 에서는 \co{globalize_count()} 를 호출해서 이 쓰레드의
+카운터 상태를 정리하고, 라인~\lnref{clear} 에서 이 쓰레드의 \co{counterp[]}
+배열에서의 상응하는 원소를 정리합니다.
+\iffalse
+
 Finally, lines~\lnref{b}-\lnref{e} show \co{count_unregister_thread()},
 which tears down
 state for a soon-to-be-exiting thread.
@@ -3222,9 +3233,8 @@ Line~\lnref{globalize} invokes \co{globalize_count()}
 to clear out this thread's
 counter state, and line~\lnref{clear} clears this thread's entry in the
 \co{counterp[]} array.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \subsection{Simple Limit Counter Discussion}
 \label{sec:count:Simple Limit Counter Discussion}
@@ -3285,13 +3295,6 @@ Listing~\ref{lst:count:Approximate Limit Counter Variables} 는 쓰레드별
 \co{countermax} 의 허용되는 최대값을 나타내는 \co{MAX_COUNTERMAX} 가
 추가되었다는 점을 제외하곤
 Listing~\ref{lst:count:Simple Limit Counter Variables} 와 똑같습니다.
-
-비슷하게,
-Listing~\ref{lst:count:Approximate Limit Counter Balancing} 는 라인~6 과~7 에서
-쓰레드별 \co{countermax} 변수에 \co{MAX_COUNTERMAX} 한계를 적용하는 내용이
-추가된 걸 제외하고는
-Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
-\co{balance_count()} 함수와 동일합니다.
 \iffalse
 
 Because this implementation (\path{count_lim_app.c}) is quite similar to
@@ -3305,8 +3308,17 @@ is identical to
 Listing~\ref{lst:count:Simple Limit Counter Variables},
 with the addition of \co{MAX_COUNTERMAX}, which sets the maximum
 permissible value of the per-thread \co{countermax} variable.
+\fi
 
 \begin{lineref}[ln:count:count_lim_app:balance]
+비슷하게,
+Listing~\ref{lst:count:Approximate Limit Counter Balancing} 는
+라인~\lnref{enforce:b} 과~\lnref{enforce:e} 에서 쓰레드별 \co{countermax}
+변수에 \co{MAX_COUNTERMAX} 한계를 적용하는 내용이 추가된 걸 제외하고는
+Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 의
+\co{balance_count()} 함수와 동일합니다.
+\iffalse
+
 Similarly,
 Listing~\ref{lst:count:Approximate Limit Counter Balancing}
 is identical to the \co{balance_count()} function in
@@ -3314,9 +3326,8 @@ Listing~\ref{lst:count:Simple Limit Counter Utility Functions},
 with the addition of
 lines~\lnref{enforce:b} and~\lnref{enforce:e}, which enforce the
 \co{MAX_COUNTERMAX} limit on the per-thread \co{countermax} variable.
-%TODO: Apply
-\end{lineref}
 \fi
+\end{lineref}
 
 \subsection{Approximate Limit Counter Discussion}
 
@@ -3463,25 +3474,24 @@ represent \co{counter} and the low-order 16 bits to represent
 \label{lst:count:Atomic Limit Counter Variables and Access Functions}
 \end{listing}
 
+\begin{lineref}[ln:count:count_lim_atomic:var_access:var]
 간단한 어토믹 리미트 카운터를 위한 변수와 액세스 함수들을
 Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
 (\path{count_lim_atomic.c}) 에 보였습니다.
-앞의 알고리즘에서의 \co{counter} 와 \co{countermax} 변수들은 라인~1 에 있는
-하나의 변수 \co{ctrandmax} 의 앞쪽 절반에 \co{counter} 가, 뒷쪽 절반에는
-\co{countermax} 가 위치하도록 합쳐졌습니다.
+앞의 알고리즘에서의 \co{counter} 와 \co{countermax} 변수들은
+라인~\lnref{candmax} 에 있는 하나의 변수 \co{ctrandmax} 의 앞쪽 절반에
+\co{counter} 가, 뒷쪽 절반에는 \co{countermax} 가 위치하도록 합쳐졌습니다.
 이 변수는 결국 \co{int} 인 \co{atomic_t} 타입입니다.
 
-라인~2-6 은 \co{globalcountmax}, \co{globalcount}, \co{globalreserve},
-\co{counterp}, 그리고 \co{gblcnt_mutex} 의 정의를 보이는데, 이들은
-Listing~\ref{lst:count:Approximate Limit Counter Variables} 에 있는 것들과
-비슷한 역할을 합니다.
-라인~7 은 \co{ctrandmax} 의 각 절반에 사용되는 비트의 수를 나타내는
-\co{CM_BITS}를 정의하고, 라인~8 에서는 \co{ctrandmax} 의 각 절반이 가질 수 있는
-최대값을 나타내는 \co{MAX_COUNTERMAX} 를 정의합니다.
+라인~\lnref{def:b}-\lnref{def:e} 은 \co{globalcountmax}, \co{globalcount},
+\co{globalreserve}, \co{counterp}, 그리고 \co{gblcnt_mutex} 의 정의를 보이는데,
+이들은 Listing~\ref{lst:count:Approximate Limit Counter Variables} 에 있는
+것들과 비슷한 역할을 합니다.
+라인~\lnref{CM_BITS} 은 \co{ctrandmax} 의 각 절반에 사용되는 비트의 수를
+나타내는 \co{CM_BITS}를 정의하고, 라인~\lnref{MAX_CMAX} 에서는 \co{ctrandmax}
+의 각 절반이 가질 수 있는 최대값을 나타내는 \co{MAX_COUNTERMAX} 를 정의합니다.
 \iffalse
 
-%TODO: Apply
-\begin{lineref}[ln:count:count_lim_atomic:var_access:var]
 The variables and access functions for a simple atomic limit counter
 are shown in
 Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
@@ -3502,15 +3512,15 @@ of \co{counterandmax}, and line~\lnref{MAX_CMAX} defines \co{MAX_COUNTERMAX}, wh
 gives the maximum value that may be held in either half of
 %TODO: Apply
 \co{counterandmax}.
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
-	의 라인~7 에서는 C 표준을 어기는거 아닌가요?
+        의 line~\ref{ln:count:count_lim_atomic:var_access:var:CM_BITS}
+	에서는 C 표준을 어기는거 아닌가요?
 	\iffalse
 
-	%TODO: Apply
 	In what way does
         line~\ref{ln:count:count_lim_atomic:var_access:var:CM_BITS} of
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
