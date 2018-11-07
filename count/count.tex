@@ -884,13 +884,13 @@ Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
 \co{__get_thread_var()} 함수를 사용해 \co{counter} 배열에서 현재 수행중인
 쓰레드의 원소를 얻어옵니다.  이 원소는 연관된 쓰레드에 의해서만 수정되므로,
 어토믹하지 않은 방식으로도 충분합니다.
-
-라인~8-16 은 카운터의 전체 값을 얻어오는 함수로, \co{for_each_thread()} 를
-이용해 현재 돌고 있는 쓰레드들의 리스트를 순회하면서 \co{per_thread()} 를
-이용해 특정 쓰레드의 카운터 값을 얻어옵니다.
-하드웨어는 제대로 정렬되어 있는 \co{long} 변수는 어토믹하게 읽고 쓸 수 있기
-때문에, 그리고 \GCC\ 는 이 기능을 잘 사용해주기 때문에, 평범한 읽기로 충분하고,
-별다른 어토믹 오퍼레이션은 필요치 않습니다.
+하지만, 이 코드는 위험한 컴파일러 최적화를 막기 위해 \co{WRITE_ONCE()} 를
+사용하고 있습니다.
+하나만 예를 들자면, 컴파일러는 쓰기가 될 값을 담는 곳을 임시적 저장소로 대신할
+수 있어서, 모든 의도와 목적을 담는 쓰기는 실제 쓰기가 되기 전에 쓰레기가 되어
+버릴 겁니다.
+물론 이는 이 카운트를 읽으려 하는 모든 시도를 혼란스럽게 만들 겁니다.
+\co{WRITE_ONCE()} 는 이런 부류의 최적화를 방지합니다.
 \iffalse
 
 Such an array can be wrapped into per-thread primitives, as shown in
@@ -906,7 +906,6 @@ show a function that increments the counters, using the
 thread's element of the \co{counter} array.
 Because this element is modified only by the corresponding thread,
 non-atomic increment suffices.
-%TODO: Apply
 However, this code uses \co{WRITE_ONCE()} to prevent destructive compiler
 optimizations.
 For but one example, the compiler is within its rights to use a
@@ -919,8 +918,27 @@ The use of \co{WRITE_ONCE()} prevents this optimization and others besides.
 \fi
 
 \QuickQuiz{}
+	이거 말고도 \GCC\ 가 할 수 있는 이상한 최적화는 어떤게 있나요?
+	\iffalse
+
 	What other nasty optimizations could \GCC\ apply?
+	\fi
 \QuickQuizAnswer{
+	C 표준에 따르면, 다른 쓰레드에 의해 동시에 읽혀질 수 있는 변수에
+	평범하게 쓰기를 하는 행동이 일으킬 효과는 정의되어 있지 않습니다.
+	C 는 어토믹하게 \co{long} 을 읽어들일 수가 없는 (예를 들어) 8비트
+	아키텍쳐를 지원해야만 했기에, C 표준은 그럴 수밖에 없었습니다.
+	C 표준의 최신 버전은 이 간극을 채우기 위한 어토믹 기능들을
+	도입했습니다.
+	하지만 이걸 리눅스 커널에 적용하려던 시도는 엇갈린 결과를
+	가져왔는데~\cite{JonathanCorbet2016C11atomics}, 어토믹 기능을 위해
+	컴파일러가 만들어내는 코드의 품질이 나빴던 게 한 이유였습니다.
+	또한, 리눅스 커널은 C11 어토믹 기능이 제공하는 것보다 더 많은 기능을
+	자신의 메모리 모델에 바라고 있는데, 컨트롤 의존성, 완전한 배리어/펜스,
+	낮은 비용의 주소/데이터 의존성~\cite{PaulEMcKenney2016P0124R5-LKMM} 이
+	여기에 포함됩니다.
+	\iffalse
+
 	According to the C standard, the effects of doing a normal store
 	to a variable that might be concurrently loaded by some other
 	thread are undefined.
@@ -936,6 +954,7 @@ The use of \co{WRITE_ONCE()} prevents this optimization and others besides.
 	memory model than C11 atomics provide, including control
 	dependencies, full barriers/fences, and low-overhead address
 	and data dependencies~\cite{PaulEMcKenney2016P0124R5-LKMM}.
+	\fi
 
 	언젠가는 C11 어토믹 기능이 이 간극을 메우겠지만, 그 때가 오기 전까지
 	리눅스 커널은 volatile 접근, inline 어셈블리, 컴파일러 지시어, 그리고
@@ -1044,6 +1063,20 @@ The use of \co{WRITE_ONCE()} prevents this optimization and others besides.
 	\fi
 } \QuickQuizEnd
 
+라인~\lnref{read:b}-\lnref{read:e}
+는 현재 수행중인 쓰레드의 리스트를 순회하기 위해 \co{for_each_thread()} 기능을
+사용하고 특정 쓰레드의 카운터를 읽어오기 위해 \co{per_thread()} 기능을 사용해
+카운터의 합산값을 구하는 함수를 보이고 있습니다.
+이 코드는 또한 컴파일러가 이 읽기를 잊혀지도록 만드는 최적화를 하지 않도록
+보장하기 위해 \co{READ_ONCE()} 를 사용하고 있습니다.
+하나만 예를 들자면, \co{read_count()} 를 연속해서 호출하는 코드는 inline 코드로
+변환될 수 있고, 용기 있는 최적화 장치는 같은 위치의 값들의 합이 연속해 구해짐을
+알아채서 그 값들의 합을 한번만 구하고 재사용하려 할 수 있습니다.
+이런 종류의 최적화는 나중의 \co{read_count()} 호출이 더 큰 값을 리턴할 거라
+기대하는 사람들을 당황하게 만들 겁니다.
+\co{READ_ONCE()} 의 사용은 이 최적화와 비슷한 것들을 방지할 겁니다.
+\iffalse
+
 Lines~\lnref{read:b}-\lnref{read:e}
 show a function that reads out the aggregate value of the counter,
 using the \co{for_each_thread()} primitive to iterate over the list of
@@ -1058,6 +1091,7 @@ be simply wonderful to sum them once and use the resulting value twice.
 This sort of optimization might be rather frustrating to people expecting
 later \co{read_count()} calls to return larger values.
 The use of \co{READ_ONCE()} prevents this optimization and others besides.
+\fi
 \end{lineref}
 
 \QuickQuiz{}
