@@ -2701,17 +2701,23 @@ STORE r0,counter
 } \QuickQuizEnd
 
 하지만, \co{spin_lock()} 과 \co{spin_unlock()} 기능들은 성능상의 문제가 있는데,
-Section~\ref{sec:toolsoftrade:Performance} 에서 다루어집니다.
+Chapter~\ref{chp:Data Structures} 에서 다루어집니다.
 \iffalse
 
 However, the \co{spin_lock()} and \co{spin_unlock()} primitives
 do have performance consequences, as will be seen in
-%TODO: Apply
 Chapter~\ref{chp:Data Structures}.
 \fi
 
 \subsection{Accessing Shared Variables}
 \label{sec:toolsoftrade:Accessing Shared Variables}
+
+C 표준은 2011년에 와서야 공유된 변수로의 동시의 read/write 액세스에 대해 어떤
+일이 벌어지는지 정의했습니다만, 동시성 있는 C 코드는 그보다 최소 25년은 전부터
+쓰여졌습니다~\cite{Beck85,Inman85}.
+이 사실은 오늘날의 노인들이 C11 이전 시대에는 뭘 했는지 궁금하게 만듭니다.
+이에 대한 짧은 대답은 ``그들은 위험하게 살았다'' 입니다.
+\iffalse
 
 The C standard defined semantics for concurrent read/write access to
 shared variables only in 2011, but concurrent C code was being
@@ -2719,6 +2725,7 @@ written at least a quarter century earlier~\cite{Beck85,Inman85}.
 This raises the question as to what today's greybeards did back
 in long-past pre-C11 days.
 A short answer to this question is ``they lived dangerously''.
+\fi
 
 \begin{listing}[tbp]
 \begin{linelabel}[ln:toolsoftrade:Living Dangerously Early 1990s Style]
@@ -2744,6 +2751,21 @@ if (global_ptr != NULL &&\lnlbl{if:a}
 \label{lst:toolsoftrade:C Compilers Can Invent Loads}
 \end{listing}
 
+그들은 최소한 2018년도의 컴파일러를 사용하면 위험하게 살았을 겁니다.
+(대략) 1990년대 초, 컴파일러는 덜 유능했는데, 부분적으로는 많은 연구와 발전이
+이루어지지 않았기 때문이고, 한편으로는 당시의 상대적으로 작은 메모리에 제한되어
+있었기 때문입니다.
+그러나,
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style} 에 보인
+것처럼 문제는 있었는데, 컴파일러는 이 코드를
+Listing~\ref{lst:toolsoftrade:C Compilers Can Invent Loads} 처럼 바꿀 수
+있었습니다.
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+의 라인~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} 에 있는
+임의의 메모리 접근이 사라져서, \co{global_ptr} 는 최대 세번까지 로드될 수 있게
+되었습니다.
+\iffalse
+
 At least they would have been living dangerously had they been using
 2018 compilers.
 In (say) the early 1990s, compilers were less capable in part because
@@ -2758,15 +2780,37 @@ line~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} of
 Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
 has been optimized away, so that \co{global_ptr} will been loaded
 up to three times.
+\fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+	의 \co{global_ptr} 를 최대 세번까지 로드하게 된게 뭐가 문제죠?
+	\iffalse
+
 	What is wrong with loading
 	Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}'s
 	\co{global_ptr} up to three times?
+	\fi
 \QuickQuizAnswer{
+	\co{global_ptr} 이 최초에는 \co{NULL} 이 아니었지만, 어떤 다른 쓰레드가
+	\co{global_ptr} 를 \co{NULL} 로 바꾼다고 생각해 보세요.
+	\iffalse
+
 	Suppose that \co{global_ptr} is initially non-\co{NULL},
 	but that some other thread sets \co{global_ptr} to \co{NULL}.
+	\fi
 	\begin{lineref}[ln:toolsoftrade:C Compilers Can Invent Loads]
+	더 나아가서 변경된 코드
+	(Listing~\ref{lst:toolsoftrade:C Compilers Can Invent Loads}) 의
+	라인~\lnref{if:a} 이 \co{global_ptr} 이 \co{NULL} 로 쓰여지기 직전에
+	쓰여지고 이어서 라인~\lnref{if:b} 가 수행된다고 생각해 보세요.
+	라인~\lnref{if:a} 는 \co{global_ptr} 가 \co{NULL} 이 아니라고 생각하고,
+	라인~\lnref{if:b} 는 그 값이 \co{high_address} 보다 작다고 결론내릴
+	겁니다.
+	따라서 라인~\lnref{do_low} 는 \co{do_low()} 에 \co{NULL} 포인터를
+	넘길텐데, 이 인자는 \co{do_low()} 가 처리할 준비가 되지 않은 값입니다.
+	\iffalse
+
 	Suppose further that line~\lnref{if:a} of the transformed code
 	(Listing~\ref{lst:toolsoftrade:C Compilers Can Invent Loads})
 	executes just before \co{global_ptr} is set to \co{NULL} and
@@ -2777,8 +2821,22 @@ up to three times.
         \co{high_address},
 	so that line~\lnref{do_low} passes \co{do_low()} a \co{NULL} pointer,
 	which \co{do_low()} just might not be prepared to deal with.
+	\fi
 	\end{lineref}
 } \QuickQuizEnd
+
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+은 평범한 접근들로 인해 생길 수 있는 또다른 문제들을 설명하고,
+Sections~\ref{sec:toolsoftrade:A Volatile Solution}
+과~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}
+은 C11 이전 시대의 해결책 일부를 소개합니다.
+물론, 실용적이라면
+Section~\ref{sec:toolsoftrade:Atomic Operations (gcc Classic)}
+이나 (특히)
+Section~\ref{sec:toolsoftrade:Atomic Operations (C11)}
+에 소개된 기능들이 데이터 레이스를 없애기 위해, 즉, 특정 변수에 동시적으로 여러
+접근이 가해진다면 그것들이 모두 읽기임을 보장하기 위해 사용되어야 합니다.
+\iffalse
 
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
 describes additional problems caused by plain accesses,
@@ -2792,6 +2850,7 @@ Section~\ref{sec:toolsoftrade:Atomic Operations (C11)}
 should be instead be used to avoid data races, that is, to ensure
 that if there are multiple concurrent accesses to a given
 variable, all of those accesses are loads.
+\fi
 
 \subsubsection{Shared-Variable Shenanigans}
 \label{sec:toolsoftrade:Shared-Variable Shenanigans}
