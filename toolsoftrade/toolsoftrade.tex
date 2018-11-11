@@ -2855,6 +2855,20 @@ variable, all of those accesses are loads.
 \subsubsection{Shared-Variable Shenanigans}
 \label{sec:toolsoftrade:Shared-Variable Shenanigans}
 
+평범한 로드와 스토어\footnote{
+	즉, C11 의 어토믹 기능들, 인라인 어셈블리, 또는 volatile 액세스가 아닌
+	평범한 로드와 스토어.}
+를 하는 코드를 가지고, 컴파일러는 영향을 받는 변수들은 다른 쓰레드에 의해
+접근되지도 수정되지도 않는다고 가정할 수 잇는 권한을 갖습니다.
+이 가정은 컴파일러가 많은 변경을 가할 수 있도록 하는데, 여기엔 로드 찢기 (Load
+tearing), 스토어 찢기 (store tearing), 로드 합치기 (load fusing), 스토어 합치기
+(store fusing), 코드 재배치, 로드 만들어내기 (invented loads), 스토어
+만들어내기 (invented store) 와 같은 것들이 포함되며 싱글 쓰레드 코드에서는 잘
+동작합니다.
+하지만 동시성 있는 코드는 이 변화들 각각, 또는 공유 변수 장난으로 인해 아래에
+설명될 것처럼 망가질 수 있습니다.
+\iffalse
+
 Given code that does plain loads and stores,\footnote{
 	That is, normal loads and stores instead of C11 atomics, inline
 	assembly, or volatile accesses.}
@@ -2867,6 +2881,20 @@ load fusing, store fusing, code reordering, invented loads, and
 invented stores, all of which work just fine in single-threaded code.
 But concurrent code can be broken by each of these transformations,
 or shared-variable shenanigans, as described below.
+\fi
+
+{\bf Load tearing{ 은 컴파일러가 하나의 액세스를 위해 여러 로드 인스트럭션을
+상요할 때 발생합니다.
+예를 들어, 컴파일러는 이론적으로 \co{global_ptr} 로부터의 로드를
+(Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style} 의
+라인~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} 을
+참고하세요) 일련의 1바이트 로드들로 만들 수 있습니다.
+만약 다른 쓰레드가 \co{global_ptr} 을 \co{NULL} 로 설정하고 있었다면, 하나의
+바이트 빼고는 0으로 채워진 포인터가 만들어 져서 ``야생의 포인터'' 를 만들게 될
+겁니다.
+이런 야생의 포인터를 사용한 스토어는 메모리의 임의의 영역을 오염시켜서 드물게
+일어나고 디버깅 하기 어려운 크래시를 유발할 겁니다.
+\iffalse
 
 {\bf Load tearing} occurs when the compiler uses multiple load
 instructions for a single access.
@@ -2880,12 +2908,31 @@ If some other thread was concurrently setting \co{global_ptr} to
 set to zero, thus forming a ``wild pointer''.
 Stores using such a wild pointer could corrupt arbitrary
 regions of memory, resulting in rare and difficult-to-debug crashes.
+\fi
+
+아직 더 나쁜게, (예컨대) 16비트 포인터를 사용하는 8비트 시스템에서, 컴파일러는
+해당 포인터를 접근하기 위해 두개의 8비트 인스트럭션들을 사용할 수밖에 없을
+겁니다.
+C 표준은 모든 형태의 시스템을 지원해야 하므로, 이 표준은 일반적 경우에 있어서의
+로드 찢기를 금지할 수 없습니다.
+\iffalse
 
 Worse yet, on (say) an 8-bit system with 16-bit pointers, the compiler
 might have no choice but to use a pair of 8-bit instructions to access
 a given pointer.
 Because the C standard must support all manner of systems, the standard
 cannot rule out load tearing in the general case.
+\fi
+
+{\bf Store tearing} 은 컴파일러가 하나의 액세스를 위해 여러개의 스토어
+인스트럭션을 사용할 때 발생합니다.
+예를 들어, 한 쓰레드가 4바이트 정수형 변수에 \co{0x1234} 를 저장하는 동안 다른
+쓰레드는 \co{0xabcd} 를 저장할 수 있습니다.
+이 컴파일러가 각 액세스에 16비트 스토어들을 사용했다면, 결과는 \co{0x12cd} 가
+될 수도 있는데, 이 변수로부터 값을 읽는 코드에는 매우 놀라운 결과가 될 겁니다.
+다시 말하지만, C 표준은 16비트 시스템에서 32비트 정수형을 사용하는 코드의
+가능성과 같은 일반적 경우에 대해 다른 선택의 여지가 없습니다.
+\iffalse
 
 {\bf Store tearing} occurs when the compiler uses multiple store
 instructions for a single access.
@@ -2896,6 +2943,7 @@ might well be \co{0x12cd}, which could come as quite a surprise to
 code loading from this integer.
 Again, the C standard simply has no choice in the general case, given
 the possibility of code using 32-bit integers running on a 16-bit system.
+\fi
 
 \begin{listing}[tbp]
 \begin{linelabel}[ln:toolsoftrade:C Compilers Can Fuse Loads]
@@ -2925,11 +2973,32 @@ if (!need_to_stop)
 \label{lst:toolsoftrade:C Compilers Can Fuse Loads}
 \end{listing}
 
+{\bf Load fusing{ 은 컴파일러가 로드를 반복하는 대신 해당 변수의 앞의 로드의
+결과를 사용할 때 발생합니다.
+이런 종류의 최적화는 싱글 쓰레드 코드에서만이 아니라 멀티쓰레드 코드에서도 많은
+경우에 유효합니다.
+불행히도, 이 ``많은 경우'' 라는 단어는 진짜 짜증나는 예외를 감추고 있습니다.
+\iffalse
+
 {\bf Load fusing} occurs when the compiler uses the result of a
 prior load from a given variable instead of repeating the load.
 Not only is this sort of optimization just fine in single-threaded
 code, it is often just fine in multithreaded code.
 Unfortunately, the word ``often'' hides some truly annoying exceptions.
+\fi
+
+예를 들어, \co{need_to_stop} 변수의 값이 적혀질 때까지
+\co{do_something_quickly()} 를 반복적으로 수행하는 리얼타임 시스템이 있고,
+컴파일러가 \co{do_something_quickly()} 는 \co{need_to_stop} 에 쓰기를 하지
+않는다는 것을 볼 수 있다고 해봅시다.
+이 컴파일러는 루프의 끝에서의 뒤로의 브랜치를 줄이기 위해 이 루프를 16회씩 풀
+수 있을 겁니다.
+더 나쁜 것이, 컴파일러는 \co{do_something_quickly()} 가 \co{need_to_stop} 에
+쓰기를 하지 않는다는 것을 알기 때문에, 이 컴파일러는 이 변수를 한번만
+체크하도록 할 수 있어서,
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads} 에 보인 것과 같은
+코드를 초래할 수 있을 겁니다.
+\iffalse
 
 For example, suppose that a real-time system needs to invoke a
 function named \co{do_something_quickly()} repeatedly until the
@@ -2942,13 +3011,34 @@ Worse yet, because the compiler knows that \co{do_something_quickly()}
 does not store to \co{need_to_stop}, the compiler could quite reasonably
 decide to check this variable only once, resulting in the code shown in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads}.
+\fi
 \begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Loads]
+라인~\lnref{loop:b}-\lnref{loop:e} 의 루프는 한번 진입하면 다른 쓰레드가
+몇번이나 \co{need_to_stop} 에 0이 아닌 값을 저장했는가에 관계없이 멈추지 않게
+됩니다.
+\iffalse
+
 Once entered, the loop on
 lines~\lnref{loop:b}-\lnref{loop:e} will never stop, regardless of how
 many times some other thread stores a non-zero value to \co{need_to_stop}.
+\fi
 \end{lineref}
+그 결과는 최선의 경우에도 실망스러울 것이고, 상당한 물리적 손상을 가져올 수도
+있을 겁니다.
+\iffalse
+
 The result will at best be disappointment, and might well also
 include severe physical damage.
+\fi
+
+{\bf Store fusing} 은 컴파일러가 특정 변수로의 연속적인 쓰기들이 중간에 그
+변수로부터의 읽기 없이 이루어진다는 걸 컴파일러가 알아낼 때 발생합니다.
+이 경우, 컴파일러는 첫번째 쓰기를 없애버릴 수 있는 권한을 갖습니다.
+이건 싱글 쓰레드 코드에서는 문제가 안되고, 올바르게 작성된 동시성 있는
+코드에서도 일반적으로는 그렇습니다.
+무엇보다, 만약 두개의 쓰기가 빠르게 수행된다면, 다른 쓰레드가 첫번째 쓰기로
+인한 값을 읽을 확률은 매우 적을 겁니다.
+\iffalse
 
 {\bf Store fusing} can occur when the compiler notices a pair of successive
 stores to a given variable with no intervening loads from that variable.
@@ -2958,6 +3048,7 @@ the case that it is not a problem in correctly written concurrent code.
 After all, if the two stores are executed in quick succession, there is
 very little chance that some other thread could load the value from the
 first store.
+\fi
 
 \begin{listing}[tbp]
 \begin{linelabel}[ln:toolsoftrade:C Compilers Can Fuse Stores]
@@ -2985,9 +3076,30 @@ void work_until_shut_down(void)
 \label{lst:toolsoftrade:C Compilers Can Fuse Stores}
 \end{listing}
 
+하지만, 예외가 존재하는데, 예를 들면
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores} 에 보인 것과
+같습니다.
+\iffalse
+
 However, there are exceptions, for example as shown in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}.
+\fi
 \begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
+\co{shut_it_down()} 함수는 라인~\lnref{store:a} 과~\lnref{store:b} 에서 공유
+변수 \co{status} 에 스토어를 하고, 따라서 \co{start_shutdown()} 도,
+\co{finish_shutdown()} 도 \co{status} 에 접근하지 않는다고 가정하며, 컴파일러는
+line~\lnref{store:a} 에서의 \co{status} 로의 스토어를 제거할 수 있습니다.
+불행히도, 이는 \co{work_until_shut_down()} 이
+라인~\lnref{until:loop:b} 과~\lnref{until:loop:e} 의 루프를 결코 빠져나오지
+못해서, \co{other_task_ready} 의 값을 결코 쓰지 못하게 될 것을 의미하는데, 이는
+결국 \co{shut_it_down()} 이 라인~\lnref{loop:b} 과~\lnref{loop:e} 의 루프를
+설령 컴파일러가 line~\lnref{loop:b} 에서의 \co{other_task_ready} 로부터의
+연속된 로드를 합치지 않는다 하더라도 빠져나오지 못하게 될것임을 의미합니다.
+
+그리고 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores} 의 코드에는
+코드 재배치를 포함한 더 많은 문제들이 있습니다.
+\iffalse
+
 The function \co{shut_it_down()} stores to the shared
 variable \co{status} on lines~\lnref{store:a} and~\lnref{store:b},
 and so assuming that neither
@@ -3006,6 +3118,22 @@ the compiler chooses not to fuse the successive loads from
 And there are more problems with the code in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores},
 including code reordering.
+\fi
+
+{\bf Code reordering} 은 일반적인 표현문들을 합치고, 레지스터 사용률을 줄이고,
+오늘날의 슈퍼스칼라 마이크로프로세서들의 기능 유닛들의 사용률을 개선하는데
+사용되는 흔한 컴파일 기술입니다.
+이게
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores} 의 코드가 왜 버그를
+가지고 있는가에 대한 또다른 이유입니다.
+예를 들어, 라인~\lnref{until:loop:e} 의 \co{do_more_work()} 함수가
+\co{other_task_ready} 를 접근하지 않는다고 해봅시다.
+그러면 컴파일러는 라인~\lnref{other:store} 에서의 \co{other_task_ready} 로의 값
+할당을 라인~\lnref{until:loop:b} 를 앞서게 만들 수 있는데, 이는
+라인~\lnref{until:loop:e} 에서의 \co{do_more_work()} 호출이 라인~\lnref{finish}
+에서의 \co{finish_shutdown()} 호출 후에 일어났길 바라는 사람들에게는 큰
+아쉬움일 겁니다.
+\iffalse
 
 {\bf Code reordering} is a common compilation technique used to
 combine common subexpressions, reduce register pressure, and
@@ -3023,7 +3151,21 @@ line~\lnref{other:store} to precede line~\lnref{until:loop:b}, which might
 be a great disappointment for anyone hoping that the last call to
 \co{do_more_work()} on line~\lnref{until:loop:e} happens before the call to
 \co{finish_shutdown()} on line~\lnref{finish}.
+\fi
 \end{lineref}
+
+{\bf Invented loads} 는
+Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+과~\ref{lst:toolsoftrade:C Compilers Can Invent Loads} 의 코드에 의해서
+보여지는데, 컴파일러가 임시 변수를 최적화로 없애버려서 공유변수로부터의 로드를
+의도한 것보다 자주 일어나게 만들어서 발생합니다.
+
+만들어진 로드는 성능상의 문제가 될수도 있습니다.
+이런 문제는 ``자주 접근되는'' 캐시라인의 변수로부터의 로드가 \co{if} 문 밖으로
+빠져나올 때 발생합니다.
+이런 빼내기 최적화는 드물지 않으며, 캐시 미스를 크게 늘릴 수 있어서, 성능과
+확장성에 상당한 저하를 일으킬 수 있습니다.
+\iffalse
 
 {\bf Invented loads} were illustrated by the code in
 Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
@@ -3037,8 +3179,27 @@ cacheline is hoisted out of an \co{if} statement.
 These hoisting optimizations are not uncommon, and can cause significant
 increases in cache misses, and thus significant degradation of
 both performance and scalability.
+\fi
 
 \begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
+{\bf Invented stores} 는 다양한 상황에서 발생될 수 있습니다.
+예를 들어, 컴파일러는
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores} 의
+\co{work_until_shut_down()} 를 위한 코드를 만들어내는 컴파일러는
+\co{other_task_ready} 이 \co{do_more_work()} 에 의해 접근되지 않고
+라인~\lnref{other:store} 에서 스토어 됨을 알 수 있습니다.
+만약 \co{do_more_work()} 함수가 복잡한 인라인 함수였다면, 레지스터 엎지르기를
+해야 할 수 있는데, 이 경우 \co{other_task_ready} 는 임시 저장소로 사용하기에
+적당해 보일 겁니다.
+무엇보다, 거기에 접근하는 게 없는데, 뭐가 해롭겠어요?
+
+물론, 잘못된 시점에 이 변수로 0이 아닌 값을 저장하는 행위는 라인~\lnref{loop:b}
+에서의 \co{while} 루프가 지나치게 빨리 종료되게 만들어서,
+\co{finish_shutdown()} 이 \co{do_more_work()} 와 동시에 수행되게 만들 겁니다.
+이 \co{while} 문의 의도가 그런 동시성을 제거하기 위함이란 걸 놓고 보면, 이는
+좋은 일이 아닙니다.
+\iffalse
+
 {\bf Invented stores} can occur in a number of situations.
 For example, a compiler emitting code for \co{work_until_shut_down()} in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
@@ -3056,6 +3217,7 @@ prematurely, again allowing \co{finish_shutdown()} to run
 concurrently with \co{do_more_work()}.
 Given that the entire point of this \co{while} appears to be to
 prevent such concurrency, this is not a good thing.
+\fi
 \end{lineref}
 
 \begin{listing}[tbp]
@@ -3085,12 +3247,28 @@ if (!condition) {
 \label{lst:toolsoftrade:Compiler Invents an Invited Store}
 \end{listing}
 
+값이 저장된 변수를 임시 저장소로 사용하는 건 희한해 보이지만, 표준에 의해
+허용됩니다.
+그러나,
+Listing~\ref{lst:toolsoftrade:Inviting an Invented Store}
+과~\ref{lst:toolsoftrade:Compiler Invents an Invited Store} 의 덜 희한해 보이는
+예제를 봐도 좋을 겁니다.
+\iffalse
+
 Using a stored-to variable as a temporary might seem outlandish,
 but it is permitted by the standard.
 Nevertheless, readers might be justified in wanting a less
 outlandish example, which is provided by
 Listings~\ref{lst:toolsoftrade:Inviting an Invented Store}
 and~\ref{lst:toolsoftrade:Compiler Invents an Invited Store}.
+\fi
+
+Listing~\ref{lst:toolsoftrade:Inviting an Invented Store}
+의 코드를 만들어내는 컴파일러는 \co{a} 의 값이 초기에 0이란 걸 알텐데, 이는 이
+코드를
+Listing~\ref{lst:toolsoftrade:Compiler Invents an Invited Store}
+의 코드로 변형함으로써 브랜치를 하나 없애버리고 싶은 욕망을 갖게 될겁니다.
+\iffalse
 
 A compiler emitting code for
 Listing~\ref{lst:toolsoftrade:Inviting an Invented Store}
@@ -3098,12 +3276,32 @@ might know that the value of \co{a} is initially zero,
 which might be a strong temptation to optimize away one branch
 by transforming this code to that in
 Listing~\ref{lst:toolsoftrade:Compiler Invents an Invited Store}.
+\fi
 \begin{lineref}[ln:toolsoftrade:Compiler Invents an Invited Store]
+여기서, 라인~\lnref{store:uncond} 는 부조건적으로 \co{a} 에 \co{1} 을 저장하고,
+이어서 \co{condition} 이 값 설정되지 않았다면 라인~\lnref{store:cond} 에서 이
+값을 다시 0으로 만듭니다.
+이는 이 if-then-else 문을 if-then 으로 변형해서, 브랜치를 하나 아낍니다.
+\iffalse
+
 Here, line~\lnref{store:uncond} unconditionally stores \co{1} to \co{a}, then
 resets the value back to zero on
 line~\lnref{store:cond} if \co{condition} was not set.
 This transforms the if-then-else into an if-then, saving one branch.
+\fi
 \end{lineref}
+
+마지막으로, C11 전의 컴파일러는 쓰여진 변수에 인접해서 일어났던 연관없는
+변수로의 쓰기를 만들어 낼 수 있습니다~\cite[Section
+4.2]{Boehm:2005:TCI:1064978.1065042}.
+이 invented stores 의 변종은 데이터 레이스를 만들어내는 컴파일러 최적화의
+금지로 인해 없어졌습니다.
+
+안정적인 동시성 코드는 컴파일러가 중요한 액세스들의 횟수와 순서를 분명히
+지키도록 할 필요가 있는데, 이 주제는 뒤의
+Section~\ref{sec:toolsoftrade:A Volatile Solution}
+과~\ref{sec:toolsoftrade:Assembling the Rest of a Solution} 에서 다루어 집니다.
+\iffalse
 
 Finally, pre-C11 compilers could invent writes to unrelated
 variables that happened to be adjacent to written-to
@@ -3117,6 +3315,7 @@ up by
 Sections~\ref{sec:toolsoftrade:A Volatile Solution}
 and~\ref{sec:toolsoftrade:Assembling the Rest of a Solution},
 which are up next.
+\fi
 
 \subsubsection{A Volatile Solution}
 \label{sec:toolsoftrade:A Volatile Solution}
