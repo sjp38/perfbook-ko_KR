@@ -3320,6 +3320,20 @@ which are up next.
 \subsubsection{A Volatile Solution}
 \label{sec:toolsoftrade:A Volatile Solution}
 
+지금은 훨씬 나아졌지만, C11 과 C++11~\cite{PeteBecker2011N3242} 의 발전
+전까지는, \co{volatile} 키워드가 병렬 프로그래머의 도구 상자에 없어서는 안될
+도구였습니다.
+이는 \co{volatile} 이 의미하는바가 정확히 무엇인가라는 질문을 유발하는데, 이는
+이 표준의 최신 버전에서조차도~\cite{RichardSmith2018N4762} 매우 자세히 답변된
+바가 없습니다.
+이 버전은 ``\co{volatile} \co{gvalues} 를 통한 접근은 추상적 머신의 규칙을
+엄격히 따라서 평가된다'' 는 것을 보장하고, \co{volatile} 액세스는 사이드
+이펙트이고, 이는 네개의 forward-progress 알림 중 하나이며, 그것의 정확한 의미는
+구현 종속적입니다.
+%TODO: Polish
+가장 분명한 안내는 아마도 이 노트를 통해 제공됩니다:
+\iffalse
+
 Although it is now much maligned, before the advent of C11 and
 C++11~\cite{PeteBecker2011N3242}, the \co{volatile} keyword was an
 indispensible tool in the parallel programmer's toolbox.
@@ -3333,8 +3347,19 @@ that \co{volatile} accesses are side effects,
 that they are one of the four forward-progress indicators,
 and that their exact semantics are implementation-defined.
 Perhaps the most clear guidance is provided by this non-normative note:
+\fi
 
 \begin{quote}
+	\co{volatile} 은 구현이 해당 오브젝트에 대한 적극적인 최적화를 해당
+	오브젝트의 값이 이 구현에 의해서 파악될 수 없는 방법으로 변경될 수도
+	있는 경우를 위해 막기 위한 힌트입니다.
+	더 나아가서, 일부 구현의 경우, \co{volatile} 은 해당 오브젝트를
+	접근하는데에 특수한 하드웨어 명령어를 필요로 함을 의미할 수도 있습니다.
+	자세한 의미를 보기 위해선 6.8.1 을 참고하세요.
+	일반적으로, \co{volatile} 의 의미는 C 에서와 C++ 에서와 동일하도록
+	의도되어 있습니다.
+	\iffalse
+
 	\co{volatile} is a hint to the implementation to avoid
 	aggressive optimization involving the object because the value
 	of the object might be changed by means undetectable by an
@@ -3345,7 +3370,17 @@ Perhaps the most clear guidance is provided by this non-normative note:
 	See 6.8.1 for detailed semantics.
 	In general, the semantics of \co{volatile} are intended to be the
 	same in C++ as they are in C.
+	\fi
 \end{quote}
+
+이 표현이 낮은 단계의 코드를 작성하는 사람들에겐 더 명확할테지만, 컴파일러를
+작성하는 사람들은 표준화 되지 않은 노트를 완전히 무시할 수 있다는 사실은
+예외입니다.
+병렬 프로그래머들은 그 대신 컴파일러 작성자들이 (디바이스 드라이버 개발자들과의
+``솔직하고 개방된'' 토론 뒤에만 그렇겠지만) 디바이스 드라이버를 망가뜨리지
+않으려 할거라는 걸 분명히 할 거고, 디바이스 드라이버는 적어도 다음의
+제약사항들을 가질 겁니다~\cite{PaulEMcKenney2016P0124R6-LKMM}:
+\iffalse
 
 This wording might be reassuring to those writing low-level code, except
 for the fact that compiler writers are free to completely ignore
@@ -3355,8 +3390,18 @@ writers would like to avoid breaking device drivers (though perhaps
 only after a few ``frank and open'' discussions with device-driver
 developers), and device drivers impose at least the following
 constraints~\cite{PaulEMcKenney2016P0124R6-LKMM}:
+\fi
 
 \begin{enumerate}
+\item	액세스의 크기와 타입이 기계 명령어에 알려진다면 구현은 정렬된 volatile
+	액세스를 쪼개는 것을 알지 않아도 될 겁니다.\footnote{
+		이는 128비트 CAS 는 갖지만 128비트 로드와 스토어는 갖지 않는
+		CPU 위에서 128비트 로드와 스토어가 무슨 일을 할지 불명확하게
+		둔다는 것을 알아 두시기 바랍니다.}
+	동시성 코드는 불필요한 로드와 스토어 쪼개짐을 막기 위해 이 제약 사항에
+	의존합니다.
+\iffalse
+
 \item	Implementations are forbidden from tearing an aligned volatile
 	access when machine instructions of the access's size and type
 	are available.\footnote{
@@ -3365,6 +3410,15 @@ constraints~\cite{PaulEMcKenney2016P0124R6-LKMM}:
 		128-bit loads and stores.}
 	Concurrent code relies on this constraint to avoid unnecessary
 	load and store tearing.
+\fi
+\item	구현은 volatile 액세스의 의미에 대해서도, 값을 리턴하는 volatile
+	액세스의 경우 어떤 값이 리턴될 수 있는지 가능한 값들의 집합에 대해서도
+	어떤 가정도 가져선 안됩니다.\footnote{
+		이는 뒤에서 이야기 될 구현 종속적 의미에 의해 분명히
+		유도됩니다.}
+	동시성 코드는 다른 프로세서가 현재 접근 중인 위치를 접근할 수 있다는
+	점을 생각하면 적절치 않은 최적화를 막기 위해 이 제약사항에 의존합니다.
+\iffalse
 \item	Implementations must not assume anything about the semantics of
 	a volatile access, nor, for any volatile access that returns a
 	value, about the possible set of values that might be
@@ -3374,6 +3428,19 @@ constraints~\cite{PaulEMcKenney2016P0124R6-LKMM}:
 	Concurrent code relies on this constraint to avoid optimizations
 	that are inapplicable given that other processors might be
 	concurrently accessing the location in question.
+\fi
+\item	정렬되고 기계에서 지원하는 크기의, 다른 것들과 섞이지 않은 크기의
+	volatile 액세스들은 앞과 뒤의 volatile 어셈블리 코드들과 자연적으로
+	상호작용합니다.
+	일부 디바이스는 volatile MMIO 액세스와 특수목적 어셈블리어
+	인스트럭션들의 조합으로 접근되어야 하기 때문에 이 제약사항이
+	필요합니다.
+	동시성 코드는 volatile 액세스와
+	Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}
+	에서 이야기 되는 다른 수단의 조합으로부터의 의도된 순서를 지키기 위해
+	이 제약사항에 의존합니다.
+\iffalse
+
 \item	Aligned machine-sized non-mixed-size volatile accesses interact
 	naturally with volatile assembly-code sequences before and after.
 	This is necessary because some devices must be accessed using
@@ -3383,7 +3450,18 @@ constraints~\cite{PaulEMcKenney2016P0124R6-LKMM}:
 	the desired ordering properties from combinations of volatile
 	accesses and other means discussed in
 	Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}.
+\fi
 \end{enumerate}
+
+동시성 코드는 또한, 모든 액세스가 정렬되었고 기계 지원 크기라는 가정 하에, 특정
+오브젝트에의 어떤 액세스가 어토믹하지 않거나 volatile 하지 않은 경우 발생
+가능한 데이터 레이스로 발생할 수 있는 정의되지 않은 동작을 막기 위해 앞의 두
+제약 사항을 이용합니다.
+같은 변수로의 뒤섞인 크기의 액세스는 더 복잡한데, 나중으로 설명을
+미뤄두겠습니다.
+
+그럼 앞의 예제에 대해 \co{volatile} 은 어떻게 동작할까요?
+\iffalse
 
 Concurrent code also relies on the first two constraints to avoid
 undefined behavior that could result due to data races if any of the
@@ -3393,6 +3471,7 @@ The semantics of mixed-size accesses to the same locations are more
 complex, and are left aside for the time being.
 
 So how does \co{volatile} stack up against the earlier examples?
+\fi
 
 \begin{listing}[tbp]
 \begin{linelabel}[ln:toolsoftrade:Avoiding Danger, 2018 Style]
