@@ -3818,10 +3818,30 @@ limiting or even entirely avoiding data races.
 \subsubsection{Avoiding Data Races}
 \label{sec:toolsoftrade:Avoiding Data Races}
 
+``의사 선생님, 공유된 변수를 동시적으로 접근하는걸 생각하면 머리가 아파요!''
+
+``그럼 동시적으로 공유된 변수에 접근하질 마세요!!!''
+\iffalse
+
 ``Doctor, it hurts my head when I think about concurrently accessing
 shared variables!''
 
 ``Then stop concurrently accessing shared variables!!!''
+\fi
+
+이 의사 선생님의 조언은 도움이 되지 않는다 생각할 수도 있겠지만, 단순화는 많은
+경우에 매우 좋은 일입니다.
+그리고 동시적으로 공유 변수에 접근하는걸 막는 방법 중 시간이 검증한 방법 중
+하나는 Chapter~\ref{chp:Locking} 에서 이야기 된 것처럼 락킹을 사용하는 겁니다.
+또다른 방법은 Chapter~\ref{chp:Data Ownership} 에서 이야기한 것처럼 ``공유된''
+변수를 하나의 쓰레드 또는 CPU 에서만 접근하는 겁니다.
+이것들을 조합하는 것도 가능한데, 예를 들어, 특정 변수는 특정 락이 잡혀 있는
+동안 하나의 CPU 또는 쓰레드에 의해서만 수정되고, 같은 쓰레드 또는 CPU 에
+의해서, 또는 같은 락을 잡고 있는 다른 누군가에 의해서 읽혀질 수도 있습니다.
+``모든 작은 것들이 도움이 된다'' 는 정신에 입각해서, 일부 경우에 평범한 로드와
+스토어를 허용하는 경우들을 나열합니다, 다른 경우들에는 마킹이 필요하지만요
+(말하자면 \co{READ_ONCE()} 와 \co{WRITE_ONCE()}:
+\iffalse
 
 The doctor's advice might seem unhelpful, but simplification is often
 a very good thing.
@@ -3840,8 +3860,22 @@ In the spirit of ``every little bit helps'', here is a list of
 ways of allowing plain loads and stores in some cases, while requiring
 markings (such as \co{READ_ONCE()} and \co{WRITE_ONCE()}) for other
 cases:
+\fi
 
 \begin{enumerate}
+\item	만약 어떤 공유 변수가 특정 주인 CPU 나 쓰레드에 의해 특정 락을 잡고
+	있는 동안만 수정된다면, 모든 스토어는 \co{WRITE_ONCE()} 를 사용해야
+	하고, 이 락을 잡고 있지 않은 주인이 아닌 CPU 또는 쓰레드들은 로드를
+	위해 \co{READ_ONCE()} 를 사용해야만 합니다.
+	다른 CPU 나 쓰레드가 해당 락을 잡게 되므로, 주인 CPU 또는 쓰레드는
+	평범한 로드를 써도 됩니다.
+\item	공유 변수가 특정 락을 잡고 있는 동안만 수정된다면, 모든 스토어가
+	\co{WRITE_ONCE()} 를 사용해야 합니다.
+	이 락을 잡지 않고 있는 CPU 또는 쓰레드는 로드를 위해 \co{READ_ONCE()}
+	를 사용해야 합니다.
+	이 락을 잡고 있는 CPU 또는 쓰레드는 평범한 로드를 사용해도 됩니다.
+\iffalse
+
 \item	If a shared variable is only modified while holding a given
 	lock by a given owning CPU or thread, then all stores must use
 	\co{WRITE_ONCE()} and non-owning CPUs or threads that
@@ -3853,11 +3887,29 @@ cases:
 	CPUs or threads not holding the lock must use \co{READ_ONCE()}
 	for loads.
 	CPUs or threads holding the lock may use plain loads.
+\fi
+\item	공유 변수가 주인 CPU 또는 스레드에 의해서만 수정된다면, 모든 스토어는
+	\co{WRITE_ONCE()} 를 사용해야 하고 주인이 아닌 CPU 또는 쓰레드는 로드를
+	위해 \co{READ_ONCE()} 를 사용해야 합니다.
+	주인 CPU 또는 쓰레드는 평범한 로드를 사용해도 됩니다.
+\iffalse
+
 \item	If a shared variable is only modified by a given owning CPU or
 	thread, then all stores must use \co{WRITE_ONCE()} and non-owning
 	CPUs or threads must use \co{READ_ONCE()} for loads.
 	The owning CPU or thread may use plain loads.
+\fi
 \end{enumerate}
+
+대부분의 경우, 공유 변수로의 로드와 스토어는 반드시 \co{READ_ONCE()} 와
+\co{WRITE_ONCE()} 또는 이보다 강한 것들을 각각 사용해야 합니다.
+하지만 \co{READ_ONCE()} 도 \co{WRITE_ONCE()} 도 어떤 순서 보장을 제공하지
+않는다는 의문이 떠오르게 될겁니다.
+순서 보장을 제공하는데 대한 정보를 위해선
+앞의 Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution} 또는
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+를 참고하시기 바랍니다.
+\iffalse
 
 In most other cases, loads from and stores to a shared variable must
 use \co{READ_ONCE()} and \co{WRITE_ONCE()} or stronger, respectively.
@@ -3867,6 +3919,14 @@ See the above
 Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution} or
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
 for information on providing ordering guarantees.
+\fi
+
+한가지 중요한 특수 케이스는 특정 변수가 프로세스 수준 코드로 공유되면서
+언터럽트나 시그널 핸들러에 의해서도 공유되지만, 다른 CPU 또는 쓰레드에 의해서는
+접근되지 않는 경우입니다.
+이 경우, 프로세스 수준 코드는 이 변수에 접근하기 위해 \co{READ_ONCE()} 와
+\co{WRITE_ONCE()} 또는 그보다 강한 것들을 사용해야 합니다.
+\iffalse
 
 One important special case is when a given variable is shared by
 process-level code on the one hand and by an interrupt or signal handler
@@ -3874,11 +3934,24 @@ on the other, but is never accessed concurrently by some other CPU or
 thread.
 In this case, the process-level code must use \co{READ_ONCE()} and
 \co{WRITE_ONCE()} or stronger to access this variable.
+\fi
 
 \QuickQuiz{}
+	특정 인터럽트나 시그널 핸들러가 그 스스로 인터럽트 되면 어떻게 되나요?
+	\iffalse
+
 	What needs to happen if a given interrupt or signal handler
 	might itself be interrupted?
+	\fi
 \QuickQuizAnswer{
+	그렇다면 그 인터럽트 가능한 핸들러는 인터럽트를 처리하는 핸들러가
+	접근할 수 있는 모든 변수로의 접근에 \co{READ_ONCE()} 와
+	\co{WRITE_ONCE()} 도는 그보다 강한 것을 사용해야 합니다.
+	그 스스로는 인터럽트 당할 수 없거나 인터럽트 하는 핸들러와 어떤 변수도
+	공유하지 않는 코드만이 평범한 액세스를 사용할 수 있고, 그렇다 하더라도
+	다른 CPU 또는 스레드에서 동시에 그 변수들을 접근하지 않아야 합니다.
+	\iffalse
+
 	Then that interruptible handler must also use \co{READ_ONCE()} and
 	\co{WRITE_ONCE()} or stronger to access any variable that
 	might be accessed by the interrupting handler.
@@ -3887,11 +3960,16 @@ In this case, the process-level code must use \co{READ_ONCE()} and
 	may safely use plain accesses, and even then only if those
 	variables cannot be concurrently accessed by some other CPU or
 	thread.
+	\fi
 } \QuickQuizEnd
+
+이런 데이터 레이스 제거 패턴의 많은 예제가 Chapter~\ref{chp:Counting} 에
+있습니다.
+\iffalse
 
 Examples of many of these data-race-avoidance patterns are presented in
 Chapter~\ref{chp:Counting}.
->>>>>>> paul/master
+\fi
 
 \subsection{Atomic Operations}
 \label{sec:toolsoftrade:Atomic Operations}
