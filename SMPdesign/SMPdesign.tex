@@ -203,36 +203,32 @@ careful choice of data structure, can be arbitrarily large.
 \fi
 
 \begin{listing}[tbhp]
-{ \scriptsize
-\begin{verbbox}
-  1 struct hash_table
-  2 {
-  3   long nbuckets;
-  4   struct node **buckets;
-  5 };
-  6
-  7 typedef struct node {
-  8   unsigned long key;
-  9   struct node *next;
- 10 } node_t;
- 11
- 12 int hash_search(struct hash_table *h, long key)
- 13 {
- 14   struct node *cur;
- 15
- 16   cur = h->buckets[key % h->nbuckets];
- 17   while (cur != NULL) {
- 18     if (cur->key >= key) {
- 19       return (cur->key == key);
- 20     }
- 21     cur = cur->next;
- 22   }
- 23   return 0;
- 24 }
-\end{verbbox}
+\begin{VerbatimL}[commandchars=\\\[\]]
+struct hash_table
+{
+	long nbuckets;
+	struct node **buckets;
+};
+
+typedef struct node {
+	unsigned long key;
+	struct node *next;
+} node_t;
+
+int hash_search(struct hash_table *h, long key)
+{
+	struct node *cur;
+
+	cur = h->buckets[key % h->nbuckets];
+	while (cur != NULL) {
+		if (cur->key >= key) {
+			return (cur->key == key);
+		}
+		cur = cur->next;
+	}
+	return 0;
 }
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Sequential-Program Hash Table Search}
 \label{lst:SMPdesign:Sequential-Program Hash Table Search}
 \end{listing}
@@ -310,43 +306,39 @@ lock before returning.
 \fi
 
 \begin{listing}[tbhp]
-{ \scriptsize
-\begin{verbbox}
-  1 spinlock_t hash_lock;
-  2
-  3 struct hash_table
-  4 {
-  5   long nbuckets;
-  6   struct node **buckets;
-  7 };
-  8
-  9 typedef struct node {
- 10   unsigned long key;
- 11   struct node *next;
- 12 } node_t;
- 13
- 14 int hash_search(struct hash_table *h, long key)
- 15 {
- 16   struct node *cur;
- 17   int retval;
- 18
- 19   spin_lock(&hash_lock);
- 20   cur = h->buckets[key % h->nbuckets];
- 21   while (cur != NULL) {
- 22     if (cur->key >= key) {
- 23       retval = (cur->key == key);
- 24       spin_unlock(&hash_lock);
- 25       return retval;
- 26     }
- 27     cur = cur->next;
- 28   }
- 29   spin_unlock(&hash_lock);
- 30   return 0;
- 31 }
-\end{verbbox}
+\begin{VerbatimL}[commandchars=\\\[\]]
+spinlock_t hash_lock;
+
+struct hash_table
+{
+	long nbuckets;
+	struct node **buckets;
+};
+
+typedef struct node {
+	unsigned long key;
+	struct node *next;
+} node_t;
+
+int hash_search(struct hash_table *h, long key)
+{
+	struct node *cur;
+	int retval;
+
+	spin_lock(&hash_lock);
+	cur = h->buckets[key % h->nbuckets];
+	while (cur != NULL) {
+		if (cur->key >= key) {
+			retval = (cur->key == key);
+			spin_unlock(&hash_lock);
+			return retval;
+		}
+		cur = cur->next;
+	}
+	spin_unlock(&hash_lock);
+	return 0;
 }
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Code-Locking Hash Table Search}
 \label{lst:SMPdesign:Code-Locking Hash Table Search}
 \end{listing}
@@ -432,48 +424,44 @@ in the form of an additional data structure, the \co{struct bucket}.
 \fi
 
 \begin{listing}[tb]
-{ \scriptsize
-\begin{verbbox}
-  1 struct hash_table
-  2 {
-  3   long nbuckets;
-  4   struct bucket **buckets;
-  5 };
-  6
-  7 struct bucket {
-  8   spinlock_t bucket_lock;
-  9   node_t *list_head;
- 10 };
- 11
- 12 typedef struct node {
- 13   unsigned long key;
- 14   struct node *next;
- 15 } node_t;
- 16
- 17 int hash_search(struct hash_table *h, long key)
- 18 {
- 19   struct bucket *bp;
- 20   struct node *cur;
- 21   int retval;
- 22
- 23   bp = h->buckets[key % h->nbuckets];
- 24   spin_lock(&bp->bucket_lock);
- 25   cur = bp->list_head;
- 26   while (cur != NULL) {
- 27     if (cur->key >= key) {
- 28       retval = (cur->key == key);
- 29       spin_unlock(&bp->bucket_lock);
- 30       return retval;
- 31     }
- 32     cur = cur->next;
- 33   }
- 34   spin_unlock(&bp->bucket_lock);
- 35   return 0;
- 36 }
-\end{verbbox}
+\begin{VerbatimL}
+struct hash_table
+{
+	long nbuckets;
+	struct bucket **buckets;
+};
+
+struct bucket {
+	spinlock_t bucket_lock;
+	node_t *list_head;
+};
+
+typedef struct node {
+	unsigned long key;
+	struct node *next;
+} node_t;
+
+int hash_search(struct hash_table *h, long key)
+{
+	struct bucket *bp;
+	struct node *cur;
+	int retval;
+
+	bp = h->buckets[key % h->nbuckets];
+	spin_lock(&bp->bucket_lock);
+	cur = bp->list_head;
+	while (cur != NULL) {
+		if (cur->key >= key) {
+			retval = (cur->key == key);
+			spin_unlock(&bp->bucket_lock);
+			return retval;
+		}
+		cur = cur->next;
+	}
+	spin_unlock(&bp->bucket_lock);
+	return 0;
 }
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Data-Locking Hash Table Search}
 \label{lst:SMPdesign:Data-Locking Hash Table Search}
 \end{listing}
@@ -1317,43 +1305,39 @@ shows how the hash search might be implemented using reader-writer locking.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 rwlock_t hash_lock;
-  2
-  3 struct hash_table
-  4 {
-  5   long nbuckets;
-  6   struct node **buckets;
-  7 };
-  8
-  9 typedef struct node {
- 10   unsigned long key;
- 11   struct node *next;
- 12 } node_t;
- 13
- 14 int hash_search(struct hash_table *h, long key)
- 15 {
- 16   struct node *cur;
- 17   int retval;
- 18
- 19   read_lock(&hash_lock);
- 20   cur = h->buckets[key % h->nbuckets];
- 21   while (cur != NULL) {
- 22     if (cur->key >= key) {
- 23       retval = (cur->key == key);
- 24       read_unlock(&hash_lock);
- 25       return retval;
- 26     }
- 27     cur = cur->next;
- 28   }
- 29   read_unlock(&hash_lock);
- 30   return 0;
- 31 }
-\end{verbbox}
+\begin{VerbatimL}[commandchars=\\\[\]]
+rwlock_t hash_lock;
+
+struct hash_table
+{
+	long nbuckets;
+	struct node **buckets;
+};
+
+typedef struct node {
+	unsigned long key;
+	struct node *next;
+} node_t;
+
+int hash_search(struct hash_table *h, long key)
+{
+	struct node *cur;
+	int retval;
+
+	read_lock(&hash_lock);
+	cur = h->buckets[key % h->nbuckets];
+	while (cur != NULL) {
+		if (cur->key >= key) {
+			retval = (cur->key == key);
+			read_unlock(&hash_lock);
+			return retval;
+		}
+		cur = cur->next;
+	}
+	read_unlock(&hash_lock);
+	return 0;
 }
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Reader-Writer-Locking Hash Table Search}
 \label{lst:SMPdesign:Reader-Writer-Locking Hash Table Search}
 \end{listing}
@@ -1399,51 +1383,49 @@ and likely perform better.
 \fi
 
 \begin{listing}[tb]
-{ \scriptsize
-\begin{verbbox}
-  1 struct hash_table
-  2 {
-  3   long nbuckets;
-  4   struct bucket **buckets;
-  5 };
-  6
-  7 struct bucket {
-  8   spinlock_t bucket_lock;
-  9   node_t *list_head;
- 10 };
- 11
- 12 typedef struct node {
- 13   spinlock_t node_lock;
- 14   unsigned long key;
- 15   struct node *next;
- 16 } node_t;
- 17
- 18 int hash_search(struct hash_table *h, long key)
- 19 {
- 20   struct bucket *bp;
- 21   struct node *cur;
- 22   int retval;
- 23
- 24   bp = h->buckets[key % h->nbuckets];
- 25   spin_lock(&bp->bucket_lock);
- 26   cur = bp->list_head;
- 27   while (cur != NULL) {
- 28     if (cur->key >= key) {
- 29       spin_lock(&cur->node_lock);
- 30       spin_unlock(&bp->bucket_lock);
- 31       retval = (cur->key == key);
- 32       spin_unlock(&cur->node_lock);
- 33       return retval;
- 34     }
- 35     cur = cur->next;
- 36   }
- 37   spin_unlock(&bp->bucket_lock);
- 38   return 0;
- 39 }
-\end{verbbox}
+\begin{linelabel}[ln:SMPdesign:Hierarchical-Locking Hash Table Search]
+\begin{VerbatimL}[commandchars=\\\[\]]
+struct hash_table
+{
+	long nbuckets;
+	struct bucket **buckets;
+};
+
+struct bucket {
+	spinlock_t bucket_lock;
+	node_t *list_head;
+};
+
+typedef struct node {
+	spinlock_t node_lock;
+	unsigned long key;
+	struct node *next;
+} node_t;
+
+int hash_search(struct hash_table *h, long key)
+{
+	struct bucket *bp;
+	struct node *cur;
+	int retval;
+
+	bp = h->buckets[key % h->nbuckets];
+	spin_lock(&bp->bucket_lock);
+	cur = bp->list_head;
+	while (cur != NULL) {
+		if (cur->key >= key) {
+			spin_lock(&cur->node_lock);
+			spin_unlock(&bp->bucket_lock);
+			retval = (cur->key == key);\lnlbl[retval]
+			spin_unlock(&cur->node_lock);
+			return retval;
+		}
+		cur = cur->next;
+	}
+	spin_unlock(&bp->bucket_lock);
+	return 0;
 }
-\centering
-\theverbbox
+\end{VerbatimL}
+\end{linelabel}
 \caption{Hierarchical-Locking Hash Table Search}
 \label{lst:SMPdesign:Hierarchical-Locking Hash Table Search}
 \end{listing}
@@ -1462,7 +1444,8 @@ and likely perform better.
 	해제에 드는 오버헤드보다 커질 수도 있을 것입니다.
 	\iffalse
 
-	If the comparison on line~31 of
+	If the comparison on
+        line~\ref{ln:SMPdesign:Hierarchical-Locking Hash Table Search:retval} of
 	Listing~\ref{lst:SMPdesign:Hierarchical-Locking Hash Table Search}
 	were replaced by a much heavier-weight operation,
 	then releasing \co{bp->bucket_lock} \emph{might} reduce lock
@@ -1520,12 +1503,11 @@ data ownership to this problem---simply carve up memory so that
 each CPU owns its share.
 For example, suppose that a system with two CPUs has two gigabytes
 of memory (such as the one that I am typing on right now).
-We could simply assign each CPU one gigabyte of memory, and allow
-each CPU to access its own private chunk of memory, without the
-need for locking and its complexities and overheads.
-Unfortunately, this simple scheme breaks down if an algorithm happens
-to have CPU~0 allocate all of the memory and CPU~1 the free it, as
-would happen in a simple producer-consumer workload.
+We could simply assign each CPU one gigabyte of memory, and allow each
+CPU to allocate from its own gigabyte, without the need for locking and
+its complexities and overheads.
+Unfortunately, this scheme fails when CPU~0 only allocates memory and
+CPU~1 only frees it, as happens in simple producer-consumer workloads.
 
 The other extreme, code locking, suffers from excessive lock contention
 and overhead~\cite{McKenney93}.
@@ -1594,8 +1576,8 @@ caches are shown in
 Listing~\ref{lst:SMPdesign:Allocator-Cache Data Structures}.
 The ``Global Pool'' of Figure~\ref{fig:SMPdesign:Allocator Cache Schematic}
 is implemented by \co{globalmem} of type \co{struct globalmempool},
-and the two CPU pools by the per-CPU variable \co{percpumem} of
-type \co{struct percpumempool}.
+and the two CPU pools by the per-thread variable \co{perthreadmem} of
+type \co{struct perthreadmempool}.
 Both of these data structures have arrays of pointers to blocks
 in their \co{pool} fields, which are filled from index zero upwards.
 Thus, if \co{globalmem.pool[3]} is \co{NULL}, then the remainder of
@@ -1612,27 +1594,7 @@ must be empty.\footnote{
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 #define TARGET_POOL_SIZE 3
-  2 #define GLOBAL_POOL_SIZE 40
-  3
-  4 struct globalmempool {
-  5   spinlock_t mutex;
-  6   int cur;
-  7   struct memblock *pool[GLOBAL_POOL_SIZE];
-  8 } globalmem;
-  9
- 10 struct percpumempool {
- 11   int cur;
- 12   struct memblock *pool[2 * TARGET_POOL_SIZE];
- 13 };
- 14
- 15 DEFINE_PER_THREAD(struct percpumempool, percpumem);
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/SMPdesign/smpalloc@data_struct.fcv}
 \caption{Allocator-Cache Data Structures}
 \label{lst:SMPdesign:Allocator-Cache Data Structures}
 \end{listing}
@@ -1685,54 +1647,30 @@ Line~10-14 는 블럭들을 글로벌에서 per-thread 풀로 로컬 풀이 목�
 그렇지 않다면, line~23 에서 메모리가 부족하다는 슬픈 이야기를 전합니다.
 \iffalse
 
+\begin{lineref}[ln:SMPdesign:smpalloc:alloc]
 The allocation function \co{memblock_alloc()} may be seen in
 Listing~\ref{lst:SMPdesign:Allocator-Cache Allocator Function}.
-Line~7 picks up the current thread's per-thread pool,
-and line~8 check to see if it is empty.
+Line~\lnref{pick} picks up the current thread's per-thread pool,
+and line~\lnref{chk:empty} checks to see if it is empty.
 
-If so, lines~9-16 attempt to refill it from the global pool
-under the spinlock acquired on line~9 and released on line~16.
-Lines~10-14 move blocks from the global to the per-thread pool until
+If so, lines~\lnref{ack}-\lnref{rel} attempt to refill it
+from the global pool
+under the spinlock acquired on line~\lnref{ack} and released on line~\lnref{rel}.
+Lines~\lnref{loop:b}-\lnref{loop:e} move blocks from the global
+to the per-thread pool until
 either the local pool reaches its target size (half full) or
-the global pool is exhausted, and line~15 sets the per-thread pool's
+the global pool is exhausted, and line~\lnref{set} sets the per-thread pool's
 count to the proper value.
 
-In either case, line~18 checks for the per-thread pool still being
-empty, and if not, lines~19-21 remove a block and return it.
-Otherwise, line~23 tells the sad tale of memory exhaustion.
+In either case, line~\lnref{chk:notempty} checks for the per-thread
+pool still being
+empty, and if not, lines~\lnref{rem:b}-\lnref{rem:e} remove a block and return it.
+Otherwise, line~\lnref{ret:NULL} tells the sad tale of memory exhaustion.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 struct memblock *memblock_alloc(void)
-  2 {
-  3   int i;
-  4   struct memblock *p;
-  5   struct percpumempool *pcpp;
-  6
-  7   pcpp = &__get_thread_var(percpumem);
-  8   if (pcpp->cur < 0) {
-  9     spin_lock(&globalmem.mutex);
- 10     for (i = 0; i < TARGET_POOL_SIZE &&
- 11                 globalmem.cur >= 0; i++) {
- 12       pcpp->pool[i] = globalmem.pool[globalmem.cur];
- 13       globalmem.pool[globalmem.cur--] = NULL;
- 14     }
- 15     pcpp->cur = i - 1;
- 16     spin_unlock(&globalmem.mutex);
- 17   }
- 18   if (pcpp->cur >= 0) {
- 19     p = pcpp->pool[pcpp->cur];
- 20     pcpp->pool[pcpp->cur--] = NULL;
- 21     return p;
- 22   }
- 23   return NULL;
- 24 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/SMPdesign/smpalloc@alloc.fcv}
 \caption{Allocator-Cache Allocator Function}
 \label{lst:SMPdesign:Allocator-Cache Allocator Function}
 \end{listing}
@@ -1751,48 +1689,43 @@ line~13 에서는 per-thread 풀의 카운트를 올바른 값으로 재조정 �
 어떤 경우든, line~16 에서는 새로 해제된 블럭을 per-thread 풀에 넣습니다.
 \iffalse
 
+\begin{lineref}[ln:SMPdesign:smpalloc:free]
 Listing~\ref{lst:SMPdesign:Allocator-Cache Free Function} shows
 the memory-block free function.
-Line~6 gets a pointer to this thread's pool, and
-line~7 checks to see if this per-thread pool is full.
+Line~\lnref{get} gets a pointer to this thread's pool, and
+line~\lnref{chk:full} checks to see if this per-thread pool is full.
 
-If so, lines~8-15 empty half of the per-thread pool into the global pool,
-with lines~8 and~14 acquiring and releasing the spinlock.
-Lines~9-12 implement the loop moving blocks from the local to the
-global pool, and line~13 sets the per-thread pool's count to the proper
+If so, lines~\lnref{acq}-\lnref{empty:e} empty half of the per-thread pool
+into the global pool,
+with lines~\lnref{acq} and~\lnref{rel} acquiring and releasing the spinlock.
+Lines~\lnref{loop:b}-\lnref{loop:e} implement the loop moving blocks
+from the local to the
+global pool, and line~\lnref{set} sets the per-thread pool's count to the proper
 value.
 
-In either case, line~16 then places the newly freed block into the
+In either case, line~\lnref{place} then places the newly freed block into the
 per-thread pool.
+\end{lineref}
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 void memblock_free(struct memblock *p)
-  2 {
-  3   int i;
-  4   struct percpumempool *pcpp;
-  5
-  6   pcpp = &__get_thread_var(percpumem);
-  7   if (pcpp->cur >= 2 * TARGET_POOL_SIZE - 1) {
-  8     spin_lock(&globalmem.mutex);
-  9     for (i = pcpp->cur; i >= TARGET_POOL_SIZE; i--) {
- 10       globalmem.pool[++globalmem.cur] = pcpp->pool[i];
- 11       pcpp->pool[i] = NULL;
- 12     }
- 13     pcpp->cur = i;
- 14     spin_unlock(&globalmem.mutex);
- 15   }
- 16   pcpp->pool[++pcpp->cur] = p;
- 17 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/SMPdesign/smpalloc@free.fcv}
 \caption{Allocator-Cache Free Function}
 \label{lst:SMPdesign:Allocator-Cache Free Function}
 \end{listing}
+
+\QuickQuiz{}
+	Doesn't this resource-allocator design resemble that of
+	the approximate limit counters covered in
+	Section~\ref{sec:count:Approximate Limit Counters}?
+\QuickQuizAnswer{
+	Indeed it does!
+	We are used to thinking of allocating and freeing memory,
+	but the algorithms in
+	Section~\ref{sec:count:Approximate Limit Counters}
+	are taking very similar actions to allocate and free
+	``count''.
+} \QuickQuizEnd
 
 \subsubsection{Performance}
 
