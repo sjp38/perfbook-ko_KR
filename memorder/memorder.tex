@@ -2289,10 +2289,10 @@ addition, subtraction, and array indexing.\footnote{
 \fi
 
 어떤 사람들은 line~21 의 헤드 포인터 로드가 line~22 의 dereference 전으로 순서
-잡히길 바랄 겁니다.
+잡히길 바랄 텐데, 리눅스 v4.15 이후 버전에선 실제로 그렇습니다.
 하지만,
-Section~\ref{sec:memorder:Alpha} 에서 설명할, 종속적 로드에 대한 예측된 값의
-사용을 할 수 있는 DEC Alpha 에서는 그렇지 않을 겁니다.
+Section~\ref{sec:memorder:Alpha} 에서 설명할, 종속적 로드에 대한 예측된 값
+사용을 할 수 있는 리눅스 v4.15 전 버전의 DEC Alpha 에서는 그렇지 않을 겁니다.
 따라서,
 Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}
 의 \co{exists} 절은 발동될 수 \emph{있습니다}.
@@ -2348,8 +2348,12 @@ exists (1:r2=x0 /\ 1:r3=1)
 
 Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
 (\path{C-MP+o-wmb-o+ld-addr-o.litmus})
-은 DEC Alpha 도 포함해서 이식성 있게 동작하도록 어떻게 할 수 있는지 보이는데,
-line~21 의 \co{READ_ONCE()} 를 \co{lockless_dereference()} 로 대체하는 것으로,
+은 어떻게 하면 이걸 DEC Alpha 에서 돌아가는 오래된 리눅스 커널에서 안정적으로
+동작하도록 할 수 있는지 보이는데, line~21 의 \co{READ_ONCE()} 를
+\co{lockless_dereference()} 로 대체하는 것으로,\footnote{
+	\co{lockless_dereference()} 는 v4.15 이후 버전에서는 필요치 않고,
+	따라서 이 리눅스 커널들에서는 해당 기능이 존재치 않음을 알아 두시기
+	바랍니다.}
 \co{lockless_dereference()} 는 DEC Alpha 외의 모든 플랫폼에서 \co{READ_ONCE()}
 와 동일하지만, DEC Alpha 에서는 \co{READ_ONCE()} 뒤에 \co{smp_mb()} 를 붙여
 동작해서 모든 플랫폼에서 필요한 순서규칙을 강제하고, 결국 \co{exists} 절이
@@ -2358,7 +2362,6 @@ line~21 의 \co{READ_ONCE()} 를 \co{lockless_dereference()} 로 대체하는 �
 
 Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
 (\path{C-MP+o-wmb-o+ld-addr-o.litmus})
-% TODO: Apply
 shows how to make this work reliably on old Linux kernels running on
 DEC Alpha, by
 replacing line~21's \co{READ_ONCE()} with \co{lockless_dereference()},\footnote{
@@ -6996,7 +6999,11 @@ Listing~\ref{lst:memorder:Insert and Lock-Free Search (No Ordering)}
 이 그림의 line~9 에서의 \co{smp_wmb()} 는 line~6-8 의 원소 초기화가 line~10
 에서 원소가 추가되기 전에 수행될 것을 보장해서 이 lock-free 탐색이 제대로
 동작할 겁니다.
-정확히 말하면, Alpha 를 {\em 제외한} 모든 CPU 에서 이 보장이 지켜집니다.
+정확히 말하면, Alpha 를 {\em 제외한} 모든 CPU 에서 이 보장이
+지켜집니다.\footnote{
+	하지만 리눅스 커널 버전 v4.15 이후에서는 \co{READ_ONCE()} 가 Alpha
+	에서는 메모리 배리어를 만들도록 하며, 따라서 이 이야기는 그보다 오래된
+	버전의 리눅스 커널들에만 적용됩니다.}
 \iffalse
 
 It may seem strange to say much of anything about a CPU whose end of life
@@ -7153,8 +7160,10 @@ in Alpha's heyday.
 하지만, 이는 읽기에 대해 data dependency 를 지키는 시스템들 (ARM, Itanium, PPC,
 그리고 SPARC) 에는 불필요한 오버헤드를 가져올 수 있습니다.
 그래서 이런 시스템에서의 오버헤드를 없애기 위해 \co{smp_read_barrier_depends()}
-기능이 리눅스 커널에 추가되었습니다.
-이 기능이
+기능이 리눅스 커널에 추가되었으며, 또한 리눅스 커널 v4.15 에서 핵심 커널 코드가
+더이상 이런 DEC Alpha 의 측면을 신경쓰지 않아도 되게끔 \co{READ_ONCE()} 에
+추가되었습니다.
+이 \co{smp_read_barrier_depends()} 기능이
 Listing~\ref{lst:memorder:Insert and Lock-Free Search (No Ordering)} 의 line~19
 에 추가될 수 있습니다만,
 Listing~\ref{lst:memorder:Safe Insert and Lock-Free Search} 의 line~17 과~22 에
