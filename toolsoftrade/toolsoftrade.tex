@@ -3067,6 +3067,28 @@ void t1(void)
 \end{listing}
 
 \begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads]
+컴파일러는 놀라우리 만큼 넓은 크기의 코드를 가로질러 로드를 합칠 수 있습니다.
+예를 들어,
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads} 에서,
+\co{t0()} 와 \co{t1()} 은 동시에 수행되고, \co{do_something()} 과
+\co{do_something_else()} 는 인라인 함수입니다.
+라인~\lnref{gp} 는 포인터 \co{gp} 를 선언하는데, C 는 이를 기본값 \co{NULL} 로
+초기화 시킵니다.
+어떤 시점에서, \co{t0()} 의 라인~\lnref{wgp} 에서는 \co{NULL} 이 아닌 값을
+\co{gp} 에 저장합니다.
+그사이 \co{t1()} 은 라인~\lnref{p1}, \lnref{p2}, 그리고~\lnref{p3} 에서 \co{gp}
+로부터의 로드를 세번 행합니다.
+라인~\lnref{if} 는 \co{gp} 가 \co{NULL} 이 아니란 것을 확인했으므로, 대부분
+라인~\lnref{p3} 에서의 디레퍼런스가 잘못되지 않을 거라 믿을 겁니다.
+불행히도, 컴파일러는 라인~\lnref{p1} 과~\lnref{p3} 에서의 읽기를 합칠 수
+있는데, 이는 라인~\lnref{p1} 이 \co{NULL} 을 읽어오고 라인~\lnref{p2} 가
+\co{&myvar} 를 읽어오고, 라인~\lnref{p3} 는 \co{NULL} 을 읽어올 수 있어서,
+문제를 만들 수 있습니다.\footnote{
+	Will Deacon 은 이게 리눅스 커널에서도 발생했다고 말했습니다.}
+중간의 \co{READ_ONCE()} 는 세개의 로드가 모두 같은 변수에 대해 행해짐에도
+불구하고 다른 두 로드가 합쳐지는 걸 막지 않는다는 걸 알아두시기 바랍니다.
+\iffalse
+
 The compiler can fuse loads across surprisingly large spans of code.
 For example, in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads},
@@ -3089,21 +3111,36 @@ could load \co{NULL}, resulting in a fault.\footnote{
 Note that the intervening \co{READ_ONCE()} does not prevent the other
 two loads from being fused, despite the fact that all three are loading
 from the same variable.
+\fi
 \end{lineref}
 
 \QuickQuiz{}
+	Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads}
+	의 \co{do_something()} 과 \co{do_something_else()} 가 인라인 함수인게
+	왜 문제되죠?
+	\iffalse
+
 	Why does it matter whether \co{do_something()} and
 	\co{do_something_else()} in
 	Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads}
 	are inline functions?
+	\fi
 \QuickQuizAnswer{
 	\begin{lineref}[ln:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads]
+	\co{gp} 는 static 변수가 아니므로, \co{do_something()} 이나
+	\co{do_something_else()} 가 별도로 컴파일 되었다면, 컴파일러는 이 두
+	함수가 \co{gp} 의 값을 바꿀 수 있다고 가정하게 됩니다.
+	이 가능성은 컴파일러가 라인~\lnref{p3} 에서 \co{gp} 를 다시 읽어오는 걸
+	방지해서, \co{NULL} 포인터 디레퍼런스 문제를 막을 겁니다.
+	\iffalse
+
 	Because \co{gp} is not a static variable, if either
 	\co{do_something()} or \co{do_something_else()} were separately
 	compiled, the compiler would have to assume that either or both
 	of these two functions might change the value of \co{gp}.
 	This possibility would force the compiler to reload \co{gp}
 	on line~\lnref{p3}, thus avoiding the \co{NULL}-pointer dereference.
+	\fi
 	\end{lineref}
 } \QuickQuizEnd
 
