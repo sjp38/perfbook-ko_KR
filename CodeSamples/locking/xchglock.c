@@ -20,22 +20,24 @@
 
 #include "../api.h"
 
-typedef int xchglock_t;
+//\begin{snippet}[labelbase=ln:locking:xchglock:lock_unlock,commandchars=\\\[\]]
+typedef int xchglock_t;				//\lnlbl{typedef}
+						//\fcvexclude
+#define DEFINE_XCHG_LOCK(n) xchglock_t n = 0	//\lnlbl{initval}
 
-#define DEFINE_XCHG_LOCK(n) xchglock_t n = 0
-
-void xchg_lock(xchglock_t *xp)
+void xchg_lock(xchglock_t *xp)			//\lnlbl{lock:b}
 {
-	while (xchg(xp, 1) == 1) {
-		while (*xp == 1)
-			continue;
+	while (xchg(xp, 1) == 1) {		//\lnlbl{lock:atmxchg}
+		while (READ_ONCE(*xp) == 1)	//\lnlbl{lock:inner:b}
+			continue;		//\lnlbl{lock:inner:e}
 	}
-}
+}						//\lnlbl{lock:e}
 
-void xchg_unlock(xchglock_t *xp)
+void xchg_unlock(xchglock_t *xp)		//\lnlbl{unlock:b}
 {
-	(void)xchg(xp, 0);
-}
+	(void)xchg(xp, 0);			//\lnlbl{unlock:atmxchg}
+}						//\lnlbl{unlock:e}
+//\end{snippet}
 
 DEFINE_XCHG_LOCK(testlock);
 
@@ -57,9 +59,9 @@ void *test_xchg_lock(void *arg)
 
 	run_on(me);
 	atomic_inc(&nthreadsrunning);
-	while (ACCESS_ONCE(goflag) == GOFLAG_INIT)
+	while (READ_ONCE(goflag) == GOFLAG_INIT)
 		poll(NULL, 0, 1);
-	while (ACCESS_ONCE(goflag) == GOFLAG_RUN) {
+	while (READ_ONCE(goflag) == GOFLAG_RUN) {
 		xchg_lock(&testlock);
 		if (owner != -1)
 			lockerr++;
@@ -84,11 +86,11 @@ int main(int argc, char *argv[])
 	smp_mb();
 	while (atomic_read(&nthreadsrunning) < nthreads)
 		poll(NULL, 0, 1);
-	goflag = GOFLAG_RUN;
+	WRITE_ONCE(goflag, GOFLAG_RUN);
 	smp_mb();
 	poll(NULL, 0, 10000);
 	smp_mb();
-	goflag = GOFLAG_STOP;
+	WRITE_ONCE(goflag, GOFLAG_STOP);
 	smp_mb();
 	wait_all_threads();
 	printf("lockacqs = %lu, lockerr = %lu\n", lockacqs, lockerr);
