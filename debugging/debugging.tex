@@ -2834,13 +2834,13 @@ Section~\ref{sec:debugging:Heisenbug Discussion}.
 
 Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?} 의 카운트가
 누실되는 코드를 생각해 봅시다.
-여기에 \co{printf()} 문을 집어넣는 행위는 누실되는 카운트 엄청나게 줄이거나
+여기에 \co{printf()} 문을 집어넣는 행위는 누실되는 카운트를 엄청나게 줄이거나
 심지어 없애버릴 수도 있을 겁니다.
 하지만, 읽어오고-더하고-저장하는 시퀀스를 읽어오고-더하고-기다리고-저장하는
 시퀀스로 바꾸는 것은 누실되는 카운트의 발생률을 엄청나게 증가시킬 겁니다
 (해보세요!).
-경주 상황에 관련되어 있는 버그를 일단 발견했다면, 이런 식으로 딜레이를 추가하는
-것으로 anti-heisenbug 를 만들어내는게 많은 경우에 가능합니다.
+레이스 컨디션에 관련되어 있는 버그를 일단 발견했다면, 이런 식으로 딜레이를
+추가하는 것으로 anti-heisenbug 를 만들어내는게 많은 경우에 가능합니다.
 \iffalse
 
 Consider the count-lossy code in
@@ -2853,8 +2853,9 @@ Once you spot a bug involving a race condition, it is frequently possible
 to create an anti-heisenbug by adding delay in this manner.
 \fi
 
-물론, 이는 첫째로 경주 상황을 어떻게 찾아야 하는지에 대한 질문을 이끌어 냅니다.
-이건 약간 어둠의 예술입니다만, 그것들을 찾기 위해 할 수 있는 것들이 몇가지
+물론, 이는 먼저 레이스 컨디션을 어떻게 찾아야 하는지에 대한 의문을 이끌어
+냅니다.
+이건 약간 어둠의 예술입니다만, 이를 찾기 위해 할 수 있는 것들이 몇가지
 있습니다.
 \iffalse
 
@@ -2864,11 +2865,11 @@ This is a bit of a dark art, but there are a number of things you can
 do to find them.
 \fi
 
-한가지 방법은, 경주 조건은 많은 경우에 그 경주에 관련된 데이터를 오염시키는
-결과를 이끌어 냄을 인식하는 것입니다.
+한가지 방법은, 레이스 컨디션은 많은 경우에 그 레이스에 관련된 데이터를
+오염시키는 결과를 이끌어 냄을 인식하는 것입니다.
 따라서 모든 오염된 데이터의 동기화를 두번씩 체크하는 것은 좋은 습관입니다.
-설령 당장은 그 경주 조건을 인식할 수 없다고 해도, 오염된 데이터로의 액세스 전과
-후에 딜레이를 추가하는 것은 실패 확률을 바꿀 것입니다.
+설령 당장은 그 레이스 컨디션을 인식할 수 없다고 해도, 오염된 데이터로의 액세스
+전과 후에 딜레이를 추가하는 것은 실패 확률을 바꿀 것입니다.
 딜레이들을 잘 조직된 형태 (ex: 이진 탐색) 로 넣고 빼는 것으로, 경주 조건의
 동작에 대해 좀 더 알 수 있을 겁니다.
 \iffalse
@@ -2895,8 +2896,8 @@ search), you might learn more about the workings of the race condition.
 	\fi
 \QuickQuizAnswer{
 	실제로, 그런 상황이 일어날 수 있습니다.
-	많은 CPU 들이 그런 관계없는 포인터를 찾아내는 것을 도울 수 있는
-	하드웨어 디버깅 기능을 가지고 있습니다.
+	많은 CPU 가 그런 관계없는 포인터를 찾아내는 것을 도울 수 있는 하드웨어
+	디버깅 기능을 가지고 있습니다.
 	뿐만 아니라, core dump 를 가지고 있다면, 메모리의 오염된 영역을
 	가리키는 포인터들을 위해 core dump 를 조사할 수 있습니다.
 	또한 오염의 데이터 구조를 살펴보고, 그 구조와 맞아떨어지는 포인터들을
@@ -2917,8 +2918,8 @@ search), you might learn more about the workings of the race condition.
 	만약 이게 오염을 사라지게 한다면, 각각의 모듈에서 노출된 함수들의 인자
 	체크를 더 추가해 보는 걸 고려해 보세요.
 
-	더도 아니고 덜도 아니고, 이건 어려운 문제인데, 그게 제가 ``약간 어둠의
-	예술'' 이라는 말을 사용한 이유입니다.
+	하지만, 이건 어려운 문제인데, 그게 제가 ``약간 어둠의 예술'' 이라는
+	말을 사용한 이유입니다.
 	\iffalse
 
 	You can also step back and test the modules making up your
@@ -2997,7 +2998,7 @@ to the nature of the heisenbug.
 앞서서 우리가 본 것처럼, 실패의 확률을 증가시키는 것은 관련된 수정사항에 대한
 높은 신뢰를 얻기 쉽게 해줍니다.
 
-하지만, 일반적인 디버깅 테크닉들을 사용해서 그런 문제를 추적하는 것은 어떤
+하지만, 일반적인 디버깅 테크닉을 사용해서 그런 문제를 추적하는 것은 어떤
 경우에는 상당히 복잡합니다.
 뒤따르는 섹션들은 몇가지 다른 대안들을 제시합니다.
 \iffalse
