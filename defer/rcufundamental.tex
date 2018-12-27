@@ -136,26 +136,22 @@ summarizes RCU fundamentals.
 \label{sec:defer:Publish-Subscribe Mechanism}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 struct foo {
-  2   int a;
-  3   int b;
-  4   int c;
-  5 };
-  6 struct foo *gp = NULL;
-  7
-  8 /* . . . */
-  9
- 10 p = kmalloc(sizeof(*p), GFP_KERNEL);
- 11 p->a = 1;
- 12 p->b = 2;
- 13 p->c = 3;
- 14 gp = p;
-\end{verbbox}
-}
-\centering
-\theverbbox
+\begin{VerbatimL}
+struct foo {
+	int a;
+	int b;
+	int c;
+};
+struct foo *gp = NULL;
+
+/* . . . */
+
+p = kmalloc(sizeof(*p), GFP_KERNEL);
+p->a = 1;
+p->b = 2;
+p->c = 3;
+gp = p;
+\end{VerbatimL}
 \caption{Data Structure Publication (Unsafe)}
 \label{lst:defer:Data Structure Publication (Unsafe)}
 \end{listing}
@@ -206,17 +202,12 @@ We therefore encapsulate them into a primitive
 The last four lines would then be as follows:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 p->a = 1;
-  2 p->b = 2;
-  3 p->c = 3;
-  4 rcu_assign_pointer(gp, p);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{VerbatimN}[samepage=true]
+p->a = 1;
+p->b = 2;
+p->c = 3;
+rcu_assign_pointer(gp, p);
+\end{VerbatimN}
 
 이 \co{rcu_assign_pointer()} 는 새 구조체를 \emph{공개}하고, 컴파일러와 CPU 가
 \co{p} 로 참조되는 필드들의 할당 \emph{후에} \co{gp} 로의 할당을 수행하도록
@@ -237,17 +228,12 @@ updater, as the reader must enforce proper ordering as well.
 Consider for example the following code fragment:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 p = gp;
-  2 if (p != NULL) {
-  3   do_something_with(p->a, p->b, p->c);
-  4 }
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{VerbatimN}[samepage=true]
+p = gp;
+if (p != NULL) {
+	do_something_with(p->a, p->b, p->c);
+}
+\end{VerbatimN}
 
 이 코드 조각은 잘못된 순서에 문제가 없을 것처럼 보이지만, 안타깝게도 DEC Alpha
 CPU~\cite{PaulMcKenney2005i,PaulMcKenney2005j} 와 값을 예측하는 컴파일러
@@ -303,19 +289,14 @@ directives are required for this purpose:\footnote{
 	instruction on weakly ordered systems.)}
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 rcu_read_lock();
-  2 p = rcu_dereference(gp);
-  3 if (p != NULL) {
-  4   do_something_with(p->a, p->b, p->c);
-  5 }
-  6 rcu_read_unlock();
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{VerbatimN}[samepage=true]
+rcu_read_lock();
+p = rcu_dereference(gp);
+if (p != NULL) {
+	do_something_with(p->a, p->b, p->c);
+}
+rcu_read_unlock();
+\end{VerbatimN}
 
 따라서 \co{rcu_dereference()} 함수는 특정 포인터로 주어지는 값에 대한
 \emph{구독} 이고, 뒤따르는 dereference 오퍼레이션들은 해당 포인터를 공개한,
@@ -400,27 +381,25 @@ which shows only the non-header (blue) elements.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 struct foo {
-  2   struct list_head *list;
-  3   int a;
-  4   int b;
-  5   int c;
-  6 };
-  7 LIST_HEAD(head);
-  8
-  9 /* . . . */
- 10
- 11 p = kmalloc(sizeof(*p), GFP_KERNEL);
- 12 p->a = 1;
- 13 p->b = 2;
- 14 p->c = 3;
- 15 list_add_rcu(&p->list, &head);
-\end{verbbox}
-}
-\centering
-\theverbbox
+\begin{linelabel}[ln:defer:RCU Data Structure Publication]
+\begin{VerbatimL}[commandchars=\\\[\]]
+struct foo {
+	struct list_head *list;
+	int a;
+	int b;
+	int c;
+};
+LIST_HEAD(head);
+
+/* . . . */
+
+p = kmalloc(sizeof(*p), GFP_KERNEL);
+p->a = 1;
+p->b = 2;
+p->c = 3;
+list_add_rcu(&p->list, &head);		\lnlbl[add_rcu]
+\end{VerbatimL}
+\end{linelabel}
 \caption{RCU Data Structure Publication}
 \label{lst:defer:RCU Data Structure Publication}
 \end{listing}
@@ -441,7 +420,8 @@ Adapting the pointer-publish example for the linked list results in
 the code shown in
 Listing~\ref{lst:defer:RCU Data Structure Publication}.
 
-Line~15 must be protected by some synchronization mechanism (most
+Line~\ref{ln:defer:RCU Data Structure Publication:add_rcu}
+must be protected by some synchronization mechanism (most
 commonly some sort of lock) to prevent multiple \co{list_add_rcu()}
 instances from executing concurrently.
 However, such synchronization does not prevent this \co{list_add()}
@@ -450,18 +430,13 @@ instance from executing concurrently with RCU readers.
 Subscribing to an RCU-protected list is straightforward:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 rcu_read_lock();
-  2 list_for_each_entry_rcu(p, head, list) {
-  3   do_something_with(p->a, p->b, p->c);
-  4 }
-  5 rcu_read_unlock();
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{VerbatimN}[samepage=true]
+rcu_read_lock();
+list_for_each_entry_rcu(p, head, list) {
+	do_something_with(p->a, p->b, p->c);
+}
+rcu_read_unlock();
+\end{VerbatimN}
 
 앞의 \co{list_add_rcu()} 함수는 원소를 공개하고, 특정 리스트의 헤드에 집어넣고,
 이에 연관된 \co{list_for_each_entry_rcu()} 호출이 정상적으로 같은 원소를
@@ -541,27 +516,25 @@ Figure~\ref{fig:defer:Linux Linked List Abbreviated}.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 struct foo {
-  2   struct hlist_node *list;
-  3   int a;
-  4   int b;
-  5   int c;
-  6 };
-  7 HLIST_HEAD(head);
-  8
-  9 /* . . . */
- 10
- 11 p = kmalloc(sizeof(*p), GFP_KERNEL);
- 12 p->a = 1;
- 13 p->b = 2;
- 14 p->c = 3;
- 15 hlist_add_head_rcu(&p->list, &head);
-\end{verbbox}
-}
-\centering
-\theverbbox
+\begin{linelabel}[ln:defer:RCU hlist Publication]
+\begin{VerbatimL}[commandchars=\\\[\]]
+struct foo {
+	struct hlist_node *list;
+	int a;
+	int b;
+	int c;
+};
+HLIST_HEAD(head);
+
+/* . . . */
+
+p = kmalloc(sizeof(*p), GFP_KERNEL);
+p->a = 1;
+p->b = 2;
+p->c = 3;
+hlist_add_head_rcu(&p->list, &head);	\lnlbl[add_head]
+\end{VerbatimL}
+\end{linelabel}
 \caption{RCU {\tt hlist} Publication}
 \label{lst:defer:RCU hlist Publication}
 \end{listing}
@@ -580,25 +553,21 @@ Publishing a new element to an RCU-protected hlist is quite similar
 to doing so for the circular list,
 as shown in Listing~\ref{lst:defer:RCU hlist Publication}.
 
-As before, line~15 must be protected by some sort of synchronization
+As before, line~\ref{ln:defer:RCU hlist Publication:add_head}
+must be protected by some sort of synchronization
 mechanism, for example, a lock.
 
 Subscribing to an RCU-protected hlist is also similar to the
 circular list:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 rcu_read_lock();
-  2 hlist_for_each_entry_rcu(p, head, list) {
-  3   do_something_with(p->a, p->b, p->c);
-  4 }
-  5 rcu_read_unlock();
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{VerbatimN}[samepage=true]
+rcu_read_lock();
+hlist_for_each_entry_rcu(p, head, list) {
+	do_something_with(p->a, p->b, p->c);
+}
+rcu_read_unlock();
+\end{VerbatimN}
 
 \begin{table*}[tb]
 \renewcommand*{\arraystretch}{1.2}
@@ -620,8 +589,8 @@ Lists     & \parbox[c][0.37in][c]{1.3in}{
 					& \tco{list_for_each_entry_rcu()} \\
 \midrule
 Hlists    & \parbox[c][0.5in][c]{1.3in}{
-		\co{hlist_add_after_rcu()} \\
-		\co{hlist_add_before_rcu()}  \\
+		\co{hlist_add_behind_rcu()} \\
+		\co{hlist_add_before_rcu()} \\
 		\co{hlist_add_head_rcu()} \\
 		\co{hlist_replace_rcu()} }
 			& \tco{hlist_del_rcu()}
@@ -777,33 +746,31 @@ RCU to wait for readers:
 \end{enumerate}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 struct foo {
-  2   struct list_head *list;
-  3   int a;
-  4   int b;
-  5   int c;
-  6 };
-  7 LIST_HEAD(head);
-  8
-  9 /* . . . */
- 10
- 11 p = search(head, key);
- 12 if (p == NULL) {
- 13   /* Take appropriate action, unlock, & return. */
- 14 }
- 15 q = kmalloc(sizeof(*p), GFP_KERNEL);
- 16 *q = *p;
- 17 q->b = 2;
- 18 q->c = 3;
- 19 list_replace_rcu(&p->list, &q->list);
- 20 synchronize_rcu();
- 21 kfree(p);
-\end{verbbox}
+\begin{linelabel}[ln:defer:Canonical RCU Replacement Example]
+\begin{VerbatimL}[commandchars=\\\[\]]
+struct foo {
+	struct list_head *list;
+	int a;
+	int b;
+	int c;
+};
+LIST_HEAD(head);
+
+/* . . . */
+
+p = search(head, key);			\lnlbl[search]
+if (p == NULL) {
+	/* Take appropriate action, unlock, & return. */
 }
-\centering
-\theverbbox
+q = kmalloc(sizeof(*p), GFP_KERNEL);
+*q = *p;				\lnlbl[copy]
+q->b = 2;				\lnlbl[update]
+q->c = 3;
+list_replace_rcu(&p->list, &q->list);	\lnlbl[replace]
+synchronize_rcu();			\lnlbl[sync_rcu]
+kfree(p);				\lnlbl[kfree]
+\end{VerbatimL}
+\end{linelabel}
 \caption{Canonical RCU Replacement Example}
 \label{lst:defer:Canonical RCU Replacement Example}
 \end{listing}
@@ -823,10 +790,15 @@ Listing~\ref{lst:defer:Canonical RCU Replacement Example},
 adapted from those in Section~\ref{sec:defer:Publish-Subscribe Mechanism},
 demonstrates this process, with field \co{a} being the search key.
 
-Lines~19, 20, and~21 implement the three steps called out above.
-Lines~16-19 gives RCU (``read-copy update'') its name: while permitting
-concurrent \emph{reads}, line~16 \emph{copies} and lines~17-19
+\begin{lineref}[ln:defer:Canonical RCU Replacement Example]
+Lines~\lnref{replace}, \lnref{sync_rcu}, and~\lnref{kfree}
+implement the three steps called out above.
+Lines~\lnref{copy}-\lnref{replace}
+gives RCU (``read-copy update'') its name: while permitting
+concurrent \emph{reads}, line~\lnref{copy} \emph{copies} and
+lines~\lnref{update}-\lnref{replace}
 do an \emph{update}.
+\end{lineref}
 \fi
 
 Section~\ref{sec:defer:Introduction to RCU} 에서 이야기된 것처럼,
@@ -899,25 +871,25 @@ We can now revisit the deletion example from
 Section~\ref{sec:defer:Introduction to RCU},
 but now with the benefit of a firm understanding of the fundamental
 concepts underlying RCU.
+\begin{lineref}[ln:defer:Canonical RCU Replacement Example]
 To begin this new version of the deletion example,
-we will modify lines~11-21 in
+we will modify
+lines~\lnref{search}-\lnref{kfree} in
 Listing~\ref{lst:defer:Canonical RCU Replacement Example}
 to read as follows:
+\end{lineref}
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 p = search(head, key);
-  2 if (p != NULL) {
-  3   list_del_rcu(&p->list);
-  4   synchronize_rcu();
-  5   kfree(p);
-  6 }
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{linelabel}[ln:defer:RCU Deletion From Linked List]
+\begin{VerbatimN}[samepage=true,commandchars=\\\[\]]
+p = search(head, key);
+if (p != NULL) {
+	list_del_rcu(&p->list);		\lnlbl[del_rcu]
+	synchronize_rcu();		\lnlbl[sync_rcu]
+	kfree(p);
+}
+\end{VerbatimN}
+\end{linelabel}
 
 \begin{figure}[tb]
 \begin{center}
@@ -969,8 +941,9 @@ Figure~\ref{fig:defer:RCU Deletion From Linked List} 의 두번째 줄에 보여
 그로의 레퍼런스를 얻을 수 없음을 의미합니다.
 \iffalse
 
+\begin{lineref}[ln:defer:RCU Deletion From Linked List]
 After the \co{list_del_rcu()} on
-line~3 has completed, the \co{5,6,7}~element
+line~\lnref{del_rcu} has completed, the \co{5,6,7}~element
 has been removed from the list, as shown in the second row of
 Figure~\ref{fig:defer:RCU Deletion From Linked List}.
 Since readers do not synchronize directly with updaters,
@@ -1010,12 +983,13 @@ element~\co{5,6,7} after exiting from their RCU read-side
 critical sections.
 Therefore,
 once the \co{synchronize_rcu()} on
-line~4 completes, so that all pre-existing readers are
+line~\lnref{sync_rcu} completes, so that all pre-existing readers are
 guaranteed to have completed,
 there can be no more readers referencing this
 element, as indicated by its green shading on the third row of
 Figure~\ref{fig:defer:RCU Deletion From Linked List}.
 We are thus back to a single version of the list.
+\end{lineref}
 
 At this point, the \co{5,6,7}~element may safely be
 freed, as shown on the final row of
@@ -1039,20 +1013,17 @@ example shown in
 Listing~\ref{lst:defer:Canonical RCU Replacement Example}:
 \fi
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 q = kmalloc(sizeof(*p), GFP_KERNEL);
-  2 *q = *p;
-  3 q->b = 2;
-  4 q->c = 3;
-  5 list_replace_rcu(&p->list, &q->list);
-  6 synchronize_rcu();
-  7 kfree(p);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
+\begin{linelabel}[ln:defer:Canonical RCU Replacement Example (2nd)]
+\begin{VerbatimN}[samepage=true,commandchars=\\\[\],firstnumber=15]
+q = kmalloc(sizeof(*p), GFP_KERNEL);	\lnlbl[kmalloc]
+*q = *p;				\lnlbl[copy]
+q->b = 2;				\lnlbl[update1]
+q->c = 3;				\lnlbl[update2]
+list_replace_rcu(&p->list, &q->list);	\lnlbl[replace]
+synchronize_rcu();			\lnlbl[sync_rcu]
+kfree(p);				\lnlbl[kfree]
+\end{VerbatimN}
+\end{linelabel}
 
 \begin{figure}[tbp]
 \begin{center}
@@ -1106,7 +1077,8 @@ The following text describes how to replace the \co{5,6,7} element
 with \co{5,2,3} in such a way that any given reader sees one of these
 two values.
 
-Line~1 \co{kmalloc()}s a replacement element, as follows,
+\begin{lineref}[ln:defer:Canonical RCU Replacement Example (2nd)]
+Line~\lnref{kmalloc} \co{kmalloc()}s a replacement element, as follows,
 resulting in the state as shown in the second row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 At this point, no reader can hold a reference to the newly allocated
@@ -1126,14 +1098,15 @@ Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 네번째 줄에 보�
 바꿉니다.
 \iffalse
 
-Line~2 copies the old element to the new one, resulting in the
+Line~\lnref{copy} copies the old element to the new one, resulting in the
 state as shown in the third row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 The newly allocated element still cannot be referenced by readers, but
 it is now initialized.
 
-Line~3 updates \co{q->b} to the value ``2'', and
-line~4 updates \co{q->c} to the value ``3'', as shown on the fourth row of
+Line~\lnref{update1} updates \co{q->b} to the value ``2'', and
+line~\lnref{update2} updates \co{q->c} to the value ``3'',
+as shown on the fourth row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 \fi
 
@@ -1148,7 +1121,7 @@ Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 다섯번째 줄에
 하지만 어떤 읽기 쓰레드들이든 제대로 형태를 갖춘 리스트만을 볼 것이 보장됩니다.
 \iffalse
 
-Now, line~5 does the replacement, so that the new element is
+Now, line~\lnref{replace} does the replacement, so that the new element is
 finally visible to readers, and hence is shaded red, as shown on
 the fifth row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
@@ -1172,7 +1145,7 @@ Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 여섯번째 줄에
 돌아왔습니다만, 예전 원소는 새 원소로 바뀌어 있습니다.
 \iffalse
 
-After the \co{synchronize_rcu()} on line~6 returns,
+After the \co{synchronize_rcu()} on line~\lnref{sync_rcu} returns,
 a grace period will have elapsed, and so all reads that started before the
 \co{list_replace_rcu()} will have completed.
 In particular, any readers that might have been holding references
@@ -1196,9 +1169,10 @@ Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}.
 의 간단한 삭제의 케이스에 기반해 있습니다.
 \iffalse
 
-After the \co{kfree()} on line~7 completes, the list will
+After the \co{kfree()} on line~\lnref{kfree} completes, the list will
 appear as shown on the final row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+\end{lineref}
 
 Despite the fact that RCU was named after the replacement case,
 the vast majority of RCU usage within the Linux kernel relies on
@@ -1237,23 +1211,18 @@ versions of the list active at a given time.
 	\fi
 
 \begin{listing}[htbp]
-\scriptsize
-{
-\begin{verbbox}
-  1 spin_lock(&mylock);
-  2 p = search(head, key);
-  3 if (p == NULL)
-  4   spin_unlock(&mylock);
-  5 else {
-  6   list_del_rcu(&p->list);
-  7   spin_unlock(&mylock);
-  8   synchronize_rcu();
-  9   kfree(p);
- 10 }
-\end{verbbox}
+\begin{VerbatimL}
+spin_lock(&mylock);
+p = search(head, key);
+if (p == NULL)
+	spin_unlock(&mylock);
+else {
+	list_del_rcu(&p->list);
+	spin_unlock(&mylock);
+	synchronize_rcu();
+	kfree(p);
 }
-\centering
-\theverbbox
+\end{VerbatimL}
 \caption{Concurrent RCU Deletion}
 \label{lst:defer:Concurrent RCU Deletion}
 \end{listing}

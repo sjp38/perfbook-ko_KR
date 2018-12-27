@@ -761,6 +761,12 @@ value on row~2, however, as promised earlier, the \co{smp_mb()}
 instances straighten things out in the end.
 \fi
 
+Although full barriers such as \co{smp_mb()} have extremely strong
+ordering guarantees, their strength comes at a high price.
+A great many situations can be handled with much weaker ordering guarantees
+that use much cheaper memory-ordering instructions, or, in some case, no
+memory-ordering instructions at all.
+
 \begin{table*}[tbh]
 \small
 \centering\OneColumnHSpace{-0.7in}
@@ -777,7 +783,7 @@ instances straighten things out in the end.
 		   Y &   &   &     &      &   &   &    &    &     &  Y \\
 	Load, for example, \tco{READ_ONCE()} &  &
 		   Y &   &   &     &      &   &   &  Y &  Y &     &  Y \\
-	Unsuccessful RMW operation &  &
+	\tco{_relaxed()} RMW operation &  &
 		   Y &   &   &     &      &   &   &  Y &  Y &     &  Y \\
 	\tco{smp_read_barrier_depends()} &  &
 		     & Y &   &     &      &   &   &  Y &  Y &     &    \\
@@ -825,11 +831,6 @@ instances straighten things out in the end.
 \label{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 \end{table*}
 
-\co{smp_mb()} 같은 전체 배리어가 상당히 강력한 순서 보장을 갖긴 하지만, 그
-강력함은 높은 비용으로부터 나옵니다.
-굉장히 많은 상황들이 저렴한 메모리 순서 보장 인스트럭션을 사용하는, 또는, 어떤
-경우에 있어서는, 아예 메모리 순서 보장 인스트럭션을 사용하지 않는 훨씬 약한
-순서 보장만으로도 처리될 수 있습니다.
 Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 은 리눅스 커널의 순서 보장 도구들과 그 보장사항들을 보이는 커닝 페이퍼를
 보입니다.
@@ -842,11 +843,6 @@ Operation'' 으로 라벨링된 행들은 각 열의 도구에 의해 순서가 
 빈 셀들은 어떤 순서 보장도 제공되지 않음을 의미합니다.
 \iffalse
 
-Although full barriers such as \co{smp_mb()} have extremely strong
-ordering guarantees, their strength comes at a high price.
-A great many situations can be handled with much weaker ordering guarantees
-that use much cheaper memory-ordering instructions, or, in some case, no
-memory-ordering instructions at all.
 Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 provides a cheatsheet of the Linux kernel's ordering primitives and their
 guarantees.
@@ -873,6 +869,18 @@ Blank cells indicate that no ordering is supplied.
 같은 도구들에 적용됩니다.
 \iffalse
 
+The ``Store'' row also covers the store portion of an atomic RMW operation.
+In addition, the ``Load'' row covers the load
+component of a successful value-returning \co{_relaxed()} RMW atomic
+operation, although the combined ``\co{_relaxed()} RMW Operations''
+line provides a convenient combined reference in the value-returning case.
+A CPU executing unsuccessful value-returning atomic RMW operations must
+invalidate the corresponding variable from all other CPUs' caches.
+Therefore, oddly enough, unsuccessful value-returning atomic RMW
+operations have many of the properties of a store, which means that the
+``\co{_relaxed()} RMW Operations'' line also applies to unsuccessful
+value-returning atomic RMW operations.
+
 The \co{*_acquire} row covers \co{smp_load_acquire()},
 \co{cmpxchg_acquire()}, \co{xchg_acquire()}, and so on;
 the \co{*_release} row covers \co{smp_store_release()},
@@ -883,7 +891,8 @@ the ``Successful full-strength non-\co{void} RMW'' row covers
 The ``Successful'' qualifiers apply to primitives such as
 \co{atomic_add_unless()}, \co{cmpxchg_acquire()}, and \co{cmpxchg_release()},
 which have no effect on either memory or on ordering when they indicate
-failure, as indicated by the earlier ``Unsuccessful RMW operation'' row.
+% TODO: apply
+failure, as indicated by the earlier ``\co{_relaxed()} RMW operation'' row.
 \fi
 
 ``C'' 행은 누적성과 전파성을 의미하는데, 이에 대해서는
@@ -939,12 +948,12 @@ are at most two threads involved.
 	Note that all other operations providing ordering against accesses
 	to multiple variables also provide this same-variable ordering.
 
-	The \co{READ_ONCE()} row captures the fact that (as of 2017) compilers
+	The \co{READ_ONCE()} row captures the fact that (as of 2018) compilers
 	and CPUs do not indulge in user-visible speculative stores, so that
 	any store whose address, data, or execution depends on a prior load
-	will happen after that load completes.
-	At least assuming that these dependencies have been constructed
-	carefully as described in
+	is guaranteed to happen after that load completes.
+	However, this guarantee assumes that these dependencies have
+	been constructed carefully as described in
 	Sections~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
 	and~\ref{sec:memorder:Control-Dependency Calamities}.
 	\fi
@@ -969,19 +978,22 @@ are at most two threads involved.
 	배리어 인스트럭션을 가지고 있다는 사실을 사용합니다.
 	\iffalse
 
-	The ``Unsuccessful RMW operation'' row captures the fact that
-	even an unsuccessful RMW has done a read, and that read is
-	every bit as good as a \co{READ_ONCE()}.
+	The ``\co{_relaxed()} RMW operation'' row captures the fact
+	that a value-returning \co{_relaxed()} RMW has done a load and a
+	store, which are every bit as good as a \co{READ_ONCE()} and a
+	\co{WRITE_ONCE()}, respectively.
 
 	The \co{smp_read_barrier_depends()} row captures the fact that, with the
 	notable exception of DEC Alpha, compilers and CPUs do not indulge
 	in user-visible breakage of address dependencies, again assuming
 	that these dependencies have been constructed carefully as described in
 	Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties}.
+	However, as of version v4.15 of the Linux kernel, the fact that
+	\co{READ_ONCE()} provides dependency ordering should mean that
+	there is little further need for \co{smp_read_barrier_depends()}.
 
 	The \co{*_dereference()} row captures the address and data
-	dependency ordering provided by \co{lockless_dereference()},
-	\co{rcu_dereference()}, and friends.
+	dependency ordering provided by \co{rcu_dereference()} and friends.
 
 	The ``Successful \co{*_acquire()}'' row captures the fact that many
 	CPUs have special ``acquire'' forms of loads and of atomic RMW
@@ -1054,6 +1066,9 @@ are at most two threads involved.
 	The \co{smp_mb()} row corresponds to the full memory barrier
 	available on most platforms, with Itanium being the exception
 	that proves the rule.
+	However, even on Itanium, \co{smp_mb()} provides full ordering
+	with respect to \co{READ_ONCE()} and \co{WRITE_ONCE()},
+	as discussed in Section~\ref{sec:memorder:Itanium}.
 
 	The ``Successful full-strength non-\co{void} RMW'' row captures
 	the fact that on some platforms (such as x86) atomic RMW instructions
@@ -1063,6 +1078,9 @@ are at most two threads involved.
 	operations succeed.
 	(Full-strength atomic RMW operation's names do not end in
 	\co{_relaxed}, \co{_acquire}, or \co{_release}.)
+	% TODO: Apply
+	As noted earlier, the case where these operations do not succeed
+	is covered by the ``\co{_relaxed()} RMW operation'' row.
 	\fi
 
 	하지만, 리눅스 커널은 \co{atomic_inc()} 와 같은 \co{void} atomic RMW
@@ -1083,9 +1101,9 @@ are at most two threads involved.
 	법칙에 의해서만 제약되는 하드웨어의 특성 탓입니다.
 	\iffalse
 
-	However, the Linux kernel does not require that \co{void} atomic
-	RMW operations provide any ordering whatsoever, with the
-	canonical example being \co{atomic_inc()}.
+	However, the Linux kernel does not require that either \co{void}
+	or \co{_relaxed()} atomic RMW operations provide any ordering
+	whatsoever, with the canonical example being \co{atomic_inc()}.
 	Therefore, these operations, along with failing non-\co{void}
 	atomic RMW operations may be preceded by \co{smp_mb__before_atomic()}
 	and followed by \co{smp_mb__after_atomic()} to provide full
@@ -1098,10 +1116,9 @@ are at most two threads involved.
 
 	In short, any randomness in the table is due to the properties
 	of the underlying hardware, which are constrained by nothing other
-	than the laws of physics, as was explained back in
+	than the laws of physics, which were covered back in
 	Chapter~\ref{chp:Hardware and its Habits}.
 	\fi
-	% forward reference to rf co fr section
 } \QuickQuizEnd
 
 \QuickQuiz{}
@@ -1407,8 +1424,10 @@ Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet},
 and can be automatically analyzed given proper
 tooling~\cite{Alglave:2018:FSC:3173162.3177156}.
 Section~\ref{sec:memorder:Where is Memory Ordering Needed?} will
-circle back to this cheat sheet in light of learnings from all the
-intervening tricks and traps.
+% TODO: Apply
+circle back to this cheat sheet, presenting a more sophisicated set of
+rules of thumb in light of learnings from all the intervening tricks
+and traps.
 \fi
 
 \QuickQuiz{}
@@ -2257,11 +2276,11 @@ exists (1:r2=x0 /\ 1:r3=1)
 }
 \centering
 \theverbbox
-\caption{Message-Passing Address-Dependency Litmus Test (No Ordering)}
-\label{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}
+\caption{Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}
+\label{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}
 \end{listing}
 
-Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}
+Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}
 (\path{C-MP+o-wmb-o+o-addr-o.litmus})
 은 message-passing 패턴의 링크 버전을 보입니다.
 헤드 포인터는 \co{x1} 으로, 최초에 \co{int} 변수 \co{y} 를 가리키게 되며
@@ -2320,7 +2339,7 @@ However, prior to v4.15, this is not the case on DEC Alpha, which can
 in effect use a speculated value for the dependent load, as described
 in more detail in Section~\ref{sec:memorder:Alpha}.
 Therefore, on older versions of Linux,
-Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering)}'s
+Listing~\ref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}'s
 \co{exists} clause \emph{can} trigger.
 \fi
 
@@ -2347,7 +2366,7 @@ P1(int** x1) {
   int *r2;
   int r3;
 
-  r2 = lockless_dereference(*x1);
+  r2 = lockless_dereference(*x1); // Obsolete
   r3 = READ_ONCE(*r2);
 
 }
@@ -2357,12 +2376,11 @@ exists (1:r2=x0 /\ 1:r3=1)
 }
 \centering
 \theverbbox
-\caption{Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
-\label{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+\caption{Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
+\label{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
 \end{listing}
 
-Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
-(\path{C-MP+o-wmb-o+ld-addr-o.litmus})
+Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
 은 어떻게 하면 이걸 DEC Alpha 에서 돌아가는 오래된 리눅스 커널에서 안정적으로
 동작하도록 할 수 있는지 보이는데, line~21 의 \co{READ_ONCE()} 를
 \co{lockless_dereference()} 로 대체하는 것으로,\footnote{
@@ -2375,13 +2393,16 @@ Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependenc
 발동되지 않게 해줍니다.
 \iffalse
 
-Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
-(\path{C-MP+o-wmb-o+ld-addr-o.litmus})
-shows how to make this work reliably on old Linux kernels running on
+Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
+% \path{C-MP+o-wmb-o+ld-addr-o.litmus} available at commit bc4b1c3f3b35
+% ("styleguide: Loosen restriction on comment in litmus test")
+% TODO: Apply
+shows how to make this work reliably on pre-v4.15 Linux kernels running on
 DEC Alpha, by
 replacing line~21's \co{READ_ONCE()} with \co{lockless_dereference()},\footnote{
 	Note that \co{lockless_dereference()} is not needed on v4.15 and
-	later, and therefore is not available in these later Linux kernels.}
+	later, and therefore is not available in these later Linux kernels.
+	Nor is it needed in versions of this book containing this sentence.}
 which acts like \co{READ_ONCE()} on all platforms other than DEC Alpha,
 where it acts like a \co{READ_ONCE()} followed by an \co{smp_mb()},
 thereby forcing the required ordering on all platforms, in turn
@@ -2445,8 +2466,8 @@ Because no production-quality platform speculates stores,
 it is not possible for the \co{WRITE_ONCE()} on line~10 to overwrite
 the \co{WRITE_ONCE()} on line~21, meaning that the \co{exists}
 clause on line~25 cannot trigger, even on DEC Alpha, even
-without the \co{lockless_dereference()} that is required in the
-dependent-load case.
+% TODO: Apply
+in pre-v4.15 Linux kernels.
 \fi
 
 \QuickQuiz{}
@@ -2458,7 +2479,7 @@ dependent-load case.
 
 	But how do we know that \emph{all} platforms really avoid
 	triggering the \co{exists} clauses in
-	Listings~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+	Listings~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
 	and~\ref{lst:memorder:S Address-Dependency Litmus Test}?
 	\fi
 \QuickQuizAnswer{
@@ -2488,7 +2509,7 @@ dependent-load case.
 	The TSO platforms order all pairs of memory references except for
 	prior stores against later loads.
 	Because the address dependency on lines~21 and~22 of
-	Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+	Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
 	is instead a load followed by another load, TSO platforms preserve
 	this address dependency.
 	They also preserve the address dependency on lines~20 and~21 of
@@ -2521,7 +2542,7 @@ dependent-load case.
 	Weakly ordered platforms don't necessarily maintain ordering of
 	unrelated accesses.
 	However, the address dependencies in
-	Listings~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
+	Listings~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
 	and~\ref{lst:memorder:S Address-Dependency Litmus Test}
 	are not unrelated: There is an address dependency.
 	The hardware tracks dependencies and maintains the needed
@@ -2530,13 +2551,16 @@ dependent-load case.
 	There is one (famous) exception to this rule for weakly ordered
 	platforms, and that exception is DEC Alpha for load-to-load
 	address dependencies.
-	And this is why DEC Alpha requires the explicit memory barrier
-	supplied for it by the \co{lockless_dereference()} on line~21 of
-	Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}.
+	And this is why, in Linux kernels predating v4.15, DEC Alpha
+	requires the explicit memory barrier supplied for it by the
+	now-obsolete \co{lockless_dereference()} on line~21 of
+	Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}.
 	However, DEC Alpha does track load-to-store address dependencies,
 	which is why line~20 of
 	Listing~\ref{lst:memorder:S Address-Dependency Litmus Test}
-	does not have a \co{lockless_dereference()}.
+	% TODO: Apply
+	does not need a \co{lockless_dereference()}, even in Linux
+	kernels predating v4.15.
 	\fi
 
 	정리해 보면, 현존하는 플랫폼들은 TSO 플랫폼들 (x86, mainframe,
@@ -2549,8 +2573,11 @@ dependent-load case.
 	To sum up, current platforms either respect address dependencies
 	implicitly, as is the case for TSO platforms (x86, mainframe,
 	SPARC,~...), have hardware tracking for address dependencies
-	(ARM, PowerPC, MIPS,~...), or have the required memory barriers
-	supplied by \co{lockless_dereference()} (DEC Alpha).
+	% TODO: Apply
+	(ARM, PowerPC, MIPS,~...), have the required memory barriers
+	supplied by \co{READ_ONCE()} (DEC Alpha in Linux kernel v4.15 and
+	later), or require the memory barriers supplied by
+	\co{rcu_dereference()} (DEC Alpha in Linux kernel v4.14 and earlier).
 	\fi
 } \QuickQuizEnd
 
@@ -2662,28 +2689,6 @@ The value loaded by line~18 is what line~19 stores.
 The ordering provided by this data dependency is sufficient to prevent
 the \co{exists} clause from triggering.
 \fi
-
-\QuickQuiz{}
-	Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
-	의 line~18 은 왜 \co{lockless_dereference()} 가 필요없나요?
-	\iffalse
-
-	Why doesn't line~18 of
-	Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
-	need a \co{lockless_dereference()}?
-	\fi
-\QuickQuizAnswer{
-	Data dependency 들은 항상 로드에서 스토어로의 종속성이며, 따라서 DEC
-	Alpha 까지 포함해서 모든 플랫폼이 이를 지켜주고, 같은 이유로 로드에서
-	스토어로 이어지는 address dependency 들에 대해서도 마찬가지로
-	지켜줍니다.
-	\iffalse
-
-	Data dependencies are always load-to-store dependencies, and
-	so all platforms respect them, even DEC Alpha, and for the
-	same reasons that they respect load-to-store address dependencies.
-	\fi
-} \QuickQuizEnd
 
 Address dependency 와 마찬가지로, data dependency 도 깨지기 쉽고
 Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties} 에서
@@ -5434,9 +5439,7 @@ your compiler from breaking your dependencies.
 \iffalse
 
 The load that heads your dependency chain must use proper
-ordering, for example, \co{lockless_dereference()},
-\co{rcu_dereference()}, or
-a \co{READ_ONCE()} followed by \co{smp_read_barrier_depends()}.
+ordering, for example \co{rcu_dereference()} or \co{READ_ONCE()}.
 Failure to follow this rule can have serious side effects:
 \fi
 
@@ -6897,8 +6900,7 @@ set of memory-ordering primitives, which are as follows:
 	that depend on prior operations to be ordered.
 	This primitive is a no-op on all platforms except Alpha, but
 	is normally not used directly, but rather as part of
-	something like \co{lockless_dereference()} or
-	\co{rcu_dereference()}.
+	something like \co{READ_ONCE()} or \co{rcu_dereference()}.
 \item	[\tco{smp_mb__before_atomic()}] that forces ordering of accesses
 	preceding the \co{smp_mb__before_atomic()} against accesses following
 	a later RMW atomic operation.
@@ -7911,7 +7913,7 @@ defined to be the heavyweight {\tt sync} instruction.
 However, Linux's \co{smp_wmb()} instruction is never used for MMIO
 (since a driver must carefully order MMIOs in UP as well as
 SMP kernels, after all), so it is defined to be the lighter weight
-\co{eieio} or \co{lwsync} instruction~\cite{PaulEMcKenney2016MMIO}.
+\co{eieio} or \co{lwsync} instruction~\cite{PaulEMcKenney2016LinuxKernelMMIO}.
 This instruction may well be unique in having a five-vowel mnemonic.
 The \co{smp_mb()} instruction is also defined to be the {\tt sync}
 instruction, but both \co{smp_rmb()} and \co{rmb()} are defined to
@@ -8311,24 +8313,29 @@ Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
 
 This section revisits
 Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
-in light of the intervening discussion.
+and Section~\ref{sec:memorder:Basic Rules of Thumb},
+summarizing the intervening discussion with a more sophisticated
+set of rules of thumb.
 
-Memory-ordering operations are only required where there is a possibility
-of interaction involving at least two variables between at least two
-threads.
-As always, if a single-threaded program will provide sufficient
+The first rule of thumb is that memory-ordering operations are only
+required where there is a possibility of interaction involving at least
+two variables shared among at least two threads.
+In light of the intervening material, this single sentence encapsulates much of
+Section~\ref{sec:memorder:Basic Rules of Thumb}'s basic rules of thumb,
+for example, keeping in mind that ``memory-barrier pairing'' is a
+two-thread special case of ``cycle''.
+And, as always, if a single-threaded program will provide sufficient
 performance, why bother with parallelism?\footnote{
 	Hobbyists and researchers should of course feel free to ignore
 	this and other cautions.}
 After all, avoiding parallelism also avoids the added cost of
 memory-ordering operations.
 
+The second rule of thumb involves load-buffering situations:
 If all thread-to-thread communication in a given cycle use store-to-load links
 (that is, the next thread's load returning the value that the previous thread
-stored), minimal ordering suffices, as illustrated by
-Listings~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
-and~\ref{lst:memorder:Load-Buffering Control-Dependency Litmus Test}.
-Minimal ordering includes dependencies, acquires, and all stronger
+stored), minimal ordering suffices.
+Minimal ordering includes dependencies and acquires as well as all stronger
 ordering operations.
 \fi
 
@@ -8351,6 +8358,7 @@ Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
 교체할 수 있습니다.
 \iffalse
 
+The third rule of thumb involves release-acquire chains:
 If all but one of the links in a given cycle is a store-to-load
 link, it is sufficient to use release-acquire pairs for each of
 those store-to-load links, as illustrated by
@@ -8358,11 +8366,11 @@ Listings~\ref{lst:memorder:Long ISA2 Release-Acquire Chain}
 and~\ref{lst:memorder:Long Z6.2 Release-Acquire Chain}.
 You can replace a given acquire with a a dependency in environments permitting
 this, keeping in mind that the C11 standard's memory model does \emph{not}
-permit this.
-Note also that a dependency leading to a load must be headed by
-a \co{lockless_dereference()} or an \co{rcu_dereference()}:
-\co{READ_ONCE()} is not sufficient.
-Never forget to carefully review
+fully respect dependencies.
+Therefore, a dependency leading to a load must be headed by
+a \co{READ_ONCE()} or an \co{rcu_dereference()}:
+a plain C-language load is not sufficient.
+In addition, never forget to carefully review
 Sections~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
 and~\ref{sec:memorder:Control-Dependency Calamities}, because
 a dependency broken by your compiler is no help at all!
@@ -8371,6 +8379,31 @@ usually substitute \co{WRITE_ONCE()} plus \co{smp_wmb()} for
 \co{smp_store_release()} on the one hand,
 and \co{READ_ONCE()} plus \co{smp_rmb()} for \co{smp_load_acquire()}
 on the other.
+% TODO: Apply
+However, the wise developer will check such substitutions carefully,
+for example, using the herd tool as described in
+Section~\ref{sec:formal:Axiomatic Approaches}.
+
+\QuickQuiz{}
+	Why is it necessary to use heavier-weight ordering for
+	load-to-store and store-to-store links, but not for
+	store-to-load links?
+	What on earth makes store-to-load links so special???
+\QuickQuizAnswer{
+	Recall that load-to-store and store-to-store links can be
+	counter-temporal, as illustrated by
+	Figures~\ref{fig:memorder:Load-to-Store is Counter-Temporal}
+	and~\ref{fig:memorder:Store-to-Store is Counter-Temporal} in
+	Section~\ref{sec:memorder:Propagation}.
+	This counter-temporal nature of load-to-store and store-to-store
+	links necessitates strong ordering.
+
+	In constrast, store-to-load links are temporal, as illustrated by
+	Listings~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+	and~\ref{lst:memorder:Load-Buffering Control-Dependency Litmus Test}.
+	This temporal nature of store-to-load links permits use of
+	minimal ordering.
+} \QuickQuizEnd
 \fi
 
 해당 사이클이 두개 이상의 non-store-to-load 연결을 갖는다면 (즉, 두개 이상의
@@ -8387,6 +8420,8 @@ RCU 의 grace-period-wait 기능들 (\co{synchronize_rcu()} 와 그 외의 비�
 해치는 것보다는 성능을 해칩니다.
 \iffalse
 
+The fourth and final rule of thumb identifies where full memory barriers
+(or stronger) are required:
 If a given cycle contains two or more non-store-to-load links (that is,
 a total of two or more load-to-store and store-to-store links), you will
 need at least one full barrier between each pair of non-store-to-load
@@ -8398,10 +8433,10 @@ Full barriers include \co{smp_mb()}, successful full-strength non-\co{void}
 atomic RMW operations, and other atomic RMW operations in conjunction with
 either \co{smp_mb__before_atomic()} or \co{smp_mb__after_atomic()}.
 Any of RCU's grace-period-wait primitives (\co{synchronize_rcu()} and
-friends) also act as full barriers, but at even greater expense than
+friends) also act as full barriers, but at far greater expense than
 \co{smp_mb()}.
-With strength comes expense, though the overhead of full barriers
-usually hurts performance more than it hurts scalability.
+With strength comes expense, though full barriers
+usually hurt performance more than they hurt scalability.
 \fi
 
 이것들은 \emph{최소한의} 보장임을 알아두시기 바랍니다.
@@ -8419,7 +8454,7 @@ Section~\ref{sec:memorder:Hardware Specifics}
 사용하는게 거의 항상 더 낫습니다.
 \iffalse
 
-Note that these are the \emph{minimum} guarantees.
+Note that these four rules of thumb encapsulate \emph{minimum} guarantees.
 Different architectures may give
 more substantial guarantees,
 as discussed in Section~\ref{sec:memorder:Hardware Specifics},
@@ -8433,5 +8468,5 @@ expense of somewhat greater complexity.
 One final word of advice: Use of raw memory-ordering primitives is
 a last resort.
 It is almost always better to use existing primitives, such as locking
-or RCU, and to let those primitives take care of memory ordering for you.
+or RCU, thus letting those primitives do the memory ordering for you.
 \fi

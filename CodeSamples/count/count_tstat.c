@@ -22,7 +22,7 @@
 
 #include "../api.h"
 
-//\begin{snippet}[labelbase=ln:count:count_tstat:whole,commandchars=\\\@\$]
+//\begin{snippet}[labelbase=ln:count:count_tstat:whole,keepcomment=yes,commandchars=\\\@\$]
 unsigned long __thread counter = 0;
 unsigned long *counterp[NR_THREADS] = { NULL };
 int finalthreadcount = 0;
@@ -45,9 +45,11 @@ static __inline__ unsigned long read_count(void)
 	return sum;
 }
 
-void count_init(void)		//\fcvexclude
-{				//\fcvexclude
-}				//\fcvexclude
+#ifndef FCV_SNIPPET
+void count_init(void)
+{
+}
+#endif /* FCV_SNIPPET */
 				//\fcvexclude
 void count_register_thread(unsigned long *p)
 {
