@@ -968,9 +968,8 @@ are at most two threads involved.
 	Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
 	에서 설명한 대로 주의 깊게 구성되었다는 가정 하이긴 합니다.
 
-	\co{*_dereference()} 열은 \co{lockless_dereference()},
-	\co{rcu_dereference()}, 등등에 의해 제공되는 주소와 데이터 종속성 순서
-	규칙을 사용합니다.
+	\co{*_dereference()} 열은 \co{rcu_dereference()} 등에 의해 제공되는
+	주소와 데이터 종속성 순서 규칙을 사용합니다.
 
 	``Successful \co{*_acquire()}'' 열은 많은 CPU 가 특별한 ``acquire''
 	형태의 로드와 atomic RMW 인스트럭션들을 가지고 있으며, 많은 다른 CPU 가
@@ -2381,7 +2380,7 @@ exists (1:r2=x0 /\ 1:r3=1)
 \end{listing}
 
 Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
-은 어떻게 하면 이걸 DEC Alpha 에서 돌아가는 오래된 리눅스 커널에서 안정적으로
+은 어떻게 하면 이걸 DEC Alpha 에서 돌아가는 v4.15 전의 리눅스 커널에서 안정적으로
 동작하도록 할 수 있는지 보이는데, line~21 의 \co{READ_ONCE()} 를
 \co{lockless_dereference()} 로 대체하는 것으로,\footnote{
 	\co{lockless_dereference()} 는 v4.15 이후 버전에서는 필요치 않고,
@@ -2396,7 +2395,6 @@ Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependenc
 Listing~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
 % \path{C-MP+o-wmb-o+ld-addr-o.litmus} available at commit bc4b1c3f3b35
 % ("styleguide: Loosen restriction on comment in litmus test")
-% TODO: Apply
 shows how to make this work reliably on pre-v4.15 Linux kernels running on
 DEC Alpha, by
 replacing line~21's \co{READ_ONCE()} with \co{lockless_dereference()},\footnote{
@@ -2529,14 +2527,14 @@ in pre-v4.15 Linux kernels.
 
 	Weakly ordered platform 에서 이 규칙에 대한 하나의 (유명한) 예외가
 	있는데, 그 예외는 DEC Alpha 의 load-to-load address dependency 입니다.
-	그리고 이게 DEC Alpha 가
+	그리고 이게 v4.15 전의 리눅스 커널에서 DEC Alpha 가
 	Listings~\ref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test}
 	의 line~21 에 \co{lockless_dereference()} 를 통한 명시적 메모리 배리어
 	제공을 필요로 하는 이유입니다.
 	하지만, DEC Alpha 도 load-to-store address dependency 는 추적을 하며,
-	이게
+	이 때문에 v4.15 전 리눅스 커널이라 해도
 	Listings~\ref{lst:memorder:S Address-Dependency Litmus Test}
-	의 line~20 에 \co{lockless_dereference()} 가 없는 이유입니다.
+	의 line~20 에 \co{lockless_dereference()} 가 필요 없는 것입니다.
 	\iffalse
 
 	Weakly ordered platforms don't necessarily maintain ordering of
@@ -2558,22 +2556,22 @@ in pre-v4.15 Linux kernels.
 	However, DEC Alpha does track load-to-store address dependencies,
 	which is why line~20 of
 	Listing~\ref{lst:memorder:S Address-Dependency Litmus Test}
-	% TODO: Apply
 	does not need a \co{lockless_dereference()}, even in Linux
 	kernels predating v4.15.
 	\fi
 
 	정리해 보면, 현존하는 플랫폼들은 TSO 플랫폼들 (x86, mainframe,
-	SPARC,~...) 과 같이 암묵적으로 address dependency 를 지켜주거나,
-	address dependency 를 추적하는 하드웨어를 가지고 있거나 (ARM, PowerPC,
-	MIPS,~...), 또는 \co{lockless_dereference()} 를 통해 제공되는 메모리
-	배리어를 가지고 있습니다 (DEC Alpha).
+	SPARC,~...) 과 같이 address dependency 를 지켜주거나, address
+	dependency 를 추적하는 하드웨어를 가지고 있거나 (ARM, PowerPC,
+	MIPS,~...), 또는 \co{READ_ONCE()} 를 통해 제공되는, 필요한 메모리
+	배리어를 가지고 있거나 (v4.15 와 이후 리눅스 커널에서의 DEC Alpha),
+	\co{rcu_dereference()} 에 의해 제공되는 메모리 배리어를 필요로 합니다
+	(v4.14 이전 리눅스 커널에서의 DEC Alpha).
 	\iffalse
 
 	To sum up, current platforms either respect address dependencies
 	implicitly, as is the case for TSO platforms (x86, mainframe,
 	SPARC,~...), have hardware tracking for address dependencies
-	% TODO: Apply
 	(ARM, PowerPC, MIPS,~...), have the required memory barriers
 	supplied by \co{READ_ONCE()} (DEC Alpha in Linux kernel v4.15 and
 	later), or require the memory barriers supplied by
@@ -5432,9 +5430,9 @@ In the meantime, it is necessary to be very careful in order to prevent
 your compiler from breaking your dependencies.
 
 \subsubsection{Give your dependency chain a good start}
+
 여러분의 의존성 연결을 시작하는 로드는 반드시 올바른 순서를 사용해야 하는데,
-예를 들어 \co{lockless_dereference()}, \co{rcu_dereference()}, 또는
-\co{READ_ONCE()} 에 이어 \co{smp_read_barrier_depends()} 를 사용하는 식입니다.
+예를 들어 \co{rcu_dereference()}, 또는 \co{READ_ONCE()} 를 사용하는 식입니다.
 이 규칙을 따르는데 실패하면 심각한 부작용이 있을 수 있습니다:
 \iffalse
 
@@ -6872,8 +6870,8 @@ set of memory-ordering primitives, which are as follows:
 \item	[\tco{smp_read_barrier_depends()}] 앞의 오퍼레이션들에 의존적인
 	뒤따르는 오퍼레이션들을 순서지음.
 	이 기능은 Alpha 를 제외한 모든 플랫폼에서 no-op 입니다만, 직접적으로는
-	잘 사용되지 않고, \co{lockless_dereference()} 나 \co{rcu_dereference()}
-	같은 것들 안에서 사용됩니다.
+	잘 사용되지 않고, \co{READ_ONCE()} 나 \co{rcu_dereference()} 같은 것들
+	안에서 사용됩니다.
 \item	[\tco{smp_mb__before_atomic()}] \co{smp_mb__before_atomic()} 를 앞서는
 	액세스들을 뒤의 RMW 어토믹 오퍼레이션에 대해 순서짓도록 강제함.
 	이는 어토믹 RMW 오퍼레이션들에 대해 순서를 완전히 제공하는
@@ -8346,9 +8344,9 @@ store-to-load 링크들에 release-acquire 쌍을 사용하는 것으로 충분�
 여러분은 acquire 를 의존성으로 교체할 수도 있지만 이는 이를 허용하는 환경에서만
 가능하며, C11 표준의 메모리 모델은 이를 허용하지 \emph{않음} 을 명심하시기
 바랍니다.
-로드로 이어지는 의존성은 \co{lockless_dereference()} 나 \co{rcu_dereference()}
+로드로 이어지는 의존성은 \co{READ_ONCE()} 나 \co{rcu_dereference()}
 로 시작되어야만 함 역시 알아두시기 바랍니다:
-\co{READ_ONCE()} 는 충분치 않습니다.
+평범한 C 언어의 로드 기능은 충분치 않습니다.
 여러분의 컴파일러에 의해 망가진 의존성은 아무짝에도 도움이 되지 않으니,
 Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
 과~\ref{sec:memorder:Control-Dependency Calamities} 를 주의깊게 다시 볼 것을 잊지 마세요!
