@@ -8287,26 +8287,10 @@ among others.
 \section{Where is Memory Ordering Needed?}
 \label{sec:memorder:Where is Memory Ordering Needed?}
 
-이 섹션은 중간의 토론을 고려하여
-Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
-을 다시 살펴봅니다.
-
-메모리 순서 보장 오퍼레이션들은 최소 두개의 쓰레드 사이에 최소 두개의 변수에
-관여하는 상호작용의 가능성이 있을 때에만 필요합니다.
-항상 그렇듯, 싱글 쓰레드 프로그램이 충분한 성능을 제공한다면, 뭐하러 병렬성을
-고려하겠습니까?\footnote{
-	취미로 사는 사람들과 연구자들은 물론 이것 등의 경고들을 무시해도
-	좋을 겁니다.}
-무엇보다도, 병렬성을 제거하는건 메모리 순서 보장 오퍼레이션의 추가적 비용을
-제거합니다.
-
-한 사이클 내에서의 모든 쓰레드간의 통신이 store-to-load 연결 (즉, 다음 쓰레드의
-로드가 앞의 쓰레드가 스토어한 값을 리턴하는것) 을 사용한다면,
-Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
-와~\ref{lst:memorder:Load-Buffering Control-Dependency Litmus Test} 에 보인
-것과 같이 최소한의 순서보장으로 충분합니다.
-최소한의 순서 보장은 의존성, acquire, 그리고 모든 더 강력한 순서 보장
-오퍼레이션들을 포함합니다.
+이 섹션은
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 과
+Section~\ref{sec:memorder:Basic Rules of Thumb} 을 다시 살펴보고, 더 세련된
+경험적 법칙을 가지고 그 사이의 토론을 요약합니다.
 \iffalse
 
 This section revisits
@@ -8314,6 +8298,22 @@ Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 and Section~\ref{sec:memorder:Basic Rules of Thumb},
 summarizing the intervening discussion with a more sophisticated
 set of rules of thumb.
+\fi
+
+첫번째 경험적 법칙은 메모리 순서 오퍼레이션들은 최소 두개의 쓰레드 사이에 최소
+두개의 변수가 관여하는 상호작용이 존재할 가능성이 있을 때에만 필요하다는
+것입니다.
+관계되는 것들에 비춰보면, 이 하나의 문장은
+Section~\ref{sec:memorder:Basic Rules of Thumb} 의 기본 경험적 규칙을 무척
+내포하는데, 예를 들어, ``메모리 배리어 짝짓기'' 는 ``사이클'' 의 두개
+쓰레드에서의 특수 경우임을 생각해 보세요.
+또한, 항상 그렇듯, 싱글 쓰레드 프로그램이 충분한 성능을 제공한다면, 뭐하러
+병렬성을 고려하겠습니까?\footnote{
+	취미로 사는 사람들과 연구자들은 물론 이것 등의 경고들을 무시해도
+	좋을 겁니다.}
+무엇보다도, 병렬성을 제거하는건 메모리 순서 보장 오퍼레이션의 추가적 비용을
+제거합니다.
+\iffalse
 
 The first rule of thumb is that memory-ordering operations are only
 required where there is a possibility of interaction involving at least
@@ -8328,6 +8328,17 @@ performance, why bother with parallelism?\footnote{
 	this and other cautions.}
 After all, avoiding parallelism also avoids the added cost of
 memory-ordering operations.
+\fi
+
+두번째 경험적 법칙은 load-buffering 상황에 관계됩니다:
+한 사이클 내에서의 모든 쓰레드간의 통신이 store-to-load 연결 (즉, 다음 쓰레드의
+로드가 앞의 쓰레드가 스토어한 값을 리턴하는것) 을 사용한다면,
+Listing~\ref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+와~\ref{lst:memorder:Load-Buffering Control-Dependency Litmus Test} 에 보인
+것과 같이 최소한의 순서보장으로 충분합니다.
+최소한의 순서 보장은 의존성, acquire, 그리고 모든 더 강력한 순서 보장
+오퍼레이션들을 포함합니다.
+\iffalse
 
 The second rule of thumb involves load-buffering situations:
 If all thread-to-thread communication in a given cycle use store-to-load links
@@ -8337,23 +8348,28 @@ Minimal ordering includes dependencies and acquires as well as all stronger
 ordering operations.
 \fi
 
+세번째 경험적 법칙은 release-acquire 체인에 관계됩니다:
 해당 사이클 내에서의 하나를 제외한 모든 연결들이 store-to-load 연결이라면,
 Listing~\ref{lst:memorder:Long ISA2 Release-Acquire Chain}
 와~\ref{lst:memorder:Long Z6.2 Release-Acquire Chain} 에 보인 것처럼 각각의
 store-to-load 링크들에 release-acquire 쌍을 사용하는 것으로 충분합니다.
 여러분은 acquire 를 의존성으로 교체할 수도 있지만 이는 이를 허용하는 환경에서만
-가능하며, C11 표준의 메모리 모델은 이를 허용하지 \emph{않음} 을 명심하시기
-바랍니다.
-로드로 이어지는 의존성은 \co{READ_ONCE()} 나 \co{rcu_dereference()}
-로 시작되어야만 함 역시 알아두시기 바랍니다:
+가능하며, C11 표준의 메모리 모델은 종속성을 모두 지키지는 \emph{않음} 을
+명심하시기 바랍니다.
+따라서, 로드로 시작되는 종속성은 \co{READ_ONCE()} 나 \co{rcu_dereference()} 로
+시작되어야만 함 역시 알아두시기 바랍니다:
 평범한 C 언어의 로드 기능은 충분치 않습니다.
 여러분의 컴파일러에 의해 망가진 의존성은 아무짝에도 도움이 되지 않으니,
 Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
-과~\ref{sec:memorder:Control-Dependency Calamities} 를 주의깊게 다시 볼 것을 잊지 마세요!
+과~\ref{sec:memorder:Control-Dependency Calamities} 를 주의깊게 다시 볼 것을
+잊지 마세요!
 하나의 non-store-to-load 링크를 공유하는 두 쓰레드는 일반적으로
 \co{WRITE_ONCE()} 더하기 \co{smp_wmb()} 를 \co{smp_store_release()} 로 교체할
 수 있고, \co{READ_ONCE()} 더하기 \co{smp_rmb()} 를 \co{smp_load_acquire()} 로
 교체할 수 있습니다.
+하지만, 지혜로운 개발자는 예를 들면
+Section~\ref{sec:formal:Axiomatic Approaches} 에서 설명한 herd 툴을 사용하거나
+해서 그런 교체를 주의 깊게 체크할 겁니다.
 \iffalse
 
 The third rule of thumb involves release-acquire chains:
@@ -8377,10 +8393,10 @@ usually substitute \co{WRITE_ONCE()} plus \co{smp_wmb()} for
 \co{smp_store_release()} on the one hand,
 and \co{READ_ONCE()} plus \co{smp_rmb()} for \co{smp_load_acquire()}
 on the other.
-% TODO: Apply
 However, the wise developer will check such substitutions carefully,
 for example, using the herd tool as described in
 Section~\ref{sec:formal:Axiomatic Approaches}.
+\fi
 
 \QuickQuiz{}
 	Why is it necessary to use heavier-weight ordering for
@@ -8402,8 +8418,9 @@ Section~\ref{sec:formal:Axiomatic Approaches}.
 	This temporal nature of store-to-load links permits use of
 	minimal ordering.
 } \QuickQuizEnd
-\fi
 
+마지막 네번째 경험적 법칙은 어디에 완전한 메모리 배리어 (또는 그보다 강력한 것)
+이 필요한지를 식별하게 합니다:
 해당 사이클이 두개 이상의 non-store-to-load 연결을 갖는다면 (즉, 두개 이상의
 load-to-store 와 store-to-store 링크),
 Listing~\ref{lst:memorder:W+WRC Litmus Test With More Barriers} 와
@@ -8437,7 +8454,7 @@ With strength comes expense, though full barriers
 usually hurt performance more than they hurt scalability.
 \fi
 
-이것들은 \emph{최소한의} 보장임을 알아두시기 바랍니다.
+이 네개의 경험적 법칙은 \emph{최소한의} 보장만을 내포함을 알아두시기 바랍니다.
 서로 다른 아키텍쳐들은
 Section~\ref{sec:memorder:Hardware Specifics}
 에서 이야기한 것처럼 더 강력한 보장을 제공할 수도 있습니다만 이는 해당
