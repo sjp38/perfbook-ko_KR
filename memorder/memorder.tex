@@ -761,11 +761,19 @@ value on row~2, however, as promised earlier, the \co{smp_mb()}
 instances straighten things out in the end.
 \fi
 
+비록 \co{smp_mb()} 같은 완전한 배리어는 극단적으로 강력한 순서 보장을 갖지만,
+그 강력함은 높은 가격과 함께 옵니다.
+아주 많은 상황이 훨씬 약한 순서 보장으로 처리될 수 있는데, 이를 위해선 훨씬
+낮은 비용의 메모리 순서 규칙 인스트럭션을 사용해도 되며, 어떤 경우에는 메모리
+순서 규칙 인스트럭션을 아예 사용하지 않아도 됩니다.
+\iffalse
+
 Although full barriers such as \co{smp_mb()} have extremely strong
 ordering guarantees, their strength comes at a high price.
 A great many situations can be handled with much weaker ordering guarantees
 that use much cheaper memory-ordering instructions, or, in some case, no
 memory-ordering instructions at all.
+\fi
 
 \begin{table*}[tbh]
 \small
@@ -856,17 +864,16 @@ conditionally.
 Blank cells indicate that no ordering is supplied.
 \fi
 
-\co{*_acquire} 열은 \co{smp_load_acquire()}, \co{cmpxchg_acquire()},
-\co{xchg_release()}, 등등을 포함합니다;
-\co{*_release} 열은 \co{smp_store_release()}, \co{cmpxchg_release()},
-\co{xchg_release()}, 등등을 포함합니다; 그리고
-``Successful Non-Relaxed Non-\co{void} RMW'' 열은 \co{atomic_add_return()},
-\co{atomic_add_unless()}, \co{atomic_dec_and_test()}, \co{cmpxchg()},
-\co{xchg()}, 등등을 포함합니다.
-``Successful'' 이라는 수식어는 앞의 ``Unsuccessful RMW operation'' 행에서도
-가리키듯이, 실패했을 때에는 메모리에도 순서에도 어떤 영향을 끼치지 않는
-\co{atomic_add_return()}, \co{cmpxchg_acquire()}, 그리고 \co{cmpxchg_release()}
-같은 도구들에 적용됩니다.
+``Store'' 행은 또한 어토믹 RMW 오퍼레이션의 스토어 부분도 포함합니다.
+또한, ``Load'' 행은 성공한 경우의 값을 리턴하는 \co{_relaxed()} RMW 어토믹
+오퍼레이션을 다룹니다만, 결합된 ``co{_relaxed()} RMW operation'' 행은 값을
+리턴하는 경우의 결합된 경우를 제공합니다.
+성공하지 못한 값을 리턴하는 어토믹 RMW 오퍼레이션을 수행하는 CPU 는 연관된
+변수를 모든 다른 CPU 의 캐시에서 무효화 시켜야 합니다.
+따라서, 좀 이상하겠지만, 성공하지 못한 값을 리턴하는 어토믹 RMW 오퍼레이션은
+스토어의 특성을 많이 가지며, 이는 ``co{_relaxed()} RMW operation'' 행이
+성공하지 못한 값을 리턴하는 atomic RMW 오퍼레이션과도 관련되어 있음을
+의미합니다.
 \iffalse
 
 The ``Store'' row also covers the store portion of an atomic RMW operation.
@@ -880,6 +887,20 @@ Therefore, oddly enough, unsuccessful value-returning atomic RMW
 operations have many of the properties of a store, which means that the
 ``\co{_relaxed()} RMW operation'' line also applies to unsuccessful
 value-returning atomic RMW operations.
+\fi
+
+\co{*_acquire} 열은 \co{smp_load_acquire()}, \co{cmpxchg_acquire()},
+\co{xchg_release()}, 등등을 포함합니다;
+\co{*_release} 열은 \co{smp_store_release()}, \co{cmpxchg_release()},
+\co{xchg_release()}, 등등을 포함합니다; 그리고
+``Successful Non-Relaxed Non-\co{void} RMW'' 열은 \co{atomic_add_return()},
+\co{atomic_add_unless()}, \co{atomic_dec_and_test()}, \co{cmpxchg()},
+\co{xchg()}, 등등을 포함합니다.
+``Successful'' 이라는 수식어는 앞의 ``\co{_relaxed()} operation'' 행에서도
+가리키듯이, 실패했을 때에는 메모리에도 순서에도 어떤 영향을 끼치지 않는
+\co{atomic_add_return()}, \co{cmpxchg_acquire()}, 그리고 \co{cmpxchg_release()}
+같은 도구들에 적용됩니다.
+\iffalse
 
 The \co{*_acquire} row covers \co{smp_load_acquire()},
 \co{cmpxchg_acquire()}, \co{xchg_acquire()}, and so on;
@@ -891,7 +912,6 @@ the ``Successful full-strength non-\co{void} RMW'' row covers
 The ``Successful'' qualifiers apply to primitives such as
 \co{atomic_add_unless()}, \co{cmpxchg_acquire()}, and \co{cmpxchg_release()},
 which have no effect on either memory or on ordering when they indicate
-% TODO: apply
 failure, as indicated by the earlier ``\co{_relaxed()} RMW operation'' row.
 \fi
 
@@ -929,14 +949,14 @@ are at most two threads involved.
 	여러 변수들로의 접근들에 대해 순서를 제공하는 모든 다른 오퍼레이션들
 	또한 이 같은-변수 순서 규칙을 제공한다는 걸 알아두시기 바랍니다.
 
-	\co{READ_ONCE()} 열은 (2017 년에 있어) 컴파일러들과 CPU 들은 사용자가
+	\co{READ_ONCE()} 열은 (2018 년에 있어) 컴파일러들과 CPU 들은 사용자가
 	볼 수 있는 예측적 스토어를 탐닉하지 않아서, 주소, 데이터, 또는 수행이
 	앞의 로드에 의존적인 모든 스토어는 해당 로드가 완료된 후에 행해진다는
 	사실을 사용합니다.
-	최소한 이런 의존성들이
+	하지만, 이 보장사항은
 	Sections~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
 	과~\ref{sec:memorder:Control-Dependency Calamities} 에서 설명된 대로
-	주의깊게 구성되었다는 가정 아래의 이야기입니다.
+	의존성이 주의깊게 구성되었다는 가정 아래의 이야기입니다.
 	\iffalse
 
 	The rows correspond roughly to hardware mechanisms of increasing
@@ -958,15 +978,18 @@ are at most two threads involved.
 	and~\ref{sec:memorder:Control-Dependency Calamities}.
 	\fi
 
-	``Unsuccessful RMW operation'' 열은 실패한 RMW 라 하더라도 읽기는 하게
-	되고, 그 읽기는 \co{READ_ONCE()} 만큼은 좋은 효과를 낸다는 사실을
-	사용합니다.
+	``\co{_relaxed()} RMW operation'' 열은 값을 리턴하는 \co{_relaxed()}
+	RMW 는 로드와 스토어를 한다는 사실을 보이는데, 이 로드와 스토어는
+	\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 만큼 좋은 효과를 냅니다.
 
 	\co{smp_read_barrier_depends()} 열은 DEC Alpha 의 예외가 있긴 하지만,
 	컴파일러들과 CPU 들은 사용자가 볼 수 있는 주소 의존성들은 깨지 않는다는
 	사실을 사용하는데, 역시 이 의존성들이
 	Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
 	에서 설명한 대로 주의 깊게 구성되었다는 가정 하이긴 합니다.
+	하지만, v4.15 리눅스 커널 기준으로, \co{READ_ONCE()} 는 의존성 순서
+	규칙을 제공한다는 사실은 \co{smp_read_barrier_depends()} 의 필요를
+	줄임을 의미합니다.
 
 	\co{*_dereference()} 열은 \co{rcu_dereference()} 등에 의해 제공되는
 	주소와 데이터 종속성 순서 규칙을 사용합니다.
@@ -1040,6 +1063,10 @@ are at most two threads involved.
 
 	\co{smp_mb()} 열은 Itanium 의 예외가 있지만 대부분의 플랫폼에서 사용
 	가능한 전체 메모리 배리어에 연관됩니다.
+	하지만, Itanium 에서조차, \co{smp_mb()} 는
+	Section~\ref{sec:memorder:Itanium} 에서 이야기되는 것처럼
+	\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 에 대해 \co{smp_mb()} 가 완전한
+	순서를 제공합니다.
 
 	``Successful Non-Relaxed None-\co{void} RMW'' 열은 (x86 과 같은) 일부
 	플랫폼에서 atomic RMW 인스트럭션들은 그 앞과 뒤 사이에 전체 순서 규칙을
@@ -1049,6 +1076,8 @@ are at most two threads involved.
 	요구합니다.
 	(full-streangth atomic RMW 오퍼레이션의 이름들은 \co{_relaxed},
 	\co{_acquire}, 또는 \co{_relaxed} 로 끝나지 않습니다.)
+	앞서 언급되었듯, 이 오퍼레이션들이 성공하지 못한 경우는
+	``\co{_relaxed()} RMW operation'' 행에 다루어져 있습니다.
 	\iffalse
 
 	None of the ordering operations thus far require prior stores to be
@@ -1077,14 +1106,13 @@ are at most two threads involved.
 	operations succeed.
 	(Full-strength atomic RMW operation's names do not end in
 	\co{_relaxed}, \co{_acquire}, or \co{_release}.)
-	% TODO: Apply
 	As noted earlier, the case where these operations do not succeed
 	is covered by the ``\co{_relaxed()} RMW operation'' row.
 	\fi
 
-	하지만, 리눅스 커널은 \co{atomic_inc()} 와 같은 \co{void} atomic RMW
-	오퍼레이션들에 대해서는 어떠한 순서 보장도 제공할 것을 요구하지
-	않습니다.
+	하지만, 리눅스 커널은 \co{atomic_inc()} 와 같은 \co{void} 또는
+	\co{_relaxed()} atomic RMW 오퍼레이션들에 대해서는 어떠한 순서 보장도
+	제공할 것을 요구하지 않습니다, \co{atomic_inc()} 의 예에서처럼요.
 	따라서, 이 오퍼레이션들과 실패한 non-\co{void} atomic RMW
 	오퍼레이션들은 앞의, 또는 뒤의 메모리 액세스 모두에 대해 완전한 순서를
 	보장하기 위해 \co{smp_mb__before_atomic()} 을 앞세우고 뒤에
