@@ -2231,8 +2231,7 @@ each other's linked lists.
 Line~33-44 의 루프의 각 패스에서는 기존 해시 테이블의 bucket 의 내용물 중
 하나를 새로운 해시 테이블로 옮깁니다.
 Line~34 에서는 기존 테이블의 현재 bucket 으로의 레퍼런스를 가져오고, line~35
-에서 해당 bucket 의 스핀락을 잡은 후 line~36 에서 이 bucket 이 분산되었음을
-알리기 위해 \co{->ht_resize_cur} 를 업데이트 합니다.
+에서 해당 bucket 의 스핀락을 잡습니다.
 \iffalse
 
 Each pass through the loop spanning lines~\lnref{loop:b}-\lnref{loop:e} distributes the contents
@@ -2285,13 +2284,18 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	\fi
 } \QuickQuizEnd
 
+\begin{lineref}[ln:datastruct:hash_resize:resize]
 Line~37-42 의 루프의 각 패스에서는 데이터 원소 하나를 현재의 기존 테이블의
 bucket 에서 연관된 새로운 테이블의 bucket 으로 옮기는데, 이 때 새로운 테이블의
 bucket 의 락을 잡고 있습니다.
-마지막으로, line~43 에서는 기존 테이블 bucket 의 락을 놓게 됩니다.
+Line~\lnref{update_resize} 는 이 bucket 이 분산되었다는 것을, 그리고
+Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection} 에 보인
+\co{ht_get_bucket()} 의 것과 짝을 맞추는 전체 메모리 배리어에 의해 진행된다는
+것을 알리기 위해 \co{->ht_resize_cur} 를 업데이트 합니다.
+마지막으로, line~\lnref{rel_oldcur} 에서는 기존 테이블 bucket 의 락을 놓게
+됩니다.
 \iffalse
 
-\begin{lineref}[ln:datastruct:hash_resize:resize]
 Each pass through the loop spanning
 lines~\lnref{loop_list:b}-\lnref{loop_list:e} adds one data element
 from the current old-table bucket to the corresponding new-table bucket,
@@ -2305,11 +2309,29 @@ Finally, line~\lnref{rel_oldcur} releases the old-table bucket lock.
 \fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
+	의 \co{ht_get_bucket()} 과
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}
+	의 \co{hashtab_resize()} 의 메모리 배리어는 왜 존재하는 건가요?
+	\iffalse
+
 	Why the memory barriers in \co{ht_get_bucket()} in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
 	and in \co{hashtab_resize()} in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}?
+	\fi
 \QuickQuizAnswer{
+	\co{ht_get_bucket()} 은 업데이트 쪽 락을 잡지 않은 채로 호출될 수
+	있어서, 상호 배제가 없을 것이기 때문입니다.
+	이는 \co{ht_get_bucket()} 이 새로운 해시 테이블을 지금 접근하고자 하는
+	데이터 원소가 아직 그쪽 테이블에 나타나지지 않았을 때 문제가 될 수
+	있고, 따라서 이 두개의 메모리 배리어가 그런 일의 발생을 막습니다.
+	즉, \co{hashtab_resize()} 는 기존 bucket 의 데이터 원소를
+	\co{->ht_rezie_cur} 의 업데이트 전에 완전히 옮겼고,
+	\co{ht_get_bucket()} 은 \co{->ht_resize_cur} 로부터 값이 업데이트 된
+	것을 보기 전까지는 새 해시 테이블에 접근하지 않을 겁니다.
+	\iffalse
+
 	Because \co{ht_get_bucket()} can be called without holding
 	the update-side locks, there is no mutual exclusion.
 	It would be bad for \co{ht_get_bucket()} to refer to the
@@ -2320,6 +2342,7 @@ Finally, line~\lnref{rel_oldcur} releases the old-table bucket lock.
 	\co{->ht_resize_cur}, and \co{ht_get_bucket()} won't access
 	the new hash table until after it sees the updated value
 	from \co{->ht_resize_cur}.
+	\fi
 } \QuickQuizEnd
 
 일단 모든 기존 테이블의 bucket 들이 새로운 테이블로 분산되면 line~45 가
@@ -2339,8 +2362,8 @@ the old table) to complete.
 Then line~\lnref{rel_master} releases the resize-serialization lock,
 line~\lnref{free} frees
 the old hash table, and finally line~\lnref{ret_success} returns success.
-\end{lineref}
 \fi
+\end{lineref}
 
 \subsection{Resizable Hash Table Discussion}
 \label{sec:datastruct:Resizable Hash Table Discussion}
