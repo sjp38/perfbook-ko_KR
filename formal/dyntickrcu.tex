@@ -325,13 +325,13 @@ covered in the following section.
 \subsubsection{Interrupt Interface}
 \label{sec:formal:Interrupt Interface}
 
-\co{rcu_irq_enter()} 와 \co{rcu_irq_exit()} 함수들은 인터럽트/NMI 진입과 종료를
+\co{rcu_irq_enter()} 와 \co{rcu_irq_exit()} 함수는 인터럽트/NMI 진입과 종료를
 각각 처리합니다.
 물론, 중첩된 인터럽트들 또한 적절하게 처리되어야만 합니다.
-중첩 인터럽트의 가능성은 인터럽트나 NMI 핸들러 로의 진입 시에
-(\co{rcu_irq_enter()} 에서) 값이 증가되고 종료 시에(\co{rcu_irq_exit()} 에서)
-값이 감소되는 두번째 per-CPU 변수, \co{rcu_update_flag} 에 의해 처리됩니다.
-추가적으로, 앞서서부터 존재해온 \co{in_interrupt()} 기능은 인터럽트/NMI 가 가장
+중첩 인터럽트의 가능성은 인터럽트나 NMI 핸들러 진입 시에 (\co{rcu_irq_enter()}
+에서) 값이 증가되고 종료 시에(\co{rcu_irq_exit()} 에서) 값이 감소되는 두번째
+per-CPU 변수, \co{rcu_update_flag} 에 의해 처리됩니다.
+추가적으로, 이전부터 존재해온 \co{in_interrupt()} 기능은 인터럽트/NMI 가 가장
 바깥의 것인지 중첩된 것인지 구별해 내는데에 사용됩니다.
 
 인터럽트 진입은 아래 보여진 \co{rcu_irq_enter()} 에서 처리됩니다:
@@ -370,13 +370,13 @@ shown below:
 \end{verbatim}
 }
 
-Line~3 는 현재 CPU 의 숫자를 가져오고, line~5 와 6 는 \co{rcu_update_flag} 중첩
+Line~3 는 현재 CPU 의 숫자를 가져오고, line~5 와~6 는 \co{rcu_update_flag} 중첩
 카운터가 0이 아니라면 그 값을 증가시킵니다.
 Line~7-9 는 자신이 인터럽트의 가장 바깥 단계인지를 체크하고, 만약 그렇다면
 \co{dynticks_progress_counter} 가 증가되어야 합니다.
-그렇다면, line~10 에서 \co{dynticks_progress_counter} 의 값을 증가시키고,
-line~11 에서 메모리 배리어를 실행한 후, line~12 에서 \co{rcu_update_flag} 의
-값을 증가시킵니다.
+만약 그 경우라면, line~10 에서 \co{dynticks_progress_counter} 의 값을
+증가시키고, line~11 에서 메모리 배리어를 실행한 후, line~12 에서
+\co{rcu_update_flag} 의 값을 증가시킵니다.
 \co{rcu_exit_nohz()} 에서와 마찬가지로, 이 메모리 배리어는 이 인터럽트 핸들러
 안에서의 RCU read-side 크리티컬 섹션의 영향을 본 CPU 는
 \co{dynticks_progress_counter} 의 값의 증가 결과 역시 볼 수 있을 것을
@@ -418,11 +418,11 @@ invocation) will also see the increment of
 	NMI 에 의해 호출된 \co{rcu_irq_enter()} 의 인스턴스는
 	\co{rcu_update_flag} 의 원래 값이 0이 아닌 것으로 보게 될 것이고,
 	따라서 \co{dynticks_progress_counter} 의 값을 증가시키지 않을 겁니다.
-	이는 RCU grace-period 치가 이 CPU 에서 NMI 핸들러가 실행되었음을 알 수
+	이는 RCU grace-period 에게 이 CPU 에서 NMI 핸들러가 실행되었음을 알 수
 	있는 증거를 남기지 않을 것이고, 따라서 이 NMI 핸들러 내에서의 모든 RCU
 	red-side 크리티컬 섹션들은 RCU 보호를 깨트릴 겁니다.
 
-	그 정의에 의해 마스킹 될 수 없는 NMI 핸들러들의 존재 가능성은 정말로 이
+	그 정의에 의해 마스킹 될 수 없는 NMI 핸들러의 존재 가능성은 정말로 이
 	코드를 복잡하게 만듭니다.
 	\iffalse
 
@@ -496,7 +496,7 @@ Interrupt exit is handled similarly by
 Line~3 은 앞에서처럼 현재 CPU 의 번호를 가져옵니다.
 Line~5 는 \co{rcu_update_flag} 의 값이 0이 아닌지 확인해보고, 그렇지 않다면
 곧바로 (함수의 마지막으로 제어를 넘김으로써) 리턴합니다.
-그렇지 않다면, line~6 부터 12 가 수행됩니다.
+그렇지 않다면, line~6 부터~12 가 수행됩니다.
 Line~6 은 \co{rcu_update_flag} 의 값을 감소시키고, 그 결과가 0이 아니라면
 리턴합니다.
 Line~8 은 우리가 정말로 중첩된 인터럽트들 가운데 가장 마지막 단계를 빠져나가고
@@ -528,7 +528,7 @@ in the interrupt handler (preceding the \co{rcu_irq_exit()}
 invocation).
 \fi
 
-이 두 섹션들은 \co{dynticks_progress_counter} 변수가 태스크들과 인터럽트, NMI
+이 두 섹션은 \co{dynticks_progress_counter} 변수가 태스크들과 인터럽트, NMI
 에 의해 dynticks-idle 모드로 들어갈 때와 빠져나올 때에 어떻게 관리되는지를
 설명했습니다.
 다음 섹션은 이 변수가 preemption 가능한 RCU 의 grace-period 장치에 의해 어떻게
