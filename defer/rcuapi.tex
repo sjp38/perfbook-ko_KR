@@ -14,7 +14,9 @@ Section~\ref{sec:defer:So, What is RCU Really?}
 에서는 결론을 정리합니다.
 \iffalse
 
-This section looks at RCU from the viewpoint of its Linux-kernel API.
+This section looks at RCU from the viewpoint of its Linux-kernel API.\footnote{
+	Userspace RCU's API is documented
+	elsewhere~\cite{PaulMcKenney2013LWNURCU}.}
 Section~\ref{sec:defer:RCU has a Family of Wait-to-Finish APIs}
 presents RCU's wait-to-finish APIs, and
 Section~\ref{sec:defer:RCU has Publish-Subscribe and Version-Maintenance APIs}
@@ -27,108 +29,80 @@ presents concluding remarks.
 \subsubsection{RCU has a Family of Wait-to-Finish APIs}
 \label{sec:defer:RCU has a Family of Wait-to-Finish APIs}
 
-\begin{sidewaystable*}[htbp]
+\begin{table*}[htbp]
 \rowcolors{1}{}{lightgray}
 \renewcommand*{\arraystretch}{1.3}
 \centering
 \caption{RCU Wait-to-Finish APIs}
 \label{tab:defer:RCU Wait-to-Finish APIs}
 \footnotesize
-\begin{tabularx}{7.9in}{>{\raggedright\arraybackslash}p{1.08in}
+\begin{tabularx}{6.5in}{>{\raggedright\arraybackslash}p{1.08in}
     >{\raggedright\arraybackslash}X
     >{\raggedright\arraybackslash}X
-    >{\raggedright\arraybackslash}X
-    >{\raggedright\arraybackslash}X
-    >{\raggedright\arraybackslash}p{1.22in}}
+    >{\raggedright\arraybackslash}p{1.3in}}
 \toprule
-Attribute &
-    RCU Classic &
-	RCU BH &
-	    RCU Sched &
-		Realtime RCU &
-		    SRCU \\
+&
+    {\bf RCU}: Original &
+	{\bf SRCU}: Sleeping readers &
+	    {\bf Tasks RCU}: Free tracing trampolines \\
 \midrule
-Purpose &
-    Original &
-	Prevent DDoS attacks &
-	    Wait for preempt-disable regions, hardirqs, \& NMIs &
-	        Realtime response &
-		    Sleeping readers \\
-Availability &
-    2.5.43 &
-	2.6.9 &
-	    2.6.12 &
-		2.6.26 &
-		    2.6.19 \\
-Read-side primitives &
-    \tco{rcu_read_lock()}~! \tco{rcu_read_unlock()}~! &
-	\tco{rcu_read_lock_bh()} \tco{rcu_read_unlock_bh()} &
-	    \tco{preempt_disable()} \tco{preempt_enable()} (and friends) &
-	        \tco{rcu_read_lock()} \tco{rcu_read_unlock()} &
-		    \tco{srcu_read_lock()} \tco{srcu_read_unlock()} \\
-{ Update-side primitives (synchronous) } &
-    { \tco{synchronize_rcu()} \tco{synchronize_net()} } &
-	\tco{synchronize_rcu_bh()} &
-	    \tco{synchronize_sched()} &
-	        { \tco{synchronize_rcu()} \tco{synchronize_net()} } &
-		    \tco{synchronize_srcu()} \\
-{ Update-side primitives (asynchronous/callback) } &
+{\bf Read-side critical-section markers} &
+    \tco{rcu_read_lock()}~! \tco{rcu_read_unlock()}~!
+    \tco{rcu_read_lock_bh()} \tco{rcu_read_unlock_bh()}
+    \tco{rcu_read_lock_sched()} \tco{rcu_read_unlock_sched()}
+    \tco{rcu_read_lock_sched_notrace()} \tco{rcu_read_unlock_sched_notrace()}
+    (Plus anything disabing bottom halves, preemption, or interrupts.) &
+	\tco{srcu_read_lock()} \tco{srcu_read_unlock()} &
+	    Voluntary context switch \\
+{\bf Update-side primitives (synchronous) } &
+    { \tco{synchronize_rcu()} \tco{synchronize_rcu_expedited()}
+      \tco{synchronize_net()} } &
+	\tco{synchronize_srcu()} \tco{synchronize_srcu_expedited()} &
+	    \tco{synchronize_rcu_tasks()} \\
+{\bf Update-side primitives (asynchronous/callback) } &
     \tco{call_rcu()} ! &
-	\tco{call_rcu_bh()} &
-	    \tco{call_rcu_sched()} &
-	        \tco{call_rcu()} &
-		    \tco{call_srcu()} \\
-{ Update-side primitives (wait for callbacks) } &
+	\tco{call_srcu()} &
+	    \tco{call_rcu_tasks()} \\
+{\bf Update-side primitives (wait for callbacks) } &
     \tco{rcu_barrier()} &
-	\tco{rcu_barrier_bh()} &
-	    \tco{rcu_barrier_sched()} &
-	        \tco{rcu_barrier()} &
-		    N/A \\
-Type-safe memory &
-    \tco{SLAB_DESTROY_BY_RCU} &
+	\tco{srcu_barrier()} &
+	    \tco{rcu_barrier_tasks()} \\
+{\bf Update-side primitives (initiate / wait)} &
+    \tco{get_state_synchronize_rcu()}
+    \tco{cond_synchronize_rcu()} &
 	&
-	    &
-	        \tco{SLAB_DESTROY_BY_RCU} &
-		    \\
-Read side constraints &
-    No blocking &
-	No bottom-half (BH) enabling &
-	    No blocking &
-	        Only preemption and lock acquisition &
-		    No \tco{synchronize_srcu()} with same \tco{srcu_struct} \\
-Read side overhead &
-    Preempt disable/enable (free on non-\tco{PREEMPT}) &
-	BH disable/enable &
-	    Preempt disable/enable (free on non-\tco{PREEMPT}) &
-	        Simple instructions, \IRQ\ disable/enable &
-		    Simple instructions, preempt disable/enable, memory barriers \\
-Asynchronous update-side overhead &
+	    \\
+{\bf Update-side primitives (free memory) } &
+    \tco{kfree_rcu()} &
+	&
+	    \\
+{\bf Type-safe memory } &
+    \tco{SLAB_TYPESAFE_BY_RCU} &
+	&
+	    \\
+{\bf Read side constraints } &
+    No blocking (only preemption) &
+	No \tco{synchronize_srcu()} with same \tco{srcu_struct} &
+	    No voluntary context switch \\
+{\bf Read side overhead } &
+    CPU-local accesses (free on \tco{PREEMPT=n}) &
+	Simple instructions, memory barriers &
+	    Free \\
+{\bf Asynchronous update-side overhead } &
     sub-microsecond &
 	sub-microsecond &
-	    sub-microsecond &
-	        sub-microsecond &
-		    N/A \\
-Grace-period latency &
+	    sub-microsecond \\
+{\bf Grace-period latency } &
     10s of milliseconds &
-	10s of milliseconds &
-	    10s of milliseconds &
-	        10s of milliseconds &
-		    10s of milliseconds \\
-Non-\tco{PREEMPT_RT} implementation &
-    RCU Classic &
-	RCU BH &
-	    RCU Classic &
-	        Preemptible RCU &
-		    SRCU \\
-\tco{PREEMPT_RT} implementation &
-    Preemptible RCU &
-	Realtime RCU &
-	    Forced Schedule on all CPUs &
-	        Realtime RCU &
-		    SRCU \\
+        Milliseconds &
+	    seconds \\
+{\bf Expedited grace-period latency } &
+    10s of microseconds &
+        Microseconds &
+	    N/A \\
 \bottomrule
 \end{tabularx}
-\end{sidewaystable*}
+\end{table*}
 
 ``RCU 는 무엇인가'' 에 대한 가장 단순한 답변은 RCU 는 리눅스 커널에서
 사용되는 API 라는 것으로, 각각 잠들 수 없는 버전과 잠들 수 있는 버전 API 의
@@ -142,8 +116,8 @@ Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs} 에
 The most straightforward answer to ``what is RCU'' is that RCU is
 an API used in the Linux kernel, as summarized by
 Table~\ref{tab:defer:RCU Wait-to-Finish APIs},
-which shows the wait-for-RCU-readers portions of the non-sleepable and
-sleepable APIs, respectively,
+which shows the wait-for-readers portions of the RCU, ``sleepable'' RCU
+(SRCU), Tasks RCU, and generic APIs, respectively,
 and by
 Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs},
 which shows the publish-subscribe portions of the API.
@@ -162,6 +136,10 @@ Table~\ref{tab:defer:RCU Wait-to-Finish APIs} 의 행들 중 하나에만 집중
 
 이미 RCU 에 친숙하다면, 이 표는 유용한 레퍼런스로 사용될 수 있을 겁니다.
 \iffalse
+
+% @@@ SRCU and Tasks RCU counterparts of "RCU API Usage Constraints" diagram?
+
+% @@@ There are no special srcu list APIs.  Should there be?  Abstract somehow?
 
 If you are new to RCU, you might consider focusing on just one
 of the columns in
@@ -275,17 +253,16 @@ In the context of RCU, type-safe memory guarantees that a given
 data element will not change type during any RCU read-side critical section
 that accesses it.
 To make use of RCU-based type-safe memory, pass
-\co{SLAB_DESTROY_BY_RCU} to
-\co{kmem_cache_create()}.
-It is important to note that \co{SLAB_DESTROY_BY_RCU} will
+\co{SLAB_TYPESAFE_BY_RCU} to \co{kmem_cache_create()}.
+It is important to note that \co{SLAB_TYPESAFE_BY_RCU} will
 \emph{in no way}
 prevent \co{kmem_cache_alloc()} from immediately reallocating
 memory that was just now freed via \co{kmem_cache_free()}!
-In fact, the \co{SLAB_DESTROY_BY_RCU}-protected data structure
+In fact, the \co{SLAB_TYPESAFE_BY_RCU}-protected data structure
 just returned by \co{rcu_dereference} might be freed and reallocated
 an arbitrarily large number of times, even when under the protection
 of \co{rcu_read_lock()}.
-Instead, \co{SLAB_DESTROY_BY_RCU} operates by preventing
+Instead, \co{SLAB_TYPESAFE_BY_RCU} operates by preventing
 \co{kmem_cache_free()}
 from returning a completely freed-up slab of data structures
 to the system until after an RCU grace period elapses.
@@ -751,9 +728,8 @@ Fortunately, the RCU publish-subscribe and version-maintenance
 primitives shown in
 Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
 apply to all of the variants of RCU discussed above.
-This commonality can in some cases allow more code to be shared,
-which certainly reduces the API proliferation that would otherwise
-occur.
+This commonality can allow more code to be shared, and reduces API
+proliferation.
 The original purpose of the RCU publish-subscribe APIs was to
 bury memory barriers into these APIs, so that Linux kernel
 programmers could use RCU without needing to become expert on
@@ -765,103 +741,423 @@ that Linux supports~\cite{Spraul01}.
 \renewcommand*{\arraystretch}{1.15}
 \footnotesize
 \centering
-\begin{tabular}{lllp{1.2in}}
+\begin{tabular}{llp{2.2in}}
 \toprule
 Category &
 	Primitives &
-		Availability &
-			Overhead \\
+		Overhead \\
 \midrule
-List traversal &
-	\tco{list_for_each_entry_rcu()} &
-		2.5.59 &
-			Simple instructions (memory barrier on Alpha) \\
-\midrule
-List update &
-	\tco{list_add_rcu()} &
-		2.5.44 &
-			Memory barrier \\
-&
-	\tco{list_add_tail_rcu()} &
-		2.5.44 &
-			Memory barrier \\
-&
-	\tco{list_del_rcu()} &
-		2.5.44 &
-			Simple instructions \\
-&
-	\tco{list_replace_rcu()} &
-		2.6.9 &
-			Memory barrier \\
-&
-	\tco{list_splice_init_rcu()} &
-		2.6.21 &
-			Grace-period latency \\
-\midrule
-Hlist traversal &
-	\tco{hlist_for_each_entry_rcu()} &
-		2.6.8 &
-			Simple instructions (memory barrier on Alpha) \\
-\midrule
-Hlist update &
-	\tco{hlist_add_behind_rcu()} &
-		2.6.14 &
-			Memory barrier \\
-&	\multicolumn{2}{l}{(Renamed from \tco{hlist_add_after_rcu()} in 3.17)} &
-			\\ \addlinespace[2pt]
-&
-	\tco{hlist_add_before_rcu()} &
-		2.6.14 &
-			Memory barrier \\
-&
-	\tco{hlist_add_head_rcu()} &
-		2.5.64 &
-			Memory barrier \\
-&
-	\tco{hlist_del_rcu()} &
-		2.5.64 &
-			Simple instructions \\
-&
-	\tco{hlist_replace_rcu()} &
-		2.6.15 &
-			Memory barrier \\
-\midrule
-Pointer traversal &
-	\tco{rcu_dereference()} &
-		2.6.9 &
-			Simple instructions (memory barrier on Alpha) \\
-\midrule
-Pointer update &
+Pointer publish &
 	\tco{rcu_assign_pointer()} &
-		2.6.10 &
-			Memory barrier \\
+		Memory barrier \\
+&
+	\tco{rcu_swap_protected()} &
+		Memory barrier (two of them on Alpha) \\
+&
+	\tco{rcu_pointer_handoff()} &
+		Simple instructions \\
+&
+	\tco{RCU_INIT_POINTER()} &
+		Simple instructions \\
+&
+	\tco{RCU_POINTER_INITIALIZER()} &
+		Compile-time constant \\
+\midrule
+Pointer subscribe (traveral) &
+	\tco{rcu_access_pointer()} &
+		Simple instructions \\
+&
+	\tco{rcu_dereference()} &
+		Simple instructions (memory barrier on Alpha) \\
+&
+	\tco{rcu_dereference_check()} &
+		Simple instructions (memory barrier on Alpha) \\
+&
+	\tco{rcu_dereference_protected()} &
+		Simple instructions \\
+&
+	\tco{rcu_dereference_raw()} &
+		Simple instructions (memory barrier on Alpha) \\
+&
+	\tco{rcu_dereference_raw_notrace()} &
+		Simple instructions (memory barrier on Alpha) \\
 \bottomrule
 \end{tabular}
 \caption{RCU Publish-Subscribe and Version Maintenance APIs}
 \label{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
 \end{table*}
 
-카테고리들 중 처음 두개의 카테고리는 순환형의 이중 링크드 리스트인 리눅스
-\co{struct list_head} 리스트들에 동작합니다.
-\co{list_for_each_entry_rcu()} 함수는 RCU 로 보호되는 리스트를 type-safe 하게
-횡단하는데 새로운 리스트 원소가 횡단과 동시에 삽입되는 상황을 위한 메모리
-순서 강제 역시 합니다.
-Alpha 외의 플랫폼에서 이 함수는 \co{list_for_each_entry()} 에 비해 성능을
-하락시키긴 하지만 그 정도는 적거나 아예 없습니다.
-\co{list_add_rcu()}, \co{list_add_tail_rcu()}, 그리고 \co{list_replace_rcu()}
-함수는 RCU 아닌 비슷한 것들과 유사합니다만 완화된 순서의 기계들에서는 추가적인
-메모리 배리어로 인한 오버헤드를 갖습니다.
-\co{list_del_rcu()} 함수 또한 RCU 아닌 비슷한 것과 유사합니다만,
-\co{list_del()} 이 그래야 하는 것처럼 \co{prev} 와 \co{next} 포인터들을 모두
-파괴하는게 아니라 \co{prev} 포인터만 파괴하기 때문에 신기하게도 매우 조금
-빠릅니다.
-마지막으로, \co{list_splice_init_rcu()} 함수는 역시 RCU 아닌 비슷한 것들과
-유사합니다만 grace-period 대기시간을 갖습니다.
-이 grace period 의 목적은 RCU 읽기 쓰레드가 원본 리스트의 횡단을 그것이
-리스트 헤더로부터 분리되기를 완료하기 전까지 안전하게 마치도록 하는 것입니다 --
-이에 실패하는 것은 그런 읽기 쓰레드들이 그 횡단을 마무리하지 못하게 할수도
-있습니다.
-\iffalse
+These primitives operate directly on pointers, and are useful for
+creating RCU-protected linked data structures, such as RCU-protected
+arrays and trees.
+The special case of linked lists is handled by a separate set of
+APIs described in
+Section~\ref{sec:defer:RCU has List-Processing APIs}.
+
+The first category publishes pointers to new data items. 
+The \co{rcu_assign_pointer()} primitive ensures that any
+prior initialization remains ordered before the assignment to the
+pointer on weakly ordered machines.
+The \co{rcu_swap_protected()} primitive updates the pointer just like
+\co{rcu_assign_pointer()} does, but also returns the previous value,
+just like \co{rcu_dereference_protected()} (see below) would, including
+the lockdep expression.
+This swapping is convenient when the updater must both publish a new
+pointer and free the structure referenced by the old pointer.
+
+\QuickQuiz{}
+	Normally, any pointer subject to \co{rcu_dereference()} \emph{must}
+	always be updated using one of the pointer-publish functions in
+	Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs},
+	for example, \co{rcu_assign_pointer()}.
+
+	What is an exception to this rule?
+\QuickQuizAnswer{
+	One such exception is when a multi-element linked
+	data structure is initialized as a unit while inaccessible to other
+	CPUs, and then a single \co{rcu_assign_pointer()} is used
+	to plant a global pointer to this data structure.
+	The initialization-time pointer assignments need not use
+	\co{rcu_assign_pointer()}, though any such assignments that
+	happen after the structure is globally visible \emph{must} use
+	\co{rcu_assign_pointer()}.
+
+	However, unless this initialization code is on an impressively hot
+	code-path, it is probably wise to use \co{rcu_assign_pointer()}
+	anyway, even though it is in theory unnecessary.
+	It is all too easy for a ``minor'' change to invalidate your cherished
+	assumptions about the initialization happening privately.
+} \QuickQuizEnd
+
+\QuickQuiz{}
+	Are there any downsides to the fact that these traversal and update
+	primitives can be used with any of the RCU API family members?
+\QuickQuizAnswer{
+	It can sometimes be difficult for automated
+	code checkers such as ``sparse'' (or indeed for human beings) to
+	work out which type of RCU read-side critical section a given
+	RCU traversal primitive corresponds to.
+	For example, consider the code shown in
+	Listing~\ref{lst:defer:Diverse RCU Read-Side Nesting}.
+
+\begin{listing}[htbp]
+\begin{VerbatimL}
+rcu_read_lock();
+preempt_disable();
+p = rcu_dereference(global_pointer);
+
+/* . . . */
+
+preempt_enable();
+rcu_read_unlock();
+\end{VerbatimL}
+\caption{Diverse RCU Read-Side Nesting}
+\label{lst:defer:Diverse RCU Read-Side Nesting}
+\end{listing}
+
+	Is the \co{rcu_dereference()} primitive in a vanilla RCU critical
+	section or an RCU Sched critical section?
+	What would you have to do to figure this out?
+
+	But perhaps after the consolidation of the RCU flavors in
+	the v4.20 Linux kernel we no longer need to care!
+} \QuickQuizEnd
+
+The \co{rcu_pointer_handoff()} primitive simply returns its sole argument,
+but is useful to tooling checking for pointers being leaked from
+RCU read-side critical sections.
+Use of \co{rcu_pointer_handoff()} indicates to such tooling that protection
+of the structure in question has been handed off from RCU to some other
+mechanism, such as locking or reference counting.
+
+The \co{RCU_INIT_POINTER()} macro can be used to initialized RCU-protected
+pointers that have not yet been exposed to readers, or alternatively,
+to set RCU-protected pointers to \co{NULL}.
+In these restricted cases, the memory-barrier instructions provided by
+\co{rcu_assign_pointer()} are not needed.
+Similarly, \co{RCU_POINTER_INITIALIZER()} provides a \GCC-style
+structure initializer to allow easy initialization of RCU-protected
+pointers in structures.
+
+The second category subscribes to pointers to data items, or,
+alternatively, safely traverses RCU-protected pointers.
+Again, simply loading these pointers using C-language accesses
+could result in seeing pre-initialization garbage in the pointed-to data.
+However, if the pointer is merely to be tested and not dereferenced,
+this protection is not needed.
+In this case, \co{rcu_access_pointer()()} may be used.
+Normally, however, protection is required, and so the
+\co{rcu_dereference()} primitive ensures that subsequent code
+dereferencing the pointer will see the effects of initialization code
+prior to the corresponding \co{rcu_assign_pointer()}, even on Alpha CPUs.
+On non-Alpha CPUs, \co{rcu_dereference()} documents which pointer
+dereferences require RCU protection.
+
+Another situation where protection is not required is when update side code
+accesses the RCU protected pointer while holding the update-side lock.
+The \co{rcu_dereference_protected()} API member is provided for this
+situation.
+Its first parameter is the RCU-protected pointer, and the second
+parameter takes a lockdep expression describing which locks must be
+held in order for the access to be safe.
+Code invoked both from readers and updaters can use
+\co{rcu_dereference_check()}, which also takes a lockdep expression, but
+which may also be invoked from read-side code not holding the locks.
+In some cases, the lockdep expressions can be very complex, for example,
+when using fine-grained locking, any of a very large number of locks
+might be held, and it might be quite difficult to work out which applies.
+In these (hopefully rare) cases, \co{rcu_dereference_raw()} provides
+protection but does not check for being invoked within a reader or with
+any particular lock being held.
+The \co{rcu_dereference_raw_notrace()} API member acts similarly, but
+cannot be traced, and may therefore be safely used by tracing code.
+
+Although pretty much any linked structure can be accessed by manipulating
+pointers, higher-level structures can be quite helpful.
+The next section therefore looks at various sorts of RCU-protected
+linked lists used by the Linux kernel.
+
+\subsubsection{RCU has List-Processing APIs}
+\label{sec:defer:RCU has List-Processing APIs}
+
+@@@ Update the following list decription to include nulls and bl lists.
+
+\begin{figure}[tb]
+\centering
+\resizebox{3in}{!}{\includegraphics{defer/Linux_list}}
+\caption{Linux Circular Linked List (\tco{list})}
+\label{fig:defer:Linux Circular Linked List (list)}
+\end{figure}
+
+\begin{figure}[tb]
+\centering
+\resizebox{3in}{!}{\includegraphics{defer/Linux_list_abbr}}
+\caption{Linux Linked List Abbreviated}
+\label{fig:defer:Linux Linked List Abbreviated}
+\end{figure}
+
+Although \co{rcu_assign_pointer()} and
+\co{rcu_dereference()} can in theory be used to construct any
+conceivable RCU-protected data structure, in practice it is often better
+to use higher-level constructs.
+Therefore, the \co{rcu_assign_pointer()} and
+\co{rcu_dereference()}
+primitives have been embedded in special RCU variants of Linux's
+list-manipulation API.
+Linux has two variants of doubly linked list, the circular
+\co{struct list_head} and the linear
+\co{struct hlist_head}/\co{struct hlist_node} pair.
+The former is laid out as shown in
+Figure~\ref{fig:defer:Linux Circular Linked List (list)},
+where the green (leftmost) boxes represent the list header and the blue
+(rightmost three) boxes represent the elements in the list.
+This notation is cumbersome, and will therefore be abbreviated as shown in
+Figure~\ref{fig:defer:Linux Linked List Abbreviated},
+which shows only the non-header (blue) elements.
+
+\begin{figure}[tb]
+\centering
+\resizebox{3in}{!}{\includegraphics{defer/Linux_hlist}}
+\caption{Linux Linear Linked List (\tco{hlist})}
+\label{fig:defer:Linux Linear Linked List (hlist)}
+\end{figure}
+
+Linux's other doubly linked list, the hlist,
+is a linear list, which means that
+it needs only one pointer for the header rather than the two
+required for the circular list, as shown in
+Figure~\ref{fig:defer:Linux Linear Linked List (hlist)}.
+Thus, use of hlist can halve the memory consumption for the hash-bucket
+arrays of large hash tables.
+As before, this notation is cumbersome, so hlists will be abbreviated
+in the same way lists are, as shown in
+Figure~\ref{fig:defer:Linux Linked List Abbreviated}.
+
+% @@@ Refer to \ref{fig:defer:Insertion With Concurrent Readers} and
+%	\ref{fig:defer:Deletion With Concurrent Readers}, mostly the latter.
+
+\begin{linelabel}[ln:defer:Canonical RCU Replacement Example (2nd)]
+\begin{VerbatimN}[samepage=true,commandchars=\\\[\],firstnumber=15]
+q = kmalloc(sizeof(*p), GFP_KERNEL);	\lnlbl[kmalloc]
+*q = *p;				\lnlbl[copy]
+q->b = 2;				\lnlbl[update1]
+q->c = 3;				\lnlbl[update2]
+list_replace_rcu(&p->list, &q->list);	\lnlbl[replace]
+synchronize_rcu();			\lnlbl[sync_rcu]
+kfree(p);				\lnlbl[kfree]
+\end{VerbatimN}
+\end{linelabel}
+
+\begin{figure}[tbp]
+\centering
+\resizebox{2.7in}{!}{\includegraphics{defer/RCUReplacement}}
+\caption{RCU Replacement in Linked List}
+\label{fig:defer:RCU Replacement in Linked List}
+\end{figure}
+
+The initial state of the list, including the pointer \co{p},
+is the same as for the deletion example, as shown on the
+first row of
+Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+
+@@@ As before,
+the triples in each element represent the values of fields \co{a},
+\co{b}, and \co{c}, respectively.
+The red-shaded elements might be referenced by readers,
+and because readers do not synchronize directly with updaters,
+readers might run concurrently with this entire replacement process.
+Please note that
+we again omit the backwards pointers and the link from the tail
+of the list to the head for clarity.
+
+The following text describes how to replace the \co{5,6,7} element
+with \co{5,2,3} in such a way that any given reader sees one of these
+two values.
+
+\begin{lineref}[ln:defer:Canonical RCU Replacement Example (2nd)]
+Line~\lnref{kmalloc} \co{kmalloc()}s a replacement element, as follows,
+resulting in the state as shown in the second row of
+Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+At this point, no reader can hold a reference to the newly allocated
+element (as indicated by its green shading), and it is uninitialized
+(as indicated by the question marks).
+
+Line~\lnref{copy} copies the old element to the new one, resulting in the
+state as shown in the third row of
+Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+The newly allocated element still cannot be referenced by readers, but
+it is now initialized.
+
+Line~\lnref{update1} updates \co{q->b} to the value ``2'', and
+line~\lnref{update2} updates \co{q->c} to the value ``3'',
+as shown on the fourth row of
+Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+
+Now, line~\lnref{replace} does the replacement, so that the new element is
+finally visible to readers, and hence is shaded red, as shown on
+the fifth row of
+Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+At this point, as shown below, we have two versions of the list.
+Pre-existing readers might see the \co{5,6,7} element (which is
+therefore now shaded yellow), but
+new readers will instead see the \co{5,2,3} element.
+But any given reader is guaranteed to see some well-defined list.
+
+After the \co{synchronize_rcu()} on line~\lnref{sync_rcu} returns,
+a grace period will have elapsed, and so all reads that started before the
+\co{list_replace_rcu()} will have completed.
+In particular, any readers that might have been holding references
+to the \co{5,6,7} element are guaranteed to have exited
+their RCU read-side critical sections, and are thus prohibited from
+continuing to hold a reference.
+Therefore, there can no longer be any readers holding references
+to the old element, as indicated its green shading in the sixth row of
+Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+As far as the readers are concerned, we are back to having a single version
+of the list, but with the new element in place of the old.
+
+After the \co{kfree()} on line~\lnref{kfree} completes, the list will
+appear as shown on the final row of
+Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+\end{lineref}
+
+Despite the fact that RCU was named after the replacement case,
+the vast majority of RCU usage within the Linux kernel relies on
+the simple deletion case shown in
+Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}.
+
+\begin{sidewaystable*}[htbp]
+\rowcolors{1}{}{lightgray}
+\renewcommand*{\arraystretch}{1.3}
+\centering
+\caption{RCU-Protected List APIs}
+\label{tab:defer:RCU-Protected List APIs}
+\footnotesize
+\newlength{\cwa}\newlength{\cwb}\newlength{\cwc}\newlength{\cwd}
+\IfNimbusAvail{
+  \renewcommand{\ttdefault}{NimbusMonoN}
+  \setlength{\cwa}{1.9in}\setlength{\cwb}{2.1in}
+  \setlength{\cwc}{1.8in}\setlength{\cwd}{1.6in}
+}{
+  \setlength{\cwa}{1.95in}\setlength{\cwb}{2.15in}
+  \setlength{\cwc}{1.9in}\setlength{\cwd}{1.7in}
+}
+\begin{tabular}{>{\raggedright\arraybackslash}p{\cwa}
+    >{\raggedright\arraybackslash}p{\cwb}
+    >{\raggedright\arraybackslash}p{\cwc}
+    >{\raggedright\arraybackslash}p{\cwd}}
+\toprule
+\pmb{\tco{list}}: Circular doubly linked list &
+    \pmb{\tco{hlist}}: Linear doubly linked list &
+	\pmb{\tco{hlist_nulls}}: Linear doubly linked list with marked
+	NULL pointer, with up to 31~bits of marking &
+	    \pmb{\tco{hlist_bl}}: Linear doubly linked list with bit locking \\
+\midrule
+\multicolumn{4}{l}{{\bf Initialization}} \\
+&
+    \tco{INIT_LIST_HEAD_RCU()} &
+	&
+	    \\
+\multicolumn{4}{l}{{\bf Full traversal}} \\
+\tco{list_for_each_entry_rcu()}
+\tco{list_for_each_entry_lockless()} &
+    \tco{hlist_for_each_entry_rcu()}
+    \tco{hlist_for_each_entry_rcu_bh()}
+    \tco{hlist_for_each_entry_rcu_notrace()} &
+	\tco{hlist_nulls_for_each_entry_rcu()}
+	\tco{hlist_nulls_for_each_entry_safe()} &
+	    \tco{hlist_bl_for_each_entry_rcu()} \\
+\multicolumn{4}{l}{{\bf Resume traversal}} \\
+\tco{list_for_each_entry_continue_rcu()}
+\tco{list_for_each_entry_from_rcu()} &
+    \tco{hlist_for_each_entry_continue_rcu()}
+    \tco{hlist_for_each_entry_continue_rcu_bh()}
+    \tco{hlist_for_each_entry_from_rcu()} &
+	&
+	    \\
+\multicolumn{4}{l}{{\bf Stepwise traversal}} \\
+\tco{list_entry_rcu()}
+\tco{list_entry_lockless()}
+\tco{list_first_or_null_rcu()}
+\tco{list_next_rcu()}
+\tco{list_next_or_null_rcu()} &
+    \multicolumn{1}{p{1.2in}}{\tco{hlist_first_rcu()}
+			      \tco{hlist_next_rcu()}
+			      \tco{hlist_pprev_rcu()}} &
+	\tco{hlist_nulls_first_rcu()}
+	\tco{hlist_nulls_next_rcu()} &
+	    \tco{hlist_bl_first_rcu()} \\
+\multicolumn{4}{l}{{\bf Add}} \\
+\multicolumn{1}{p{1.2in}}{\tco{list_add_rcu()}
+			  \tco{list_add_tail_rcu()}} &
+    \tco{hlist_add_before_rcu()}
+    \tco{hlist_add_behind_rcu()}
+    \tco{hlist_add_head_rcu()}
+    \tco{hlist_add_tail_rcu()} &
+	\tco{hlist_nulls_add_head_rcu()} &
+	    \tco{hlist_bl_add_head_rcu()}
+	    \tco{hlist_bl_set_first_rcu()} \\
+\multicolumn{4}{l}{{\bf Delete}} \\
+\tco{list_del_rcu()} &
+    \multicolumn{1}{p{1.2in}}{\tco{hlist_del_rcu()}
+			      \tco{hlist_del_init_rcu()}} &
+	\tco{hlist_nulls_del_rcu()}
+	\tco{hlist_nulls_del_init_rcu()} &
+	    \tco{hlist_bl_del_rcu()}
+	    \tco{hlist_bl_del_init_rcu()} \\
+\multicolumn{4}{l}{{\bf Replace}} \\
+\tco{list_replace_rcu()} &
+    \tco{hlist_replace_rcu()} &
+	&
+	    \\
+\multicolumn{4}{l}{{\bf Splice}} \\
+\tco{list_splice_init_rcu()} &
+    \tco{list_splice_tail_init_rcu()} &
+	&
+	    \\
+\bottomrule
+\end{tabular}
+\end{sidewaystable*}
 
 The first pair of categories operate on Linux
 \co{struct list_head} lists, which are circular, doubly-linked
@@ -943,117 +1239,130 @@ Alpha 외의 CPU 에서 \co{rcu_dereference()} 는 어떤 포인터 디레퍼런
 보호되고 있음을 표시합니다.
 \iffalse
 
-The final pair of categories operate directly on pointers, and
-are useful for creating RCU-protected non-list data structures,
-such as RCU-protected arrays and trees.
-The \co{rcu_assign_pointer()} primitive ensures that any
-prior initialization remains ordered before the assignment to the
-pointer on weakly ordered machines.
-Similarly, the \co{rcu_dereference()} primitive ensures that subsequent
-code dereferencing the pointer will see the effects of initialization code
-prior to the corresponding \co{rcu_assign_pointer()} on
-Alpha CPUs.
-On non-Alpha CPUs, \co{rcu_dereference()} documents which pointer
-dereferences are protected by RCU.
-\fi
+The next section looks at APIs that assist developers in debugging
+their code that makes use of RCU.
+
+\subsubsection{RCU Has Diagnostic APIs}
+\label{sec:defer:RCU Has Diagnostic APIs}
+
+\begin{table}[tb]
+\renewcommand*{\arraystretch}{1.15}
+\footnotesize
+\centering
+\begin{tabular}{ll}
+\toprule
+Category &
+	Primitives \\
+\midrule
+Mark RCU pointer &
+	\tco{__rcu} \\
+\midrule
+Debug-object support &
+	\tco{init_rcu_head()} \\
+&	\tco{destroy_rcu_head()} \\
+&	\tco{init_rcu_head_on_stack()} \\
+&	\tco{destroy_rcu_head_on_stack()} \\
+\midrule
+Stall-warning control &
+	\tco{rcu_cpu_stall_reset()} \\
+\midrule
+Callback checking &
+	\tco{rcu_head_init()} \\
+&	\tco{rcu_head_after_call_rcu()} \\
+\midrule
+lockdep support &
+	\tco{rcu_read_lock_held()} \\
+&	\tco{rcu_read_lock_bh_held()} \\
+&	\tco{rcu_read_lock_sched_held()} \\
+&	\tco{srcu_read_lock_held()} \\
+&	\tco{rcu_is_watching()} \\
+&	\tco{RCU_LOCKDEP_WARN()} \\
+&	\tco{RCU_NONIDLE()} \\
+&	\tco{rcu_sleep_check()} \\
+\bottomrule
+\end{tabular}
+\caption{RCU Diagnostic APIs}
+\label{tab:defer:RCU Diagnostic APIs}
+\end{table}
+
+Table~\ref{tab:defer:RCU Diagnostic APIs}
+shows RCU's diagnostic APIs.
+
+The \co{__rcu} marks an RCU-protected pointer, for example,
+\qco{struct foo __rcu *p;}.
+Pointers that might be passed to \co{rcu_dereference()} can be marked,
+but pointers holding values returned from \co{rcu_dereference()}
+should not be.
+Providing these markings on variables, structure fields, function
+parameters, and return values allows the Linux kernel's \co{sparse}
+tool to detect situtations where RCU-protected pointers are
+incorrectly accessed using plain C-language loads and stores.
+
+Debug-object support is automatic for any \co{rcu_head} structures
+that are part of a structure obtained from the Linux kernel's
+memory allocators, but those building their own special-purpose
+memory allocators can use \co{init_rcu_head()} and \co{destroy_rcu_head()}
+at allocation and free time, respectively.
+Those using \co{rcu_head} structures allocated on the function-call
+stack (it happens!) may use \co{init_rcu_head_on_stack()}
+before first use and \co{destroy_rcu_head_on_stack()} after last use,
+but before returning from the function.
+Debug-object support allows detection of bugs involving passing the
+same \co{rcu_head} structure to \co{call_rcu()} and friends in
+quick succession, which is the \co{call_rcu()} counterpart to the
+infamous double-free class of bugs.
+
+Stall-warning control is provided by \co{rcu_cpu_stall_reset()}, which
+allows the caller to suppress RCU CPU stall warnings for the remainder
+of the current grace period.
+RCU CPU stall warnings help pinpoint situations where an RCU read-side
+critical section runs for an excessive length of time, and it is useful
+for things like kernel debuggers to be able to suppress them, for example,
+when encountering a breakpoint.
+
+Callback checking is provided by \co{rcu_head_init()} and
+\co{rcu_head_after_call_rcu()}.
+The former is invoked on an \co{rcu_head} structure before it is passed
+to \co{call_rcu()}, and then \co{rcu_head_after_call_rcu()} will
+check to see if the callback is has been invoked with the specified
+function.
+
+Support for lockdep~\cite{JonathanCorbet2006lockdep} includes
+\co{rcu_read_lock_held()},
+\co{rcu_read_lock_bh_held()},
+\co{rcu_read_lock_sched_held()}, and
+\co{srcu_read_lock_held()},
+each of which returns \co{true} if invoked within the corresponding
+type of RCU read-side critical section.
 
 \QuickQuiz{}
-	일반적으로, \co{rcu_dereference()} 에 사용되는 모든 포인터는
-	\emph{반드시} 항상 \co{rcu_assign_pointer()} 로 업데이트
-	되어야만 합니다.
-	이 규칙에 예외는 뭐가 있을까요?
-	\iffalse
-
-	Normally, any pointer subject to \co{rcu_dereference()} \emph{must}
-	always be updated using \co{rcu_assign_pointer()}.
-	What is an exception to this rule?
-	\fi
+	Why isn't there a \co{rcu_read_lock_tasks()} for Tasks RCU?
 \QuickQuizAnswer{
-	그런 예외 가운데 하나는 여러 원소가 연결된 데이터 구조체가 다른 CPU
-	들에서 접근할 수 없는 상태에서 하나의 유닛으로써 초기화되었고 하나의
-	\co{rcu_assign_pointer()} 가 이 데이터 구조체로의 글로벌 포인터를
-	설정하는데 사용된 경우입니다.
-	비록 그 구조체가 글로벌하게 보여진 후에 일어나는 그런 할당들은
-	\emph{반드시} \co{rcu_assign_pointer()} 를 사용해야 하지만, 초기화
-	시점의 포인터 할당은 \co{rcu_assign_pointer()} 를 사용할 필요가
-	없습니다.
-	\iffalse
-
-	One such exception is when a multi-element linked
-	data structure is initialized as a unit while inaccessible to other
-	CPUs, and then a single \co{rcu_assign_pointer()} is used
-	to plant a global pointer to this data structure.
-	The initialization-time pointer assignments need not use
-	\co{rcu_assign_pointer()}, though any such assignments that
-	happen after the structure is globally visible \emph{must} use
-	\co{rcu_assign_pointer()}.
-	\fi
-
-	하지만, 이 초기화 코드가 매우 자주 실행되는 코드 수행경로에 있는게
-	아니라면, 이론적으로는 불필요할지라도 \co{rcu_assign_pointer()} 를
-	사용하는게 현명할 것입니다.
-	어떤 ``사소한'' 변경이 그 초기화는 혼자서 행하게 된다는 소중한 가정을
-	무효화 시키기는 매우 쉽습니다.
-	\iffalse
-
-	However, unless this initialization code is on an impressively hot
-	code-path, it is probably wise to use \co{rcu_assign_pointer()}
-	anyway, even though it is in theory unnecessary.
-	It is all too easy for a ``minor'' change to invalidate your cherished
-	assumptions about the initialization happening privately.
-	\fi
+	Because Tasks RCU does not have read-side markers.
+	Instead, Tasks RCU read-side critical sections are
+	bounded by voluntary context switches.
 } \QuickQuizEnd
 
-\QuickQuiz{}
-	이런 횡단과 업데이트 기능들이 어떤 RCU API 패밀리 멤버들과 함께
-	사용된다 하더라도 어떤 문제는 없나요?
-	\iffalse
+Because \co{rcu_read_lock()} cannot be used from the idle loop,
+and because energy-efficiency concerns have caused the idle loop
+to become quite ornate, \co{rcu_is_watching()} returns true if
+invoked in a context where use of \co{rcu_read_lock()} is legal.
+Note again that \co{srcu_read_lock()} may be used from idle and
+even offline CPUs, which means that \co{rcu_is_watching()} does not
+apply to SRCU.
 
-	Are there any downsides to the fact that these traversal and update
-	primitives can be used with any of the RCU API family members?
-	\fi
-\QuickQuizAnswer{
-	어떤 경우에는 ``sparse'' 와 같은 자동화된 코드 검사기 (또는 사람이) 가
-	어떤 종류의 RCU read-side 크리티컬 섹션이 어떤 RCU 횡단 기능들과
-	연관되어 있는지 알기 어려울 수 있습니다.
-	예를 들어,
-	Listing~\ref{lst:defer:Diverse RCU Read-Side Nesting} 에 보여진 것과
-	같은 코드를 생각해 봅시다.
-	\iffalse
+\co{RCU_LOCKDEP_WARN()} emits a warning if lockdep is enabled and if
+its argument evaluated to \co{true}.
+For example, \co{RCU_LOCKDEP_WARN(!rcu_read_lock_held())} would emit a
+warning if invoked outside of an RCU read-side critical section.
 
-	It can sometimes be difficult for automated
-	code checkers such as ``sparse'' (or indeed for human beings) to
-	work out which type of RCU read-side critical section a given
-	RCU traversal primitive corresponds to.
-	For example, consider the code shown in
-	Listing~\ref{lst:defer:Diverse RCU Read-Side Nesting}.
-	\fi
+\co{RCU_NONIDLE()} may be used to force RCU to watch when executing
+the statement that is passed in as the sole argument.
+For example, \co{RCU_NONIDLE(WARN_ON(!rcu_is_watching()))}
+would never emit a warning.
 
-\begin{listing}[htbp]
-\begin{VerbatimL}
-rcu_read_lock();
-preempt_disable();
-p = rcu_dereference(global_pointer);
-
-/* . . . */
-
-preempt_enable();
-rcu_read_unlock();
-\end{VerbatimL}
-\caption{Diverse RCU Read-Side Nesting}
-\label{lst:defer:Diverse RCU Read-Side Nesting}
-\end{listing}
-
-	\co{rcu_deference()} 기능은 RCU Classic 크리티컬 섹션 안에 있을까요 RCU
-	Sched 크리티컬 섹션 안에 있을까요?
-	이걸 알아내려면 어떻게 해야할까요?
-	\iffalse
-
-	Is the \co{rcu_dereference()} primitive in an RCU Classic
-	or an RCU Sched critical section?
-	What would you have to do to figure this out?
-	\fi
-} \QuickQuizEnd
+Finally,  \co{rcu_sleep_check()} emits a warning if invoked within
+an RCU, RCU-bh, or RCU-sched read-side critical section.
 
 \subsubsection{Where Can RCU's APIs Be Used?}
 \label{sec:defer:Where Can RCU's APIs Be Used?}
@@ -1138,7 +1447,9 @@ all of the things you can do with these APIs.
 However, for many people, a complete view of RCU must include sample
 RCU implementations.
 Appendix~\ref{chp:app:``Toy'' RCU Implementations} therefore presents a series
-of ``toy'' RCU implementations of increasing complexity and capability.
-For everyone else, the next section gives an overview of both academic
-and industry use of RCU.
+of ``toy'' RCU implementations of increasing complexity and capability,
+though others might prefer the classic
+``User-Level Implementations of Read-Copy
+Update''~\cite{MathieuDesnoyers2012URCU}.
+For everyone else, the next section gives an overview of some RCU use cases.
 \fi

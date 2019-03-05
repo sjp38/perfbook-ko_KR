@@ -4910,519 +4910,87 @@ describes how to protect those delicate control dependencies.
 \subsection{Memory-Reference Restrictions}
 \label{sec:memorder:Memory-Reference Restrictions}
 
-다시 말하지만, 달리 이야기 해주지 않으면, 컴파일러는 생성된 코드에 의해
-접근되는 변수들에 영향을 끼치는 다른 존재는 없다고 가정합니다.
-이 가정은 단순한 설계상의 에러가 아니고, 다양한 표준에서 소중히 지켜지는
-것입니다.\footnote{
-	또는, 어쩌면 표준화된 설계상의 에러일 수도 있겠습니다.}
-이 가정은 컴파일러는 다음의 코드에 대해 컴파일러가 \co{do_something()} 은
-\co{a} 를 수정하지 않음을 증명할 수 있는 경우라면 \co{a} 로부터의 로드를 루프
-바깥으로 끄집어 내는 최적화를 수행할 (표준에 정의된) 권리를 가짐을 의미합니다:
-\iffalse
-
-Again, unless told otherwise, compilers assume that nothing else
-is affecting the variables being accessed by the generated code.
-This assumption is not simply some design error, but is instead enshrined in
-various standards.\footnote{
+As noted in Section~\ref{sec:toolsoftrade:Accessing Shared Variables},
+unless told otherwise, compilers assume that nothing else
+is affecting the variables that the code is accessing.
+Furthermore, this assumption is not simply some design error, but is
+instead enshrined in various standards.\footnote{
 	Or perhaps it is a standardized design error.}
-This assumption means that compilers are within their rights
-(as defined by the standards) to optimize the following code
-so as to hoist the load from \co{a} out of the loop, at least
-in cases where the compiler can prove that \co{do_something()}
-does not modify \co{a}:
-\fi
+It is worth summarizing this material in preparation for the following
+sections.
 
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 while (a)
-  2   do_something();
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-최적화된 코드는 아래와 같이, 임의의 거대한 횟수의 의도된 로드들을 하나의 실제
-로드로 합쳐버린 모습으로 될 수 있을 겁니다:
-\iffalse
-
-The optimized code might look something like this, essentially
-fusing an arbitrarily large number of intended loads into a single
-actual load:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 if (a)
-  2   for (;;)
-  3     do_something();
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-이 최적화는 \co{a} 에 값 0을 저장함으로써 이 루프를 종료시킬 것이라고 예상한
-다른 곳의 코드에 놀라움으로 다가올 겁니다.
-다행히도, 이 문제를 막을 수 있는 여러 방법들이 있습니다:
-\iffalse
-
-This optimization might come as a fatal surprise to code elsewhere
-that expected to terminate this loop by storing a zero to \co{a}.
-Fortunately, there are several ways of avoiding this sort of problem:
-\fi
+Plain accesses, as in plain-access C-language assignment statements such
+as \qco{r1 = a} or \qco{b = 1} are subject to the
+shared-variable shenanigans described in
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}.
+Ways of avoiding these shenanigans are described in
+Sections~\ref{sec:toolsoftrade:A Volatile Solution}-\ref{sec:toolsoftrade:Avoiding Data Races}:
 
 \begin{enumerate}
-\item	Volatile 액세스.
-\item	어토믹 변수들.
-\item	데이터 레이스를 가져오는 걸 막는것.
-\iffalse
-
-\item	Volatile accesses.
-\item	Atomic variables.
-\item	Prohibitions against introducing data races.
-\fi
+\item	Plain accesses can tear, for example, the compiler could choose
+	to access an eight-byte pointer one byte at a time.
+	Tearing can be prevented by using \co{READ_ONCE()} and
+	\co{WRITE_ONCE()}.
+\item	Plain loads can fuse, for example, if the results of an earlier
+	load from that same object are still in a machine register,
+	the compiler might opt to reuse the value in that register
+	instead of reloading from memory.
+	Load fusing can be prevented by using \co{READ_ONCE()} or by
+	enforcing ordering between the two loads using \co{barrier()},
+	\co{smp_rmb()}, and other means shown in
+	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+\item	Plain stores can fuse, so that a store can be omitted entirely
+	if there is a later store to that same variable.
+	Store fusing can be prevented by using \co{WRITE_ONCE()} or by
+	enforcing ordering between the two stores using \co{barrier()},
+	\co{smp_wmb()}, and other means shown in
+	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+\item	Plain accesses can be reordered in surprising ways by modern
+	optimizing compilers.
+	This reordering can be prevented by enforcing ordering as
+	called out above.
+\item	Plain loads can be invented, for example, register pressure might
+	cause the compiler to discard a previously loaded value from
+	its register, and then reload it later on.
+	Invented loads can be prevented by using \co{READ_ONCE()} or by
+	enforcing ordering as callout out above between the load and a
+	later use of its value using \co{barrier()}.
+\item	Stores can be invented before a plain store, for example, by
+	using the stored-to location as temporary storage.
+	This can be prevented by use of \co{WRITE_ONCE()}.
 \end{enumerate}
 
-\co{volatile} 제약은 믿을 수 있는 디바이스 드라이버를 작성하는데 필요하고,
-어토믹 변수들과 데이터 레이스를 가져오는걸 막는 것은 믿을 수 있는 동시적 코드를
-작성하는데 필요합니다.
-
-다음 코드는 \co{READ_ONCE()} 의 무한루프 최적화를 막을 수 있도록 \co{volatile}
-캐스팅을 사용합니다:
-\iffalse
-
-The \co{volatile} restrictions are necessary to write reliable
-device drivers, and the atomic variables and prohibitions against
-introducing data races are necessary to write reliable concurrent
-code.
-
-Starting with volatile accesses, the following code
-relies on the \co{volatile} casts in \co{READ_ONCE()} to prevent
-the unfortunate infinite-loop optimization:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 while (READ_ONCE(a))
-  2   do_something();
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-\co{READ_ONCE()} 는 이 로드를 \co{volatile} 캐스팅으로 표시합니다.
-\co{volatile} 은 원래 일반적인 메모리에 접근할 때 사용되는 것과 동일한 로드와
-스토어 인스트럭션을 사용해 접근되는 memory-mapped I/O (MMIO) 레지스터로의
-접근을 위해 설계되었습니다.
-하지만, MMIO 레지스터는 일반적 메모리처럼 동작해야 할 필요가 없습니다.
-MMIO 레지스터에 값을 저장하는 행위는 해당 레지스터로부터의 이어지는 로드가 지금
-저장한 값을 리턴함을 의미할 이유가 없습니다.
-MMIO 레지스터로부터의 로드는 부가 작용을 가질 수 있는데, 예를 들면 디바이스의
-상태를 바꾸거나 다른 MMIO 레지스터에 연관된, 뒤이어지는 로드와 스토어의 응답에
-영향을 끼치거나 하는 것입니다.
-같은 MMIO 주소로의 다른 크기의 로드와 스토어는 서로 다른 영향을 끼칠 수도
-있습니다.
-\iffalse
-
-\co{READ_ONCE()} marks the load with a \co{volatile} cast.
-Now \co{volatile} was originally designed for accessing
-memory-mapped I/O (MMIO) registers, which are accessed using
-the same load and store instructions that are used when
-accessing normal memory.
-However, MMIO registers need not act at all like normal memory.
-Storing a value to an MMIO register does not necessarily mean
-that a subsequent load from that register will return the value
-stored.
-Loading from an MMIO register might well have side effects,
-for example, changing the device state or affecting the response
-to subsequent loads and stores involving other MMIO registers.
-Loads and stores of different sizes to the same MMIO address
-might well have different effects.
-\fi
-
-이는, 설령 단일 프로세서 시스템이라 할지라도, MMIO 액세스의 순서, 갯수, 또는
-크기를 바꾸는 것은 엄격히 금지되어야만 함을 의미합니다.
-그리고 이게 정확히 C-언어의 \co{volatile} 키워드의 목적으로, 컴파일러가
-안정적인 디바이스 드라이버를 구현할 수 있게 해주는 것입니다.
-
-이는 왜 \co{READ_ONCE()} 가 \co{a} 로부터의 로드를 루프 바깥으로 끄집어 내는
-행위를 막아주는지 설명합니다:  그렇게 하는 것은 \co{a} 로부터의 \co{volatile}
-로드들의 수를 바꾸는 것으로, 그런 최적화는 허용되지 않습니다.
-하지만, \co{volatile} 은 하드웨어에 제약을 거는 일은 아무것도 하지 않음 역시
-알아두시기 바랍니다.
-따라서, 루프를 뒤따르는 코드가 이 루프를 종료시키는 0 값의 저장을 앞지르는
-메모리 레퍼런스의 결과를 봐야 한다면, 여러분은 값 0을 저장하는데에
-\co{smp_store_release()} 같은 것을, 그리고 루프 조건에는
-\co{smp_load_acquire()} 같은 것을 사용해야만 합니다.
-하지만 여러분에게 필요한게 루프의 안정적인 제어 뿐이고 다른 순서는 필요치
-않다면, \co{READ_ONCE()} 가 그 일을 해줄 수 있습니다.
-
-컴파일러는 로드를 복사할 수도 있습니다.
-예를 들어, 다음의 현실적인 코드를 보시기 바랍니다:
-\iffalse
-
-This means that, even on a uniprocessor system, changing the
-order, number, or size of MMIO accesses is strictly forbidden.
-And this is exactly the purpose of the C-language \co{volatile} keyword,
-to constrain the compiler so as to allow implementation of reliable device
-drivers.
-
-This is why \co{READ_ONCE()} prevents the destructive hoisting of
-the load from \co{a} out of the loop:  Doing so changes the number
-of \co{volatile} loads from \co{a}, so this optimization is disallowed.
-However, note well that \co{volatile} does absolutely nothing to
-constrain the hardware.
-Therefore, if the code following the loop needs to see the result of
-any memory references preceding the store of zero that terminated
-the loop, you will instead need to use something like
-\co{smp_store_release()} to store the zero and \co{smp_load_acquire()}
-in the loop condition.
-But if all you need is to reliably control the loop without any
-other ordering, \co{READ_ONCE()} can do the job.
-
-Compilers can also replicate loads.
-For example, consider this all-too-real code fragment:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 tmp = p;
-  2 if (tmp != NULL && tmp <= q)
-  3   do_something(tmp);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-여기서의 의도는 \co{do_something()} 함수가 \co{NULL} 포인터나 \co{q} 보다 큰
-포인터를 받지 않는 것입니다.
-하지만, 컴파일러는 이를 다음과 같이 바꿀 수 있는 권한이 있습니다:
-\iffalse
-
-Here the intent is that the \co{do_something()} function is never
-passed a \co{NULL} pointer or a pointer that is greater than \co{q}.
-However, the compiler is within its rights to transform this into the
-following:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 if (p != NULL && p <= q)
-  2   do_something(p);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-이렇게 바뀐 코드에서, \co{p} 의 값은 세개의 서로 다른 시점에서 로드됩니다.
-이 변환은 처음엔 우습게 보일 수도 있겠지만, 이를 둘러싼 코드가 기계의 모든
-레지스터를 사용하고 있는 경우라면 매우 유용할 겁니다.
-\co{p} 의 현재 값이 line~1 에서의 테스트를 통과하지만, line~2 가 수행되기 전에
-어떤 다른 쓰레드가 \co{p} 에 \co{NULL} 을 저장해서, 결국 \co{do_somethin()} 은
-놀랍게도 \co{NULL} 포인터를 받아올 수 있습니다.\footnote{
-	이 책의 편집자는 1990년대 초에 DYNIX/ptx 커널의 메모리 할당자에서
-	정확히 이와 같은 실수를 한 적이 있습니다.
-	이 버그를 찾아내기 위해 이 책의 편집자만이 아니라 그의 여러 동료들까지
-	휴일 주말을 반납해야 했습니다.
-	짧게 말해서, 이건 새로운 문제가 아닙니다.}
-컴파일러가 로드를 복제하는걸 막기 위해선, \co{READ_ONCE()} 를 아래 예제처럼
-사용하세요:
-\iffalse
-
-In this transformed code, the value of \co{p} is loaded three
-separate times.
-This transformation might seem silly at first glance, but it is quite
-useful when the surrounding code has consumed all of the
-machine registers.
-It is possible that the current value of \co{p} passes the test on
-line~1, but that some other thread stores \co{NULL} to \co{p} before
-line~2 executes, and the resulting \co{NULL} pointer could be a fatal
-surprise to \co{do_something()}.\footnote{
-	Your editor made exactly this mistake in the DYNIX/ptx
-	kernel's memory allocator in the early 1990s.
-	Tracking down the bug consumed a holiday weekend not just
-	for your editor, but also for several of his colleagues.
-	In short, this is not a new problem.}
-To prevent the compiler from replicating the load, use \co{READ_ONCE()},
-for example as follows:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 tmp = READ_ONCE(p);
-  2 if (tmp != NULL && tmp <= q)
-  3   do_something(tmp);
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-또는, 변수 \co{p} 가 \co{volatile} 로 선언될 수도 있습니다.
-
-컴파일러는 스토어들을 결합시킬 수도 있습니다.
-그런 가장 유명한 예는 아마도 아래에 보인 프로그레스바 예제일 겁니다:
-\iffalse
-
-Alternatively, the variable \co{p} could be declared \co{volatile}.
-
-Compilers can also fuse stores.
-The most infamous example is probably the progress-bar example
-shown below:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 while (!am_done()) {
-  2   do_something(p);
-  3   progress++;
-  4 }
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-컴파일러가 feedback 기반 최적화를 사용한다면, 공유 변수 \co{progress} 로의
-스토어가 상당히 비용이 비싸다는 걸 알게 되어서, 다음과 같이 의도되지 않은
-최적화를 만들어 낼 수도 있을 겁니다:
-\iffalse
-
-If the compiler used a feedback-driven optimizer, it might well
-notice that the store to the shared variable \co{progress} was
-quite expensive, resulting in the following well-intentioned
-optimization:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 while (!am_done()) {
-  2   do_something(p);
-  3   tmp++;
-  4 }
-  5 progress = tmp;
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-이는 성능을 약간 높일 수도 있겠지만, 프로그레스바를 바라보는 불쌍한 사용자는 이
-최적화로 인해 종종 잊혀져 버립니다.
-프로그레스바는 계속 0에 오랜시간 멈춰있다가, 마지막에 와서야 갑자기 커질
-겁니다.
-다음 코드는 이런 일반적으로 이런 문제를 막아줍니다:
-\iffalse
-
-This might well slightly increase performance, but the poor user
-watching the progress bar might be forgiven for harboring significant
-ill will towards this particular optimization.
-The progress bar will after all be stuck at zero for a long time,
-then jump at the very end.
-The following code will usually prevent this problem:
-\fi
-
-\vspace{5pt}
-\begin{minipage}[t]{\columnwidth}
-\scriptsize
-\begin{verbatim}
-  1 while (!am_done()) {
-  2   do_something(p);
-  3   WRITE_ONCE(progress, progress + 1);
-  4 }
-\end{verbatim}
-\end{minipage}
-\vspace{5pt}
-
-컴파일러가 \co{do_something()} 을 분석해서 어토믹, 또는 \co{volatile} 변수로의
-액세스가 없다는 것을 알아낼 수 있다면 예외가 있을 수 있습니다.
-이런 경우에 컴파일러는 \co{do_something()} 을 호출하는 루프와 \co{progress} 를
-증가시키는 루프 두개의 루프를 만들어낼 수 있습니다.
-그런 일이 일어날 수 있는 희박한 확률의 상황에는 \co{WRITE_ONCE()} 를
-\co{smp_store_release()} 같은 것으로 바꿔야 할 겁니다.
-컴파일러가 \co{volatile} 액세스의 횟수, 크기, 순서를 바꿀 수는 없게 되어
-있지만, \co{volatile} 액세스들과 관계 없는 평범한 액세스들은 순서를 바꿀 권한을
-가지고 있음을 알아두는게 중요합니다.
-\iffalse
-
-Exceptions can occur if the compiler is able to analyze \co{do_something()}
-and learn that it has no accesses to atomic or \co{volatile} variables.
-In these cases the compiler could produce two loops, one invoking
-\co{do_something()} and the other incrementing \co{progress}.
-It may be necessary to replace the \co{WRITE_ONCE()} with something
-like \co{smp_store_release()} in the unlikely event that this occurs.
-It is important to note that although the compiler is forbidden from
-changing the number, size, or order of \co{volatile} accesses, it is
-perfectly within its rights to reorder normal accesses with unrelated
-\co{volatile} accesses.
-\fi
-
-이상하게 들릴 수 있지만, 컴파일러는 어떤 변수에의 일반적 스토어 직전에 그
-변수를 임시 저장소로 사용할 수 있어서, 해당 변수로의 스토어를 만들어 낼 수
-있습니다.
-다행히도, 대부분의 컴파일러는 적어도 스택 변수 외에서는 이런 종류의 일을 하지
-않습니다.
-어떤 경우에는, \co{WRITE_ONCE()} 를 사용하는 것, 변수를 \co{volatile} 로
-선언하는것, 또는 (어토믹을 지원하는 최신 C 와 C++ 컴파일러에서) 해당 변수를
-어토믹으로 선언하는 것은 이런 일을 막아줄 겁니다.
-\iffalse
-
-Oddly enough, the compiler is within its rights to use a variable
-as temporary storage just before a normal store to that variable, thus
-inventing stores to that variable.
-Fortunately, most compilers avoid this sort of thing, at least outside
-of stack variables.
-In any case, using \co{WRITE_ONCE()}, declaring the variable
-\co{volatile}, or declaring the variable atomic (in recent C and C++
-compilers supporting atomics) will prevent this sort of thing.
-\fi
-
 \QuickQuiz{}
-	왜 컴파일러는 일반적 변수에의 스토어를 아무때나 만들 수 없는거죠?
-	\iffalse
-
-	Why can't the compiler invent a store to a normal variable
-	any time it likes?
-	\fi
+	Why not place a \co{barrier()} call immediately before
+	a plain store to prevent the compiler from inventing stores?
 \QuickQuizAnswer{
-	컴파일러는 데이터 레이스로부터 숨겨져 있기 때문입니다.
-	일반적 스토어 앞에 스토어를 만들어내는 경우는 상당히 특수합니다:
-	코드가 만들어진 스토어가 없다 해도 데이터 레이스를 가지고 있다면, CPU,
-	쓰레드, 시그널 해늗ㄹ러, 또는 인터럽트 핸들러와 같은 다른 것들은 이
-	만들어진 스토어를 볼 수 없습니다.
-
-	하지만 \co{WRITE_ONCE()} 에서와 같이 원래의 스토어가 volatile 이라면,
-	모든 컴파일러가 어떤 다른 쓰레드에 시그널을 보내는 스토어에 관련된
-	부작용이 있을 수 있음을 알게 되어서 해당 변수에의 데이터 레이스로부터
-	자유로운 액세스를 가능하게 합니다.
-	이 스토어를 만들어냄으로써, 컴파일러는 데이터 레이스를 만들어내는,
-	해서는 안될 일을 할수도 있습니다.
-	그리고 만약 이 코드가 이미 데이터 레이스를 가지고 있다면, 개발자의
-	바램과는 상관없이 컴파일러가 원하는대로 어떤 코드든 만들어낼 수 있는,
-	비정의된 행동의 무서운 유령을 이미 불러낸 것입니다.
-
-	\co{volatile} 과 어토믹 변수들의 경우, 컴파일러는 명시적으로 스토어를
-	만들지 못하도록 되어있습니다.
-	\iffalse
-
-	Because the compiler is forbidden from introducing data races.
-	The case of inventing a store just before a normal store is
-	quite special:  It is not possible for some other entity,
-	be it CPU, thread, signal handler, or interrupt handler, to be
-	able to see the invented store unless the code already has
-	a data race, even without the invented store.
-	And if the code already has a data race, it already invokes
-	the dreaded spectre of undefined behavior, which allows the
-	compiler to generate pretty much whatever code it wants,
-	regardless of the wishes of the developer.
-
-	But if the original store is volatile, as in \co{WRITE_ONCE()},
-	for all the compiler knows, there might be a side effect
-	associated with the store that could signal some other thread,
-	allowing data-race-free access to the variable.
-	By inventing the store, the compiler might be introducing a
-	data race, which it is not permitted to do.
-
-	In the case of \co{volatile} and atomic variables, the compiler
-	is specifically forbidden from inventing writes.
-	\fi
+	Because it would not work.
+	Although the compiler would be prevented from inventing a
+	store prior to the \co{barrier()}, nothing would prevent
+	it from inventing a store between that \co{barrier()} and
+	the plain store.
 } \QuickQuizEnd
 
-앞의 예는 액세스의 횟수를 바꾸는 컴파일러 최적화에 관련된 것이었습니다.
-이제, 아래쪽에 있는 하드웨어는 액세스 순서를 바꿀 수 있다는 걸 놓고 보면
-컴파일러가 액세스 순서를 바꾸는 걸 막는건 무의미한 행위라고 보일 수도 있을
-겁니다.
-하지만, 근래의 기계들은 \emph{exact exception} 과 \emph{exact interrupt} 를
-갖는데, 이는 모든 인터럽트나 익셉션은 인스트럭션의 흐름 가운데 특정 위치에서
-발생한 것을 보외게 되어서, 이것들의 핸들러는 앞의 인스트럭션들의 효과를 모두
-보게 되지만, 뒤따르는 인스트럭션들의 효과는 보지 못하게 됨을 의미합니다.
-따라서 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 는 인터럽트된 코드와 인터럽트
-핸들러 사이의 통신을 제어하기 위해 사용될 수 있습니다.\footnote{
-	하지만, 다양한 표준의 위원회들은 여러분이 이대신에 \co{sig_atomic_t}
-	타임의 변수들이나 어토믹 기능들을 대신 사용하길 권장할 겁니다.}
-\iffalse
+Please note that all of these shared-memory shenanigans can instead be
+avoided by avoiding data races on plain accesses, as described in
+Section~\ref{sec:toolsoftrade:Avoiding Data Races}.
+After all, if there are no data races, then each and every one of the
+compiler optimizations mentioned above is perfectly safe.
+But for code containing data races, this list is subject to change
+without notice as compiler optimizations continue becoming increasingly
+aggressive.
 
-The previous examples involved compiler optimizations that
-changed the number of accesses.
-Now, it might seem that preventing the compiler from changing the
-order of accesses is an act of futility, given that the underlying
-hardware is free to reorder them.
-However, modern machines have \emph{exact exceptions} and
-\emph{exact interrupts}, meaning that any interrupt or exception will
-appear to have happened at a specific place in the instruction
-stream, so that the handler will see the effect of all prior
-instructions, but won't see the effect of any subsequent instructions.
-\co{READ_ONCE()} and \co{WRITE_ONCE()} can therefore be used to
-control communication between interrupted code and interrupt handlers.\footnote{
-	That said, the various standards committees would prefer that
-	you instead use atomics or variables of type \co{sig_atomic_t}.}
-
-\fi
-
-실제 액세스되는 크기가 요청된 것보다 작을 경우에 \emph{load tearing} 과
-\emph{store tearing} 이라 알려진, 액세스의 크기의 변화에 대해선 이야기 되지
-않았습니다.
-예를 들어, 상수 \co{0x00010002} 를 32-bit 변수에 저장하는 것은 안전하게 보일
-겁니다.
-하지만, 작은 즉석값 (immediate value) 을 곧바로 메모리에 저장할 수 있는 CPU
-들이 존재하고, 그런 CPU 에서는, 명시적으로 32-bit 상수를 만드는 오버헤드를
-없애기 위해 이를 두개의 16-bit 스토어로 쪼갤 거라 예상할 수 있습니다.
-이는 이 변수의 값을 동시에 읽어들이는 다른 쓰레드 입장에서는 절반만 완료된
-스토어의 결과는 예상치 못했기에 커다란 놀라움이 됩니다.
-\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 의 사용은 컴파일러가 load tearing 과
-store tearing 을 활용하는 것을 각각 막아줍니다.
-\iffalse
-
-This leaves changes to the size of accesses, which is known as
-\emph{load tearing} and \emph{store tearing} when the actual size
-is smaller than desired.
-For example, storing the constant \co{0x00010002} into a 32-bit
-variable might seem quite safe.
-However, there are CPUs that can store small immediate values
-directly into memory, and on such CPUs, the compiler can be expected
-to split this into two 16-bit stores in order to avoid the overhead
-of explicitly forming the 32-bit constant.
-This could come as a fatal surprise to another thread concurrently
-loading from this variable, which might not expect to see the
-result of a half-completed store.
-Use of \co{READ_ONCE()} and \co{WRITE_ONCE()} prevent the compiler
-from engaging in load tearing and store tearing, respectively.
-\fi
-
-요약해서, \co{READ_ONCE()}, \co{WRITE_ONCE()}, 그리고 \co{volatile} 의 사용은
-컴파일러가 여러분의 병렬 알고리즘을 존재하는 것과 다르게 최적화 하는 것을
-막는데 효과적인 도구들입니다.
-컴파일러는 예를 들면 \co{memory_order_relaxed} 어토믹 로드와 스토어 같은, load
-와 store tearing 을 막기 위한 다른 메커니즘들을 제공하기 시작했습니다만,
-액세스들을 합치고 쪼개는 것을 막기 위해선 \co{volatile} 이 여전히 필요합니다.
-\iffalse
-
-In short, use of \co{READ_ONCE()}, \co{WRITE_ONCE()}, and
-\co{volatile} are valuable tools in preventing the compiler from
+In short, use of \co{READ_ONCE()}, \co{WRITE_ONCE()}, \co{barrier()},
+\co{volatile}, and other primitives called out in
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+are valuable tools in preventing the compiler from
 optimizing your parallel algorithm out of existence.
 Compilers are starting to provide other mechanisms for avoiding
 load and store tearing, for example, \co{memory_order_relaxed}
-atomic loads and stores, however, \co{volatile} is still needed
-to avoid fusing and splitting of accesses.
-\fi
-
-하지만, \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 를 과용할 수도 있습니다.
-예를 들어, 여러분이 특정 변수가 변화하는 것을 막았다면 (해당 변수에 대한 모든
-업데이트를 락으로 지킨다던지 하는식으로), \co{READ_ONCE()} 를 사용할 필요가
-없습니다.
-비슷하게, 여러분이 모든 다른 CPU 나 쓰레드가 특정 변수를 읽는 것을 막았다면
-(여러분이 해당 변수를 모든 다른 CPU 나 쓰레드가 접근하기 전에 초기화 한다던지
-해서), \co{WRITE_ONCE()} 를 사용할 필요가 없습니다.
-하지만, 제 경험으로는 개발자들은 그들이 생각하는 것보다 더 자주
-\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 같은 걸 사용해야 하고, 불필요한 사용으로
-인한 오버헤드는 상당히 낮습니다.
-더 나아가서, 필요한 곳에 이것들을 사용하지 않음으로써 생기는 문제는 상당히
-큽니다.
-\iffalse
+atomic loads and stores, however, work is still
+needed~/\cite{JonathanCorbet2016C11atomics}
+In addition, compiler issues aside, \co{volatile} is still needed
+to avoid fusing and invention of accesses, including C11 atomic accesses.
 
 Please note that, it is possible to overdo use of \co{READ_ONCE()} and
 \co{WRITE_ONCE()}.
@@ -5437,7 +5005,6 @@ However, in my experience, developers need to use things like
 \co{READ_ONCE()} and \co{WRITE_ONCE()} more often than they think that
 they do, the overhead of unnecessary uses is quite low.
 Furthermore, the penalty for failing to use them when needed is quite high.
-\fi
 
 \subsection{Address- and Data-Dependency Difficulties}
 \label{sec:memorder:Address- and Data-Dependency Difficulties}
@@ -6098,7 +5665,7 @@ Either can result in highly counterintuitive effects on ordering.
 
 Worse yet, if the compiler is able to prove (say) that the value of
 variable~\co{x} is always non-zero, it would be well within its rights
-to optimize the original example by eliminating the ``\co{if}'' statement
+to optimize the original example by eliminating the \qco{if} statement
 as follows:
 \fi
 
@@ -6117,7 +5684,7 @@ as follows:
 \iffalse
 
 It is tempting to try to enforce ordering on identical stores on both
-branches of the ``\co{if}'' statement as follows:
+branches of the \qco{if} statement as follows:
 \fi
 
 \vspace{5pt}
@@ -6294,7 +5861,7 @@ that \co{MAX} is greater than one, perhaps as follows:
 
 Please note once again that the stores to~\co{y} differ.
 If they were identical, as noted earlier, the compiler could pull this
-store outside of the ``\co{if}'' statement.
+store outside of the \qco{if} statement.
 
 You must also avoid excessive reliance on boolean short-circuit evaluation.
 Consider this example:
@@ -6418,9 +5985,9 @@ A weakly ordered CPU would have no dependency of any sort between the load
 from~\co{x} and the store to~\co{z}.
 The control dependencies would extend
 only to the pair of cmov instructions and the store depending on them.
-In short, control dependencies apply only to the stores in the ``\co{then}''
-and ``\co{else}'' of the ``\co{if}'' in question (including functions
-invoked by those two clauses), not to code following that ``\co{if}''.
+In short, control dependencies apply only to the stores in the \qco{then}
+and \qco{else} of the \qco{if} in question (including functions
+invoked by those two clauses), not to code following that \qco{if}.
 
 Finally, control dependencies do \emph{not} provide cumulativity.\footnote{
 	Refer to Section~\ref{sec:memorder:Cumulativity} for
@@ -6519,7 +6086,7 @@ But because control dependencies do \emph{not} provide cumulativity, the
 \co{exists} clause in the three-thread litmus test can trigger.
 If you need the three-thread example to provide ordering, you will need
 \co{smp_mb()} between the load and store in \co{P0()},
-that is, just before or just after the ``\co{if}'' statements.
+that is, just before or just after the \qco{if} statements.
 Furthermore, the original two-thread example is very fragile and should be avoided.
 
 \QuickQuiz{}
@@ -6585,12 +6152,12 @@ The following list of rules summarizes the lessons of this section:
 	수 있기 때문이란 걸 알아두시기 바랍니다.
 \iffalse
 
-\item	If both legs of the ``\co{if}'' statement begin with identical stores
+\item	If both legs of the \qco{if} statement begin with identical stores
 	to the same variable, then those stores must be ordered,
 	either by preceding both of them with \co{smp_mb()} or by using
 	\co{smp_store_release()} to carry out the stores.
 	Please note that it is \emph{not} sufficient to use \co{barrier()}
-	at beginning of each leg of the ``\co{if}'' statement because, as shown
+	at beginning of each leg of the \qco{if} statement because, as shown
 	by the example above, optimizing compilers can destroy the control
 	dependency while respecting the letter of the \co{barrier()} law.
 \fi
@@ -6637,11 +6204,11 @@ The following list of rules summarizes the lessons of this section:
 	Cumulativity 가 필요하다면, \co{smp_mb()} 를 사용하세요.
 \iffalse
 
-\item	Control dependencies apply only to the ``\co{then}'' and
-	``\co{else}'' of the ``\co{if}'' containing the control
+\item	Control dependencies apply only to the \qco{then} and
+	\qco{else} of the \qco{if} containing the control
 	dependency, including any functions that these two clauses call.
 	Control dependencies do \emph{not} apply to code following the
-	end of the ``\co{if}'' statement containing the control dependency.
+	end of the \qco{if} statement containing the control dependency.
 
 \item	Control dependencies pair normally with other types of
 	memory-ordering operations.
@@ -6663,6 +6230,590 @@ Successfully using these languages to construct multi-threaded software
 requires that you pay special attention to your memory references and
 dependencies.
 \fi
+
+\section{Higher-Level Primitives}
+\label{sec:memorder:Higher-Level Primitives}
+
+The answer to one of the quick quizzes in
+Section~\ref{sec:formal:Axiomatic Approaches and Locking}
+demonstrated exponential speedups due to verifying programs
+modeled at higher levels of abstraction.
+This section will look into how higher levels of abstraction can
+also provide a deeper understanding of the synchronization primitives
+themselves.
+Section~\ref{sec:memorder:Memory Allocation}
+takes a look at memory allocation and
+Section~\ref{sec:memorder:RCU}
+digs more deeply into RCU.
+
+\subsection{Memory Allocation}
+\label{sec:memorder:Memory Allocation}
+
+Section~\ref{sec:SMPdesign:Parallel Fastpath for Resource Allocation}
+touched upon memory allocation, and this section expands upon the relevant
+memory-ordering issues.
+
+The key requirement is that any access executed on a given block of
+memory before freeing that block must be ordered before any access
+executed after that same block is reallocated.
+It would after all be a cruel and unusual memory-allocator bug if a store
+preceding the free were to be reordered after another store following
+the reallocation!
+However, it would also be cruel and unusual to require developers to use
+\co{READ_ONCE()} and \co{WRITE_ONCE()} to access dynamically allocated
+memory.
+Full ordering must therefore be provided for plain accesses, in spite of
+all the shared-variable shenanigans called out in
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}.
+
+Of course, each CPU sees its own accesses in order and the compiler
+always has fully accounted for intra-CPU shenanigans.
+These facts are what enables the lockless fastpaths in
+\co{memblock_alloc()} and \co{memblock_free()}, which are shown in
+Listing~\ref{lst:SMPdesign:Allocator-Cache Allocator Function}
+and~\ref{lst:SMPdesign:Allocator-Cache Free Function},
+respectively.
+However, this also why the developer is responsible for providing
+appropriate ordering (for example, by using \co{smp_store_release()})
+when publishing a pointer to a newly allocated block of memory.
+After all, in the CPU-local case, the allocator has not necessarily
+provided any ordering.
+
+However, the allocator must provide ordering when rebalancing its
+per-thread pools.
+This ordering is provided by the calls to \co{spin_lock()} and
+\co{spin_unlock()} from \co{memblock_alloc()} and \co{memblock_free()}.
+For any block that has migrated from one thread to another, the old
+thread will have executed \co{spin_unlock(&globalmem.mutex)} after
+placing the block in the \co{globalmem} pool, and the new thread will
+have executed \co{spin_lock(&globalmem.mutex)} before moving that
+block to its per-thread pool.
+This \co{spin_unlock()} and \co{spin_lock()} ensures that both the
+old and new threads see the old thread's accesses as having happened
+before those of the new thread.
+
+\QuickQuiz{}
+	But doesn't PowerPC have weak unlock-lock ordering properties
+	within the Linux kernel, allowing a write before the unlock to
+	be reordered with a read after the lock?
+\QuickQuizAnswer{
+	Yes, but only from the perspective of a third thread not holding
+	that lock.
+	In contrast, memory allocators need only concern themselves with
+	the two threads migrating the memory.
+	It is after all the developer's responsibility to properly
+	synchronize with any other threads that need access to the newly
+	migrated block of memory.
+
+	That said, if there was a third CPU involved in the memory
+	allocator within the Linux kernel, it might be necessary for
+	the memory allocator to invoke \co{smp_mb__after_unlock_lock()}
+	immediately after acquiring \co{globalmem.mutex}.
+} \QuickQuizEnd
+
+Therefore, the ordering required by conventional uses of memory allocation
+can be provided solely by non-fastpath locking, allowing the fastpath to
+remain synchronization-free.
+
+% \subsection{Detailed Locking Semantics}
+% \label{sec:memorder:Detailed Locking Semantics}
+% % Awaiting LWN article.
+
+% Locking is a well-known synchronization primitive with which the
+% parallel-programming community has had decades of experience with
+% in a great many situations.
+% As such, locking's semantics are quite simple.
+
+% However, they remain quite simple only until you start thinking about
+% them rigorously enough to mathematically model them.
+
+% The simple part is that any CPU or thread holding a given lock is
+% guaranteed to see accesses executed when other CPUs or threads
+% were previously holding that lock.
+% In addition, any CPU or thread holding a given lock is guaranteed not
+% to see accesses executed when other CPUs or threads will be
+% subsequently holding that lock.
+
+% Existence of mathematical modeling, as called out in
+% Section~\ref{sec:formal:Axiomatic Approaches and Locking}.
+% Pull in performance from LKMM effort.
+
+% Ordering for holders of same lock.
+% For holders of different locks?
+
+% Memory-ordering constraints for lock and unlock.
+% When augmented by \co{smp_mb__after_spinlock()} or
+% \co{smp_mb__after_spinlock()}.
+
+% Memory-ordering constraints for unlock followed by lock.
+% When augmented \co{smp_mb__after_unlock_lock()}.
+
+\subsection{RCU}
+\label{sec:memorder:RCU}
+
+As described in
+Section~\ref{sec:defer:RCU Fundamentals},
+the fundamental property of RCU grace periods is this straightforward
+two-part guarantee:
+% @@@ Refer back to if-then diagrams to be added to RCU Fundamentals.
+(1)~If any part of a given RCU read-side critical section precedes
+the beginning of a given grace period, then the entirety of that
+critical section precedes the end of that grace period.
+(2)~If any part of a given RCU read-side critical section follows
+the end of a given grace period, then the entirety of that
+critical section follows the beginning of that grace period.
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+rl-o-o-rul@whole.fcv}
+\caption{RCU Fundamental Property}
+\label{lst:memorder:RCU Fundamental Property}
+\end{listing}
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+i-rl-o-o-rul@whole.fcv}
+\caption{RCU Fundamental Property and Reordering}
+\label{lst:memorder:RCU Fundamental Property and Reordering}
+\end{listing}
+
+In short, an RCU read-side critical section is guaranteed never to
+completely overlap an RCU grace period, as demonstrated by
+Listing~\ref{lst:memorder:RCU Fundamental Property}
+(\path{C-SB+o-rcusync-o+rl-o-o-rul.litmus}).
+Either or neither of the \co{r2} registers can have the final value of zero,
+but at least one of them must be non-zero (that is, the cycle identified
+by the \co{exists} clause is prohibited), courtesy of RCU's fundamental
+grace-period guarantee, as can be seen by running \co{herd} on this litmus test.
+Note that this guarantee is insensitive to the ordering of the accesses
+within \co{P1()}'s critical section, so the litmus test shown in
+Listing~\ref{lst:memorder:RCU Fundamental Property and Reordering},\footnote{
+	Dependencies can of course limit the ability to reorder accesses
+	within RCU read-side critical sections.}
+also forbids this same cycle.
+
+However, this definition is incomplete, as can be seen from the following
+list of questions:\footnote{
+	Several of which were introduced to Paul by Jade Alglave during
+	early work on LKMM, and a few more of which came from other
+	LKMM participants~\cite{Alglave:2018:FSC:3173162.3177156}.}
+
+\begin{enumerate}
+\item	What ordering is provided by \co{rcu_read_lock()}
+	and \co{rcu_read_unlock()}, independent of RCU grace periods?
+\item	What ordering is provided by \co{synchronize_rcu()}
+	and \co{synchronize_rcu_expedited()}, independent of RCU read-side
+	critical sections?
+\item	If the entirety of a given RCU read-side critical section
+	precedes the end of a given RCU grace period, what about
+	accesses preceding that critical section?
+\item	If the entirety of a given RCU read-side critical section
+	follows the beginning of a given RCU grace period, what about
+	accesses following that critical section?
+\item	What happens in situations involving more than one RCU read-side
+	critical section and/or more than one RCU grace period?
+\item	What happens when RCU is mixed with other memory-ordering
+	mechanisms?
+\end{enumerate}
+
+These questions are addressed in the following sections.
+
+\subsubsection{RCU Read-Side Ordering}
+\label{sec:memorder:RCU Read-Side Ordering}
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-LB+rl-o-o-rul+rl-o-o-rul@whole.fcv}
+\caption{RCU Readers Provide No Lock-Like Ordering}
+\label{lst:memorder:RCU Readers Provide No Lock-Like Ordering}
+\end{listing}
+
+On their own, RCU's read-side primitives \co{rcu_read_lock()} and
+\co{rcu_read_unlock()} provide no ordering whatsoever.
+In particular, despite their names, they do not act like locks, as can
+be seen in
+Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}
+(\path{C-LB+rl-o-o-rul+rl-o-o-rul.litmus}).
+As can be seen by running \co{herd} on this litmus test, this litmus
+test's cycle is allowed: Both instances of the \co{r1} register can
+have final values of 1.
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-LB+o-rl-rul-o+o-rl-rul-o@whole.fcv}
+\caption{RCU Readers Provide No Barrier-Like Ordering}
+\label{lst:memorder:RCU Readers Provide No Barrier-Like Ordering}
+\end{listing}
+
+Nor do these primitives have barrier-like ordering properties,
+at least not unless there is a grace period in the mix, as can be seen in
+Listing~\ref{lst:memorder:RCU Readers Provide No Barrier-Like Ordering}
+(\path{C-LB+o-rl-rul-o+o-rl-rul-o.litmus}).
+This litmus test's cycle is allowed, as can be verified by running
+\co{herd} on this litmus test.
+
+Of course, lack of ordering in both these litmus tests should be absolutely
+no surprise, given that both \co{rcu_read_lock()} and \co{rcu_read_unlock()}
+are no-ops in the QSBR implementation of RCU.
+
+\subsubsection{RCU Update-Side Ordering}
+\label{sec:memorder:RCU Update-Side Ordering}
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+o-rcusync-o@whole.fcv}
+\caption{RCU Updaters Provide Full Ordering}
+\label{lst:memorder:RCU Updaters Provide Full Ordering}
+\end{listing}
+
+In contrast with RCU readers, the RCU updater-side functions
+\co{synchronize_rcu()} and \co{synchronize_rcu_expedited()}
+provide memory ordering at least as strong as \co{smp_mb()},
+as can be seen by running \co{herd} on the litmus test shown in
+Listing~\ref{lst:memorder:RCU Updaters Provide Full Ordering}.
+This test's cycle is prohibited, just as would be the case with
+\co{smp_mb()}.
+This should be no surprise given the information presented in
+Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+
+\subsubsection{RCU Readers: Before and After}
+\label{sec:memorder:RCU Readers: Before and After}
+
+Before reading this section, it would be well to reflect on the distinction
+between guarantees that are available and guarantees that maintainable
+software should rely on.
+Keeping that firmly in mind, this section presents a few of the
+more exotic RCU guarantees.
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+o-rl-o-rul@whole.fcv}
+\caption{What Happens Before RCU Readers?}
+\label{lst:memorder:What Happens Before RCU Readers?}
+\end{listing}
+
+Listing~\ref{lst:memorder:What Happens Before RCU Readers?}
+(\path{C-SB+o-rcusync-o+o-rl-o-rul.litmus})
+shows a litmus test similar to that in
+Listing~\ref{lst:memorder:RCU Fundamental Property},
+but with the RCU reader's first access preceding the RCU read-side critical
+section, rather than the more conventional (and maintainable!) approach of
+being contained within it.
+Perhaps surprisingly, running \co{herd} on this litmus test gives the
+same result as for that in
+Listing~\ref{lst:memorder:RCU Fundamental Property}:
+The cycle is forbidden.
+
+Why would this be the case?
+
+Because both of \co{P1()}'s accesses are volatile,
+as discussed in
+Section~\ref{sec:toolsoftrade:A Volatile Solution},
+the compiler is not permitted to reorder them.
+This means that the code emitted for \co{P1()}'s \co{WRITE_ONCE()} will
+precede that of \co{P1()}'s \co{READ_ONCE()}.
+Therefore, RCU implementations that place memory-barrier instructions in
+\co{rcu_read_lock()} and \co{rcu_read_unlock()} will preserve the ordering
+of \co{P1()}'s two accesses all the way down to the hardware level.
+On the other hand, RCU implementations that rely on interrupt-based
+state machines will also fully preserve this ordering
+\emph{relative to the grace period} due to the fact that interrupts take
+place at a precise location in the execution of the interrupted code.
+
+This in turn means that if the \co{WRITE_ONCE()} follows the end of a given
+RCU grace period, then the accesses within the RCU read-side critical
+section must follow the beginning of that same grace period.
+In fact, in some RCU implementations, the critical section's accesses
+would (as an accident of the implementation!) also follow the end of
+that grace period, rather than merely the beginning of it.
+Similarly, if the \co{READ_ONCE()} precedes the beginning of the grace
+period, everything within \emph{and preceding} that critical section
+must precede the end of that same grace period.
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+rl-o-rul-o@whole.fcv}
+\caption{What Happens After RCU Readers?}
+\label{lst:memorder:What Happens After RCU Readers?}
+\end{listing}
+
+Listing~\ref{lst:memorder:What Happens After RCU Readers?}
+(\path{C-SB+o-rcusync-o+rl-o-rul-o.litmus})
+is similar, but instead looks at accesses after the RCU read-side
+critical section.
+This test's cycle is also forbidden, as can be checked with the \co{herd}
+tool.
+The reasoning is similar to that for
+Listing~\ref{lst:memorder:What Happens Before RCU Readers?},
+and is left as an exercise for the reader.
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+o-rl-rul-o@whole.fcv}
+\caption{What Happens With Empty RCU Readers?}
+\label{lst:memorder:What Happens With Empty RCU Readers?}
+\end{listing}
+
+Listing~\ref{lst:memorder:What Happens With Empty RCU Readers?}
+(\path{C-SB+o-rcusync-o+o-rl-rul-o.litmus})
+takes things one step farther, moving \co{P1()}'s \co{WRITE_ONCE()}
+to precede the RCU read-side critical section and moving
+\co{P1()}'s \co{READ_ONCE()} to follow it, resulting in an
+empty RCU read-side critical section.
+
+Perhaps surprisingly, despite the empty critical section, RCU nevertheless
+still manages to forbid the cycle.
+This can again be checked using the \co{herd} tool.
+Furthermore, the reasoning is once again similar to that for
+Listing~\ref{lst:memorder:What Happens Before RCU Readers?},
+Recapping, if \co{P1()}'s \co{WRITE_ONCE()} follows the end of a given
+grace period, then \co{P1()}'s RCU read-side critical section---and
+everything following it---must follow the beginning of that same grace
+period.
+Similarly, if \co{P1()}'s \co{READ_ONCE()} precedes the beginning of a
+given grace period, then \co{P1()}'s RCU read-side critical section---and
+everything preceding it---must precede the end of that same grace period.
+In both cases, the critical section's emptiness is irrelevant.
+
+\QuickQuiz{}
+	Wait a minute!
+	In QSBR implementations of RCU, no code is emitted for
+	\co{rcu_read_lock()} and \co{rcu_read_unlock()}.
+	This means that the RCU read-side critical section in
+	Listing~\ref{lst:memorder:What Happens With Empty RCU Readers?}
+	isn't just empty, it is completely nonexistent!!!
+	So how can something that doesn't exist at all possibly have
+	any effect whatsoever on ordering???
+\QuickQuizAnswer{
+	Because in QSBR, RCU read-side critical sections don't
+	actually disappear.
+	Instead, they are extended in both directions until a quiescent
+	state is encountered.
+	For example, in the Linux kernel, the critical section might
+	be expanded to a pair of \co{schedule()} calls, with one
+	preceding and the other following the critical section.\footnote{
+		Of course, in non-QSBR implementations,
+		\co{rcu_read_lock()} and \co{rcu_read_unlock()} really
+		do emit code, which can clearly provide ordering.}
+
+	Therefore, strange though it might seem, empty RCU read-side
+	critical sections really can and do provide some degree of
+	ordering.
+} \QuickQuizEnd
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+o-o@whole.fcv}
+\caption{What Happens With No RCU Readers?}
+\label{lst:memorder:What Happens With No RCU Readers?}
+\end{listing}
+
+This situation leads to the question of what happens if
+\co{rcu_read_lock()} and \co{rcu_read_unlock()} are omitted
+entirely, as shown in
+Listing~\ref{lst:memorder:What Happens With No RCU Readers?}
+(\path{C-SB+o-rcusync-o+o-o.litmus}).
+As can be checked with \co{herd}, this litmus test's cycle is allowed,
+that is, both instances of \co{r2} can have final values of zero.
+
+This might seem strange in light of the fact that empty RCU
+read-side critical sections can provide ordering.
+And it is true that a QSBR implementations of RCU would in fact
+forbid this outcome.
+However, RCU also has non-QSBR implementations, and these implementations
+have no way to enforce ordering in this case.
+Again, therefore, this litmus test's cycle is allowed.
+
+\QuickQuiz{}
+	Can \co{P1()}'s accesses be reordered in the litmus tests shown in
+	Listings~\ref{lst:memorder:What Happens Before RCU Readers?},
+	\ref{lst:memorder:What Happens After RCU Readers?},
+	and~\ref{lst:memorder:What Happens With Empty RCU Readers?}
+	in the same way that they were reordered going from
+	Listing~\ref{lst:memorder:RCU Fundamental Property}
+	to
+	Listing~\ref{lst:memorder:RCU Fundamental Property and Reordering}?
+\QuickQuizAnswer{
+	No, because none of these later litmus tests have more than one
+	access within their RCU read-side critical sections.
+	But what about swapping the accesses, for example, in
+	Listing~\ref{lst:memorder:What Happens Before RCU Readers?},
+	placing \co{P1()}'s \co{WRITE_ONCE()} within its critical
+	section and the \co{READ_ONCE()} before its critical section?
+
+	Swapping the accesses allows both instances of \co{r2} to
+	have a final value of zero, in other words, although RCU read-side
+	critical sections' ordering properties can extend outside of
+	those critical sections, the same is not true of their
+	reordering properties.
+	Checking this with \co{herd} and explaining why is left as an
+	exercise for the reader.
+} \QuickQuizEnd
+
+\subsubsection{Multiple RCU Readers and Updaters}
+\label{sec:memorder:Multiple RCU Readers and Updaters}
+
+Because \co{synchronize_rcu()} has stronger ordering semantics than does
+\co{smp_mb()}, no matter how many processes there are in an SB
+litmus test, placing \co{synchronize_rcu()} between each process's
+accesses prohibits the cycle.\footnote{
+	All this of course also applies to many other types of litmus tests
+	as well, including LB, MP, and so on, not just SB.}
+In addition, the cycle is prohibited in an SB test where one process
+uses \co{synchronize_rcu()} and the other uses \co{rcu_read_lock()} and
+\co{rcu_read_unlock()}, as exemplified by
+Listing~\ref{lst:memorder:RCU Fundamental Property}.
+However, if both processes use \co{rcu_read_lock()} and
+\co{rcu_read_unlock()}, the cycle will be allowed, as exemplified by
+Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}.
+
+So is it possible to say anything general about which RCU-protected
+litmus tests will be prohibited and which will be allowed?
+This section takes up this question.
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+rl-o-o-rul+rl-o-o-rul@whole.fcv}
+\caption{One RCU Grace Period and Two Readers}
+\label{lst:memorder:One RCU Grace Period and Two Readers}
+\end{listing}
+
+\begin{listing}[tb]
+\input{CodeSamples/formal/herd/C-SB+o-rcusync-o+o-rcusync-o+rl-o-o-rul+rl-o-o-rul@whole.fcv}
+\caption{Two RCU Grace Periods and Two Readers}
+\label{lst:memorder:Two RCU Grace Periods and Two Readers}
+\end{listing}
+
+More specifically, what happens when the litmus test has one RCU grace
+period and two RCU readers, as shown in
+Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers}?
+The \co{herd} tool says that this cycle is allowed, but it would be
+good to know \emph{why}.\footnote{
+	Especially given that Paul changed his mind several times about
+	this particular litmus test when working with Jade Alglave to
+	generalize RCU ordering semantics.}
+
+The key point is that the CPU is free to reorder \co{P1()}'s and \co{P2()}'s
+\co{WRITE_ONCE()} and \co{READ_ONCE()}.
+With that reordering,
+Figure~\ref{fig:memorder:Cycle for One RCU Grace Period and Two RCU Readers}
+shows how the cycle forms:
+
+\begin{enumerate}
+\item	\co{P0()}'s read from \co{x1} precedes \co{P1()}'s write, as
+	depicted by the dashed arrow near the bottom of the diagram.
+\item	Because \co{P1()}'s write follows the end of \co{P0()}'s grace period,
+	\co{P1()}'s read from \co{x2} cannot precede the beginning of
+	\co{P0()}'s grace period.
+\item	\co{P1()}'s read from \co{x2} precedes \co{P2()}'s write.
+\item	Because \co{P2()}'s write to \co{x2} precedes the end of
+	\co{P0()}'s grace period, it is completely legal for \co{P2()}'s
+	read from \co{x0} to precede the beginning of \co{P0()}'s grace period.
+\item	Therefore, \co{P2()}'s read from \co{x0} can precede \co{P0()}'s
+	write, thus allowing the cycle to form.
+\end{enumerate}
+
+But what happens when another grace period is added?
+This situation is shown in
+Listing~\ref{lst:memorder:Two RCU Grace Periods and Two Readers},
+an SB litmus test in which \co{P0()} and \co{P1()} have RCU grace periods
+and \co{P2()} and \co{P3()} have RCU readers.
+Again, the CPUs can reorder the accesses within RCU read-side critical
+sections, as shown in
+Figure~\ref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}.
+For this cycle to form, \co{P2()}'s critical section must
+end after \co{P1()}'s grace period and \co{P3()}'s must end after the
+beginning of that same grace period, which happens to also be after the
+end of \co{P0()}'s grace period.
+Therefore, \co{P3()}'s critical section must start after the beginning
+of \co{P0()}'s grace period, which in turn means that \co{P3()}'s
+read from \co{x0} cannot possibly precede \co{P0()}'s read.
+Therefore, the cycle is forbidden because RCU read-side critical sections
+cannot span full RCU grace periods.
+
+However, a closer look at
+Figure~\ref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
+makes it clear that adding a third reader would allow the cycle.
+This is because this third reader could end before the end of \co{P0()}'s
+grace period, and thus start before the beginning of that same grace
+period.
+This in turn suggests the general rule, which is:  In these sorts of RCU-only
+litmus tests, if there are at least as many RCU grace periods as there
+are RCU read-side critical sections, the cycle is forbidden.\footnote{
+	Interestingly enough, Alan Stern proved that within the context
+	of LKMM, the two-part fundamental property of RCU expressed
+	in Section~\ref{sec:defer:RCU Fundamentals} actually implies
+	this seemingly more general result, which is called the RCU
+	axiom~\cite{Alglave:2018:FSC:3173162.3177156}.}
+
+\begin{figure*}[tbp]
+\centering
+\resizebox{0.75\textwidth}{!}{\includegraphics{memorder/RCU1G2R}}
+\caption{Cycle for One RCU Grace Period and Two RCU Readers}
+\label{fig:memorder:Cycle for One RCU Grace Period and Two RCU Readers}
+\end{figure*}
+
+\begin{figure*}[tbp]
+\centering
+\resizebox{\textwidth}{!}{\includegraphics{memorder/RCU2G2R}}
+\caption{No Cycle for Two RCU Grace Periods and Two RCU Readers}
+\label{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
+\end{figure*}
+
+\subsubsection{RCU and Other Ordering Mechanisms}
+\label{sec:memorder:RCU and Other Ordering Mechanisms}
+
+But what about litmus tests that combine RCU with other ordering
+mechanisms?
+
+The general rule is that it takes only one mechanism to forbid a cycle.
+
+For example, refer back to
+Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}.
+Applying the general rule from the previous section, because this litmus
+test has two RCU read-side critical sections and no RCU grace periods,
+the cycle is allowed.
+But what if \co{P0()}'s \co{WRITE_ONCE()} is replaced by an
+\co{smp_store_release()} and \co{P1()}'s \co{READ_ONCE()} is replaced
+by an \co{smp_load_acquire()}?
+
+RCU would still allow the cycle, but the release-acquire pair would
+forbid it.
+Because it only takes one mechanism to forbid a cycle, the
+release-acquire pair would ``win'' and the cycle would be
+forbidden.
+
+For another example, refer back to
+Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers}.
+Because this litmus test has two RCU readers but only one grace period,
+its cycle is allowed.
+But suppose that an \co{smp_mb()} was placed between \co{P1()}'s
+pair of accesses.
+In this new litmus test, because of the addition of the \co{smp_mb()},
+\co{P2()}'s as well as \co{P1()}'s critical sections would extend beyond the
+end of \co{P0()}'s grace period, which in turn would prevent \co{P2()}'s
+read from \co{x0} from preceding \co{P0()}'s write, as depicted by the
+red dashed arrow.
+In this case, RCU and the full memory barrier work together to forbid
+the cycle, with RCU preserving ordering between \co{P0()} and both
+\co{P1()} and \co{P2()}, and with the \co{smp_mb()} preserving
+ordering between \co{P1()} and \co{P2()}.
+
+\QuickQuiz{}
+	What would happen if the \co{smp_mb()} was instead added between
+	\co{P2()}'s accesses in
+	Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers}?
+\QuickQuizAnswer{
+	The cycle would again be forbidden.
+	Further analysis is left as an exercise for the reader.
+} \QuickQuizEnd
+
+In short, where RCU's semantics were once purely pragmatic, they are
+now fully
+formalized~\cite{PaulMcKenney2005RCUSemantics,MathieuDesnoyers2012URCU,AlexeyGotsman2013ESOPRCU,Alglave:2018:FSC:3173162.3177156}.
+
+% \subsection{SRCU}
+% \label{sec:memorder:SRCU}
+% @@@ After LWN article
+
+% Nesting vs. value passed from \co{srcu_read_lock()} to
+% \co{srcu_read_unlock()}.
+
+% When augmented by \co{smp_mb__after_srcu_read_unlock()}.
+
+It is hoped that detailed semantics for higher-level primitives will
+enable more capable static analysis and model checking, at least compared
+to what can be done based on individual memory accesses.
 
 \section{Hardware Specifics}
 \label{sec:memorder:Hardware Specifics}

@@ -1577,7 +1577,8 @@ Line~27-30 에 보인 \co{hashtab} 구조체는 현재의 \co{ht} 구조체로�
 Resizing is accomplished by the classic approach of inserting a level
 of indirection, in this case, the \co{ht} structure shown on
 lines~\lnref{ht:b}-\lnref{ht:e} of
-Listing~\ref{lst:datastruct:Resizable Hash-Table Data Structures}.
+Listing~\ref{lst:datastruct:Resizable Hash-Table Data Structures}
+(\path{hash_resize.c}).
 The \co{hashtab} structure shown on
 lines~\lnref{hashtab:b}-\lnref{hashtab:e} contains only a
 pointer to the current \co{ht} structure along with a spinlock that
@@ -1654,19 +1655,20 @@ list pointers are being used by this instantiation of the hash table,
 and is used to index the \co{->hte_next[]} array in the \co{ht_elem}
 structure on line~\lnref{ht_elem:next}.
 
-The \co{->ht_hash_private}, \co{->ht_cmp()}, \co{->ht_gethash()},
-and \co{->ht_getkey()} fields on
-lines~\lnref{ht:hash_private}-\lnref{ht:getkey}
+The \co{->ht_cmp()}, \co{->ht_gethash()}, and \co{->ht_getkey()} fields on
+lines~\lnref{ht:cmp}-\lnref{ht:getkey}
 collectively define the per-element key and the hash function.
-The \co{->ht_hash_private} allows the hash function to be
-perturbed~\cite{McKenney89c,McKenney90,McKenney91}, which can be
-used to avoid denial-of-service attacks based on statistical
-estimation of the parameters used in the hash function.
 The \co{->ht_cmp()} function compares a specified key with that of
 the specified element,
 the \co{->ht_gethash()} calculates the specified key's hash,
 and \co{->ht_getkey()} extracts the key from the enclosing data
 element.
+
+The \co{ht_lock_state} shown on lines~\lnref{hls:b}-\lnref{hls:e}
+is used to communicate lock state from a new \co{hashtab_lock_mod()}
+to \co{hashtab_add()}, \co{hashtab_del()}, and \co{hashtab_unlock_mod()}.
+This state prevents the algorithm from being redirected to the wrong
+bucket during concurrent resize operations.
 
 The \co{ht_bucket} structure is the same as before, and the
 \co{ht_elem} structure differs from that of previous implementations
@@ -1690,7 +1692,7 @@ In contrast, when resizing, it is also necessary to determine which
 of the old and new sets of buckets to select from.
 If the bucket that would be selected from the old table has already
 been distributed into the new table, then the bucket should be selected
-from the new table.
+from the new table as well as from the old table.
 Conversely, if the bucket that would be selected from the old table
 has not yet been distributed, then the bucket should be selected from
 the old table.
@@ -1717,15 +1719,17 @@ Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection} 에
 \begin{lineref}[ln:datastruct:hash_resize:get_bucket]
 Bucket selection is shown in
 Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection},
-which shows \co{ht_get_bucket_single()} on
-lines~\lnref{single:b}-\lnref{single:e} and
-\co{ht_get_bucket()} on lines~\lnref{b}-\lnref{e}.
-The \co{ht_get_bucket_single()} function returns a reference to the bucket
+which shows \co{ht_get_bucket()} on
+lines~\lnref{single:b}-\lnref{single:e} and \co{ht_search_bucket()} on
+lines~\lnref{hsb:b}-\lnref{hsb:e}.
+The \co{ht_get_bucket()} function returns a reference to the bucket
 corresponding to the specified key in the specified hash table, without
 making any allowances for resizing.
-It also stores the hash value corresponding to the key into the location
-referenced by parameter \co{b} on
-lines~\lnref{single:gethash:b} and ~\lnref{single:gethash:e}.
+It also stores the bucket index corresponding to the key into the location
+referenced by parameter~\co{b} on
+line~\lnref{single:gethash}, and the corresponding
+hash value corresponding to the key into the location
+referenced by parameter~\co{h} (if non-\co{NULL}) on line~\lnref{single:h}.
 Line~\lnref{single:return} then returns a reference to the corresponding bucket.
 \fi
 
@@ -1738,53 +1742,16 @@ Line~17 에서 이 테이블이 크기 재조정 중이고 line~16 의 bucket �
 선택하고, 이때에도 해시 값은 패러미터 \co{b} 에 저장합니다.
 \iffalse
 
-The \co{ht_get_bucket()} function handles hash-table selection, invoking
-\co{ht_get_bucket_single()} on
-line~\lnref{call_single} to select the bucket
-corresponding to the hash in the current
-hash table, storing the hash value through parameter \co{b}.
-If line~\lnref{resized} determines that the table is being resized and that
-line~\lnref{call_single}'s bucket has already been distributed across the new hash
-table, then line~\lnref{newtable} selects the new hash table and
-line~\lnref{newbucket}
-selects the bucket corresponding to the hash in the new hash table,
-again storing the hash value through parameter \co{b}.
-\end{lineref}
-\fi
-
-\QuickQuiz{}
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
-	의 코드는 해시 값을 두번 계산하네요!
-	왜 이렇게 비효율적이죠?
-	\iffalse
-
-	The code in
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
-	computes the hash twice!
-	Why this blatant inefficiency?
-	\fi
-\QuickQuizAnswer{
-	기존의 해시 테이블과 새로운 해시 테이블은 전혀 다른 해시 함수를 사용할
-	수도 있고, 따라서 기존의 테이블을 위해 계산된 해시 값은 새로운
-	테이블에서는 적절치 않을 수 있기 때문입니다.
-	\iffalse
-
-	The reason is that the old and new hash tables might have
-	completely different hash functions, so that a hash computed
-	for the old table might be completely irrelevant to the
-	new table.
-	\fi
-} \QuickQuizEnd
-
-Line~21 에서 패러미터 \co{i} 가 \co{NULL} 이 아니란 걸 알게 되면, line~22 에서
-선택된 해시 테이블로의 인덱스를 저장합니다.
-마지막으로, line~23 에서는 선택된 해시 bucket 으로의 레퍼런스를 리턴합니다.
-\iffalse
-
-\begin{lineref}[ln:datastruct:hash_resize:get_bucket]
-If line~\lnref{chk_i} finds that parameter \co{i} is non-\co{NULL}, then
-line~\lnref{set_idx} stores the pointer-set index for the selected hash table.
-Finally, line~\lnref{return} returns a reference to the selected hash bucket.
+The \co{ht_search_bucket()} function searches for the specified key
+within the specified hash-table version.
+Line~\lnref{hsb:get_curbkt} obtains a reference to the bucket corresponding
+to the specified key.
+The loop spanning lines~\lnref{hsb:loop:b}-\lnref{hsb:loop:e} searches
+that bucket, so that if line~\lnref{hsb:match} detects a match,
+line~\lnref{hsb:ret_match} returns a pointer to the enclosing data element.
+Otherwise, if there is no match,
+line~\lnref{hsb:ret_NULL} returns \co{NULL} to indicate
+failure.
 \end{lineref}
 \fi
 
@@ -1814,10 +1781,9 @@ Finally, line~\lnref{return} returns a reference to the selected hash bucket.
 재조정 작업과 동시에 탐색과 수정이 가능하게 할 겁니다.
 \iffalse
 
-This implementation of
-\co{ht_get_bucket_single()} and \co{ht_get_bucket()}
-will permit lookups and modifications to run concurrently
-with a resize operation.
+This implementation of \co{ht_get_bucket()} and \co{ht_search_bucket()}
+permits lookups and modifications to run concurrently with a resize
+operation.
 \fi
 
 \begin{listing}[tb]
@@ -1857,7 +1823,7 @@ Line~13 에서는 동시의 크기 재조정 오퍼레이션이 이미 이 bucke
 리턴합니다.
 \iffalse
 
-\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod:lock]
+\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod:l]
 The \co{hashtab_lock_mod()} spans
 lines~\lnref{b}-\lnref{e} in the listing.
 Line~\lnref{rcu_lock} enters an RCU read-side critical section to prevent
@@ -1867,12 +1833,18 @@ line~\lnref{refbucket} obtains a reference to the bucket in this hash table
 corresponding to the key.
 Line~\lnref{acq_bucket} acquires that bucket's lock, which will prevent any concurrent
 resizing operation from distributing that bucket, though of course it
-will have no effect if the resizing operation has already distributed
-this bucket.
-Line~\lnref{chk_resz_dist} then checks to see if a concurrent resize operation has
-already distributed this bucket across the new hash table, and if not,
-line~\lnref{fastret} returns with the selected hash bucket's lock held (and also
-within an RCU read-side critical section).
+will have no effect if that bucket has already been distributed.
+Lines~\lnref{lsp0b}-\lnref{lsp0e} store the bucket pointer and
+pointer-set index into their respective fields in the
+\co{ht_lock_state} structure, which communicates the information to
+\co{hashtab_add()}, \co{hashtab_del()}, and \co{hashtab_unlock_mod()}.
+Line~\lnref{ifresized} then checks to see if a concurrent resize
+operation has already distributed this bucket across the new hash table,
+and if not, line~\lnref{lsp1_1} indicates that there is no
+already-resized hash bucket and
+line~\lnref{fastret1} returns with the selected hash bucket's
+lock held (thus preventing a concurrent resize operation from distributing
+this bucket) and also within an RCU read-side critical section.
 \fi
 
 그렇지 않다면, 동시의 크기 재조정 오퍼레이션이 이미 이 bucket 을 분산시킨
@@ -1885,46 +1857,24 @@ bucket 을 선택합니다.
 \iffalse
 
 Otherwise, a concurrent resize operation has already distributed this
-bucket, so line~\lnref{new_hashtbl} proceeds to the new hash table and
-line~\lnref{get_newbucket}
-selects the bucket corresponding to the key.
-Finally, line~\lnref{acq_newbucket} acquires the bucket's lock and
-line~\lnref{rel_oldbucket} releases the
-lock for the old hash table's bucket.
+bucket, so line~\lnref{new_hashtbl} proceeds to the new hash table,
+line~\lnref{get_newbkt} selects the bucket corresponding to the key,
+and line~\lnref{acq_newbkt} acquires the bucket's lock.
+Lines~\lnref{lsp1b}-\lnref{lsp1e} store the bucket pointer and
+pointer-set index into their respective fields in the 
+\co{ht_lock_state} structure, which again communicates this information to
+\co{hashtab_add()}, \co{hashtab_del()}, and \co{hashtab_unlock_mod()}.
+Because this bucket has already been resized and because
+\co{hashtab_add()} and \co{hashtab_del()} affect both the old and the
+new \co{ht_bucket} structures, two locks are held, one on each of the
+two buckets.
+Additionally, both elements of each array in \co{ht_lock_state} structure
+are used, with the \co{[0]} element pertaining to the old \co{ht_bucket}
+structure and the \co{[1]} element pertaining to the new structure.
 Once again, \co{hashtab_lock_mod()} exits within an RCU read-side critical
 section.
 \end{lineref}
 \fi
-
-\QuickQuiz{}
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
-	와~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
-	의 코드는 업데이트를 위해 해시 값을 계산하고 bucket 선택 로직을 두번
-	수행하네요!
-	왜 이렇게 비효율적인거죠?
-	\iffalse
-
-	The code in
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
-	and~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
-	computes the hash and executes the bucket-selection logic twice for
-	updates!
-	Why this blatant inefficiency?
-	\fi
-\QuickQuizAnswer{
-	이 방법은 \path{hashtorture.h} 테스트 도구가 재사용될 수 있게 합니다.
-	그렇다고는 하지만, 제품 품질의 크기 재조정 가능한 해시 테이블은 이런
-	두번의 계산이 없도록 최적화 되어야 할겁니다.
-	그런 최적화를 하는건 독자 여러분의 몫으로 남겨둡니다.
-	\iffalse
-
-	This approach allows the \path{hashtorture.h} testing infrastructure
-	to be reused.
-	That said, a production-quality resizable hash table would likely
-	be optimized to avoid this double computation.
-	Carrying out this optimization is left as an exercise for the reader.
-	\fi
-} \QuickQuizEnd
 
 \co{hashtab_unlock_mod()} 함수는 \co{hashtab_lock_mod()} 로 잡아 두었던 락을
 놓아줍니다.
@@ -1935,17 +1885,15 @@ Line~30 은 이 bucket 의 락을 놓고 마지막으로 line~31 에서 RCU read
 크리티컬 섹션을 빠져나갑니다.
 \iffalse
 
-\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod:unlock]
-The \co{hashtab_unlock_mod()} function releases the lock acquired by
+\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod:ul]
+The \co{hashtab_unlock_mod()} function releases the lock(s) acquired by
 \co{hashtab_lock_mod()}.
-Line~\lnref{get_curtbl} picks up the current hash table, and then
-line~\lnref{get_curbucket} invokes
-\co{ht_get_bucket()} in order to gain a reference to the bucket that
-corresponds to the key---and of course this bucket might well be in a
-new hash table.
-Line~\lnref{rel_curbucket} releases the bucket's lock and finally
-line~\lnref{rcu_unlock} exits the
-RCU read-side critical section.
+Line~\lnref{relbkt0} releases the lock on the old \co{ht_bucket} structure.
+In the unlikely event that line~\lnref{ifbkt1} determines that a resize
+operation is in progress, line~\lnref{relbkt1} releases the lock on the
+new \co{ht_bucket} structure.
+Either way, line~\lnref{rcu_unlock} exits the RCU read-side critical
+section.
 \end{lineref}
 \fi
 
@@ -1957,7 +1905,7 @@ RCU read-side critical section.
 	\iffalse
 
 	Suppose that one thread is inserting an element into the
-	new hash table during a resize operation.
+	hash table during a resize operation.
 	What prevents this insertion from being lost due to a subsequent
 	resize operation completing before the insertion does?
 	\fi
@@ -1975,16 +1923,14 @@ RCU read-side critical section.
 
 	The second resize operation will not be able to move beyond
 	the bucket into which the insertion is taking place due to
-	the insertion holding the lock on one of the hash buckets in
-	the new hash table (the second hash table of three in this
-	example).
+	the insertion holding the lock(s) on one or both of the hash
+	buckets in the hash tables.
 	Furthermore, the insertion operation takes place within an
 	RCU read-side critical section.
 	As we will see when we examine the \co{hashtab_resize()}
-	function, this means that the first resize operation will
-	use
-	\co{synchronize_rcu()} to wait for the insertion's read-side
-	critical section to complete.
+	function, this means that each resize operation uses
+	\co{synchronize_rcu()} invocations to wait for the insertion's
+	read-side critical section to complete.
 	\fi
 } \QuickQuizEnd
 
@@ -2004,7 +1950,7 @@ Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions} 에 보여져
 Now that we have bucket selection and concurrency control in place,
 we are ready to search and update our resizable hash table.
 The \co{hashtab_lookup()}, \co{hashtab_add()}, and \co{hashtab_del()}
-functions shown in
+functions are shown in
 Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}.
 \fi
 
@@ -2021,64 +1967,30 @@ Line~13-19 의 루프는 bucket 내부를 탐색하는데, line~16 에서는 매
 line~20 에서 실패를 알리는 \co{NULL} 을 리턴합니다.
 \iffalse
 
-\begin{lineref}[ln:datastruct:hash_resize:access:lookup]
+\begin{lineref}[ln:datastruct:hash_resize:access:lkp]
 The \co{hashtab_lookup()} function on
-lines~\lnref{b}-\lnref{e} of the figure does
+lines~\lnref{b}-\lnref{e} of the listing does
 hash lookups.
 Line~\lnref{get_curtbl} fetches the current hash table and
-line~\lnref{get_curbucket} obtains a reference
-to the bucket corresponding to the specified key.
-This bucket will be located in a new resized hash table when a
-resize operation has progressed past the bucket in the old hash
-table that contained the desired data element.
-Note that line~\lnref{get_curbucket} also passes back the index that will be used to
-select the correct set of pointers from the pair in each element.
-The loop spanning lines~\lnref{loop:b}-\lnref{loop:e} searches the bucket,
-so that if line~\lnref{match}
-detects a match,
-line~\lnref{ret_match} returns a pointer to the enclosing data element.
-Otherwise, if there is no match,
-line~\lnref{ret_NULL} returns \co{NULL} to indicate
-failure.
+line~\lnref{get_curbkt} searches the bucket corresponding to the
+specified key.
+Line~\lnref{ret} returns a pointer to the searched-for element
+or \co{NULL} when the search fails.
 \end{lineref}
 \fi
 
 \QuickQuiz{}
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions} 의
-	\co{hashtab_lookup()} 함수에서, 코드는 탐색될 원소가 이미 동시의 크기
-	재조정 작업에 의해 분산되었다면 새로운 해시 테이블에 있는 올바른 bucket
-	을 찾아옵니다.
-	이건 RCU 로 보호되는 탐색에서는 좀 낭비가 있는 것 같은데요.
-	이 경우에는 왜 그냥 기존 해시 테이블에서 작업을 끝내지 않는 거죠?
-	\iffalse
-
-	In the \co{hashtab_lookup()} function in
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions},
-	the code carefully finds the right bucket in the new hash table
-	if the element to be looked up has already been distributed
-	by a concurrent resize operation.
-	This seems wasteful for RCU-protected lookups.
-	Why not just stick with the old hash table in this case?
-	\fi
+	The \co{hashtab_lookup()} function in
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
+	does not account for concurrent resize operations.
+	Doesn't this mean that readers might miss an element that was
+	added during a resize operation?
 \QuickQuizAnswer{
-	크기 재조정 작업이 시작되었고 기존 테이블의 bucket 들 중 절반만 새로운
-	테이블로 분산했다고 생각해 보세요.
-	더 나아가서 한 쓰레드가 이미 분산된 bucket 안에 원소를 하나 넣었고, 이
-	쓰레드가 이제 방금 새로 추가한 원소를 탐색한다고 생각해 봅시다.
-	탐색이 무조건적으로 기존 해시 테이블을 탐색한다고 하면, 이 쓰레드는
-	자신이 집어넣은 원소를 찾는데 실패할텐데, 이는 저한테는 분명한 버그처럼
-	들리는군요!
-	\iffalse
-
-	Suppose that a resize operation begins and distributes half of
-	the old table's buckets to the new table.
-	Suppose further that a thread adds a new element that goes into
-	one of the already-distributed buckets, and that this same thread
-	now looks up this newly added element.
-	If lookups unconditionally traversed only the old hash table,
-	this thread would get a lookup failure for the element that it
-	just added, which certainly sounds like a bug to me!
-	\fi
+	No.
+	As we will see soon,
+	the \co{hashtab_add()} and \co{hashtab_del()} functions
+	keep the old hash table up-to-date while a resize operation
+	is in progress.
 } \QuickQuizEnd
 
 그림의 line~23-37 의 \co{hashtab_add()} 함수는 해시 테이블에 새로운 데이터
@@ -2094,19 +2006,18 @@ Line~32-34 는 앞에서와 같이 키에 연관되는 bucket 으로의 포인�
 \iffalse
 
 \begin{lineref}[ln:datastruct:hash_resize:access:add]
-The \co{hashtab_add()} function on lines~\lnref{b}-\lnref{e} of the figure adds
+The \co{hashtab_add()} function on lines~\lnref{b}-\lnref{e} of the listing adds
 new data elements to the hash table.
-Lines~\lnref{get_curtbl}-\lnref{get_curbucket} obtain a pointer to
-the hash bucket corresponding to
-the key (and provide the index), as before, and line~\lnref{add} adds the new
-element to the table.
+Line~\lnref{htbp} picks up the current \co{ht_bucket} structure into which the
+new element is to be added, and line~\lnref{i} picks up the index of
+the pointer pair.
+Line~\lnref{add} adds the new element to the current hash bucket.
+If line~\lnref{ifnew} determines that this bucket has been distributed
+to a new version of the hash table, then line~\lnref{addnew} also adds the
+new element to the corresponding new bucket.
 The caller is required to handle concurrency, for example, by invoking
 \co{hashtab_lock_mod()} before the call to \co{hashtab_add()} and invoking
 \co{hashtab_unlock_mod()} afterwards.
-These two concurrency-control functions will correctly synchronize with
-a concurrent resize operation:  If the resize operation has already
-progressed beyond the bucket that this data element would have been added to,
-then the element is added to the new table.
 \end{lineref}
 \fi
 
@@ -2120,11 +2031,13 @@ Line~48-50 에서는 앞에서와 같이 bucket 과 인덱스를 제공하고, l
 
 \begin{lineref}[ln:datastruct:hash_resize:access:del]
 The \co{hashtab_del()} function on
-lines~\lnref{b}-\lnref{e} of the figure removes
+lines~\lnref{b}-\lnref{e} of the listing removes
 an existing element from the hash table.
-Lines~\lnref{get_curtbl}-\lnref{get_curidx} provide the index as before,
-and line~\lnref{del} removes
-the specified element.
+Line~\lnref{i} picks up the index of the pointer pair
+and line~\lnref{del} removes the specified element from the current table.
+If line~\lnref{ifnew} determines that this bucket has been distributed
+to a new version of the hash table, then line~\lnref{delnew} also removes
+the specified element from the corresponding new bucket.
 As with \co{hashtab_add()}, the caller is responsible for concurrency
 control and this concurrency control suffices for synchronizing with
 a concurrent resize operation.
@@ -2132,46 +2045,47 @@ a concurrent resize operation.
 \fi
 
 \QuickQuiz{}
+	The \co{hashtab_add()} and \co{hashtab_del()} functions in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
-	의 \co{hashtab_del()} 함수는 원소를 항상 기존 해시 테이블에서
-	제거하지는 않는데요.
-	이 말은 읽기 쓰레드들이 이 새로 제거된 원소를 해제된 후에도 볼 수
-	있다는 의미 아닌가요?
-	\iffalse
-
-	The \co{hashtab_del()} function in
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
-	does not always remove the element from the old hash table.
-	Doesn't this mean that readers might access this newly removed
-	element after it has been freed?
-	\fi
+	can update two hash buckets while a resize operation is progressing.
+	This might cause a poor performance if the frequency of resize operation
+	is not negligible.
+	Isn't it possible to reduce the cost of updates in such cases?
 \QuickQuizAnswer{
-	아닙니다.
-	\co{hashtab_del()} 함수는 이제 제거된 원소를 담고 있는 bucket 에 대해
-	크기 재조정 작업이 이미 완료되었을 때에만 기존 해시 테이블에서
-	제거합니다.
-	하지만 이는 새로운 \co{hashtab_lookup()} 오퍼레이션은 해당 원소를
-	탐색할 때 새로운 해시 테이블을 사용할 것을 의미합니다.
-	따라서, \co{hashtab_del()} 보다 먼저 시작된 \co{hashtab_lookup()}
-	오퍼레이션들만이 이번에 제거된 원소를 만날 수 있을 겁니다.
-	이는 \co{hashtab_del()} 는 이 불편한 \co{hashtab_lookup()} 을 막기 위해
-	하나의 RCU grace period 만 기다리면 된다는 것을 의미합니다.
-	\iffalse
+	Yes, at least assuming that a slight increase in the cost of
+	\co{hashtab_lookup()} is acceptable.
+	One approach is shown in
+	Listings~\ref{lst:datastruct:Resizable Hash-Table Access Functions (Fewer Updates)}
+	and~\ref{lst:datastruct:Resizable Hash-Table Update-Side Locking Function (Fewer Updates)}
+	(\path{hash_resize_s.c}).
 
-	No.
-	The \co{hashtab_del()} function omits removing the element
-	from the old hash table only if the resize operation has
-	already progressed beyond the bucket containing the just-deleted
-	element.
-	But this means that new \co{hashtab_lookup()} operations will
-	use the new hash table when looking up that element.
-	Therefore, only old \co{hashtab_lookup()} operations that started
-	before the \co{hashtab_del()} might encounter the newly
-	removed element.
-	This means that \co{hashtab_del()} need only wait for an
-	RCU grace period to avoid inconveniencing
-	\co{hashtab_lookup()} operations.
-	\fi
+\begin{listing}[tbh]
+\input{CodeSamples/datastruct/hash/hash_resize_s@access.fcv}
+\caption{Resizable Hash-Table Access Functions (Fewer Updates)}
+\label{lst:datastruct:Resizable Hash-Table Access Functions (Fewer Updates)}
+\end{listing}
+
+\begin{listing}[tbh]
+\input{CodeSamples/datastruct/hash/hash_resize_s@lock_mod.fcv}
+\caption{Resizable Hash-Table Update-Side Locking Function (Fewer Updates)}
+\label{lst:datastruct:Resizable Hash-Table Update-Side Locking Function (Fewer Updates)}
+\end{listing}
+
+	This version of \co{hashtab_add()} adds an element to
+	either the old bucket if it is not resized yet, or to the new
+	bucket if it has been resized, and \co{hashtab_del()} removes
+	the specified element from any buckets into which it has been inserted.
+	The \co{hashtab_lookup()} function searches the new bucket
+	if the search of the old bucket fails, which has the disadvantage
+	of adding overhead to the lookup fastpath.
+	The alternative \co{hashtab_lock_mod()} returns the locking
+	state of the new bucket in \co{->hbp[0]} and \co{->hls_idx[0]}
+	if resize operation is in progress, instead of the perhaps
+	more natural choice of \co{->hbp[1]} and \co{->hls_idx[1]}.
+	However, this less-natural choice has the advantage of simplifying
+	\co{hashtab_add()}.
+
+	Further analysis of the code is left as an exercise for the reader.
 } \QuickQuizEnd
 
 \begin{listing*}[tb]
@@ -2219,13 +2133,15 @@ Line~31 에서는 현재 테이블의 인덱스를 얻어오고 그 역을 새�
 것을 보장합니다.
 \iffalse
 
-Line~\lnref{set_newtbl} starts the bucket-distribution process by installing a reference
-to the new table into the \co{->ht_new} field of the old table.
-Line~\lnref{sync_rcu} ensures that all readers who are not aware of the new table
-complete before the resize operation continues.
-Line~\lnref{get_curidx} picks up the current table's index and stores its inverse to
+Line~\lnref{get_curidx} picks up the current table's index and
+line~\lnref{put_curidx} stores its inverse to
 the new hash table, thus ensuring that the two hash tables avoid overwriting
 each other's linked lists.
+Line~\lnref{set_newtbl} then starts the bucket-distribution process by
+installing a reference to the new table into the \co{->ht_new} field of
+the old table.
+Line~\lnref{sync_rcu} ensures that all readers who are not aware of the
+new table complete before the resize operation continues.
 \fi
 
 Line~33-44 의 루프의 각 패스에서는 기존 해시 테이블의 bucket 의 내용물 중
@@ -2254,8 +2170,11 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing},
 	what guarantees that the update to \co{->ht_new} on line~\lnref{set_newtbl}
 	will be seen as happening before the update to \co{->ht_resize_cur}
-	on line~\lnref{update_resize} from the perspective of \co{hashtab_lookup()},
-	\co{hashtab_add()}, and \co{hashtab_del()}?
+	on line~\lnref{update_resize} from the perspective of
+	\co{hashtab_add()} and \co{hashtab_del()}?
+	In other words, what prevents \co{hashtab_add()}
+	and \co{hashtab_del()} from dereferencing
+	a NULL pointer loaded from \co{->ht_new}?
 	\end{lineref}
 	\fi
 \QuickQuizAnswer{
@@ -2280,6 +2199,13 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	of \co{->ht_resize_cur} cannot have started before the
 	assignment to \co{->ht_new}, and thus must be able to see
 	the reference to the new hash table.
+
+	And this is why the update-side \co{hashtab_add()} and
+	\co{hashtab_del()} functions must nevertheless be enclosed
+	in RCU read-side critical sections, courtesy of
+	\co{hashtab_lock_mod()} and \co{hashtab_unlock_mod()} in
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency
+	Control}.
 	\end{lineref}
 	\fi
 } \QuickQuizEnd
@@ -2301,49 +2227,9 @@ lines~\lnref{loop_list:b}-\lnref{loop_list:e} adds one data element
 from the current old-table bucket to the corresponding new-table bucket,
 holding the new-table bucket's lock during the add operation.
 Line~\lnref{update_resize} updates
-\co{->ht_resize_cur} to indicate that this bucket has been distributed,
-and is preceded by a full memory barrier that pairs with the one in
-\co{ht_get_bucket()} shown in
-Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}.
+\co{->ht_resize_cur} to indicate that this bucket has been distributed.
 Finally, line~\lnref{rel_oldcur} releases the old-table bucket lock.
 \fi
-
-\QuickQuiz{}
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
-	의 \co{ht_get_bucket()} 과
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}
-	의 \co{hashtab_resize()} 의 메모리 배리어는 왜 존재하는 건가요?
-	\iffalse
-
-	Why the memory barriers in \co{ht_get_bucket()} in
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
-	and in \co{hashtab_resize()} in
-	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}?
-	\fi
-\QuickQuizAnswer{
-	\co{ht_get_bucket()} 은 업데이트 쪽 락을 잡지 않은 채로 호출될 수
-	있어서, 상호 배제가 없을 것이기 때문입니다.
-	이는 \co{ht_get_bucket()} 이 새로운 해시 테이블을 지금 접근하고자 하는
-	데이터 원소가 아직 그쪽 테이블에 나타나지지 않았을 때 문제가 될 수
-	있고, 따라서 이 두개의 메모리 배리어가 그런 일의 발생을 막습니다.
-	즉, \co{hashtab_resize()} 는 기존 bucket 의 데이터 원소를
-	\co{->ht_rezie_cur} 의 업데이트 전에 완전히 옮겼고,
-	\co{ht_get_bucket()} 은 \co{->ht_resize_cur} 로부터 값이 업데이트 된
-	것을 보기 전까지는 새 해시 테이블에 접근하지 않을 겁니다.
-	\iffalse
-
-	Because \co{ht_get_bucket()} can be called without holding
-	the update-side locks, there is no mutual exclusion.
-	It would be bad for \co{ht_get_bucket()} to refer to the
-	new hash table before the data element of interest appeared
-	there, and the two memory barriers prevent this from happening.
-	That is, \co{hashtab_resize()} will have fully moved the
-	data elements in the old bucket before updating
-	\co{->ht_resize_cur}, and \co{ht_get_bucket()} won't access
-	the new hash table until after it sees the updated value
-	from \co{->ht_resize_cur}.
-	\fi
-} \QuickQuizEnd
 
 일단 모든 기존 테이블의 bucket 들이 새로운 테이블로 분산되면 line~45 가
 수행됩니다.
@@ -2364,6 +2250,24 @@ line~\lnref{free} frees
 the old hash table, and finally line~\lnref{ret_success} returns success.
 \fi
 \end{lineref}
+
+\QuickQuiz{}
+	\begin{lineref}[ln:datastruct:hash_resize:resize]
+	Why is there a \co{WRITE_ONCE()} on line~\lnref{update_resize}
+	in Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}?
+	\end{lineref}
+\QuickQuizAnswer{
+	\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod]
+	Together with the \co{READ_ONCE()}
+	on line~\lnref{l:ifresized} in \co{hashtab_lock_mod()}
+	of Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side
+	Concurrency Control},
+	it tells the compiler that the non-initialization accesses
+	to \co{->ht_resize_cur} must remain because reads
+	from \co{->ht_resize_cur} really can race with writes,
+	just not in a way to change the ``if'' conditions.
+	\end{lineref}
+} \QuickQuizEnd
 
 \subsection{Resizable Hash Table Discussion}
 \label{sec:datastruct:Resizable Hash Table Discussion}
@@ -2481,7 +2385,7 @@ somewhat due to the cache misses causes by the updates to each element's
 pointers, and this effect is most pronounced when the hash-tables
 bucket lists are short.
 This indicates that hash tables should be resized by substantial amounts,
-and that hysteresis should be be applied to prevent performance degradation
+and that hysteresis should be applied to prevent performance degradation
 due to too-frequent resize operations.
 In memory-rich environments, hash-table sizes should furthermore
 be increased much more aggressively than they are decreased.

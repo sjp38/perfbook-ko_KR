@@ -11,8 +11,9 @@ LATEXSOURCES = \
 	*/*.tex \
 	*/*/*.tex
 
+LST_SOURCES := $(wildcard CodeSamples/formal/promela/*.lst)
+
 LATEXGENERATED = autodate.tex qqz.tex contrib.tex origpub.tex
-OBSOLETE_FILES = intro/PPGrelation.eps extraction
 
 ABBREVTARGETS := tcb 1c hb msns mss mstx msr msn msnt 1csf
 
@@ -31,6 +32,12 @@ EPSSOURCES_FROM_DOT := $(DOTSOURCES:%.dot=%.eps)
 FIGSOURCES := $(wildcard */*.fig) $(wildcard */*/*.fig)
 
 EPSSOURCES_FROM_FIG := $(FIGSOURCES:%.fig=%.eps)
+
+SVGSOURCES := $(wildcard */*.svg)
+FAKE_EPS_FROM_SVG := $(SVGSOURCES:%.svg=%.eps)
+PDFTARGETS_OF_SVG := $(SVGSOURCES:%.svg=%.pdf)
+
+OBSOLETE_FILES = extraction $(FAKE_EPS_FROM_SVG) CodeSamples/snippets.mk
 
 EPSSOURCES_DUP := \
 	$(wildcard */*.eps) \
@@ -51,16 +58,30 @@ PDFTARGETS_OF_EPSOTHER := $(filter-out $(PDFTARGETS_OF_EPSORIG),$(PDFTARGETS_OF_
 
 BIBSOURCES := bib/*.bib alphapf.bst
 
-SVGSOURCES := $(wildcard */*.svg)
-PDFTARGETS_OF_SVG := $(SVGSOURCES:%.svg=%.pdf)
-
+# required commands
 DOT := $(shell which dot 2>/dev/null)
 FIG2EPS := $(shell which fig2eps 2>/dev/null)
 A2PING := $(shell which a2ping 2>/dev/null)
 INKSCAPE := $(shell which inkscape 2>/dev/null)
 LATEXPAND := $(shell which latexpand 2>/dev/null)
+QPDF := $(shell which qpdf 2>/dev/null)
+
+# required fonts
 STEELFONT := $(shell fc-list | grep -c -i steel)
 URWPS := $(shell fc-list | grep "Nimbus Mono PS" | wc -l)
+
+# required font packages
+FONTPACKAGES := $(shell kpsewhich nimbusmono.sty newtxtt.sty newtxsf.sty inconsolata.sty)
+NIMBUSMONO := $(findstring nimbusmono,$(FONTPACKAGES))
+NEWTXTT := $(findstring newtxtt,$(FONTPACKAGES))
+NEWTXSF := $(findstring newtxsf,$(FONTPACKAGES))
+INCONSOLATA := $(findstring inconsolata,$(FONTPACKAGES))
+
+# for line break in error text
+define n
+
+
+endef
 
 ifeq ($(URWPS),0)
 FIXSVGFONTS   = utilities/fixsvgfonts.sh
@@ -81,8 +102,8 @@ A2PING_GSCNFL := 0
 endif
 endif
 
-SOURCES_OF_SNIPPET_ALL := $(shell grep -r -l -F '\begin{snippet}' CodeSamples)
-SOURCES_OF_LITMUS      := $(shell grep -r -l -F '\begin[snippet]' CodeSamples)
+SOURCES_OF_SNIPPET_ALL := $(shell grep -R -l -F '\begin{snippet}' CodeSamples)
+SOURCES_OF_LITMUS      := $(shell grep -R -l -F '\begin[snippet]' CodeSamples)
 SOURCES_OF_LTMS        := $(patsubst %.litmus,%.ltms,$(SOURCES_OF_LITMUS))
 SOURCES_OF_SNIPPET     := $(filter-out $(SOURCES_OF_LTMS),$(SOURCES_OF_SNIPPET_ALL)) $(SOURCES_OF_LITMUS)
 GEN_SNIPPET_D  = utilities/gen_snippet_d.pl utilities/gen_snippet_d.sh
@@ -94,6 +115,8 @@ ifeq ($(default),)
 else
 	targ = $(default)
 endif
+
+chkpagegroup = $(PERFBOOK_CHKPAGEGROUP)
 
 .PHONY: all touchsvg clean distclean neatfreak 2c ls-unused $(ABBREVTARGETS) mslm perfbook-mslm.pdf mslmmsg help
 all: $(targ)
@@ -121,7 +144,7 @@ $(PDFTARGETS): %.pdf: %.tex %.bbl
 $(PDFTARGETS:.pdf=.bbl): %.bbl: %.aux $(BIBSOURCES)
 	bibtex $(basename $@)
 
-$(PDFTARGETS:.pdf=.aux): $(LATEXGENERATED) $(LATEXSOURCES)
+$(PDFTARGETS:.pdf=.aux): $(LATEXGENERATED) $(LATEXSOURCES) $(LST_SOURCES)
 	sh utilities/runfirstlatex.sh $(basename $@)
 
 autodate.tex: perfbook.tex $(LATEXSOURCES) $(BIBSOURCES) $(SVGSOURCES) $(FIGSOURCES) $(DOTSOURCES) $(EPSORIGIN) $(SOURCES_OF_SNIPPET) utilities/fcvextract.pl
@@ -155,33 +178,52 @@ perfbook-hb.tex: perfbook.tex
 	sed -e 's/,twocolumn/&,letterpaperhb/' -e 's/setboolean{hardcover}{false}/setboolean{hardcover}{true}/' < $< > $@
 
 perfbook-msns.tex: perfbook.tex
-	sed -e 's/%msfontstub/\\usepackage{courier}/' \
-	    -e 's/{lmttforcode}{true}/{lmttforcode}{false}/' < $< > $@
+	sed -e 's/%msfontstub/\\usepackage{courier}/' < $< > $@
 
 perfbook-mss.tex: perfbook.tex
-	sed -e 's/%msfontstub/\\usepackage[scaled=.94]{couriers}/' \
-	    -e 's/{lmttforcode}{true}/{lmttforcode}{false}/' < $< > $@
+	sed -e 's/%msfontstub/\\usepackage[scaled=.94]{couriers}/' < $< > $@
 
 perfbook-mstx.tex: perfbook.tex
 	sed -e 's/%msfontstub/\\renewcommand*\\ttdefault{txtt}/' < $< > $@
 
 perfbook-msr.tex: perfbook.tex
-	sed -e 's/%msfontstub/\\usepackage[scaled=.94]{nimbusmono}/' < $< > $@
-	@echo "## This target requires font package nimbus15. ##"
+ifeq ($(NIMBUSMONO),)
+	$(error Font package 'nimbus15' not found. See #9 in FAQ-BUILD.txt)
+endif
+	sed -e 's/%msfontstub/\\usepackage[scaled=.94]{nimbusmono}/' \
+	    -e 's/{nimbusavail}{false}/{nimbusavail}{true}/' < $< > $@
 
 perfbook-msn.tex: perfbook.tex
-	sed -e 's/%msfontstub/\\usepackage{nimbusmononarrow}/' < $< > $@
-	@echo "## This target requires font package nimbus15. ##"
+ifeq ($(NIMBUSMONO),)
+	$(error Font package 'nimbus15' not found. See #9 in FAQ-BUILD.txt)
+endif
+	sed -e 's/\\renewcommand\*\\ttdefault{lmtt}//' \
+	    -e 's/{lmttforcode}{true}/{lmttforcode}{false}/' \
+	    -e 's/{nimbusavail}{false}/{nimbusavail}{true}/' < $< > $@
 
 perfbook-msnt.tex: perfbook.tex
-	sed -e 's/%msfontstub/\\usepackage[zerostyle=a]{newtxtt}/' < $< > $@
-	@echo "## This target requires font package newtxtt. ##"
-	@echo "## If build fails, try target 'mstx' instead. ##"
+ifeq ($(NEWTXTT),)
+	$(error Font package 'newtxtt' not found.$nInstall it or try 'make mstx' instead. See #9 in FAQ-BUILD.txt)
+endif
+ifeq ($(NIMBUSMONO),)
+	$(error Font package 'nimbus15' not found. See #9 in FAQ-BUILD.txt)
+endif
+	sed -e 's/%msfontstub/\\usepackage[zerostyle=a]{newtxtt}/' \
+	    -e 's/{nimbusavail}{false}/{nimbusavail}{true}/' < $< > $@
 
 perfbook-1csf.tex: perfbook-1c.tex
+ifeq ($(NEWTXSF),)
+	$(error Font package 'newtxsf' not found. See #9 in FAQ-BUILD.txt)
+endif
+ifeq ($(INCONSOLATA),)
+	$(error Font package 'inconsolata' not found. See #9 in FAQ-BUILD.txt)
+endif
+ifeq ($(NIMBUSMONO),)
+	$(error Font package 'nimbus15' not found. See #9 in FAQ-BUILD.txt)
+endif
 	sed -e 's/setboolean{sansserif}{false}/setboolean{sansserif}{true}/' \
+	    -e 's/{nimbusavail}{false}/{nimbusavail}{true}/' \
 	    -e 's/%msfontstub/\\usepackage[var0]{inconsolata}[2013\/07\/17]/' < $< > $@
-	@echo "## This target requires math font package newtxsf. ##"
 
 # Rules related to perfbook_html are removed as of May, 2016
 
@@ -246,21 +288,33 @@ else
 endif
 	@inkscape --export-pdf=$@ $<i > /dev/null 2>&1
 	@rm -f $<i
+ifeq ($(chkpagegroup),on)
+ifndef QPDF
+	$(error qpdf not found. Please install it)
+endif
+	@echo "checking page group in $@"
+	@qpdf --qdf $@ $@q
+	@./utilities/extpagegroup.pl < $@q > $@p
+	@diff -q -w $@p pagegroup
+	@rm -f $@q $@p
+endif
 
 CodeSamples/snippets.d: $(SOURCES_OF_SNIPPET) $(GEN_SNIPPET_D)
 	sh ./utilities/gen_snippet_d.sh
 
 $(FCVSNIPPETS):
 	@echo "$< --> $@"
-	utilities/fcvextract.pl $< $(subst +,\\+,$(subst @,:,$(basename $(notdir $@)))) > $@
+	@utilities/fcvextract.pl $< $(subst +,\\+,$(subst @,:,$(basename $(notdir $@)))) > $@
+	@utilities/checkfcv.pl $@
 
 $(FCVSNIPPETS_VIA_LTMS):
 	@echo "$< --> $@"
-	utilities/fcvextract.pl $< $(subst +,\\+,$(subst @,:,$(basename $(notdir $@)))) > $@
+	@utilities/fcvextract.pl $< $(subst +,\\+,$(subst @,:,$(basename $(notdir $@)))) > $@
+	@utilities/checkfcv.pl $@
 
 $(FCVSNIPPETS_LTMS):
 	@echo "$< --> $@"
-	utilities/reorder_ltms.pl $< > $@
+	@utilities/reorder_ltms.pl $< > $@
 
 help:
 	@echo "Official targets (Latin Modern Typewriter for monospace font):"
@@ -285,21 +339,23 @@ help:
 	@echo "  \"msn\" doesn't cover bold face for monospace."
 	@echo "  \"1csf\" requires \"newtxsf\"."
 	@echo
-	@echo "All targets except for \"msns\" and \"mss\" use \"Latin Modern Typewriter\" font"
+	@echo "All targets except for \"msn\" use \"Latin Modern Typewriter\" font"
 	@echo "for code snippets."
 
 clean:
 	find . -name '*.aux' -o -name '*.blg' \
 		-o -name '*.dvi' -o -name '*.log' \
 		-o -name '*.qqz' -o -name '*.toc' -o -name '*.bbl' \
-		-o -name '*.fcv' -o -name '*.ltms' | xargs rm -f
+		-o -name '*.pdfp' -o -name '*.pdfq' | xargs rm -f
 	rm -f perfbook_flat.tex perfbook*.out perfbook-*.tex
-	rm -f $(LATEXGENERATED) $(OBSOLETE_FILES)
-	rm -f CodeSamples/snippets.mk CodeSamples/snippets.d
+	rm -f $(LATEXGENERATED)
+	rm -f CodeSamples/snippets.d
+	@rm -f $(OBSOLETE_FILES)
 
 distclean: clean
 	sh utilities/cleanpdf.sh
 	rm -f $(EPSSOURCES_FROM_DOT) $(EPSSOURCES_FROM_TEX) $(EPSSOURCES_FROM_FIG)
+	find . -name '*.fcv' -o -name '*.ltms' | xargs rm -f
 
 touchsvg:
 	find . -name '*.svg' | xargs touch

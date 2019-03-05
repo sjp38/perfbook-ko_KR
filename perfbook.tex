@@ -2,6 +2,13 @@
 % For arxiv.org, must be on or before line 5:
 \pdfoutput=1
 
+% To accomodate change in Ghostscript 9.26 (default output: PDF 1.7)
+\pdfminorversion=7
+
+% Suppress warning emitted when multiple figures drawn by inkscape appear
+% within a page. See: https://tex.stackexchange.com/questions/183149/
+\ifdefined\pdfsuppresswarningpagegroup \pdfsuppresswarningpagegroup=1 \fi
+
 % standard packages
 
 % A more pleasant font
@@ -9,8 +16,6 @@
 \usepackage[T1]{fontenc} % use postscript type 1 fonts
 \usepackage[defaultsups]{newtxtext} % use nice, standard fonts for roman
 \usepackage{textcomp} % use symbols in TS1 encoding
-\renewcommand*\ttdefault{lmtt}
-%msfontstub
 
 % Improves the text layout
 \usepackage{microtype}
@@ -42,6 +47,7 @@
 \usepackage{changepage}
 \usepackage{listings}
 \lstset{basicstyle=\ttfamily}
+\usepackage{examplep}
 % \usepackage[strings]{underscore}
 % \usepackage{underscore}
 \usepackage{pifont} % special character for qqz reference point
@@ -51,6 +57,7 @@
 \usepackage[bottom]{footmisc} % place footnotes under floating figures/tables
 \usepackage{tabularx}
 \usepackage[hyphens]{url}
+\usepackage{threeparttable}
 \usepackage[bookmarks=true,bookmarksnumbered=true,pdfborder={0 0 0}]{hyperref}
 \usepackage{footnotebackref} % to enable cross-ref of footnote
 \usepackage[all]{hypcap} % for going to the top of figure and table
@@ -92,6 +99,15 @@
 \newboolean{tblcptop}
 \setboolean{tblcptop}{true}
 \newcommand{\IfTblCpTop}[2]{\ifthenelse{\boolean{tblcptop}}{#1}{#2}}
+\newboolean{nimbusavail}
+\setboolean{nimbusavail}{false}
+\newcommand{\IfNimbusAvail}[2]{\ifthenelse{\boolean{nimbusavail}}{#1}{#2}}
+
+\IfNimbusAvail{
+\usepackage{nimbusmononarrow}
+}{}
+\renewcommand*\ttdefault{lmtt}
+%msfontstub
 
 \newcommand{\OneColumnHSpace}[1]{\IfTwoColumn{}{\hspace*{#1}}}
 
@@ -116,26 +132,29 @@
 \usepackage{arydshln}
 \definecolor{lightgray}{gray}{0.9} % for coloring alternate rows in table
 
+\fvset{fontsize=\scriptsize,obeytabs=true}
+\IfTwoColumn{
+\fvset{tabsize=2}
+}{
+\fvset{tabsize=8}
+}
 \DefineVerbatimEnvironment{VerbatimL}{Verbatim}%
-{fontsize=\scriptsize,numbers=left,numbersep=5pt,xleftmargin=9pt,obeytabs=true,tabsize=2}
+{numbers=left,numbersep=5pt,xleftmargin=9pt}
 \AfterEndEnvironment{VerbatimL}{\vspace*{-9pt}}
 \DefineVerbatimEnvironment{VerbatimN}{Verbatim}%
-{fontsize=\scriptsize,numbers=left,numbersep=3pt,xleftmargin=5pt,xrightmargin=5pt,obeytabs=true,tabsize=2,frame=single}
+{numbers=left,numbersep=3pt,xleftmargin=5pt,xrightmargin=5pt,frame=single}
 \DefineVerbatimEnvironment{VerbatimU}{Verbatim}%
-{fontsize=\scriptsize,numbers=none,xleftmargin=5pt,xrightmargin=5pt,obeytabs=true,tabsize=2,samepage=true,frame=single}
+{numbers=none,xleftmargin=5pt,xrightmargin=5pt,samepage=true,frame=single}
 
 \IfLmttForCode{
 \AtBeginEnvironment{verbatim}{\renewcommand{\ttdefault}{lmtt}}
 \AtBeginEnvironment{verbbox}{\renewcommand{\ttdefault}{lmtt}}
 \AtBeginEnvironment{table}{\renewcommand{\ttdefault}{lmtt}}
-\AtBeginEnvironment{tabular}{\renewcommand{\ttdefault}{lmtt}}
-\AtBeginEnvironment{tabularx}{\renewcommand{\ttdefault}{lmtt}}
+\AtBeginEnvironment{table*}{\renewcommand{\ttdefault}{lmtt}}
+\AtBeginEnvironment{sidewaystable*}{\renewcommand{\ttdefault}{lmtt}}
 \AtBeginEnvironment{minipage}{\renewcommand{\ttdefault}{lmtt}}
 \AtBeginEnvironment{listing}{\renewcommand{\ttdefault}{lmtt}}
-\AtBeginEnvironment{Verbatim}{\renewcommand{\ttdefault}{lmtt}}
-\AtBeginEnvironment{VerbatimL}{\renewcommand{\ttdefault}{lmtt}}
-\AtBeginEnvironment{VerbatimN}{\renewcommand{\ttdefault}{lmtt}}
-\AtBeginEnvironment{VerbatimU}{\renewcommand{\ttdefault}{lmtt}}
+\fvset{fontfamily=lmtt}
 }{}
 
 \IfTblCpTop{
@@ -158,10 +177,11 @@
 }
 %%HTMLNOSKIP
 \newcommand{\co}[1]{\lstinline[breaklines=true,breakatwhitespace=true]{#1}}
-\newcommand{\nbco}[1]{\hbox{\lstinline[breaklines=false,breakatwhitespace=false]{#1}}} % no break lines for short snippet
+\newcommand{\nbco}[1]{\mbox{\PVerb[pverb-space=invnobreak]{#1}}} % no break lines for short snippet
 \newcommand{\qco}[1]{``\nbco{#1}''} % \nbco with quotation marks
 \newcommand{\tco}[1]{\texttt{\detokenize{#1}}} % for code in tabular environment
 % \tco{} will break at spaces but not at underscores
+\newcommand{\lopt}[1]{\tco{-}\tco{-}\tco{#1}} % to avoid "--" to endash conversion
 \newcommand{\nf}[1]{\textnormal{#1}} % to return to normal font
 \newcommand{\qop}[1]{{\sffamily #1}} % QC operator such as H, T, S, etc.
 

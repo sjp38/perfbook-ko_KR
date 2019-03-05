@@ -30,13 +30,17 @@
 #include <sched.h>
 #include <string.h>
 
-#ifndef hash_register_test
-#define hash_register_test(htp) do { } while (0)
-#endif /* #ifndef hash_register_test */
-
 #ifndef hash_resize_test
+#define hashtab_alloc(n, cmp, tgh, testgk) hashtab_alloc(n, cmp)
 #define hash_resize_test(htp, n) do { } while (0)
-#endif /* #ifndef hash_register_test */
+#define hashtab_lock_mod(htp, k, h) hashtab_lock_mod(htp, k)
+#define hashtab_unlock_mod(htp, k, h) hashtab_unlock_mod(htp, k)
+#define hashtab_lock_mod_zoo(htp, k, h, s) hashtab_lock_mod(htp, h, s)
+#define hashtab_add(htp, h, htep, s) hashtab_add((htp), (h), (htep))
+#define hashtab_del(htep,s) hashtab_del(htep)
+struct ht_lock_state {
+};
+#endif /* #ifndef hash_resize_test */
 
 #ifndef other_init
 #define other_init() do { } while (0)
@@ -55,7 +59,17 @@ void (*defer_del_done)(struct ht_elem *htep) = NULL;
 #ifndef quiescent_state
 #define quiescent_state() do ; while (0)
 #define synchronize_rcu() do ; while (0)
+#define rcu_barrier() do ; while (0)
+#else /* #ifndef quiescent_state */
+# ifndef rcu_barrier
+#  error You need a modern version of liburcu which has "rcu_barrier()".
+#  define rcu_barrier() do ; while (0)
+# endif /* #ifndef rcu_barrier */
 #endif /* #ifndef quiescent_state */
+
+#ifndef check_hash
+#define check_hash() (htep->hte_hash != hash)
+#endif /* #ifndef check_hash */
 
 /*
  * Test variables.
@@ -82,6 +96,11 @@ void *testgk(struct ht_elem *htep)
 	return (void *)thep->data;
 }
 
+unsigned long tgh(void *key)
+{
+	return (unsigned long)key;
+}
+
 int testcmp(struct ht_elem *htep, void *key)
 {
 	struct testhe *thep;
@@ -106,13 +125,13 @@ void smoketest(void)
 	struct testhe *e2p;
 	struct testhe *e3p;
 	struct testhe *e4p;
+	struct ht_lock_state __attribute__((__unused__)) hlms;
 	struct hashtab *htp;
 	struct ht_elem *htep;
 	long i;
 
-	htp = hashtab_alloc(5, testcmp);
+	htp = hashtab_alloc(5, testcmp, tgh, testgk);
 	BUG_ON(htp == NULL);
-	hash_register_test(htp);
 	hash_register_thread();
 
 	/* Should be empty. */
@@ -124,32 +143,32 @@ void smoketest(void)
 
 	/* Add one by one and check. */
 	e1p = smoketest_malloc(1);
-	hashtab_lock_mod(htp, 1);
-	hashtab_add(htp, 1, &e1p->the_e);
+	hashtab_lock_mod(htp, 1, &hlms);
+	hashtab_add(htp, 1, &e1p->the_e, &hlms);
 	htep = hashtab_lookup(htp, 1, (void *)1);
 	BUG_ON(!htep);
-	hashtab_unlock_mod(htp, 1);
+	hashtab_unlock_mod(htp, 1, &hlms);
 	hashtab_lookup_done(htep);
 	e2p = smoketest_malloc(2);
-	hashtab_lock_mod(htp, 2);
-	hashtab_add(htp, 2, &e2p->the_e);
+	hashtab_lock_mod(htp, 2, &hlms);
+	hashtab_add(htp, 2, &e2p->the_e, &hlms);
 	htep = hashtab_lookup(htp, 2, (void *)2);
 	BUG_ON(!htep);
-	hashtab_unlock_mod(htp, 2);
+	hashtab_unlock_mod(htp, 2, &hlms);
 	hashtab_lookup_done(htep);
 	e3p = smoketest_malloc(3);
-	hashtab_lock_mod(htp, 3);
-	hashtab_add(htp, 3, &e3p->the_e);
+	hashtab_lock_mod(htp, 3, &hlms);
+	hashtab_add(htp, 3, &e3p->the_e, &hlms);
 	htep = hashtab_lookup(htp, 3, (void *)3);
 	BUG_ON(!htep);
-	hashtab_unlock_mod(htp, 3);
+	hashtab_unlock_mod(htp, 3, &hlms);
 	hashtab_lookup_done(htep);
 	e4p = smoketest_malloc(4);
-	hashtab_lock_mod(htp, 4);
-	hashtab_add(htp, 4, &e4p->the_e);
+	hashtab_lock_mod(htp, 4, &hlms);
+	hashtab_add(htp, 4, &e4p->the_e, &hlms);
 	htep = hashtab_lookup(htp, 4, (void *)4);
 	BUG_ON(!htep);
-	hashtab_unlock_mod(htp, 4);
+	hashtab_unlock_mod(htp, 4, &hlms);
 	hashtab_lookup_done(htep);
 
 	/* Should be full. */
@@ -162,22 +181,22 @@ void smoketest(void)
 	}
 
 	/* Delete all and check one by one. */
-	hashtab_lock_mod(htp, 1);
-	hashtab_del(&e1p->the_e);
+	hashtab_lock_mod(htp, 1, &hlms);
+	hashtab_del(&e1p->the_e, &hlms);
 	BUG_ON(hashtab_lookup(htp, 1, (void *)1));
-	hashtab_unlock_mod(htp, 1);
-	hashtab_lock_mod(htp, 2);
-	hashtab_del(&e2p->the_e);
+	hashtab_unlock_mod(htp, 1, &hlms);
+	hashtab_lock_mod(htp, 2, &hlms);
+	hashtab_del(&e2p->the_e, &hlms);
 	BUG_ON(hashtab_lookup(htp, 2, (void *)2));
-	hashtab_unlock_mod(htp, 2);
-	hashtab_lock_mod(htp, 3);
-	hashtab_del(&e3p->the_e);
+	hashtab_unlock_mod(htp, 2, &hlms);
+	hashtab_lock_mod(htp, 3, &hlms);
+	hashtab_del(&e3p->the_e, &hlms);
 	BUG_ON(hashtab_lookup(htp, 3, (void *)3));
-	hashtab_unlock_mod(htp, 3);
-	hashtab_lock_mod(htp, 4);
-	hashtab_del(&e4p->the_e);
+	hashtab_unlock_mod(htp, 3, &hlms);
+	hashtab_lock_mod(htp, 4, &hlms);
+	hashtab_del(&e4p->the_e, &hlms);
 	BUG_ON(hashtab_lookup(htp, 4, (void *)4));
-	hashtab_unlock_mod(htp, 4);
+	hashtab_unlock_mod(htp, 4, &hlms);
 
 	/* Should be empty. */
 	for (i = 1; i <= 4; i++) {
@@ -672,12 +691,15 @@ void *perftest_resize(void *arg)
 	run_on(0);
 	els[0]= nbuckets;
 	els[1] = els[0] * resizemult / resizediv;
-	while (goflag == GOFLAG_INIT)
+	while (READ_ONCE(goflag) == GOFLAG_INIT)
 		poll(NULL, 0, 1);
-	while (goflag == GOFLAG_RUN) {
+	while (READ_ONCE(goflag) == GOFLAG_RUN) {
 		smp_mb();
-		if (resizewait != 0)
+		if (resizewait != 0) {
 			poll(NULL, 0, resizewait);
+			if (READ_ONCE(goflag) != GOFLAG_RUN)
+				break;
+		}
 		i++;
 		hash_resize_test(perftest_htp, els[i & 0x1]);
 	}
@@ -704,22 +726,26 @@ int perftest_lookup(long i)
 /* Add an element to the hash table. */
 void perftest_add(struct testhe *thep)
 {
+	struct ht_lock_state __attribute__((__unused__)) hlms;
+
 	BUG_ON(thep->in_table);
-	hashtab_lock_mod(perftest_htp, thep->data);
+	hashtab_lock_mod(perftest_htp, thep->data, &hlms);
 	BUG_ON(hashtab_lookup(perftest_htp, thep->data, (void *)thep->data));
 	thep->in_table = 1;
-	hashtab_add(perftest_htp, thep->data, &thep->the_e);
-	hashtab_unlock_mod(perftest_htp, thep->data);
+	hashtab_add(perftest_htp, thep->data, &thep->the_e, &hlms);
+	hashtab_unlock_mod(perftest_htp, thep->data, &hlms);
 }
 
 /* Remove an element from the hash table. */
 void perftest_del(struct testhe *thep)
 {
+	struct ht_lock_state __attribute__((__unused__)) hlms;
+
 	BUG_ON(thep->in_table != 1);
-	hashtab_lock_mod(perftest_htp, thep->data);
-	hashtab_del(&thep->the_e);
+	hashtab_lock_mod(perftest_htp, thep->data, &hlms);
+	hashtab_del(&thep->the_e, &hlms);
 	thep->in_table = 2;
-	hashtab_unlock_mod(perftest_htp, thep->data);
+	hashtab_unlock_mod(perftest_htp, thep->data, &hlms);
 	defer_del(&thep->the_e);
 }
 
@@ -748,7 +774,7 @@ void *perftest_reader(void *arg)
 	/* Run the test code. */
 	i = 0;
 	for (;;) {
-		gf = ACCESS_ONCE(goflag);
+		gf = READ_ONCE(goflag);
 		if (gf != GOFLAG_RUN) {
 			if (gf == GOFLAG_STOP)
 				break;
@@ -765,6 +791,7 @@ void *perftest_reader(void *arg)
 		if (i >= ne)
 			i = i % ne + offset;
 	}
+
 	pap->nlookups = nlookups;
 	pap->nlookupfails = nlookupfails;
 	hash_unregister_thread();
@@ -800,13 +827,14 @@ void *perftest_updater(void *arg)
 			if (++j >= elperupdater)
 				j = 0;
 		perftest_add(&thep[j]);
+		BUG_ON(!perftest_lookup(thep[j].data));
 	}
 
 	/* Announce our presence and enter the test loop. */
 	atomic_inc(&nthreads_running);
 	i = 0;
 	for (;;) {
-		gf = ACCESS_ONCE(goflag);
+		gf = READ_ONCE(goflag);
 		if (gf != GOFLAG_RUN) {
 			if (gf == GOFLAG_STOP)
 				break;
@@ -820,9 +848,11 @@ void *perftest_updater(void *arg)
 			poll(NULL, 0, 10);  /* No actual updating wanted. */
 		} else if (thep[i].in_table == 1) {
 			perftest_del(&thep[i]);
+			BUG_ON(perftest_lookup(thep[i].data));
 			ndels++;
 		} else if (thep[i].in_table == 0) {
 			perftest_add(&thep[i]);
+			BUG_ON(!perftest_lookup(thep[i].data));
 			nadds++;
 		}
 
@@ -839,6 +869,7 @@ void *perftest_updater(void *arg)
 			quiescent_state();
 	}
 
+	rcu_barrier();
 	/* Test over, so remove all our elements from the hash table. */
 	for (i = 0; i < elperupdater; i++) {
 		if (thep[i].in_table != 1)
@@ -846,10 +877,7 @@ void *perftest_updater(void *arg)
 		BUG_ON(!perftest_lookup(thep[i].data));
 		perftest_del(&thep[i]);
 	}
-	/* Really want rcu_barrier(), but missing from old liburcu versions. */
-	synchronize_rcu();
-	poll(NULL, 0, 100);
-	synchronize_rcu();
+	rcu_barrier();
 
 	hash_unregister_thread();
 	free(thep);
@@ -871,9 +899,8 @@ void perftest(void)
 	long long starttime;
 
 	BUG_ON(maxcpus <= 0);
-	perftest_htp = hashtab_alloc(nbuckets, testcmp);
+	perftest_htp = hashtab_alloc(nbuckets, testcmp, tgh, testgk);
 	BUG_ON(perftest_htp == NULL);
-	hash_register_test(perftest_htp);
 	defer_del_done = defer_del_done_perftest;
 	pap = malloc(sizeof(*pap) * (nreaders + nupdaters));
 	BUG_ON(pap == NULL);
@@ -899,9 +926,9 @@ void perftest(void)
 
 	/* Run the test. */
 	starttime = get_microseconds();
-	ACCESS_ONCE(goflag) = GOFLAG_RUN;
+	WRITE_ONCE(goflag, GOFLAG_RUN);
 	poll(NULL, 0, duration);
-	ACCESS_ONCE(goflag) = GOFLAG_STOP;
+	WRITE_ONCE(goflag, GOFLAG_STOP);
 	starttime = get_microseconds() - starttime;
 	wait_all_threads();
 
@@ -948,7 +975,7 @@ int zoo_cmp(struct ht_elem *htep, void *key)
 	return strncmp((char *)key, zhep->name, ZOO_NAMELEN) == 0;
 }
 
-unsigned long zoo_hash(char *key)
+unsigned long zoo_hash(void *key)
 {
 	char *cp = (char *)key;
 	int i;
@@ -970,7 +997,7 @@ int zoo_lookup(char *key)
 	htep = hashtab_lookup(perftest_htp, hash, key);
 	zhep = container_of(htep, struct zoo_he, zhe_e);
 	BUG_ON(htep &&
-	       (htep->hte_hash != hash ||
+	       (check_hash() ||
 	        strncmp(zhep->name, (char *)key, ZOO_NAMELEN) != 0));
 	hashtab_unlock_lookup(perftest_htp, hash);
 	hashtab_lookup_done(htep);
@@ -980,22 +1007,24 @@ int zoo_lookup(char *key)
 /* Add an element to the hash table. */
 void zoo_add(struct zoo_he *zhep)
 {
-	unsigned long hash = zoo_hash(zhep->name);
+	unsigned long hash __attribute__((__unused__)) = zoo_hash(zhep->name);
+	struct ht_lock_state __attribute__((__unused__)) hlms;
 
-	hashtab_lock_mod(perftest_htp, hash);
+	hashtab_lock_mod_zoo(perftest_htp, zhep->name, hash, &hlms);
 	BUG_ON(hashtab_lookup(perftest_htp, hash, (void *)zhep->name));
-	hashtab_add(perftest_htp, hash, &zhep->zhe_e);
-	hashtab_unlock_mod(perftest_htp, hash);
+	hashtab_add(perftest_htp, hash, &zhep->zhe_e, &hlms);
+	hashtab_unlock_mod(perftest_htp, hash, &hlms);
 }
 
 /* Remove an element from the hash table. */
 void zoo_del(struct zoo_he *zhep)
 {
-	unsigned long hash = zoo_hash(zhep->name);
+	unsigned long hash __attribute__((__unused__)) = zoo_hash(zhep->name);
+	struct ht_lock_state __attribute__((__unused__)) hlms;
 
-	hashtab_lock_mod(perftest_htp, hash);
-	hashtab_del(&zhep->zhe_e);
-	hashtab_unlock_mod(perftest_htp, hash);
+	hashtab_lock_mod_zoo(perftest_htp, zhep->name, hash, &hlms);
+	hashtab_del(&zhep->zhe_e, &hlms);
+	hashtab_unlock_mod(perftest_htp, hash, &hlms);
 	defer_del(&zhep->zhe_e);
 }
 
@@ -1027,7 +1056,7 @@ void *zoo_reader(void *arg)
 	/* Run the test code. */
 	i = 0;
 	for (;;) {
-		gf = ACCESS_ONCE(goflag);
+		gf = READ_ONCE(goflag);
 		if (gf != GOFLAG_RUN) {
 			if (gf == GOFLAG_STOP)
 				break;
@@ -1048,10 +1077,6 @@ void *zoo_reader(void *arg)
 		if (i >= ne)
 			i = i % ne + offset;
 	}
-	/* Really want rcu_barrier(), but missing from old liburcu versions. */
-	synchronize_rcu();
-	poll(NULL, 0, 100);
-	synchronize_rcu();
 
 	pap->nlookups = nlookups;
 	pap->nlookupfails = nlookupfails;
@@ -1091,13 +1116,14 @@ void *zoo_updater(void *arg)
 		strcpy(zhep->name, &zoo_names[ZOO_NAMELEN * (j + mylowkey)]);
 		zoo_add(zhep);
 		zheplist[j] = zhep;
+		BUG_ON(!zoo_lookup(zhep->name));
 	}
 
 	/* Announce our presence and enter the test loop. */
 	atomic_inc(&nthreads_running);
 	i = 0;
 	for (;;) {
-		gf = ACCESS_ONCE(goflag);
+		gf = READ_ONCE(goflag);
 		if (gf != GOFLAG_RUN) {
 			if (gf == GOFLAG_STOP)
 				break;
@@ -1111,6 +1137,7 @@ void *zoo_updater(void *arg)
 			poll(NULL, 0, 10);  /* No actual updating wanted. */
 		} else if (zheplist[i]) {
 			zoo_del(zheplist[i]);
+			BUG_ON(zoo_lookup(zheplist[i]->name));
 			zheplist[i] = NULL;
 			ndels++;
 		} else {
@@ -1119,6 +1146,7 @@ void *zoo_updater(void *arg)
 			strcpy(zhep->name,
 			       &zoo_names[ZOO_NAMELEN * (i + mylowkey)]);
 			zoo_add(zhep);
+			BUG_ON(!zoo_lookup(zhep->name));
 			zheplist[i] = zhep;
 			nadds++;
 		}
@@ -1136,15 +1164,19 @@ void *zoo_updater(void *arg)
 			quiescent_state();
 	}
 
+	rcu_barrier();
 	/* Test over, so remove all our elements from the hash table. */
 	for (i = 0; i < elperupdater; i++) {
 		if (!zheplist[i])
 			continue;
 		zoo_del(zheplist[i]);
 	}
+	rcu_barrier();
+
 	hash_unregister_thread();
 	pap->nadds = nadds;
 	pap->ndels = ndels;
+	free(zheplist);
 	return NULL;
 }
 
@@ -1170,9 +1202,8 @@ void zoo_test(void)
 	struct zoo_he *zhep;
 
 	BUG_ON(maxcpus <= 0);
-	perftest_htp = hashtab_alloc(nbuckets, zoo_cmp);
+	perftest_htp = hashtab_alloc(nbuckets, zoo_cmp, zoo_hash, zoo_gk);
 	BUG_ON(perftest_htp == NULL);
-	hash_register_test(perftest_htp);
 	defer_del_done = defer_del_free;
 	zoo_names = malloc(ZOO_NAMELEN * nupdaters * elperupdater);
 	BUG_ON(zoo_names == NULL);
@@ -1184,6 +1215,7 @@ void zoo_test(void)
 	BUG_ON(!zhep);
 	strcpy(zhep->name, "cat");
 	zoo_add(zhep);
+	BUG_ON(!zoo_lookup("cat"));
 
 	pap = malloc(sizeof(*pap) * (nreaders + nupdaters));
 	BUG_ON(pap == NULL);
@@ -1209,9 +1241,9 @@ void zoo_test(void)
 
 	/* Run the test. */
 	starttime = get_microseconds();
-	ACCESS_ONCE(goflag) = GOFLAG_RUN;
+	WRITE_ONCE(goflag, GOFLAG_RUN);
 	poll(NULL, 0, duration);
-	ACCESS_ONCE(goflag) = GOFLAG_STOP;
+	WRITE_ONCE(goflag, GOFLAG_STOP);
 	starttime = get_microseconds() - starttime;
 	wait_all_threads();
 
