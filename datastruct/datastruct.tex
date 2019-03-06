@@ -1639,10 +1639,6 @@ Line~\lnref{ht:cmp}-\lnref{ht:getkey} 의 \co{->ht_cmp()}, \co{->ht_gethash()},
 \co{->ht_cmp()} 함수는 특정 키를 특정 원소와 비교하고, \co{ht_gethash()} 는
 특정 키의 해시를 계산하며, \co{->ht_getkey()} 는 키를 감싸고 있는 데이터
 원소로부터 키를 꺼낼 수 있게 합니다.
-
-\co{ht_bucket} 구조체는 앞에서와 동일하고, \co{ht_elem} 구조체는 앞에서의
-하나의 리스트 포인터와 달리 두개의 리스트 포인터의 원소 배열을 제공한다는 점만
-다릅니다.
 \iffalse
 
 The \co{->ht_idx} field on
@@ -1659,6 +1655,18 @@ the specified element,
 the \co{->ht_gethash()} calculates the specified key's hash,
 and \co{->ht_getkey()} extracts the key from the enclosing data
 element.
+\fi
+
+Line~\lnref{hls:b}-\lnref{hls:e} 에 보인 \co{ht_lock_state} 는 락 상태를 새로운
+\co{hashtab_lock_mod()} 에서 \co{hashtab_add()}, \co{hashtab_del()}, 그리고
+\co{hashtab_unlock_mod()} 로 전달하는 데 사용됩니다.
+이 상태는 이 알고리즘이 동시적인 크기 재조정 작업 중에 잘못된 bucket 을
+찾아가는 걸 방지합니다.
+
+\co{ht_bucket} 구조체는 앞에서와 동일하고, \co{ht_elem} 구조체는 앞에서의
+하나의 리스트 포인터와 달리 두개의 리스트 포인터의 원소 배열을 제공한다는 점만
+다릅니다.
+\iffalse
 
 The \co{ht_lock_state} shown on lines~\lnref{hls:b}-\lnref{hls:e}
 is used to communicate lock state from a new \co{hashtab_lock_mod()}
@@ -1809,21 +1817,25 @@ concurrent resize operation as shown in
 Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}.
 \fi
 
+\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod:l]
 이 일람표의 line~1-19 에 \co{hashtab_lock_mod()} 가 있습니다.
 Line~9 는 데이터 구조가 횡단을 하는 도중에 해제되는 일을 막기 위해 RCU
 read-side 크리티컬 섹션에 들어가고, line~10 에서 현재 해시 테이블로의
 레퍼런스를 얻어온 후, line~11 에서 이 해시 테이블에서 현재 키에 연관되는 bucket
 으로의 레퍼런스를 얻어옵니다.
-Line~12 는 이 bucket 의 락을 획득하는데, 이 락은 동시의 크기 재조정
-오퍼레이션이 그 bucket 을 분산시키는 것을 막는데, 물론 크기 재조정 오퍼레이션이
-이미 이 bucket 을 분산시켰다면 아무 영향이 없을 것임에도 불구하고 그렇습니다.
-Line~13 에서는 동시의 크기 재조정 오퍼레이션이 이미 이 bucket 을 새 해시
-테이블에 분산시켰는지 확인해보고, 그렇지 않다면 line~14 에서 선택된 bucket 의
-락을 잡은채로 (그리고 RCU read-side 크리티컬 섹션 안에 들어와 있는 채로)
-리턴합니다.
+Line~\lnref{acq_bucket} 는 이 bucket 의 락을 획득하는데, 이 락은 이 bucket 이
+이미 분산되었다면 아무 영향이 없을 것임에도 불구하고 그렇습니다.
+Line~\lnref{lsp0b}-\lnref{lsp0e} 는 bucket 포인터, 포인터 집합 인덱스, 그리고
+해시 값을 \co{ht_lock_state} 구조체의 해당하는 필드에 저장하는데, 이것들은 이
+정보를 \co{hashtab_add()}, \co{hashtab_del()}, 그리고 \co{hashtab_unlock_mod()}
+에 전달합니다.
+Line~\lnref{chk_resz_dist} 는 이어서 동시의 크기 재조정 작업이 이미 이 bucket
+을 새로운 해시 테이블로 분산시켰는지 보고, 그렇지 않다면 line~\lnref{lsp1_1} 이
+이미 크기 재조정된 해시 bucket 이 조재하지 않는다는 걸 알리고
+line~\lnref{fastret1} 은 선택된 해시 bucket 의 락을 잡은 채 (그리고 여전히 RCU
+read-size 크리티컬 섹션 안에 있는 채) 리턴합니다.
 \iffalse
 
-\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod:l]
 The \co{hashtab_lock_mod()} spans
 lines~\lnref{b}-\lnref{e} in the listing.
 Line~\lnref{rcu_lock} enters an RCU read-side critical section to prevent
@@ -1848,12 +1860,17 @@ this bucket) and also within an RCU read-side critical section.
 \fi
 
 그렇지 않다면, 동시의 크기 재조정 오퍼레이션이 이미 이 bucket 을 분산시킨
-것이므로, line~15 에서 새로운 해시 테이블로 넘어가고 line~16 에서 키에 연관되는
-bucket 을 선택합니다.
-마지막으로, line~17 에서 해당 bucket 의 락을 잡고 line~18 에서 기존 해시
-테이블의 bucket 을 위한 락을 놓아줍니다.
-다시 한번, \co{hashtab_lock_mod()} 는 RCU read-side 크리티컬 섹션 안에 들어와
-있는 채로 빠져나가집니다.
+것이므로, line~\lnref{new_hashtbl} 이 새로운 해시 테이블로 진행을 이어가서,
+line~\lnref{get_newbucket} 이 키에 연관된 bucket 을 고르고,
+line~\lnref{acq_newbucket} 이 이 bucket 의 락을 획득합니다.
+Line~\lnref{lsp1b}-\lnref{lsp1e} 는 이 bucket 의 포인터, 포인터 집합 인덱스,
+그리고 해시 값을 \co{ht_lock_state} 구조체의 연관된 필드에 저장하는데, 이것들은
+이 정보를 \co{hashtab_add()}, \co{hashtab_del()}, 그리고
+\co{hashtab_unlock_mod()} 로 전달합니다.
+이 경우, 두 락이 잡히는데, 하나는 기존의 \co{ht_bucket} 구조체의 것으로 이
+bucket 을 (이미 크기 재조정되지 않았다면) 크기 재조정하는 걸 막기 위한 것이고,
+하나는 새로운 \co{ht_bucket} 구조체의 것으로 동시의 \co{hashtab_add()} 와
+\co{hashtab_del()} 호출과 동기화 하기 위한 것입니다.
 \iffalse
 
 Otherwise, a concurrent resize operation has already distributed this
@@ -1873,19 +1890,20 @@ are used, with the \co{[0]} element pertaining to the old \co{ht_bucket}
 structure and the \co{[1]} element pertaining to the new structure.
 Once again, \co{hashtab_lock_mod()} exits within an RCU read-side critical
 section.
-\end{lineref}
 \fi
-
-\co{hashtab_unlock_mod()} 함수는 \co{hashtab_lock_mod()} 로 잡아 두었던 락을
-놓아줍니다.
-Line~28 에서 현재 해시 테이블을 고르고, line~29 에서 키에 연관된
-bucket---당연히 이 bucket 은 새로운 해시 테이블에 속해 있을 수도 있습니다--- 의
-레퍼런스를 증가시키기 위해 \co{ht_get_bucket()} 을 수행합니다.
-Line~30 은 이 bucket 의 락을 놓고 마지막으로 line~31 에서 RCU read-side
-크리티컬 섹션을 빠져나갑니다.
-\iffalse
+\end{lineref}
 
 \begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod:ul]
+\co{hashtab_unlock_mod()} 함수는 \co{hashtab_lock_mod()} 로 잡아 두었던
+락(들)을 놓아줍니다.
+Line~\lnref{relbkt0} 는 기존 \co{ht_bucket} 구조체의 락을 놓는데, 크기 재조정
+작업이 진행중이지 않은 경우에 사용되는 구조체입니다.
+Line~\lnref{ifbkt1} 이 크기 재조정 작업이 진행되었다고 판단되면,
+line~\lnref{relbkt1} 은 새로운 \co{ht_bucket} 구조체의 락을 놓습니다.
+어느 쪽이던, line~\lnref{rcu_unlock} 은 RCU read-side 크리티컬 섹션을
+빠져나갑니다.
+\iffalse
+
 The \co{hashtab_unlock_mod()} function releases the lock(s) acquired by
 \co{hashtab_lock_mod()}.
 Line~\lnref{relbkt0} releases the lock on the old \co{ht_bucket} structure.
@@ -1894,8 +1912,8 @@ operation is in progress, line~\lnref{relbkt1} releases the lock on the
 new \co{ht_bucket} structure.
 Either way, line~\lnref{rcu_unlock} exits the RCU read-side critical
 section.
-\end{lineref}
 \fi
+\end{lineref}
 
 \QuickQuiz{}
 	크기 재조정 작업이 이루어지는 사이에 한 쓰레드가 새로운 해시 테이블에
