@@ -2163,6 +2163,8 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	업데이트가 line~36 에서의 \co{->ht_resize_cur} 로의 업데이트 전에
 	일어난 것으로 \co{hashtab_lookup()}, \co{hashtab_add()}, 그리고
 	\co{hashtab_del()} 의 관점에 보일 것을 무엇이 보장하죠?
+	달리 말해서, \co{hashtab_add()} 와 \co{hashtab_del()} 이 \co{->ht_new}
+	로부터 로드된 NULL 포인터를 dereference 하는걸 뭐가 막는거죠?
 	\iffalse
 
 	\begin{lineref}[ln:datastruct:hash_resize:resize]
@@ -2199,6 +2201,13 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	of \co{->ht_resize_cur} cannot have started before the
 	assignment to \co{->ht_new}, and thus must be able to see
 	the reference to the new hash table.
+	\fi
+
+	그리고 이게 왜 업데이트쪽의 \co{hashtab_add()} 와 \co{hashtab_del()}
+	함수가
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
+	의 \co{hashtab_lock_mod()} 와 \co{hashtab_unlock_mod()} 덕에 RCU
+	read-side 크리티컬 섹션 안에 들어가야 하는 이유입니다.
 
 	And this is why the update-side \co{hashtab_add()} and
 	\co{hashtab_del()} functions must nevertheless be enclosed
