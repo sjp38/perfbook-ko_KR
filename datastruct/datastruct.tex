@@ -1711,10 +1711,11 @@ the old table.
 
 \begin{lineref}[ln:datastruct:hash_resize:get_bucket]
 Bucket 선택 코드는
-\co{ht_get_bucket()} 을 보이는
+\co{ht_get_bucket()} 을 line~\lnref{single:b}-\lnref{single:e} 에서,
+\co{ht_search_bucket()} 을 line~\lnref{hsb:b}-\lnref{hsb:e} 에서 보이는
 Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection} 에 있습니다.
-이 함수는 특정 해시 테이블의 특정 키에 연관된 bucket
-으로의 레퍼런스를 리턴하는데, 이때에는 크기 재조정을 고려하지 않습니다.
+\co{ht_get_bucket()} 함수는 특정 해시 테이블의 특정 키에 연관된 bucket 으로의
+레퍼런스를 리턴하는데, 이때에는 크기 재조정을 고려하지 않습니다.
 이 함수는 또한 line~\lnref{single:gethash} 의 패러미터~\co{b} 에 의해 레퍼런스
 되는 위치로 키에 연관된 bucket 인덱스를 저장하고,
 키에 연관된 해시 값을 line~\lnref{single:h} 의 패러미터~\co{h} (이게 \co{NULL}
@@ -1739,6 +1740,15 @@ referenced by parameter~\co{h} (if non-\co{NULL}) on line~\lnref{single:h}.
 Line~\lnref{single:return} then returns a reference to the corresponding bucket.
 \fi
 
+\co{ht_search_bucket()} 함수는 특정 해시 테이블 버전 내에서 특정 키를
+탐색합니다.
+Line~\lnref{hsb:get_curbkt} 은 해당 키에 연관된 bucket 으로의 레퍼런스를
+얻어옵니다.
+Line~\lnref{hsb:loop:b}-\lnref{hsb:loop:e} 의 루프는 이 bucket 을 탐색해서,
+만약 line~\lnref{hsb:match} 가 조건이 맞음을 발견하면,
+line~\lnref{hsb:ret_match} 에서 둘러싼 데이터 원소로의 포인터를 리턴합니다.
+그렇지 않고 조건이 맞는 경우가 없다면 line~\lnref{hsb:ret_NULL} 이 실패를
+알리는 \co{NULL} 을 리턴합니다.
 \iffalse
 
 The \co{ht_search_bucket()} function searches for the specified key
@@ -1967,12 +1977,14 @@ Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}.
 이 그림의 line~\lnref{b}-\lnref{e} 의 \co{hashtab_lookup()} 함수는 탐색을
 합니다.
 Line~\lnref{get_curtbl} 에서는 현재 해시 테이블을 가져오고
-line~\lnref{get_curbkt} 에서 특정 키에 연관된 bucket 으로의 레퍼런스를
-얻어옵니다.
-Line~\lnref{loop:b}-\lnref{loop:e} 의 루프는 bucket 내부를 탐색하는데,
-line~\lnref{match} 에서는 매치되는지를 판단하고, line~18 에서 데이터 원소로의
-포인터를 리턴하는데, 매치되지 않는다면 line~20 에서 실패를 알리는 \co{NULL} 을
-리턴합니다.
+line~\lnref{get_curbkt} 에서 특정 키에 연관된 bucket 을 탐색합니다.
+만약 line~\lnref{entchk} 가 이 탐색이 성공했음을 판단하면
+line~\lnref{ret_match} 에서 해당 원소로의 포인터를 리턴합니다.
+그렇지 않다면, line~\lnref{get_nxttbl} 이 다음 버전으로의 포인터를 가져오고,
+만약 line~\lnref{htpchk} 가 진행중인 크기 재조정이 없음으로 판단하면,
+line~\lnref{noresize} 가 \co{NULL} 을 리턴합니다.
+크기 재조정이 진행 중이라면, 수행은 line~\lnref{ret_nxtbkt} 에 이르는데, 여기선
+새 버전에서 \co{key} 에 연관된 bucket 에 대한 탐색의 결과를 리턴합니다.
 \iffalse
 
 The \co{hashtab_lookup()} function on
