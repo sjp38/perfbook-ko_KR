@@ -5,13 +5,13 @@
 
 앞의 섹션들에서 이야기된 방법들은 어느정도 확장성 있긴 했지만 모두 Pre-BSD
 라우팅 테이블을 위한 성능에 있어서 이상적이지 못했습니다.
-Pre-BSD 탐색 오버헤드가 싱글 쓰레드 탐색에서와 동일하게끔, 병렬로 수행되는
-탐색이 싱글 쓰레드에서의 탐색과 동일한 어셈블리어 인스트럭션 시퀀스를
-수행한다면 좋을 겁니다.
-이는 좋은 목표가 될 수 있지만, 그러기 위해서는 구현 단계에서 많은 심각한 질문을
-이끌어냅니다.
-하지만 이걸 시도하면 어떤 일이 벌어질지 알아보고 삽입과 삭제를 구분해서
-다뤄봅시다.
+따라서, ``너무 멀리 가 본 자들만이 당신이 얼마나 멀리 갈 지 알 수
+있다''\footnote{T.~S.~Eliot 에게의 사죄와 함께.} 정신에 의거해서, 우린 모든
+방법을 알아보고, 동시의 읽기 쓰레드들이 동시의 업데이트가 존재함에도 불구하고
+싱글쓰레드 탐색에서와 동일한 어셈블리어 인스트럭션들만을 수행하는 알고리즘을
+들여다 볼 겁니다.
+물론, 이 칭찬받아 마땅한 목표는 심각한 구현상의 의문을 일으킬 겁니다만, 시도도
+해보지 않고는 성공할 수 없습니다!
 \iffalse
 
 The approaches discussed in the preceding sections have provided
@@ -50,6 +50,13 @@ Figure~\ref{fig:defer:Insertion With Concurrent Readers} 에 표현되어 있습
 두번째 열에서는 하나의 구조체를 메모리 할당하는데, 초기화 되지 않은 부분들은
 물음표로 표시되어 있습니다.
 세번째 열에서는 이 구조체를 초기화 시킵니다.
+우린 간단한 C-언어 값 할당문을 사용해서 \co{gptr} 이 이 새 원소를 가리키도록
+해서, 네번째와 다섯번째 열에 보인 상태를 만들 수도 있습니다.
+불행히도, Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans} 은 이
+희망을 꺾습니다.
+따라서, 업데이트 쓰레드는 간단한 C-언어 할당문을 사용할 수 없고, 대신
+\co{WRITE_ONCE()} 또는 나중에 설명되겠지만 \co{rcu_assign_pointer()} 를
+사용해야만 합니다.
 \iffalse
 
 A classic approach for insertion is shown in
@@ -58,7 +65,6 @@ The first row shows the initial state, with \co{gptr} equal to \co{NULL}.
 In the second row, we have allocated a structure which is uninitialized,
 as indicated by the question marks.
 In the third row, we have initialized the structure.
-\fi
 We might hope to assign \co{gptr} to reference this new element
 using a simple C-language assignment statement, resulting in the
 state shown in the fourth and final row.
@@ -68,6 +74,20 @@ dashes these hopes.
 Therefore, the updater cannot use a simple C-language assignment, but
 must instead use something like \co{smp_store_release()}, or, as will be seen,
 \co{rcu_assign_pointer()}.
+\fi
+
+비슷하게, 어떤 사람은 읽기 쓰레드가 \co{gptr} 의 값을 읽어오는데 간단한 C-언어
+값 할당문을 사용할 수도 있고, 그럼으로써 예전 값인 \co{NULL} 또는 새로 설치된
+포인터를 가져오는 모두 합법적인 결과를 보장할 수도 있다고 희망할 수 있을
+겁니다.
+불행히도, Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans} 역시 이
+희망을 꺾습니다.
+이 보장을 갖기 위해선, 읽기 쓰레드들이 \co{READ_ONCE()} 또는, 뒤에서
+설명하겠지만 \co{rcu_dereference()} 를 사용해야만 합니다.
+하지만, 대부분의 최신 컴퓨터 시스템에서, 이 두 기능은 하나의 로드
+인스트럭션으로 구현될 수 있는데, 이는 싱글쓰레드 코드에서 사용될 인스트럭션과
+정확히 동일합니다.
+\iffalse
 
 Similarly, one might hope that readers could use a single C-language
 assignment statement to fetch the value of \co{gptr}, and be guaranteed
@@ -80,6 +100,14 @@ or, as will be seen, \co{rcu_dereference()}.
 However, on most modern computer systems, each of these two primitives
 can be implemented with a single load instruction, exactly the instruction
 that would be used in single-threaded code.
+\fi
+
+따라서, 이 심각한 구현상의 질문에도 불구하고, 동시의 읽기 쓰레드가 싱글쓰레드
+코드에 필요시 되는 것과 동일한 기계 명령만을 수행하면서 연결된 데이터 구조에
+새로운 데이터를 추가하는게 정말 가능합니다.
+동시의 읽기에 추가 비용이 들지 않는 이 방법은 훌륭한 성능과 확장성을 제공하고,
+real-time 사용 예에 무척 잘 맞습니다.
+\iffalse
 
 Therefore, despite the serious implementability questions, it really
 is possible to add new data to linked data structures while allowing
@@ -87,6 +115,7 @@ concurrent readers to execute the same sequence of machine instructions
 that is required in single-threaded code.
 This no-cost approach to concurrent reading provides excellent performance
 and scalability, and also is eminently suitable for real-time use.
+\fi
 
 \begin{figure}[tb]
 \begin{center}
@@ -97,20 +126,16 @@ and scalability, and also is eminently suitable for real-time use.
 
 하지만 동시에 읽기 쓰레드에 의해 레퍼런스 되고 있는 데이터는 언젠가는 없어져야
 할 겁니다.
-Figure~\ref{fig:defer:Deletion From Linked List With Concurrent Readers} 와
-같이 링크드 리스트에서 원소를 삭제하는, 더 복잡한 예제를 봅시다.
-이 리스트는 초기에 원소~\co{A}, \co{B}, 그리고 \co{C} 를 가지고 있으며, 여기서
-원소~\co{B} 를 삭제해야 합니다.
-먼저 \co{list_del()} 을 사용해 삭제를 진행하는데,\footnote{
-	역시 앞서 말했듯 이는 추상화된 예이고,
-	Section~\ref{sec:defer:RCU Fundamentals} 에서 이에 관련해서 더 이야기
-합니다.}
-모든 새로운 읽기 쓰레드들은 원소~\co{B} 를 리스트에서 삭제된
-것으로 보게 될 겁니다.
-하지만, 이 원소를 여전히 보고 있는 오래된 읽기 쓰레드들도 있을 수
-있습니다.
-이 오래된 읽기 쓰레드들이 종료되고 나면, 원소~\co{B} 를 안전히 메모리
-해제시켜서 그림의 아래쪽에 그려진 상태를 만들 수 있을 겁니다.
+Figure~\ref{fig:defer:Deletion With Concurrent Readers} 에 보인 것처럼, 첫번째
+단계는 쉽습니다.
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans} 에서의 교훈을 가슴에
+담아서, 그 포인터를 \co{NULL} 로 만드는 데 \co{WRITE_ONCE()} 를 사용해서, 이
+그림의 첫번째 줄에서 두번째 줄로 넘어갑니다.
+이 시점에서, 이전부터 존재한 읽기 쓰레드들은 \co{->addr} 값은 42 이고
+\co{->iface} 는 1인 이전 구조체를 보게 되지만, 새로운 읽기 쓰레드들은 \co{NULL}
+포인터를 보게 되는데, 즉, 동시의 읽기 쓰레드들이 상태에 동의하지 않을 수
+있으며, 이게 그림 상의 ``2 Versions'' 라고 표시되어 있습니다.
+\iffalse
 
 But sooner or later, it will be necessary to remove data that is
 being referenced by concurrent readers.
@@ -125,6 +150,7 @@ At this point, pre-existing readers will see the old structure with
 \co{->addr} of 42 and \co{->iface} of 1, but new readers will see
 a \co{NULL} pointer, that is, concurrent readers can disagree on
 the state, as indicated by the ``2 Versions'' in the figure.
+\fi
 
 \QuickQuiz{}
 	Shouldn't
@@ -184,12 +210,30 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	this is not necessarily problematic.
 } \QuickQuizEnd
 
+단순히 모든 이전부터 존재한 읽기 쓰레드가 종료되기를 기다림으로써 세번째 줄에
+보인 것과 같이 하나의 버전만이 존재하는 상태로 되돌아갈 수 있습니다.
+이 시점에서, 모든 미리 존재한 읽기 쓰레드는 종료되었고, 어떤 뒤의 읽기 쓰레드도
+과거의 데이터 항목으로 가는 경로를 갖지 못하므로, 이를 레퍼런스 하는 읽기
+쓰레드는 더이상 존재할 수 없습니다.
+따라서 네번째 줄에 보여진 것처럼, 이 과거의 데이터는 해제되기에 안전합니다.
+\iffalse
+
 We get back to a single version simply by waiting for all the
 pre-existing readers to complete, as shown in row~3.
 At that point, all the pre-existing readers are done, and no later
 reader has a path to the old data item, so there can no longer be
 any readers referencing it.
 It may therefore be safely freed, as shown on row~4.
+\fi
+
+따라서, 이전부터 존재한 읽기 쓰레드들이 완료되기를 기다리는 방법을 제공하면,
+연결된 데이터 구조에 데이터를 추가하고 제거하는게 가능합니다, 읽기 쓰레드들이
+싱글쓰레드 버전에서와 동일한 기계 명령만을 수행함에도 불구하고요!
+따라서 너무 멀리 갔던게 너무 멀리 간 건 전혀 아니었던 걸수도 있습니다.
+
+하지만 이전부터 존재한 읽기 쓰레드들이 언제 정말로 완료되었다고 말할 수
+있을까요?
+\iffalse
 
 Thus, given a way to wait for pre-existing readers to complete,
 it is possible to both add data to and remove data from a linked
@@ -201,9 +245,20 @@ So perhaps going too far was not too far after all.
 But how can we tell when all of the pre-existing readers have in
 fact completed?
 This question is the topic of the next section.
+\fi
 
 \subsubsection{Waiting for Readers}
 \label{sec:defer:Waiting for Readers}
+
+읽기 쓰레드 대기를 레퍼런스 카운팅에 기초해서 하고 싶을 수 있지만,
+Chapter~\ref{chp:Counting} 의
+Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem}
+는 동시의 레퍼런스 카운팅은 우리가
+Section~\ref{sec:defer:Reference Counting} 에서 본 것처럼 상당한 오버헤드를
+초래함을 보입니다.
+해저드 포인터가 이 오버헤드를 상당히 줄여주지만,
+Section~\ref{sec:defer:Hazard Pointers} 에서 보여주듯, 완전 없애는 건 아닙니다.
+\iffalse
 
 It is tempting to base reader waiting on reference counting, but
 Figure~\ref{fig:count:Atomic Increment Scalability on Nehalem}
@@ -214,6 +269,7 @@ as we already saw in
 Section~\ref{sec:defer:Reference Counting}.
 Hazard pointers profoundly reduces this overhead, but, as we saw in
 Section~\ref{sec:defer:Hazard Pointers}, not to zero.
+\fi
 
 A second approach observes that memory synchronization is expensive,
 and therefore uses registers instead, namely each CPU's or thread's
@@ -231,6 +287,18 @@ and ever-exciting code-motion optimizations.
 Nevertheless, this approach is said to be used in
 production~\cite{MikeAsh2015Apple}.
 
+세번째 방법은 어떤 합리적 읽기 쓰레드의 수명도 넘어갈 만큼 충분히 긴 고정된
+시간을 그냥 기다리는 겁니다~\cite{Jacobson93,AjuJohn95}.
+이는 hard real-time 시스템에서는 매우 잘 동작할 수 있습니다만, 그보다 덜
+매력적인 환경에서라면, Murphy 는 비합리적으로 긴 수명의 읽기 쓰레드에도 준비해
+두는게 매우 중요하다고 말할 겁니다.
+이걸 이해하기 위해, 충분히 길게 기다리는데 실패하는 경우의 결과를 생각해
+보세요: 어떤 데이터 아이템은 비합리적인 읽기 쓰레드가 여전히 그걸 레퍼런스하고
+있는 중에 해제되고, 그 아이템은 곧바로 재할당 되어서, 다른 타입의 데이터
+아이템이 되어 있을 수도 있습니다.
+이 문제는 최선의 경우에도 무척 디버깅하기 어려울 겁니다.
+\iffalse
+
 A third approach is to simply wait for a fixed period of time that is
 long enough to comfortably exceed the lifetime of any reasonable
 reader~\cite{Jacobson93,AjuJohn95}.
@@ -244,6 +312,21 @@ possibly even as a data item of some other type.
 The unreasonable reader and the unwitting reallocator would then
 be attempting to use the same memory for two very different purposes.
 The ensuing mess will at best be exceedingly difficult to debug.
+\fi
+
+네번째 방법은 가장 비합리적인 읽기 쓰레드도 기다릴 수 있도록 영원히 기다리는
+겁니다.
+이 방법은 ``메모리 누출'' 이라고도 불리며, 메모리 누출은 종종 때이른 리부팅을
+필요로 한다는 사실 때문에 나쁜 평판을 가지고 있습니다.
+하지만, 평판에도 불구하고, 업데이트 비율과 시스템 운용 시간의 최대값이 확실히
+제한되어 있는 경우에는 실행 가능한 전략입니다.
+예를 들어, 클러스터가 정말로 높은 availability 를 보장함을 증명하기 위해
+주기적으로 크래시 되는 높은 availability 의 클러스터에서는 잘 사용될 수도 있을
+겁니다.\footnote{
+	주기적인 크래시를 강제하는 이 프로그램은 가끔 ``chaos monkey'' 라고도
+	알려져 있습니다:
+	\url{https://netflix.github.io/chaosmonkey/}.}
+\iffalse
 
 A fourth approach is to wait forever, secure in the knowledge that
 doing so will outwait even the most unreasonable reader.
@@ -258,10 +341,20 @@ that cluster really remained highly available.\footnote{
 	The program that forces the periodic crashing is sometimes
 	known as a ``chaos monkey'':
 	\url{https://netflix.github.io/chaosmonkey/}.}
+\fi
 Leaking the memory is also a viable strategy in environments having
 garbage collectors, in which case the garbage collector can be thought
 of as plugging the leak~\cite{Kung80}.
 However, if your environment lacks a garbage collector, read on!
+
+다섯번째 방법은 주기적으로 ``모든 걸 멈추기'' 를 보다 선호함으로써 주기적
+크래시를 막는데, 전통적인 stop-the-world 가비지 콜렉터로 보여지듯이 이를 잘
+보입니다.
+모든 걸 멈추기는 응답 시간을 상당히 악화시킬 수 있는데, 이는 동시적 가비지
+콜렉터~\cite{DavidFBacon2003RTGC}의 개발에 대한 모티베이션이 되었습니다.
+더 나아가서, 우린 모든 이전부터 존재한 읽기 쓰레드들이 완료되길 원하지, 모든게
+한번에 완료되길 바라는 건 아닙니다.
+\iffalse
 
 A fifth approach avoids the period crashes in favor of periodically
 ``stopping the world'', as exemplified by the traditional stop-the-world
@@ -274,6 +367,24 @@ can gravely degrade response times, which has been one motivation for the
 development of concurrent garbage collectors~\cite{DavidFBacon2003RTGC}.
 Furthermore, we only need all pre-existing readers to complete, not to
 complete all at the same time.
+\fi
+
+이 관찰은 네번째 방법을 이끄는데, 하나의 CPU 또는 쓰레드를 충분한 시간동안
+멈추는 것으로, 이 방법은 모든 응답 시간을 악화시키진 않고, 멈춰진 하나의 것의
+응답시간만 악화시킵니다.
+더 나아가서, 다양한 어플리케이션이 이미 모든 이전부터 존재한 읽기 쓰레드들이
+완료된 후에야 도달 가능한 상태 (\emph{quiescent state}) 를 가지고 있습니다.
+트랜잭션 처리 시스템에서, 한쌍의 성공적인 트랜잭션 사이의 시간이 하나의
+quiescent state 가 될 수 있습니다.
+Preemption 을 제공하지 않는 운영체제 커널에서, 컨텍스트 스위치는 하나의
+quiescent state 가 될 수 있습니다~\cite{McKenney98}.
+어느 쪽이던, 모든 CPU 그리고/또는 쓰레드들이 하나의 quiescent state 를
+지났다면, 이 시스템은 하나의 \emph{grace period} 를 완료했다고, 모든 이전부터
+존재한 읽기 쓰레드들이 완료되었다고 말해지며, 모든 이전에 제거된 데이터
+아이템이 해제되기에 안전하다고 말해집니다.\footnote{
+	단순히 메모리 회수를 지연시키는 것보다 RCU 는 더 많은 걸 할 수
+	있습니다만, 메모리 회수 지연은 시작하기에 좋은 내용입니다.}
+\iffalse
 
 This observation leads to the sixth approach, which is stopping
 one CPU or thread at a time.
@@ -295,6 +406,24 @@ safe to free any previously-removed data items.\footnote{
 	It is possible to do much more with RCU than simply defer
 	reclamation of memory, but deferred reclamation is an
 	excellent place to start.}
+\fi
+
+Preemption 을 하지 않는 운영체제 커널에서, 컨텍스트 스위치가 합법적 quiescent
+state 가 되기 위해선, 읽기 쓰레드들이
+Figure~\ref{fig:defer:Insertion With Concurrent Readers}
+와~\ref{fig:defer:Deletion With Concurrent Readers} 에 보여진 \co{gptr} 를 통해
+얻어온 특정 데이터 자료의 인스턴스를 레퍼런스 하는 동안 블록되는걸 금지해야만
+합니다.
+이 블록킹 금지 규칙은 스핀락을 잡고 있는 동안은 CPU 가 블록되는게 금지되는 순수
+스핀락과 같은 비슷한 규칙입니다.
+이 금지 규칙이 없으면, 모든 CPU 가 블락된 쓰레드가 잡고있는 스핀락을 잡고자
+스피닝 하는 쓰레드들에 의해 소모될 수 있습니다.
+이 스피닝 하는 쓰레드들은 각자가 이 락을 획득하기 전까지는 CPU 를 놓지 않을
+것인데, 이 락을 잡고 있는 쓰레드는 이 스피닝 하는 쓰레드들 중 하나가 CPU 를
+놓기 전까지는 락을 놓을 수가 없습니다.
+이는 고전적인 데드락 상황이며, 이 데드락은 스핀락을 잡고 있는 동안은 블록되는
+것을 금지하는 것으로 막아집니다.
+\iffalse
 
 Within a non-preemptive operating-system kernel, for context switch to be
 a valid quiescent state, readers must be prohibited from blocking while
@@ -312,6 +441,24 @@ the lock, but the thread holding the lock cannot possibly release it
 until one of the spinning threads relinquishes a CPU.
 This is a classic deadlock situation, and this deadlock is avoided
 by prohibiting blocking while holding a spinlock.
+\fi
+
+다시 말하지만, 이 동일한 금지 규칙은 \co{gptr} 을 디레퍼런싱하는 읽기
+쓰레드들에 부과됩니다: 그런 쓰레드들은 그 포인터로 가리켜진 데이터 아이템을
+사용하는 걸 마무리 하기 전까지는 블록될 수 없습니다.
+업데이트 쓰레드가 \co{WRITE_ONCE()} 를 수행하는 걸 마무리 한
+Figure~\ref{fig:defer:Deletion With Concurrent Readers} 의 두번째 줄로
+돌아와서, CPU~0 이 컨텍스트 스위치를 한다고 생각해 봅시다.
+읽기 쓰레드들은 이 링크드 리스트를 횡단하는 동안 블록되는게 허용되어 있지
+않으므로, CPU~0 에서 수행된 모든 이전의 읽기 쓰레드는 완료되었다고 보장됩니다.
+이 논리를 다른 CPU 들에도 적용해 보면, 일단 모든 CPU 들이 컨텍스트 스위치를
+수행했음이 관측되었다면, 모든 이전의 읽기 스레드들이 완료되었으며, 따라서 새로
+제거된 데이터 원소를 레퍼런스하는 읽기 쓰레드는 더이상 존재하지 않는다는게
+보장됩니다.
+이 업데이트 쓰레드는 이제 안전하게 이 데이터 원소를 해제할 수 있어서,
+Figure~\ref{fig:defer:Deletion With Concurrent Readers} 의 바닥에 보여진 상태를
+이룰 수 있습니다.
+\iffalse
 
 Again, this same constraint is imposed on reader threads dereferencing
 \co{gptr}: such threads are not allowed to block until after
@@ -330,6 +477,7 @@ threads referencing the newly removed data element.
 The updater can then safely free that data element, resulting in the
 state shown at the bottom of
 Figure~\ref{fig:defer:Deletion With Concurrent Readers}.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -341,7 +489,7 @@ Figure~\ref{fig:defer:Deletion With Concurrent Readers}.
 이런 방법은 \emph{quiescent state based
 reclamation}(QSBR)~\cite{ThomasEHart2006a} 이라 명명되어 있습니다.
 QSBR 방법이
-Figure~\ref{fig:defer:RCU QSBR: Waiting for Pre-Existing Readers}
+Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers},
 에 그림의 꼭대기부터
 바닥까지로 시간의 흐름에 따라 그려져 있습니다.
 
