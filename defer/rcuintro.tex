@@ -296,6 +296,8 @@ production~\cite{MikeAsh2015Apple}.
 보세요: 어떤 데이터 아이템은 비합리적인 읽기 쓰레드가 여전히 그걸 레퍼런스하고
 있는 중에 해제되고, 그 아이템은 곧바로 재할당 되어서, 다른 타입의 데이터
 아이템이 되어 있을 수도 있습니다.
+이 비합리적인 읽기 쓰레드와 부주의한 재할당자는 이제 같은 메모리를 두개의 매우
+다른 목적으로 사용하려 할 겁니다.
 이 문제는 최선의 경우에도 무척 디버깅하기 어려울 겁니다.
 \iffalse
 
@@ -326,6 +328,10 @@ The ensuing mess will at best be exceedingly difficult to debug.
 	주기적인 크래시를 강제하는 이 프로그램은 가끔 ``chaos monkey'' 라고도
 	알려져 있습니다:
 	\url{https://netflix.github.io/chaosmonkey/}.}
+메모리를 누출하는 건 또한 가비지 콜렉터가 있는 환경에서라면 실행 가능한
+전략인데, 이 경우 가비지 콜렉터는 이 누출에 대한 마개가 될
+겁니다~\cite{Kung80}.
+하지만, 여러분의 환경이 가비지 콜렉터를 갖지 못했다면, 계속 읽으세요!
 \iffalse
 
 A fourth approach is to wait forever, secure in the knowledge that
@@ -341,11 +347,11 @@ that cluster really remained highly available.\footnote{
 	The program that forces the periodic crashing is sometimes
 	known as a ``chaos monkey'':
 	\url{https://netflix.github.io/chaosmonkey/}.}
-\fi
 Leaking the memory is also a viable strategy in environments having
 garbage collectors, in which case the garbage collector can be thought
 of as plugging the leak~\cite{Kung80}.
 However, if your environment lacks a garbage collector, read on!
+\fi
 
 다섯번째 방법은 주기적으로 ``모든 걸 멈추기'' 를 보다 선호함으로써 주기적
 크래시를 막는데, 전통적인 stop-the-world 가비지 콜렉터로 보여지듯이 이를 잘
@@ -492,11 +498,19 @@ QSBR 방법이
 Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers},
 에 그림의 꼭대기부터
 바닥까지로 시간의 흐름에 따라 그려져 있습니다.
+CPU~1 은 현재 데이터 아이템을 제거하는 \co{WRITE_ONCE()} 를 행하고 (아마 앞서서
+이 포인터 값을 읽었고 적절한 동기화를 했을 겁니다), 이어서 읽기 쓰레드들을
+기다립니다.
+이 기다리기 동작은 즉각적인 컨텍스트 스위치로 귀결되는데, 이는 quiescent state
+로, CPU~1 위의 모든 앞의 읽기들이 완료되었음을 의미합니다.
+다음으로, CPU~2 가 컨텍스트 스위치를 해서, CPU~1 과~2 의 모든 읽기 쓰레드가
+완료되었음이 알려집니다.
+마지막으로, CPU~3 가 컨텍스트 스위치를 합니다.
+이 시점에서, 전체 시스템의 모든 읽기 쓰레드는 완료되었음이 알려진 것이고,
+따라서 grace period 가 종료되어서, CPU~1 이 기존 데이터 아이템을 해제할 수 있게
+됩니다.
 
-이런 방법의 제품 수준 구현은 매우 복잡할 수 있지만, 장난감 수준 구현은 상당히
-간단합니다:
 \iffalse
-
 This approach is termed \emph{quiescent state based reclamation}
 (QSBR)~\cite{ThomasEHart2006a}.
 A QSBR schematic is shown in
@@ -515,27 +529,47 @@ Finally, CPU~3 does a context switch.
 At this point, all readers throughout the entire system are known to
 have completed, so the grace period ends, permitting CPU~1 to free
 the old data item.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers} 에서,
+	과거의 데이터 아이템에 접근했을 수도 있는 CPU~3 의 마지막 읽기 쓰레드는
+	grace period 가 시작하기 전에 이미 종료되었습니다!
+	그런데 왜 CPU~3 가 이후의 컨텍스트 스위치를 할 때까지 기다리는거죠???
+	\iffalse
+
 	In Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers},
 	the last of CPU~3's readers that could possibly have
 	access to the old data item ended before the grace period
 	even started!
 	So why would any anyone bother waiting until CPU~3's later context
 	switch???
+	\fi
 \QuickQuizAnswer{
+	이 기다림이 바로 읽기 쓰레드가 싱글쓰레드의 경우와 동일한 인스트럭션을
+	수행할 수 있도록 해주는 것이기 때문입니다.
+	달리 말하자면, 기다림이 훌륭한 읽기쪽 성능, 확장성, 그리고 real-time
+	응답을 가능하게 합니다.
+	\iffalse
+
 	Because that waiting is exactly what enables readers to use
 	the same sequence of instructions that is appropriate for
 	single-theaded situations.
 	In other words, waiting enables excellent read-side performance,
 	scalability, and real-time response.
+	\fi
 } \QuickQuizEnd
 
 \subsubsection{Toy Implementation}
 \label{sec:defer:Toy Implementation}
 
+이런 방법의 제품 수준 구현은 매우 복잡할 수 있지만, 장난감 수준 구현은 상당히
+간단합니다:
+\iffalse
+
 Although production-quality QSBR implementations can be quite complex,
 a toy non-preemptive Linux-kernel implementation is exceedingly simple:
+\fi
 
 \begin{VerbatimN}[samepage=true]
 void synchronize_rcu(void)
