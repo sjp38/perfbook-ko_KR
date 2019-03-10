@@ -1562,8 +1562,8 @@ which is the subject of the next section.
 
 \begin{lineref}[ln:datastruct:hash_resize:data]
 크기 재조절은 전통적인 우회로 추가 방법으로 이루어지는데, 여기서 이 우회로는
-Listing~\ref{lst:datastruct:Resizable Hash-Table Data Structures} 의 line~12-25
-에 보이는 \co{ht} 구조체입니다.
+Listing~\ref{lst:datastruct:Resizable Hash-Table Data Structures}
+(\path{hash_resize.c}) 의 line~12-25 에 보이는 \co{ht} 구조체입니다.
 Line~27-30 에 보인 \co{hashtab} 구조체는 현재의 \co{ht} 구조체로의 포인터와
 해시 테이블 크기 재조정을 하려는 동시적 시도를 직렬화 하는데 사용되는
 스핀락만을 담고 있습니다.
@@ -1826,10 +1826,10 @@ Line~\lnref{rcu_lock} 는 데이터 구조가 횡단을 하는 도중에 해제�
 테이블에서 현재 키에 연관되는 bucket 으로의 레퍼런스를 얻어옵니다.
 Line~\lnref{acq_bucket} 는 이 bucket 의 락을 획득하는데, 이 락은 이 bucket 이
 이미 분산되었다면 아무 영향이 없을 것임에도 불구하고 그렇습니다.
-Line~\lnref{lsp0b}-\lnref{lsp0e} 는 bucket 포인터, 포인터 집합 인덱스, 그리고
-해시 값을 \co{ht_lock_state} 구조체의 해당하는 필드에 저장하는데, 이것들은 이
-정보를 \co{hashtab_add()}, \co{hashtab_del()}, 그리고 \co{hashtab_unlock_mod()}
-에 전달합니다.
+Line~\lnref{lsp0b}-\lnref{lsp0e} 는 bucket 포인터와 포인터 집합 인덱스를
+\co{ht_lock_state} 구조체의 해당하는 필드에 저장하는데, 이것들은 이 정보를
+\co{hashtab_add()}, \co{hashtab_del()}, 그리고 \co{hashtab_unlock_mod()} 에
+전달합니다.
 Line~\lnref{ifresized} 는 이어서 동시의 크기 재조정 작업이 이미 이 bucket
 을 새로운 해시 테이블로 분산시켰는지 보고, 그렇지 않다면 line~\lnref{lsp1_1} 이
 이미 크기 재조정된 해시 bucket 이 조재하지 않는다는 걸 알리고
@@ -1864,10 +1864,10 @@ this bucket) and also within an RCU read-side critical section.
 것이므로, line~\lnref{new_hashtbl} 이 새로운 해시 테이블로 진행을 이어가서,
 line~\lnref{get_newbkt} 이 키에 연관된 bucket 을 고르고,
 line~\lnref{acq_newbkt} 이 이 bucket 의 락을 획득합니다.
-Line~\lnref{lsp1b}-\lnref{lsp1e} 는 이 bucket 의 포인터, 포인터 집합 인덱스,
-그리고 해시 값을 \co{ht_lock_state} 구조체의 연관된 필드에 저장하는데, 이것들은
-이 정보를 \co{hashtab_add()}, \co{hashtab_del()}, 그리고
-\co{hashtab_unlock_mod()} 로 전달합니다.
+Line~\lnref{lsp1b}-\lnref{lsp1e} 는 이 bucket 의 포인터와 포인터 집합 인덱스
+를 \co{ht_lock_state} 구조체의 연관된 필드에 저장하는데, 이것들은 이 정보를
+\co{hashtab_add()}, \co{hashtab_del()}, 그리고 \co{hashtab_unlock_mod()} 로
+전달합니다.
 이 경우, 두 락이 잡히는데, 하나는 기존의 \co{ht_bucket} 구조체의 것으로 이
 bucket 을 (이미 크기 재조정되지 않았다면) 크기 재조정하는 걸 막기 위한 것이고,
 하나는 새로운 \co{ht_bucket} 구조체의 것으로 동시의 \co{hashtab_add()} 와
@@ -1978,13 +1978,8 @@ Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}.
 합니다.
 Line~\lnref{get_curtbl} 에서는 현재 해시 테이블을 가져오고
 line~\lnref{get_curbkt} 에서 특정 키에 연관된 bucket 을 탐색합니다.
-만약 line~\lnref{entchk} 가 이 탐색이 성공했음을 판단하면
-line~\lnref{ret_match} 에서 해당 원소로의 포인터를 리턴합니다.
-그렇지 않다면, line~\lnref{get_nxttbl} 이 다음 버전으로의 포인터를 가져오고,
-만약 line~\lnref{htpchk} 가 진행중인 크기 재조정이 없음으로 판단하면,
-line~\lnref{noresize} 가 \co{NULL} 을 리턴합니다.
-크기 재조정이 진행 중이라면, 수행은 line~\lnref{ret_nxtbkt} 에 이르는데, 여기선
-새 버전에서 \co{key} 에 연관된 bucket 에 대한 탐색의 결과를 리턴합니다.
+Line~\lnref{ret} 은 탐색되었다면 그 원소로의 포인터를, 탐색이 실패했다면
+\co{NULL} 을 리턴합니다.
 \iffalse
 
 The \co{hashtab_lookup()} function on
@@ -2012,16 +2007,20 @@ or \co{NULL} when the search fails.
 	is in progress.
 } \QuickQuizEnd
 
-그림의 line~23-37 의 \co{hashtab_add()} 함수는 해시 테이블에 새로운 데이터
-원소를 넣습니다.
-Line~32-34 는 앞에서와 같이 키에 연관되는 bucket 으로의 포인터 (그리고 인덱스)
-를 얻어오고, line~35 는 새로운 원소를 테이블에 집어넣습니다.
-호출자는 동시성을 잘 제어할 것이 요구되는데, 예를 들어 \co{hashtab_add()} 호출
-전에 \co{hashtab_lock_mod()} 를 호출하고, 후에 \co{hashtab_unlock_mod()} 를
-호출해야 하는 것 등입니다.
+\begin{lineref}[ln:datastruct:hash_resize:access:add]
+이 코드의 line~\lnref{b}-\lnref{e} 의 \co{hashtab_add()} 함수는 새로운 데이터
+원소를 이 해시 테이블에 넣습니다.
+Line~\lnref{htbp} 는 새로운 원소가 추가될 현재의 \co{ht_bucket} 구조체를
+가져오고, line~\lnref{i} 는 포인터 쌍의 인덱스를 가져옵니다.
+Line~\lnref{add} 는 새로운 원소를 현재 해시 bucket 에 추가합니다.
+Line~\lnref{ifnew} 에서 이 bucket 이 새로운 버전의 해시 테이블로 분산되었다고
+판단하면, line~\lnref{addnew} 는 새로운 원소를 연관된 새로운 bucket 에도
+추가합니다.
+이 함수의 호출자는 동시성을 제어할 것이 요구되는데, 예를 들면,
+\co{hashtab_add()} 전에 \co{hashtab_lock_mod()} 를, 그 후에는
+\co{hashtab_unlock_mod()} 를 호출해야 합니다.
 \iffalse
 
-\begin{lineref}[ln:datastruct:hash_resize:access:add]
 The \co{hashtab_add()} function on lines~\lnref{b}-\lnref{e} of the listing adds
 new data elements to the hash table.
 Line~\lnref{htbp} picks up the current \co{ht_bucket} structure into which the
@@ -2034,13 +2033,16 @@ new element to the corresponding new bucket.
 The caller is required to handle concurrency, for example, by invoking
 \co{hashtab_lock_mod()} before the call to \co{hashtab_add()} and invoking
 \co{hashtab_unlock_mod()} afterwards.
-\end{lineref}
 \fi
+\end{lineref}
 
 \begin{lineref}[ln:datastruct:hash_resize:access:del]
-그림의 line~39-52 의 \co{hashtab_del()} 함수는 해시 테이블에서 존재하는 원소를
-하나 제거합니다.
-Line~\lnref{i} 는 포인터 쌍의 인덱스를 고르고 line~\lnref{del} 은 해당 원소를
+코드의 line~\lnref{b}-\lnref{e} 의 \co{hashtab_del()} 함수는 해시 테이블에서
+존재하는 원소를 하나 제거합니다.
+Line~\lnref{i} 는 포인터 쌍의 인덱스를 고르고 line~\lnref{del} 은 현재
+테이블에서 해당 원소를 지웁니다.
+Line~\lnref{ifnew} 는 이 bucket 이 새로운 해시 테이블로 분산되었는지 확인하고,
+만약 그렇다면 line~\lnref{delnew} 에서 해당 원소를 새로운 테이블의 bucket 에서
 지웁니다.
 \co{hashtab_add()} 에서와 같이, 호출자는 동시성 제어를 할 책임을 갖게 되고 이
 동시성 제어는 동시의 크기 재조정 작업과의 동기화를 처리합니다.
@@ -2174,16 +2176,17 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 \end{lineref}
 
 \QuickQuiz{}
+	\begin{lineref}[ln:datastruct:hash_resize:resize]
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions} 의
-	\co{hashtab_resize()} 함수에서, line~29 에서의 \co{->ht_new} 로의
-	업데이트가 line~36 에서의 \co{->ht_resize_cur} 로의 업데이트 전에
-	일어난 것으로 \co{hashtab_lookup()}, \co{hashtab_add()}, 그리고
-	\co{hashtab_del()} 의 관점에 보일 것을 무엇이 보장하죠?
+	\co{hashtab_resize()} 함수에서, line~\lnref{set_newtbl} 에서의
+	\co{->ht_new} 로의 업데이트가 line~\lnref{update_resize} 에서의
+	\co{->ht_resize_cur} 로의 업데이트 전에 일어난 것으로
+	\co{hashtab_add()} 와 \co{hashtab_del()} 의 관점에 보일 것을 무엇이
+	보장하죠?
 	달리 말해서, \co{hashtab_add()} 와 \co{hashtab_del()} 이 \co{->ht_new}
 	로부터 로드된 NULL 포인터를 dereference 하는걸 뭐가 막는거죠?
 	\iffalse
 
-	\begin{lineref}[ln:datastruct:hash_resize:resize]
 	In the \co{hashtab_resize()} function in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing},
 	what guarantees that the update to \co{->ht_new} on line~\lnref{set_newtbl}
@@ -2193,8 +2196,8 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	In other words, what prevents \co{hashtab_add()}
 	and \co{hashtab_del()} from dereferencing
 	a NULL pointer loaded from \co{->ht_new}?
-	\end{lineref}
 	\fi
+	\end{lineref}
 \QuickQuizAnswer{
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
 	의 line~30 에서의 \co{synchronize_rcu()} 는 전부터 존재한 RCU 읽기
