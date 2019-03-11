@@ -2063,19 +2063,37 @@ a concurrent resize operation.
 \end{lineref}
 
 \QuickQuiz{}
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
+	의 \co{hashtab_add()} 와 \co{hashtab_del()} 함수는 크기 재조정 작업이
+	진행중인 동안 해시 bucket 들을 업데이트 할 수 있습니다.
+	이 빈번한 크기 재조정 작업이 무시할만하지 않다면 이는 성능을 떨어뜨릴
+	겁니다.
+	그런 경우에 업데이트 비용을 줄일 수 있지 않나요?
+	\iffalse
+
 	The \co{hashtab_add()} and \co{hashtab_del()} functions in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
 	can update two hash buckets while a resize operation is progressing.
 	This might cause a poor performance if the frequency of resize operation
 	is not negligible.
 	Isn't it possible to reduce the cost of updates in such cases?
+	\fi
 \QuickQuizAnswer{
+	그래요, \co{hashtab_lookup()} 에의 약간의 비용 증가가 괜찮다고 하면
+	말이죠.
+	그러기 위한 한가지 방법이
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions (Fewer Updates)}
+	과~\ref{lst:datastruct:Resizable Hash-Table Update-Side Locking Function (Fewer Updates)}
+	(\path{hash_resize_s.c}) 에 보여 있습니다.
+	\iffalse
+
 	Yes, at least assuming that a slight increase in the cost of
 	\co{hashtab_lookup()} is acceptable.
 	One approach is shown in
 	Listings~\ref{lst:datastruct:Resizable Hash-Table Access Functions (Fewer Updates)}
 	and~\ref{lst:datastruct:Resizable Hash-Table Update-Side Locking Function (Fewer Updates)}
 	(\path{hash_resize_s.c}).
+	\fi
 
 \begin{listing}[tbh]
 \input{CodeSamples/datastruct/hash/hash_resize_s@access.fcv}
@@ -2088,6 +2106,22 @@ a concurrent resize operation.
 \caption{Resizable Hash-Table Update-Side Locking Function (Fewer Updates)}
 \label{lst:datastruct:Resizable Hash-Table Update-Side Locking Function (Fewer Updates)}
 \end{listing}
+
+	이 버전의 \co{hashtab_add()} 는 아직 크기 재조정 작업이 이루어지지
+	않았다면 과거 bucket 에, 크기 재조정이 되었다면 새 bucket 에 저장하고,
+	\co{hashtab_del()} 은 해당 원소를 넣어졌던 bucket 에서 제거합니다.
+	\co{hashtab_lookup()} 함수는 과거 bucket 의 탐색이 실패하면 새 bucket
+	을 탐색하는데, 이는 룩업 빠른 수행 경로에 오버헤드를 추가하는 단점을
+	갖습니다.
+	여기서의 대안적인 \co{hashtab_lock_mod()} 는 크기 재조정이 진행 중이면
+	아마도 더 자연스러운 선택일 \co{->hbp[1]} 과 \co{->hls_idx[1]} 대신
+	\co{->hbp[0]} 와 \co{->hls_idx[0]} 에서 새로운 bucket 의 락킹 상태를
+	리턴합니다.
+	하지만, 이 덜 자연적인 선택은 \co{hashtab_add()} 를 단순화 시키는
+	장점을 갖습니다.
+
+	이 코드를 더 분석하는건 독자 여러분의 몫으로 두겠습니다.
+	\iffalse
 
 	This version of \co{hashtab_add()} adds an element to
 	either the old bucket if it is not resized yet, or to the new
@@ -2104,6 +2138,7 @@ a concurrent resize operation.
 	\co{hashtab_add()}.
 
 	Further analysis of the code is left as an exercise for the reader.
+	\fi
 } \QuickQuizEnd
 
 \begin{listing*}[tb]
