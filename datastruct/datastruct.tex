@@ -1994,17 +1994,31 @@ or \co{NULL} when the search fails.
 \end{lineref}
 
 \QuickQuiz{}
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
+	의 \co{hashtab_lookup()} 함수는 동시의 크기 재조정 작업을 신경쓰지
+	않네요.
+	이는 읽기 쓰레드가 크기 재조정 작업 중에 추가된 원소를 놓칠 수도 있다는
+	걸 의미하지 않나요?
+	\iffalse
+
 	The \co{hashtab_lookup()} function in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Access Functions}
 	does not account for concurrent resize operations.
 	Doesn't this mean that readers might miss an element that was
 	added during a resize operation?
+	\fi
 \QuickQuizAnswer{
+	아닙니다.
+	곧 보게 되겠지만, \co{hashtab_add()} 와 \co{hashtab_del()} 함수는 크기
+	재조정 작업이 진행중인 동안 과거의 해시 테이블을 최신상태로 유지합니다.
+	\iffalse
+
 	No.
 	As we will see soon,
 	the \co{hashtab_add()} and \co{hashtab_del()} functions
 	keep the old hash table up-to-date while a resize operation
 	is in progress.
+	\fi
 } \QuickQuizEnd
 
 \begin{lineref}[ln:datastruct:hash_resize:access:add]
@@ -2314,11 +2328,23 @@ the old hash table, and finally line~\lnref{ret_success} returns success.
 
 \QuickQuiz{}
 	\begin{lineref}[ln:datastruct:hash_resize:resize]
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing} 의
+	line~\lnref{update_resize} 에 \co{WRITE_ONCE()} 는 왜 있는 건가요?
+	\iffalse
+
 	Why is there a \co{WRITE_ONCE()} on line~\lnref{update_resize}
 	in Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}?
+	\fi
 	\end{lineref}
 \QuickQuizAnswer{
 	\begin{lineref}[ln:datastruct:hash_resize:lock_unlock_mod]
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
+	의 line~\lnref{l:ifresized} in \co{hashtab_lock_mod()} 과 함께, 이
+	코드는 컴파일러에게 \co{->ht_resize_cur} 로의 초기화가 아닌 접근은
+	\co{->ht_resize_cur} 로부터의 읽기가 ``if'' 조건에만 쓰이는게 아니라 이
+	쓰기와 경주할 수 있기 때문에 유지되어야 한다는 걸 알립니다.
+	\iffalse
+
 	Together with the \co{READ_ONCE()}
 	on line~\lnref{l:ifresized} in \co{hashtab_lock_mod()}
 	of Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side
@@ -2327,6 +2353,7 @@ the old hash table, and finally line~\lnref{ret_success} returns success.
 	to \co{->ht_resize_cur} must remain because reads
 	from \co{->ht_resize_cur} really can race with writes,
 	just not in a way to change the ``if'' conditions.
+	\fi
 	\end{lineref}
 } \QuickQuizEnd
 
