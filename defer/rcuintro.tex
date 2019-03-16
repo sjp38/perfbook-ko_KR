@@ -39,11 +39,20 @@ questions, but we cannot possibly succeed if we don't even try!
 \label{fig:defer:Insertion With Concurrent Readers}
 \end{figure}
 
+구현에 있어 고려해야 할 점들을 최소화 하기 위해, 우리는 그 값이 \co{NULL}
+이거나 하나의 구조체로의 레퍼런스를 갖게 되는 하나의 전역 포인터로 구성되는
+최소한의 데이터 구조를 생각해 봅니다.
+흥미롭게도, 이 간단한 데이터 구조는 상품에서도
+사용되었습니다~\cite{GeoffRomer2018C++DeferredReclamationP0561R4}.
+\iffalse
+
 To minimize implementability concerns, we focus on a minimal
 data structure, which consists of a single global pointer that is either
 \co{NULL} or references a single structure.
 Interestingly enough, this simple data structure is used in
 production~\cite{GeoffRomer2018C++DeferredReclamationP0561R4}.
+\fi
+
 아이템 추가를 위한 고전적인 방법이
 Figure~\ref{fig:defer:Insertion With Concurrent Readers} 에 표현되어 있습니다.
 첫번째 열은 기본 상태를 보이는데, \co{gptr} 은 \co{NULL} 값을 갖습니다.
@@ -55,7 +64,7 @@ Figure~\ref{fig:defer:Insertion With Concurrent Readers} 에 표현되어 있습
 불행히도, Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans} 은 이
 희망을 꺾습니다.
 따라서, 업데이트 쓰레드는 간단한 C-언어 할당문을 사용할 수 없고, 대신
-\co{WRITE_ONCE()} 또는 나중에 설명되겠지만 \co{rcu_assign_pointer()} 를
+\co{smp_store_release()} 또는 나중에 설명되겠지만 \co{rcu_assign_pointer()} 를
 사용해야만 합니다.
 \iffalse
 
@@ -153,11 +162,33 @@ the state, as indicated by the ``2 Versions'' in the figure.
 \fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+	의 \co{WRITE_ONCE()} 는 \co{smp_store_release()} 가 되어야 하지
+	않을까요?
+	\iffalse
+
 	Shouldn't
 	Figure~\ref{fig:defer:Deletion With Concurrent Readers}'s
 	\co{WRITE_ONCE()} instead be \co{smp_store_release()}?
+	\fi
 \QuickQuizAnswer{
+	아뇨, 그렇지 않습니다.
+	\iffalse
+
 	No, it need not be.
+	\fi
+
+	\co{NULL} 포인터가 할당되었으므로, 순서를 엇갈리게 할 것이 존재치
+	않으니 \co{smp_store_release()} 는 필요가 없습니다.
+	반대로, \co{NULL} 이 아닌 포인터를 할당할 때에는
+	\co{smp_store_release()} 가 사용되어야 하는데 가리켜지는 구조체의
+	초기화가 이 포인터 할당 전에 완료되었을 것을 보장하기 위함입니다.
+	하지만 이 경우에, \co{NULL} 포인터는 가리켜지는 구조체가 없음을
+	의미하므로, 순서가 필요없습니다.
+
+	요약해서, \co{smp_store_release()} 로도 동작할 겁니다만, 불필요한
+	오버헤드를 일으킬 수 있습니다.
+	\iffalse
 
 	Because a \co{NULL} pointer is being assigned, there is nothing
 	to order against, so no need for \co{smp_store_release()}.
@@ -170,15 +201,31 @@ the state, as indicated by the ``2 Versions'' in the figure.
 
 	In short, \co{smp_store_release()} would work, but could
 	incur unnecessary overhead.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+	에 표시된 진행과 서로 동시 수행되는 읽기 쓰레드들은 \co{gptr} 의 값에
+	대해 동의하지 않을 수 있습니다.
+	이건 문제가 되지 않나요???
+	\iffalse
+
 	Readers running concurrently each other and with the procedure
 	outlined in
 	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
 	can disagree on the value of \co{gptr}.
 	Isn't that just a wee bit problematic???
+	\fi
 \QuickQuizAnswer{
+	꼭 그렇지는 않습니다.
+
+	Sections~\ref{sec:cpu:Hardware Optimizations}
+	와~\ref{sec:cpu:Hardware Free Lunch?} 에서 힌트가 주어졌듯이, 빛의
+	속도의 지연은 컴퓨터의 데이터는 항상 그 데이터가 실제로 모델링하고자
+	했던 외부의 실제에 비해 낡았음을 의미합니다.
+	\iffalse
+
 	Not necessarily.
 
 	As hinted at in Sections~\ref{sec:cpu:Hardware Optimizations}
@@ -186,6 +233,15 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	speed-of-light delays mean that a computer's data is always
 	stale compared to whatever external reality that data is intended
 	to model.
+	\fi
+
+	따라서 실제 세계의 알고리즘은 외부의 실제와 그 실제를 반영하는 컴퓨터
+	내의 데이터 사이의 비일관성을 받아들일 수 있어야만 합니다.
+	그런 알고리즘의 많은 부분은 컴퓨터 내부의 데이터 사이의 비일관성도
+	어느정도 받아들일 수 있습니다.
+	Section~\ref{sec:datastruct:RCU-Protected Hash Table Discussion}
+	에서 이를 좀 더 자세히 이야기 합니다.
+	\iffalse
 
 	Real-world algorithms therefore absolutely must tolerate
 	inconsistancies between external reality and the in-computer
@@ -195,6 +251,21 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	data.
 	Section~\ref{sec:datastruct:RCU-Protected Hash Table Discussion}
 	discusses this point in more detail.
+	\fi
+
+	이러한, 비일관성과 낡은 데이터에 대한 내성의 필요는 RCU 에만 국한되지
+	않음을 알아 두시기 바랍니다.
+	이는 레퍼런스 카운트, 해저드 포인터, 시퀀스 락, 심지어 일부 락킹
+	사용예에도 적용됩니다.
+	예를 들어, 여러분이 락을 잡은 상태에서 뭔가를 계산하고자 하지만 이
+	계산된 것을 그 락을 놓은 후에 사용하고자 한다면, 여러분은 낡은 데이터를
+	사용하고 있을 수 있습니다.
+	무엇보다, 그 뭔가가 계산될 때의 데이터는 그 락을 놓음과 동시에 어떻게든
+	바뀔 수 있습니다.
+
+	따라서, 그래요, RCU 읽기 쓰레드는 낡고 비일관적인 데이터를 볼 수
+	있습니다만, 아니요, 이건 꼭 문제라 할수는 없습니다.
+	\iffalse
 
 	Please note that this need to tolerate inconsistent and stale
 	data is not limited to RCU.
@@ -208,6 +279,7 @@ the state, as indicated by the ``2 Versions'' in the figure.
 
 	So yes, RCU readers can see stale and inconsistent data, but no,
 	this is not necessarily problematic.
+	\fi
 } \QuickQuizEnd
 
 단순히 모든 이전부터 존재한 읽기 쓰레드가 종료되기를 기다림으로써 세번째 줄에
@@ -233,6 +305,7 @@ It may therefore be safely freed, as shown on row~4.
 
 하지만 이전부터 존재한 읽기 쓰레드들이 언제 정말로 완료되었다고 말할 수
 있을까요?
+이 질문이 다음 섹션의 주제입니다.
 \iffalse
 
 Thus, given a way to wait for pre-existing readers to complete,
@@ -271,6 +344,21 @@ Hazard pointers profoundly reduces this overhead, but, as we saw in
 Section~\ref{sec:defer:Hazard Pointers}, not to zero.
 \fi
 
+두번째 방법은 메모리 동기화는 비용이 높다는 점을 파악하고, 따라서 레지스터를
+대신 사용하는 것으로, 구체적으로는 각 CPU 또는 각 쓰레드의 프로그램 카운터 (PC)
+에 대한 것으로, 이로써 읽기 쓰레드에게 어떤 오버헤드도 일으키지 않을 수 있는데,
+최소한 동시의 업데이트가 없다면 그렇습니다.
+이 업데이트 쓰레드는 각각의 연관된 PC 를 훑어보고, 만약 그 PC 가 읽기쪽 코드에
+들어있지 않다면, 그 연관된 CPU 나 쓰레드는 quiescent state 에 있음을 의미하여,
+결국 새로 삭제된 데이터 원소로의 접근을 할수도 있는 모든 읽기 쓰레드가
+완료되었음을 알릴 수 있습니다.
+모든 CPU 또는 쓰레드의 PC 가 모든 읽기 코드의 바깥에 있음이 확인되면, 이 grace
+period 가 완료된 겁니다.
+이 방법은 메모리 순서 잡기, \emph{가끔은} 읽기 쓰레드로부터 수행되는 함수들,
+그리고 code-motion 최적화 등의 심각한 도전 과제를 가짐을 알아 두시기 바랍니다.
+그러나, 이 방법은 제품 레벨에서도 사용된다고 합니다~\cite{MikeAsh2015Apple}.
+\iffalse
+
 A second approach observes that memory synchronization is expensive,
 and therefore uses registers instead, namely each CPU's or thread's
 program counter (PC), thus imposing no overhead on readers, at least
@@ -286,6 +374,7 @@ memory ordering, functions that are \emph{sometimes} invoked from readers,
 and ever-exciting code-motion optimizations.
 Nevertheless, this approach is said to be used in
 production~\cite{MikeAsh2015Apple}.
+\fi
 
 세번째 방법은 어떤 합리적 읽기 쓰레드의 수명도 넘어갈 만큼 충분히 긴 고정된
 시간을 그냥 기다리는 겁니다~\cite{Jacobson93,AjuJohn95}.
@@ -356,7 +445,8 @@ However, if your environment lacks a garbage collector, read on!
 다섯번째 방법은 주기적으로 ``모든 걸 멈추기'' 를 보다 선호함으로써 주기적
 크래시를 막는데, 전통적인 stop-the-world 가비지 콜렉터로 보여지듯이 이를 잘
 보입니다.
-모든 걸 멈추기는 응답 시간을 상당히 악화시킬 수 있는데, 이는 동시적 가비지
+하지만, 오늘날의 모든게 연결되고 모든게 켜져있는 세계에서, 모든 걸 멈추기는
+응답 시간을 상당히 악화시킬 수 있는데, 이는 동시적 가비지
 콜렉터~\cite{DavidFBacon2003RTGC}의 개발에 대한 모티베이션이 되었습니다.
 더 나아가서, 우린 모든 이전부터 존재한 읽기 쓰레드들이 완료되길 원하지, 모든게
 한번에 완료되길 바라는 건 아닙니다.
@@ -375,8 +465,9 @@ Furthermore, we only need all pre-existing readers to complete, not to
 complete all at the same time.
 \fi
 
-이 관찰은 네번째 방법을 이끄는데, 하나의 CPU 또는 쓰레드를 충분한 시간동안
-멈추는 것으로, 이 방법은 모든 응답 시간을 악화시키진 않고, 멈춰진 하나의 것의
+이 관찰은 여섯번째 방법을 이끄는데, 하나의 CPU 또는 쓰레드를 충분한 시간동안
+멈추는 것입니다.
+이 방법은 읽기 쓰레드의 응답 시간을 전혀 악화시키지 않고, 멈춰진 하나의 것의
 응답시간만 악화시킵니다.
 더 나아가서, 다양한 어플리케이션이 이미 모든 이전부터 존재한 읽기 쓰레드들이
 완료된 후에야 도달 가능한 상태 (\emph{quiescent state}) 를 가지고 있습니다.
@@ -563,8 +654,8 @@ the old data item.
 \subsubsection{Toy Implementation}
 \label{sec:defer:Toy Implementation}
 
-이런 방법의 제품 수준 구현은 매우 복잡할 수 있지만, 장난감 수준 구현은 상당히
-간단합니다:
+제품 수준 QSBR 구현은 상당히 복잡할 수 있지만, 비선점 모드 리눅스 커널에서의
+장난감 수준 구현은 상당히 간단합니다:
 \iffalse
 
 Although production-quality QSBR implementations can be quite complex,
@@ -654,6 +745,27 @@ int del_route(void)
 \label{lst:defer:Insertion and Deletion With Concurrent Readers}
 \end{listing}
 
+이 방법은 제품 수준이 \emph{아님} 에 유의해 주시기 바랍니다.
+여러 코너 케이스의 올바른 처리와 여러 강력한 최적화의 필요는 제품 수준 구현은
+상당한 추가적 복잡성을 가짐을 의미합니다.
+또한, 선점이 가능한 환경에서의 RCU 구현은 읽기 쓰레드들이 실제로 뭔가를 행할
+것을 필요로 합니다.\footnote{
+	선점 가능 환경을 위한 일부 장난감 수준 RCU 구현은
+	Appendix~\ref{chp:app:``Toy'' RCU Implementations} 에서 볼 수
+	있습니다.}
+하지만, 이 간단한 선점 불가 환경 방법은 개념적으로 완벽하고, 동시의 업데이트가
+있는 상황에서도 read-side 동기화를 비용 없이 가능하게 함을 보입니다.
+실제로,
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+은 읽기를 하는 방법을 (\co{access_route()}),
+Figure~\ref{fig:defer:Insertion With Concurrent Readers}
+의 삽입 (\co{ins_route()}) 과
+Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+의 삭제 (\co{del_route()} 가 구현될 수 있는지 보입니다.
+(조금 더 쓸만한 라우팅 테이블은
+Section~\ref{sec:defer:RCU for Pre-BSD Routing} 에 보여져 있습니다.)
+\iffalse
+
 Please note that this approach is \emph{not} production quality.
 Correct handling of a number of corner cases and the need for a number
 of powerful optimizations mean that production-quality implementations
@@ -676,12 +788,28 @@ deletion (\co{del_route()}) can
 be implemented.
 (A slightly more capable routing table is shown in
 Section~\ref{sec:defer:RCU for Pre-BSD Routing}.)
+\fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+	의 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 의 요점이 뭐죠?
+	그냥 quiescent state 들이 그것들을 이야기 하도록 두지 않는 이유가 뭐죠?
+	\iffalse
+
 	What is the point of \co{rcu_read_lock()} and \co{rcu_read_unlock()} in
 	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}?
 	Why not just let the quiescent states speak for themselves?
+	\fi
 \QuickQuizAnswer{
+	읽기 쓰레드들은 quiescent state 를 넘어다니지 못하게 되어 있음을 다시
+	말씀드립니다.
+	예를 들어, 리눅스 커널에서, RCU 읽기 쓰레드는 컨텍스트 스위치를 수행할 수 없습니다.
+	\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 의 사용은 올바르지 않게
+	위치한 quiescent state 를 위한 디버깅 목적의 검사를 가능하게 해서,
+	그렇지 않다면 찾기 어렵고, 간헐적으로 발생하며, 상당히 파괴적인
+	버그들을 찾기 쉽게 해줍니다.
+	\iffalse
+
 	Recall that readers are not permitted to pass through a quiescent
 	state.
 	For example, within the Linux kernel, RCU readers are not permitted
@@ -690,20 +818,52 @@ Section~\ref{sec:defer:RCU for Pre-BSD Routing}.)
 	debug checks for improperly placed quiescent states, making it
 	easy to find bugs that would otherwise be difficult to find,
 	intermittent, and quite destructive.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
+	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+	의 \co{rcu_dereference()}, \co{rcu_assign_pointer()}, 그리고
+	\co{RCU_INIT_POINTER()} 의 의미는 뭐죠?
+	왜 그냥 \co{READ_ONCE()}, \co{smp_store_release()}, 그리고
+	\co{WRITE_ONCE()} 를 대신 사용하지 않는 건가요?
+	\iffalse
+
 	What is the point of \co{rcu_dereference()}, \co{rcu_assign_pointer()}
 	and \co{RCU_INIT_POINTER()} in
 	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}?
 	Why not just use \co{READ_ONCE()}, \co{smp_store_release()}, and
 	\co{WRITE_ONCE()}, respectively?
+	\fi
 \QuickQuizAnswer{
+	이 RCU 를 위한 API 들은 제안된 대안들과 비슷한 의미를 갖습니다만, RCU
+	를 위한 API 들이 RCU 와 관련 없는 곳에서 사용되었거나 그 반대인 경우를
+	파악해내는 정적 분석 기반 디버깅을 가능하게 합니다.
+	\iffalse
+
 	The RCU-specific APIs do have similar semantics to the suggested
 	replacements, but also enable static-analysis debugging checks
 	that complain if an RCU-specific API is invoked on a non-RCU
 	pointer and vice versa.
+	\fi
 } \QuickQuizEnd
+
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+으로 돌아가서, \co{route_lock} 은 \co{ins_route()} 와 \co{del_route()} 를
+호출하는 동시적인 업데이트 쓰레드들 사이의 동기화를 위해 사용됨을 알아두시기
+바랍니다.
+하지만, 이 락은 \co{access_route()} 를 호출하는 읽기 쓰레드에 의해 잡히지
+않습니다:
+읽기 쓰레드들은 이 섹션에서 설명한 QSBR 기법을 통해 보호됩니다.
+
+\co{ins_route()} 는 단순히
+Figure~\ref{fig:defer:Insertion With Concurrent Readers} 에서 항상 \co{NULL} 일
+것이라 가정된 \co{gptr} 의 과거 값을 리턴함을 알아두시기 바랍니다.
+이는 \co{NULL} 이 아닌 값을 가지고 무얼 할지는 호출자의 책임으로, 이 작업은
+읽기 쓰레드들이 한동안 그 값을 계속 레퍼런스 하고 있다는 사실로 인해 복잡해
+집니다.
+호출자들은 아래 방법들 중 하나를 사용할 수 있을 겁니다:
+\iffalse
 
 Referring back to
 Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers},
@@ -719,15 +879,39 @@ This means that it is the caller's responsibility to figure out what to
 do with a non-\co{NULL} value, a task complicated by the fact that
 readers might still be referencing it for an indeterminate period of time.
 Callers might use one of the following approaches:
+\fi
 
 \begin{enumerate}
+\item	가리켜지는 구조체를 안전히 해제시키기 위해 \co{synchronize_rcu()} 를
+	사용합니다.
+	이 방법이 RCU 관점에서 올바르지만, 소프트웨어 엔지니어링 관점에서
+	누출되는 API 문제를 가질 수도 있습니다.
+\item	리턴된 포인터가 \co{NULL} 이 아닌 경우를 위한 단정문을 집어넣습니다.
+\item	이전의 값을 복구하기 위해 리턴된 포인터를 향후의 \co{ins_route()}
+	호출에 넘깁니다.
+\iffalse
+
 \item	Use \co{synchronize_rcu()} to safely free the pointed-to structure.
 	Although this approach is correct from an RCU perspective, it
 	arguably has software-engineering leaky-API problems.
 \item	Trip an assertion if the returned pointer is non-\co{NULL}.
 \item	Pass the returned pointer to a later invocation of
 	\co{ins_route()} to restore the earlier value.
+\fi
 \end{enumerate}
+
+대조적으로, \co{del_route()} 는 새로 삭제된 데이터 항목을 안전히 해제시키기
+위해 \co{synchronize_rcu()} 와 \co{free()} 를 사용합니다.
+
+이 예제는 RCU 로 보호되는 데이터 구조들을 읽고 업데이트하는 일반적인 한가지
+방법을 보입니다만, 상당히 다양한 사용 예가 있을 수 있으며, 그 중 몇가지는
+Section~\ref{sec:defer:RCU Usage} 에서 다뤄집니다.
+
+요약하자면, 싱글쓰레드 환경에서 읽기 쓰레드들이 수행할 것과 똑같은 기계
+명령어만을 수행하는 읽기 쓰레드에 의해 횡단될 수 있으며 동시의 여러 쓰레드가
+접근할 수 있는 연결된 데이터 구조를 만드는게 가능합니다.
+다음 섹션은 RCU 의 고수준 특성들을 요약합니다.
+\iffalse
 
 In contrast, \co{del_route()} uses \co{synchronize_rcu()} and
 \co{free()} to safely free the newly deleted data item.
@@ -741,6 +925,7 @@ In summary, it is in fact possible to create concurrent linked data
 structures that can be traversed by readers executing the same sequence
 of machine instructions that would be executed by single-threaded readers.
 The next section summarizes RCU's high-level properties.
+\fi
 
 \subsubsection{RCU Properties}
 \label{sec:defer:RCU Properties}
@@ -810,6 +995,15 @@ This question is taken up by the next section.
 \label{fig:defer:RCU Usage in the Linux Kernel}
 \end{figure}
 
+RCU 는 2002년 10월 이래 리눅스 커널에서 사용되었습니다~\cite{Torvalds2.5.43}.
+RCU API 의 사용은 그때 이후 상당히 늘어났는데,
+Figure~\ref{fig:defer:RCU Usage in the Linux Kernel} 가 이를 잘 보이고
+있습니다.
+실제로,
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+의 것과 상당히 비슷한 코드가 리눅스 커널에 사용되었습니다.
+\iffalse
+
 It turns out that RCU has been used in the Linux kernel since
 October 2002~\cite{Torvalds2.5.43}.
 Use of the RCU API has increased substantially since that time,
@@ -818,6 +1012,18 @@ Figure~\ref{fig:defer:RCU Usage in the Linux Kernel}.
 In fact, code very similar to that in
 Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
 could be used in the Linux kernel.
+\fi
+
+그 전에는,  RCU 는 Sequent Computer System 의 DYNIX/ptx 운영체제에서 1990년대
+초부터 사용되었습니다~\cite{McKenney98}, 그리고 그 전에는, 비슷한 메커니즘이
+아마도 1980년대 중반부터 IBM 의 VM/XA 에서 사용되었습니다~\cite{Hennessy89}.
+마지막으로,
+Section~\ref{sec:defer:RCU Related Work} 에서 이야기 되었듯이, RCU 와 유사한
+메커니즘들이 1980년대 초부터 학계와 산업계의 연구 분야 프로젝트들에서도
+사용되었습니다~\cite{Kung80}, 그리고 보다 최근에는 다양한 유저스페이스
+어플리케이션들에서도
+사용되었습니다~\cite{MathieuDesnoyers2009URCU,MikeDay2013RCUqemu,GeoffRomer2018C++DeferredReclamationP0561R4}.
+\iffalse
 
 Prior to that, RCU was used in production in Sequent Computer Systems's
 DYNIX/ptx operating system from the early 1990s~\cite{McKenney98},
@@ -830,6 +1036,16 @@ in academic and industrial-research projects as early as
 1980~\cite{Kung80},
 and more recently in production by a number of userspace
 applications~\cite{MathieuDesnoyers2009URCU,MikeDay2013RCUqemu,GeoffRomer2018C++DeferredReclamationP0561R4}.
+\fi
+
+따라서 RCU 가 폭넓은 실용적 사용처를 가지고 있다고 말해도 됩니다.
+
+이 섹션에서 다뤄진 최소한의 예제는 RCU 로의 좋은 소개가 됩니다.
+하지만, RCU 의 효과적인 사용은 많은 경우 여러분이 여러분의 문제를 다르게 생각할
+것을 필요로 합니다.
+따라서 RCU 의 기본적인 사항들을 알아보는게 좋은데, 뒤따르는 섹션이 이를 도울
+겁니다.
+\iffalse
 
 It is therefore safe to say that RCU enjoys wide practical applicability.
 
@@ -838,3 +1054,4 @@ However, effective use of RCU often requires that you think differently
 about your problem.
 It is therefore useful to examine RCU's fundamentals, a task taken up
 by the following section.
+\fi
