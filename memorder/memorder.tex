@@ -4910,6 +4910,22 @@ describes how to protect those delicate control dependencies.
 \subsection{Memory-Reference Restrictions}
 \label{sec:memorder:Memory-Reference Restrictions}
 
+Section~\ref{sec:toolsoftrade:Accessing Shared Variables} 에서 이야기 되었듯이,
+별도로 이야기 되지 않는다면 컴파일러는 코드가 접근하고 있는 변수에 어떤 다른
+것도 영향을 끼치지 않는다고 가정합니다.
+더 나아가서, 이 가정은 단순한 설계상의 에러가 아니라, 다양한 표준에서 소중히
+여겨지는 것입니다.\footnote{
+	또는 어쩌면 표준 설계 에러일 수도 있죠.}
+다음 섹션들을 위한 준비 단계로 이것들을 요약해 둘 가치가 있습니다.
+
+평범한 액세스, C-언어에서의 \qco{r1 = a} 또는 \qco{b = 1} 같은 평범한 할당문이
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans} 에서 설명한 공유
+변수 장난에 적합합니다.
+이런 장난을 막는 방법들이
+Sections~\ref{sec:toolsoftrade:A Volatile Solution}-\ref{sec:toolsoftrade:Avoiding Data Races}
+에 설명되어 있습니다:
+\iffalse
+
 As noted in Section~\ref{sec:toolsoftrade:Accessing Shared Variables},
 unless told otherwise, compilers assume that nothing else
 is affecting the variables that the code is accessing.
@@ -4925,8 +4941,24 @@ shared-variable shenanigans described in
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}.
 Ways of avoiding these shenanigans are described in
 Sections~\ref{sec:toolsoftrade:A Volatile Solution}-\ref{sec:toolsoftrade:Avoiding Data Races}:
+\fi
 
 \begin{enumerate}
+\item	평범한 액세스는 찢어질 (tear) 수 있는데, 예를 들어 컴파일러는 8 바이트
+	포인터를 한번에 한 바이트씩 접근할 수 있습니다.
+	찢기는 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 를 사용해 방지될 수
+	있습니다.
+\item	평범한 로드는 합쳐질 (fuse) 수 있는데, 예를 들어 한 오브젝트로부터 앞서
+	로드한 값이 아직 기계의 레지스터에 그대로 남아 있다면, 컴파일러는
+	메모리로부터 값을 다시 읽어오는 대신 이 레지스터 내의 값을 재사용
+	하도록 최적화 할 수 있습니다.
+	로드 합치기는 \co{READ_ONCE()} 를 사용하거나 \co{barrier()},
+	\co{smp_rmb()}, 또는
+	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 에
+	보인 다른 방법들을 사용해 두 로드 사이의 순서를 강제함으로써 막을 수
+	있습니다.
+\iffalse
+
 \item	Plain accesses can tear, for example, the compiler could choose
 	to access an eight-byte pointer one byte at a time.
 	Tearing can be prevented by using \co{READ_ONCE()} and
@@ -4939,6 +4971,20 @@ Sections~\ref{sec:toolsoftrade:A Volatile Solution}-\ref{sec:toolsoftrade:Avoidi
 	enforcing ordering between the two loads using \co{barrier()},
 	\co{smp_rmb()}, and other means shown in
 	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+\fi
+\item	평범한 스토어는 합쳐질 (fuse) 수 있어서, 같은 변수로의 뒤따르는
+	스토어가 존재한다면 앞의 스토어는 아예 사라질 수 있습니다.
+	스토어 함치기 (store fusing) 는 \co{WRITE_ONCE()} 를 사용하거나
+	\co{barrier()}, \co{smp_wmb()}, 또는
+	Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 에
+	보인 다른 방법들을 사용해 두 스토어 사이에 순서를 강제함으로써 방지될
+	수 있습니다.
+\item	평범한 액세스들은 현대의 최적화 기능을 가진 컴파일러들에 의해 신기한
+	방법으로 재배치 될 수 있습니다.
+	이 재배치는 앞에서 설명한 방법들로 순서를 강제함으로써 방지될 수
+	있습니다.
+\iffalse
+
 \item	Plain stores can fuse, so that a store can be omitted entirely
 	if there is a later store to that same variable.
 	Store fusing can be prevented by using \co{WRITE_ONCE()} or by
@@ -4949,6 +4995,18 @@ Sections~\ref{sec:toolsoftrade:A Volatile Solution}-\ref{sec:toolsoftrade:Avoidi
 	optimizing compilers.
 	This reordering can be prevented by enforcing ordering as
 	called out above.
+\fi
+\item	평범한 로드는 창조될 수 있는데, 예를 들어 레지스터 부족은 컴파일러가
+	앞서 레지스터로 로드된 값을 버리고 나중에 그 값을 다시 로드하게 할 수
+	있습니다.
+	창조된 로드는 \co{READ_ONCE()} 를 사용하거나 앞에서 이야기 되었듯 해당
+	로드와 뒤따르는 그 값에 대한 로드 사이에 \co{barrier()} 를 사용해
+	순서를 강제함으로써 막을 수 있습니다.
+\item	스토어는 평범한 스토어 앞에 창조될 수 있는데, 예를 들어 스토어 되는
+	장소를 임시의 저장소로 사용하는 형태입니다.
+	이는 \co{WRITE_ONCE()} 를 사용해 막아질 수 있습니다.
+\iffalse
+
 \item	Plain loads can be invented, for example, register pressure might
 	cause the compiler to discard a previously loaded value from
 	its register, and then reload it later on.
@@ -4958,17 +5016,30 @@ Sections~\ref{sec:toolsoftrade:A Volatile Solution}-\ref{sec:toolsoftrade:Avoidi
 \item	Stores can be invented before a plain store, for example, by
 	using the stored-to location as temporary storage.
 	This can be prevented by use of \co{WRITE_ONCE()}.
+\fi
 \end{enumerate}
 
 \QuickQuiz{}
+	컴파일러가 스토어를 창조해 내는 걸 막기 위해 평범한 스토어 앞에
+	\co{barrier()} 를 놓는건 어때요?
+	\iffalse
+
 	Why not place a \co{barrier()} call immediately before
 	a plain store to prevent the compiler from inventing stores?
+	\fi
 \QuickQuizAnswer{
+	그건 잘 동작하지 못할 겁니다.
+	컴파일러가 해당 \co{barrier()} 앞에 스토어를 만들어 내는 건 막겠지만,
+	해당 \co{barrier()} 와 그 평범한 스토어 사이에 스토어를 만들어 내는건
+	막지 못할 겁니다.
+	\iffalse
+
 	Because it would not work.
 	Although the compiler would be prevented from inventing a
 	store prior to the \co{barrier()}, nothing would prevent
 	it from inventing a store between that \co{barrier()} and
 	the plain store.
+	\fi
 } \QuickQuizEnd
 
 Please note that all of these shared-memory shenanigans can instead be
