@@ -2721,8 +2721,8 @@ Chapter~\ref{chp:Data Structures}.
 \subsection{Accessing Shared Variables}
 \label{sec:toolsoftrade:Accessing Shared Variables}
 
-C 표준은 2011년에 와서야 공유된 변수로의 동시의 read/write 액세스에 대해 어떤
-일이 벌어지는지 정의했습니다만, 동시성 있는 C 코드는 그보다 최소 25년은 전부터
+C 표준이공유된 변수로의 동시의 read/write 액세스에 대해 어떤 일이 벌어지는지
+정의한 건 2011년에 와서입니다만, 동시성 있는 C 코드는 그보다 최소 25년은 전부터
 쓰여졌습니다~\cite{Beck85,Inman85}.
 이 사실은 오늘날의 노인들이 C11 이전 시대에는 뭘 했는지 궁금하게 만듭니다.
 이에 대한 짧은 대답은 ``그들은 위험하게 살았다'' 입니다.
@@ -2833,12 +2833,19 @@ up to three times.
 	\fi
 	\end{lineref}
 
+	저는 1990년대초 DYNIX/ptx 커널의 메모리 할당자에 정확히 이 실수를
+	했습니다.
+	이 버그를 추적하는데 저만이 아니라 제 동료들도 연휴 주말을 보냈습니다.
+	요약하자면, 이건 새로운 문제도, 스스로 사라질 문제도 아닙니다.
+	\iffalse
+
 	Your editor made exactly this mistake in the DYNIX/ptx
 	kernel's memory allocator in the early 1990s.
 	Tracking down the bug consumed a holiday weekend not just
 	for your editor, but also for several of his colleagues.
 	In short, this is not a new problem, nor is it likely to
 	go away on its own.
+	\fi
 } \QuickQuizEnd
 
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
@@ -2947,8 +2954,12 @@ cannot rule out load tearing in the general case.
 쓰레드는 \co{0xabcd} 를 저장할 수 있습니다.
 이 컴파일러가 각 액세스에 16비트 스토어들을 사용했다면, 결과는 \co{0x12cd} 가
 될 수도 있는데, 이 변수로부터 값을 읽는 코드에는 매우 놀라운 결과가 될 겁니다.
-다시 말하지만, C 표준은 16비트 시스템에서 32비트 정수형을 사용하는 코드의
-가능성과 같은 일반적 경우에 대해 다른 선택의 여지가 없습니다.
+이건 엄격한 이론적 문제도 아닙니다.
+예를 들어, 작은 immediate 값을 직접 메모리에 쓸 수 있는 CPU 들이 존재하고, 그런
+CPU 에서 컴파일러는 명시적으로 32-bit 상수를 만드는데 드는 오버헤드를 없애기
+위해 이를 16비트 스토어들로 쪼갤 거라 예상될 수 있습니다.
+더 나아가서, C 표준은 32비트 시스템에서 64비트 정수형을 사용하는 코드 등의
+가능성으로 인해, 이 일반적 경우에 대해 선택이 없습니다.
 \iffalse
 
 {\bf Store tearing} occurs when the compiler uses multiple store
@@ -3280,18 +3291,21 @@ be a great disappointment for anyone hoping that the last call to
 \fi
 \end{lineref}
 
-{\bf Invented loads} 는
-Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
-과~\ref{lst:toolsoftrade:C Compilers Can Invent Loads} 의 코드에 의해서
-보여지는데, 컴파일러가 임시 변수를 최적화로 없애버려서 공유변수로부터의 로드를
-의도한 것보다 자주 일어나게 만들어서 발생합니다.
-
-만들어진 로드는 성능상의 문제가 될수도 있습니다.
-이런 문제는 ``자주 접근되는'' 캐시라인의 변수로부터의 로드가 \co{if} 문 밖으로
-빠져나올 때 발생합니다.
-이런 빼내기 최적화는 드물지 않으며, 캐시 미스를 크게 늘릴 수 있어서, 성능과
-확장성에 상당한 저하를 일으킬 수 있습니다.
+아랫단의 하드웨어가 재배치를 할 수 있는데 컴파일러가 액세스 순서를 바꾸는 걸
+방지하는 건 헛수고처럼 보일 수도 있습니다.
+하지만, 최신 기계들은 \emph{exact exception} 과 \emph{exact interrupt} 를
+가지고 있는데, 이는 모든 인터럽트나 익셉션은 인스트럭션 스트림의 특정 위치에서
+일어난 것으로 보일 것을 의미합니다.
+이는 이 핸들러가 앞의 모든 인스트럭션들의 효과를 보게 되지만 뒤따르는
+인스트럭션들의 효과는 보지 못할 것을 의미합니다.
+따라서 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 는 인터럽트된 코드와 인터럽트
+핸들러 사이의 통신을 아랫단의 하드웨어가 제공한 순서 규칙에 무관하게 제어하는데
+사용될 수 있습니다.\footnote{
+	그렇다고 하나, 다양한 표준 위원회들은 여러분이 \co{READ_ONCE()} 와
+	\co{WRITE_ONCE()} 대신 atomic 이나 \co{sig_atomic_t} 를 사용할 것을
+	선호할 겁니다.}
 \iffalse
+
 It might seem futile to prevent the compiler from changing the order of
 accesses in cases where the underlying hardware is free to reorder them.
 However, modern machines have \emph{exact exceptions} and
@@ -3306,6 +3320,20 @@ independent of the ordering provided by the underlying hardware.\footnote{
 	That said, the various standards committees would prefer that
 	you use atomics or variables of type \co{sig_atomic_t}, instead
 	of \co{READ_ONCE()} and \co{WRITE_ONCE()}.}
+\fi
+
+{\bf Invented loads} 는
+Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+과~\ref{lst:toolsoftrade:C Compilers Can Invent Loads} 의 코드에 의해서
+보여지는데, 컴파일러가 임시 변수를 최적화로 없애버려서 공유변수로부터의 로드를
+의도한 것보다 자주 일어나게 만들어서 발생합니다.
+
+만들어진 로드는 성능상의 문제가 될 수 있습니다.
+이런 문제는 ``자주 접근되는'' 캐시라인의 변수로부터의 로드가 \co{if} 문 밖으로
+빠져나올 때 발생합니다.
+이런 빼내기 최적화는 드물지 않으며, 캐시 미스를 크게 늘릴 수 있어서, 성능과
+확장성에 상당한 저하를 일으킬 수 있습니다.
+\iffalse
 
 {\bf Invented loads} were illustrated by the code in
 Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
@@ -3432,10 +3460,28 @@ This transforms the if-then-else into an if-then, saving one branch.
 \end{lineref}
 
 \QuickQuiz{}
+	으악!
+	그러니까 컴파일러는 평범한 변수로의 스토어를 얼마든지 원하는 만큼 만들
+	수는 없는 건가요?
+	\iffalse
+
 	Ouch!
 	So can't the compiler invent a store to a normal variable pretty
 	much any time it likes?
+	\fi
 \QuickQuizAnswer{
+	감사하게도, 만들 수 없습니다.
+	이는 컴파일러가 데이터 경주로부터 숨겨져 있기 때문입니다.
+	평범한 스토어 앞에 스토어를 만들어내는 경우는 매우 특수합니다:  CPU,
+	쓰레드, 시그널 핸들러, 인터럽트 핸들러가 아닌 것들은 코드가 이미 이
+	만들어진 스토어 없이도 존재하는 데이터 경주를 가지고 있지 않는 이상 이
+	만들어진 스토어를 감지할 수 없습니다.
+	그리고 코드가 이미 데이터 경주를 가지고 있다면, 이 코드는 이미 정의되지
+	않은 동작의 무서운 악령을 이미 호출했을 것인데, 이는 개발자가 희망한
+	것과는 무관하게 컴파일러가 뭐가 됐던 원하는 코드를 만들어낼 수 있게
+	합니다.
+	\iffalse
+
 	Thankfully, the answer is no.
 	This is because the compiler is forbidden from introducing data races.
 	The case of inventing a store just before a normal store is
@@ -3447,6 +3493,18 @@ This transforms the if-then-else into an if-then, saving one branch.
 	the dreaded spectre of undefined behavior, which allows the
 	compiler to generate pretty much whatever code it wants,
 	regardless of the wishes of the developer.
+	\fi
+
+	하지만 원래의 스토어가 \co{WRITE_ONCE()} 의 경우처럼 volatile 이었다면,
+	모든 컴파일러는 다른 쓰레드에 신호를 줄 수 있는, 해당 스토어와 연관된
+	사이드 이펙트가 발생할 것을 알 수 있어서 해당 변수로의 데이터 경주가
+	없는 액세스를 가능하게 합니다.
+	스토어를 만들어냄으로써, 컴파일러는 허용되지 않은 데이터 경주를 만들어
+	낼 수도 있는 겁니다.
+
+	\co{volatile} 과 atomic 변수들의 경우에는 컴파일러가 명시적으로 쓰기를
+	만들어내지 못하게 되어 있습니다.
+	\iffalse
 
 	But if the original store is volatile, as in \co{WRITE_ONCE()},
 	for all the compiler knows, there might be a side effect
@@ -3457,6 +3515,7 @@ This transforms the if-then-else into an if-then, saving one branch.
 
 	In the case of \co{volatile} and atomic variables, the compiler
 	is specifically forbidden from inventing writes.
+	\fi
 } \QuickQuizEnd
 
 마지막으로, C11 전의 컴파일러는 쓰여진 변수에 인접해서 일어났던 연관없는
