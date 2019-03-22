@@ -6456,6 +6456,14 @@ remain synchronization-free.
 \subsection{RCU}
 \label{sec:memorder:RCU}
 
+Section~\ref{sec:defer:RCU Fundamentals} 에서 설명되었듯, RCU grace period 의
+기본적인 속성은 이 간단한 두 부분의 보장입니다:
+(1)~만약 특정 RCU read-side 크리티컬 섹션의 어떤 부분이 특정 grace period 의
+시작을 앞선다면, 이 크리티컬 섹션 전체는 이 grace period 의 끝을 앞선다.
+(2)~만약 특정 RCU read-side 크리티컬 섹션의 어떤 부분이 특정 grace period 의
+뒤에 있다면, 이 크리티컬 섹션 전체가 이 grace period 의 시작보다 뒤에 있다.
+\iffalse
+
 As described in
 Section~\ref{sec:defer:RCU Fundamentals},
 the fundamental property of RCU grace periods is this straightforward
@@ -6467,6 +6475,7 @@ critical section precedes the end of that grace period.
 (2)~If any part of a given RCU read-side critical section follows
 the end of a given grace period, then the entirety of that
 critical section follows the beginning of that grace period.
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-SB+o-rcusync-o+rl-o-o-rul@whole.fcv}
@@ -6479,6 +6488,28 @@ critical section follows the beginning of that grace period.
 \caption{RCU Fundamental Property and Reordering}
 \label{lst:memorder:RCU Fundamental Property and Reordering}
 \end{listing}
+
+요약하자면,
+Listing~\ref{lst:memorder:RCU Fundamental Property}
+(\path{C-SB+o-rcusync-o+rl-o-o-rul.litmus}) 에서 보여지듯이 하나의 RCU
+read-side 크리티컬 섹션은 결코 RCU grace period 를 가로지르지 못합니다.
+\co{r2} 레지스터들은 모두 값이 0일 수 없지만, 최소 하나는 0이 아니어야만 하는데
+(즉, \co{exists} 절로 식별되는 사이클이 금지됩니다), 이는 RCU 의 기본적인
+grace-period 보장 덕이며, 이 리트머스 테스트를 \co{herd} 로 돌려보면 알 수
+있습니다.
+이 보장은 \co{P1()} 의 크리티컬 섹션 내에서의 액세스 순서에는 반응하지
+않으므로,
+Listing~\ref{lst:memorder:RCU Fundamental Property and Reordering}\footnote{
+	물론 의존성이 RCU read-side 크리티컬 섹션 내에서의 액세스 재배치를
+	제한할 수 있습니다.}
+또한 같은 사이클을 방지합니다.
+
+하지만, 이 정의는 완전하지 않은데, 아래와 같은 질문들\footnote{
+	이 중 몇개는 LKMM 초기 작업 중 Jade Alglave 에 의해 Paul 에게
+	전달되었고 몇개는 다른 LKMM 참여자들로부터
+	전달되었습니다~\cite{Alglave:2018:FSC:3173162.3177156}}
+로 알 수 있습니다:
+\iffalse
 
 In short, an RCU read-side critical section is guaranteed never to
 completely overlap an RCU grace period, as demonstrated by
@@ -6500,8 +6531,19 @@ list of questions:\footnote{
 	Several of which were introduced to Paul by Jade Alglave during
 	early work on LKMM, and a few more of which came from other
 	LKMM participants~\cite{Alglave:2018:FSC:3173162.3177156}.}
+\fi
 
 \begin{enumerate}
+\item	\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 은 RCU grace period 와
+	관계 없이 어떤 순서를 제공하는가?
+\item	\co{synchronize_rcu()} 와 \co{synchronize_rcu_expedited()} 는 RCU
+	read-side 크리티컬 섹션과 관계 없이는 어떤 순서를 제공합니까?
+\item	특정 RCU read-side 크리티컬 섹션의 전체 부분이 특정 RCU grace period 의
+	끝을 앞선다면, 이 크리티컬 섹션을 앞서는 액세스들은 어떤가요?
+\item	특정 RCU read-side 크리티컬 섹션의 전체 부분이 특정 RCU grace period 의 
+	시작 뒤에 있다면, 이 크리티컬 섹션을 뒤따르는 액세스들은 어떤가요?
+\iffalse
+
 \item	What ordering is provided by \co{rcu_read_lock()}
 	and \co{rcu_read_unlock()}, independent of RCU grace periods?
 \item	What ordering is provided by \co{synchronize_rcu()}
@@ -6513,13 +6555,24 @@ list of questions:\footnote{
 \item	If the entirety of a given RCU read-side critical section
 	follows the beginning of a given RCU grace period, what about
 	accesses following that critical section?
+\fi
+\item	하나 이상의 RCU read-side 크리티컬 섹션과/또는 하나 이상의 RCU grace
+	period 가 연관된 상황에서는 어떤 일이 벌어지나요?
+\item	RCU 가 다른 메모리 순서 메커니즘들과 엮이면 무슨 일이 벌어지나요?
+\iffalse
+
 \item	What happens in situations involving more than one RCU read-side
 	critical section and/or more than one RCU grace period?
 \item	What happens when RCU is mixed with other memory-ordering
 	mechanisms?
+\fi
 \end{enumerate}
 
+이런 질문들은 뒤의 섹션들에서 다뤄집니다.
+\iffalse
+
 These questions are addressed in the following sections.
+\fi
 
 \subsubsection{RCU Read-Side Ordering}
 \label{sec:memorder:RCU Read-Side Ordering}
