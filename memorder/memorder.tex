@@ -6832,6 +6832,22 @@ Again, therefore, this litmus test's cycle is allowed.
 \subsubsection{Multiple RCU Readers and Updaters}
 \label{sec:memorder:Multiple RCU Readers and Updaters}
 
+\co{synchronize_rcu()} 는 \co{smp_mb()} 보다 강한 순서 규칙을 갖기 때문에, SB
+리트머스 테스트에 얼마나 많은 프로세스가 있는가에 관계없이 각 프로세스의 액세스
+사이에 \co{synchronize_rcu()} 를 추가하는 것은 이 사이클의 발생을
+막습니다.\footnote{
+	이 모든 것은 물론 SB 만이 아니라 LB, MP, 그외에도 다른 것들을 포함한
+	다른 종류의 리트머스 테스트에도 적용됩니다.}
+또한, 이 사이클은 한 프로세스가 \co{synchronize_rcu()} 를 사용하고 다른
+프로세스는 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을 사용하는
+것으로도 방지될 수 있는데,
+Listing~\ref{lst:memorder:RCU Fundamental Property} 에 예시가 보여져 있습니다.
+하지만, 두 프로세스가 모두 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을
+사용하면 이 사이클은 허용되는데,
+Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering} 에 예시가
+보여져 있습니다.
+\iffalse
+
 Because \co{synchronize_rcu()} has stronger ordering semantics than does
 \co{smp_mb()}, no matter how many processes there are in an SB
 litmus test, placing \co{synchronize_rcu()} between each process's
@@ -6845,10 +6861,17 @@ Listing~\ref{lst:memorder:RCU Fundamental Property}.
 However, if both processes use \co{rcu_read_lock()} and
 \co{rcu_read_unlock()}, the cycle will be allowed, as exemplified by
 Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}.
+\fi
+
+그러면 어떤 RCU로 보호되는 리트머스 테스트는 통과되고 어떤건 통과되지 않을지
+일반적으로 이야기 할 수 있을까요?
+이 섹션은 이 질문에 대해 알아봅니다.
+\iffalse
 
 So is it possible to say anything general about which RCU-protected
 litmus tests will be prohibited and which will be allowed?
 This section takes up this question.
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-SB+o-rcusync-o+rl-o-o-rul+rl-o-o-rul@whole.fcv}
@@ -6862,6 +6885,17 @@ This section takes up this question.
 \label{lst:memorder:Two RCU Grace Periods and Two Readers}
 \end{listing}
 
+더 자세히 말해서,
+Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers} 처럼 이
+리트머스 테스트가 하나의 RCU grace period 와 두 RCU 읽기 쓰레드가 있다면 어떤
+일이 벌어질까요?
+\co{herd} 는 이 사이클이 발생 가능하다고 이야기 합니다만, \emph{왜} 그런지 알면
+좋을 겁니다.\footnote{
+	Paul 이 Jade Alglave 와 RCU 순서 규칙을 일반화 하기 위해 작업하던 중 이
+	리트머스 테스트에 대한 생각을 여러번 바꿨다는 걸 생각하면 특히
+	그렇습니다.}
+\iffalse
+
 More specifically, what happens when the litmus test has one RCU grace
 period and two RCU readers, as shown in
 Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers}?
@@ -6870,14 +6904,36 @@ good to know \emph{why}.\footnote{
 	Especially given that Paul changed his mind several times about
 	this particular litmus test when working with Jade Alglave to
 	generalize RCU ordering semantics.}
+\fi
+
+핵심은 CPU 가 \co{P1()} 의, 그리고 \co{P2()} 의 \co{WRITE_ONCE()} 와
+\co{READ_ONCE()} 를 재배치 할 수 있다는 겁니다.
+그런 재배치가 이뤄지는 경우에 대해,
+Figure~\ref{fig:memorder:Cycle for One RCU Grace Period and Two RCU Readers}
+가 이 사이클이 어떻게 이뤄지는지 보입니다:
+\iffalse
 
 The key point is that the CPU is free to reorder \co{P1()}'s and \co{P2()}'s
 \co{WRITE_ONCE()} and \co{READ_ONCE()}.
 With that reordering,
 Figure~\ref{fig:memorder:Cycle for One RCU Grace Period and Two RCU Readers}
 shows how the cycle forms:
+\fi
 
 \begin{enumerate}
+\item	이 다이어그램 아래의 점선 화살표가 보이듯 \co{P0()} 의 \co{x1} 읽기가
+	\co{P1()} 의 쓰기를 앞섭니다.
+\item	\co{P1()} 의 쓰기가 \co{P0()} 의 grace period 의 끝을 뒤따르므로,
+	\co{P1()} 의 \co{x2} 읽기가 \co{P0()} 의 grace period 의 시작을 앞서지
+	못합니다.
+\item	\co{P1()} 의 \co{x2} 읽기가 \co{P2()} 의 쓰기를 앞섭니다.
+\item	\co{P2()} 의 \co{x2} 쓰기가 \co{P0()} 의 grace period 의 끝을 앞서므로,
+	\co{P2()} 의 \co{x0} 읽기가 \co{P0()} 의 grace period 의 시작을
+	앞서는게 전혀 문제되지 않습니다.
+\item	따라서, \co{P2()} 의 \co{x0} 읽기가 \co{P0()} 의 쓰기를 앞설 수 있어서
+	사이클이 생성됩니다.
+\iffalse
+
 \item	\co{P0()}'s read from \co{x1} precedes \co{P1()}'s write, as
 	depicted by the dashed arrow near the bottom of the diagram.
 \item	Because \co{P1()}'s write follows the end of \co{P0()}'s grace period,
@@ -6889,6 +6945,7 @@ shows how the cycle forms:
 	read from \co{x0} to precede the beginning of \co{P0()}'s grace period.
 \item	Therefore, \co{P2()}'s read from \co{x0} can precede \co{P0()}'s
 	write, thus allowing the cycle to form.
+\fi
 \end{enumerate}
 
 But what happens when another grace period is added?
