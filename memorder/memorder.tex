@@ -6948,6 +6948,24 @@ shows how the cycle forms:
 \fi
 \end{enumerate}
 
+또다른 grace period 가 추가되면 어떤 일이 벌어질까요?
+이 상황은
+Listing~\ref{lst:memorder:Two RCU Grace Periods and Two Readers} 에 보여져
+있는데, \co{P0()} 와 \co{P1()} 이 RCU grace period 를 가지고 있고 \co{P2()} 와
+\co{P3()} 가 RCU 읽기 쓰레드를 갖습니다.
+다시 말하지만, CPU 는 RCU read-side 크리티컬 섹션 내에서의 액세스를
+Figure~\ref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
+에 보인 것처럼 재배치 할 수 있습니다.
+이 사이클이 형성되기 위해선, \co{P2()} 의 크리티컬 섹션이 \co{P1()} 의 grace
+period  후에 끝나야 하고 \co{P3()} 의 것은 이 같은 grace period 의 시작 후에
+종료되어야 하는데, 이는 또한 \co{P0()} 의 grace period 의 종료 후에 일어납니다.
+따라서, \co{P3()} 의 크리티컬 섹션은 \co{P0()} 의 grace period 의 시작 후에
+시작되어야 하는데, 이는 결국 \co{P3()} 의 \co{x0} 읽기가 \co{P0()} 의 읽기를
+앞서지 못함을 의미합니다.
+따라서, RCU read-side 크리티컬 섹션은 전체 RCU grace period 동안 유지될 수
+없으므로 이 사이클은 금지됩니다.
+\iffalse
+
 But what happens when another grace period is added?
 This situation is shown in
 Listing~\ref{lst:memorder:Two RCU Grace Periods and Two Readers},
@@ -6967,6 +6985,21 @@ Therefore, the cycle is forbidden because RCU read-side critical sections
 cannot span full RCU grace periods.
 \fi
 
+하지만,
+Figure~\ref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
+을 깊게 보면 세번째 읽기 쓰레드를 추가하면 사이클이 허용됨을 분명히 알 수
+있습니다.
+이 세번째 읽기 쓰레드는 \co{P0()} 의 grace period 의 끝 전에 끝날 수 있고,
+따라서 같은 grace period 의 시작 전에 시작할 수 있기 때문입니다.
+이는 결국 범용적인 규칙을 제안하게 되는데, 이런 겁니다:  이런 부류의 RCU-only
+리트머스 테스트에서, RCU read-side 크리티컬 섹션들만큼 많은 RCU grace period 가
+있다면, 사이클은 금지됩니다.\footnote{
+	흥미롭게도, Alan Stern 은 Section~\ref{sec:defer:RCU Fundamentals} 에서
+	나온 RCU 의 기본 속성이 LKMM 의 컨텍스트에서 이 보다 범용적인 결과를
+	실제로 암시함을 증명했으며, 이는 RCU 공리라고
+	불립니다~\cite{Alglave:2018:FSC:3173162.3177156}.}
+\iffalse
+
 However, a closer look at
 Figure~\ref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
 makes it clear that adding a third reader would allow the cycle.
@@ -6981,6 +7014,7 @@ are RCU read-side critical sections, the cycle is forbidden.\footnote{
 	in Section~\ref{sec:defer:RCU Fundamentals} actually implies
 	this seemingly more general result, which is called the RCU
 	axiom~\cite{Alglave:2018:FSC:3173162.3177156}.}
+\fi
 
 \begin{figure*}[tbp]
 \centering
@@ -6999,10 +7033,33 @@ are RCU read-side critical sections, the cycle is forbidden.\footnote{
 \subsubsection{RCU and Other Ordering Mechanisms}
 \label{sec:memorder:RCU and Other Ordering Mechanisms}
 
+하지만 RCU 와 다른 순서 강제 메커니즘들을 결합한 리트머스 테스트에 대해선
+어떨까요?
+
+범용적 규칙은 사이클을 방지하는데 하나의 메커니즘만을 사용한 경우에 대한
+겁니다.
+\iffalse
+
 But what about litmus tests that combine RCU with other ordering
 mechanisms?
 
 The general rule is that it takes only one mechanism to forbid a cycle.
+\fi
+
+예를 들어,
+Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering} 으로
+되돌아가 봅시다.
+앞의 섹션에서의 범용적 규칙을 적용해 보면, 이 리트머스 테스트는 두개의 RCU
+read-side 크리티컬 섹션을 가지고 있고 RCU grace period 는 없기 때문에, 이
+사이클이 허용됩니다.
+하지만 \co{P0()} 의 \co{WRITE_ONCE()} 가 \co{smp_store_release()} 로 교체되고
+\co{P1()} 의 \co{READ_ONCE()} 가 \co{smp_load_acquire()} 로 교체되면 어떨까요?
+
+RCU 는 여전히 사이클을 허용하겠지만, 이 release-acquire 쌍이 그걸 금지할
+겁니다.
+사이클을 제거하는데 하나의 메커니즘만을 사용하므로, 이 release-acquire 쌍은
+``승리하고'' 사이클은 금지될 겁니다.
+\iffalse
 
 For example, refer back to
 Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}.
@@ -7018,6 +7075,22 @@ forbid it.
 Because it only takes one mechanism to forbid a cycle, the
 release-acquire pair would ``win'' and the cycle would be
 forbidden.
+\fi
+
+또다른 예로,
+Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers} 로 되돌아가
+봅시다.
+이 리트머스 테스트는 두개의 RCU 읽기 쓰레드를 갖지만 grace period 는 하나만
+있으므로, 사이클이 허용됩니다.
+하지만 \co{smp_mb()} 가 \co{P1()} 의 두 액세스 사이에 놓여진다고 해봅시다.
+이 새로운 리트머스 테스트에서, \co{smp_mb()} 의 추가로 인해, \co{P2()} 의 것은
+물론 \co{P1()} 의 크리티컬 섹션도 \co{P0()} 의 grace period 종료 뒤까지
+연장되는데, 이는 결국 \co{P2()} 의 \co{x0} 읽기가 \co{P0()} 의 쓰기를
+앞지르는걸 막을 겁니다, 빨간 점선 화살표로 보인 것처럼.
+이 경우, RCU 와 전체 메모리 배리어는 사이클을 막는데 함께 영향을 발휘하는데,
+RCU 는 \co{P0()} 와 \coP1()}, \co{P2()} 사이의 순서를 보호하고 \co{smp_mb()} 는
+\co{P1()} 과 \co{P2()} 사이의 순서를 보호합니다.
+\iffalse
 
 For another example, refer back to
 Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers}.
@@ -7034,19 +7107,35 @@ In this case, RCU and the full memory barrier work together to forbid
 the cycle, with RCU preserving ordering between \co{P0()} and both
 \co{P1()} and \co{P2()}, and with the \co{smp_mb()} preserving
 ordering between \co{P1()} and \co{P2()}.
+\fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers}
+	의 \co{P2()} 의 액세스들 사이에 \co{smp_mb()} 가 놓이면 어떻게 될까요?
+	\iffalse
+
 	What would happen if the \co{smp_mb()} was instead added between
 	\co{P2()}'s accesses in
 	Listing~\ref{lst:memorder:One RCU Grace Period and Two Readers}?
+	\fi
 \QuickQuizAnswer{
+	사이클은 역시 사라질 겁니다.
+	더 분석해 보는건 독자 여러분의 몫으로 둡니다.
+	\iffalse
+
 	The cycle would again be forbidden.
 	Further analysis is left as an exercise for the reader.
+	\fi
 } \QuickQuizEnd
+
+요약해서, RCU 의 semantic 이 한때는 순수히 실용적이었지만, 이제는 완전히 정식화
+되었습니다~\cite{PaulMcKenney2005RCUSemantics,MathieuDesnoyers2012URCU,AlexeyGotsman2013ESOPRCU,Alglave:2018:FSC:3173162.3177156}.
+\iffalse
 
 In short, where RCU's semantics were once purely pragmatic, they are
 now fully
 formalized~\cite{PaulMcKenney2005RCUSemantics,MathieuDesnoyers2012URCU,AlexeyGotsman2013ESOPRCU,Alglave:2018:FSC:3173162.3177156}.
+\fi
 
 % \subsection{SRCU}
 % \label{sec:memorder:SRCU}
@@ -8320,7 +8409,7 @@ instructions~\cite{PowerPC94,MichaelLyons05a}:
 하지만, 리눅스의 \co{smp_wmb()} 인스트럭션은 (드라이버는 SMP 커널에서는
 물론이고 UP 에서도 MMIO 들의 순서를 세심히 지켜줘야 하기 때문에) MMIO 에 절대
 사용되지 않으므로, 더 가벼운 {\tt eieio} 또는 \co{lwsync} 인스트럭션으로
-정의되어 있습니다~\cite{PaulEMcKenney2016MMIO}.
+정의되어 있습니다~\cite{PaulEMcKenney2016LinuxKernelMMIO}.
 이 인스트럭션은 다섯개의 모음으로 구성된 약자를 가진다는 점에서도 독특합니다.
 \co{smp_mb()} 인스트럭션 또한 {\tt sync} 인스트럭션으로 정의되어 있습니다만,
 \co{smp_rmb()} 와 \co{rmb()} 모두 더 가벼운 {\tt lwsync} 인스트럭션으로
