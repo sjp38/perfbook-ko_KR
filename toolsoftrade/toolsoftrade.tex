@@ -2886,8 +2886,8 @@ variable, all of those accesses are loads.
 이 가정은 컴파일러가 많은 변경을 가할 수 있도록 하는데, 여기엔 로드 찢기 (Load
 tearing), 스토어 찢기 (store tearing), 로드 합치기 (load fusing), 스토어 합치기
 (store fusing), 코드 재배치, 로드 만들어내기 (invented loads), 스토어
-만들어내기 (invented store) 와 같은 것들이 포함되며 싱글 쓰레드 코드에서는 잘
-동작합니다.
+만들어내기 (invented store), 그리고 스토어를 로드로 바꾸기 (store-to-load
+transformation) 와 같은 것들이 포함되며 싱글 쓰레드 코드에서는 잘 동작합니다.
 하지만 동시성 있는 코드는 이 변화들 각각, 또는 공유 변수 장난으로 인해 아래에
 설명될 것처럼 망가질 수 있습니다.
 \iffalse
@@ -3536,6 +3536,23 @@ p = NULL;\lnlbl[null]
 \label{lst:toolsoftrade:Inviting a Store-to-Load Conversion}
 \end{listing}
 
+{\bf Store-to-load transformation} 은 컴파일러가 평범한 스토어가 메모리에 있는 값을 실제로는 바꾸지 않을 것이란 걸 알 수 있게 되면 발생할 수 있습니다.
+\begin{lineref}[ln:toolsoftrade:Inviting a Store-to-Load Conversion]
+예를 들어,
+Listing~\ref{lst:toolsoftrade:Inviting a Store-to-Load Conversion} 을 봅시다.
+Line~\lnref{load:p} 는 \co{p} 를 읽지만, line~\lnref{if} 의 \qco{if} 문은 또한
+컴파일러에게 개발자는 \co{p} 가 일반적으로 0의 값일 거라 생각한다고 이야기
+합니다.\footnote{
+	\co{unlikely()} 함수가 이 힌트를 컴파일러에게 제공하며, 다른
+	컴파일러는 \co{unlikely()} 를 구현하는 다른 방법을 제공합니다.}
+Line~\lnref{barrier} 의 \co{barrier()} 문은 컴파일러가 \co{p} 의 값을 잊도록
+강제합니다만, 어떤 사람은 컴파일러가 이 힌트를 기억하도록 하는 경우---또는
+피드백 기반의 최적화를 통해 추가적인 힌트를 얻어내는 경우를 상상해 볼 수 있을
+겁니다.
+그렇게 하는건 컴파일러가 line~\lnref{null} 은 종종 비싼 no-op 일 뿐이란 걸
+깨닫게 할 겁니다.
+\iffalse
+
 {\bf Store-to-load transformations} can occur when the compiler notices
 that a plain store might not actually change the value in memory.
 \begin{lineref}[ln:toolsoftrade:Inviting a Store-to-Load Conversion]
@@ -3553,6 +3570,7 @@ choosing to remember the hint---or getting an additional hint via
 feedback-directed optimization.
 Doing so would cause the compiler to realize that line~\lnref{null}
 is often an expensive no-op.
+\fi
 \end{lineref}
 
 \begin{listing}[tbp]
@@ -3571,6 +3589,17 @@ if (p != NULL)\lnlbl[if1]
 \end{listing}
 
 \begin{lineref}[ln:toolsoftrade:Compiler Converts a Store to a Load]
+따라서 그런 컴파일러는
+Listing~\ref{lst:toolsoftrade:Compiler Converts a Store to a Load}
+의 line~\lnref{if1} 과~\lnref{null} 에서 보인 것처럼 \co{NULL} 저장을 확인 후
+하도록 할 수 있을 겁니다.
+이 변환은 종종 바람직하지만, 이 실제 스토어가 순서대로 이뤄지길 바라는 경우엔
+문제가 될 수 있습니다.
+예를 들어, 쓰기 메모리 배리어 (리눅스 커널의 \co{smp_wmb()}) 는 이 스토어를
+순서잡아 주지만, 로드는 그렇지 않습니다.
+이 상황은 \co{smp_wmb()} 대신 \co{smp_store_release()} 의 사용을 추천할 겁니다.
+\iffalse
+
 Such a compiler might therefore guard the store of \co{NULL}
 with a check, as shown on lines~\lnref{if1} and~\lnref{null} of
 Listing~\ref{lst:toolsoftrade:Compiler Converts a Store to a Load}.
@@ -3580,6 +3609,7 @@ For example, a write memory barrier (Linux kernel \co{smp_wmb()}) would
 order the store, but not the load.
 This situation might suggest use of \co{smp_store_release()} over
 \co{smp_wmb()}.
+\fi
 \end{lineref}
 
 {\bf Dead-code elimination} can occur when the compiler notices that
