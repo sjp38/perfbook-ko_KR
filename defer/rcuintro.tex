@@ -930,6 +930,26 @@ The next section summarizes RCU's high-level properties.
 \subsubsection{RCU Properties}
 \label{sec:defer:RCU Properties}
 
+RCU 는 읽기가 업데이트와 동시에 유용한 진행을 할 수 있게 함으로써 확장성을
+개선하는데, 업데이트도 유용한 진행을 할 수 있게 해줍니다.
+이 특성은 RCU 구현이 낮은 비용의 또는 심지어 비용이 없는 읽기 쓰레드를 가능하게
+하는데, 상호 배제를 제공함으로써 유용한 동시의 진행을 불가능하게 하는 일반적인
+동기화 기능들과 대비됩니다.
+RCU 는 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을 통해 읽기 쓰레드들을
+구분하며 오브젝트의 여러 버전을 관리하고 오브젝트가 모든 이전부터 존재한
+read-side 크리티컬 섹션이 완료되기 전에 해제되지 않았음을 보장하기 위해
+\co{synchronize_rcu()} 와 같은 update-side 기능을 사용함으로써 각 읽기 쓰레드가
+일관적인 시각을 확보할 수 있게 합니다.
+RCU 는 오브젝트의 새로운 버전을 내보내고 읽기 위한 효율적이고 확장성 있는
+메커니즘을 제공하기 위해 \co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 를
+각각 정의하고 사용합니다.
+이 메커니즘은 읽기와 업데이트 경로의 일을 분산시키는데 읽기 경로는 해저드
+포인터와 비슷하게 복제와 최적화를 최소화 시키되 읽기 쪽의 재시도를 막음으로써
+극단적으로 빠르게 합니다.
+일부 경우에, \co{CONFIG_PREEMPT=n} 리눅스 커널에서 RCU 의 읽기쪽 기능들은 아예
+오버헤드가 없습니다.
+\iffalse
+
 RCU achieves scalability
 improvements by allowing reads to make useful forward progress
 concurrently with updates, which are also allowed to make useful
@@ -953,11 +973,27 @@ replication and weakening optimizations in a manner similar to
 hazard pointers, but without the need for read-side retries.
 In some cases, including \co{CONFIG_PREEMPT=n} Linux kernels,
 RCU's read-side primitives have zero overhead.
+\fi
 
 \QuickQuiz{}
+	하지만 Section~\ref{sec:defer:Sequence Locks} 의 seqlock 또한 읽기
+	쓰레드와 업데이트 쓰레드가 동시에 일을 할 수 있게 하지 않나요?
+	\iffalse
+
 	But doesn't Section~\ref{sec:defer:Sequence Locks}'s seqlock
 	also permit readers and updaters to get work done concurrently?
+	\fi
 \QuickQuizAnswer{
+	그렇고 아닙니다.
+	Seqlock 읽기 쓰레드가 seqlock 쓰기 쓰레드와 동시에 수행될 수 있긴
+	하지만, 그렇게 될 때마다 \co{read_seqretry()} 기능이 이 읽기 쓰레드를
+	재시도 하게 강제합니다.
+	이말은 seqlock 업데이트 쓰레드와 동시에 수행되는 seqlock 읽기 쓰레드가
+	폐기되고 재처리될 것을 의미합니다.
+	따라서 seqlock 읽기 쓰레드는 업데이트 쓰레드와 동시에 \emph{돌아갈}
+	수는 있으나 이 경우 어떤 일도 실제로 하지는 못합니다.
+	\iffalse
+
 	Yes and no.
 	Although seqlock readers can run concurrently with
 	seqlock writers, whenever this happens, the \co{read_seqretry()}
@@ -966,9 +1002,25 @@ RCU's read-side primitives have zero overhead.
 	with a seqlock updater will be discarded and redone.
 	So seqlock readers can \emph{run} concurrently with updaters,
 	but they cannot actually get any work done in this case.
+	\fi
+
+	반면, RCU 읽기 쓰레드는 동시의 RCU 업데이트 쓰레드가 있는 상황에서도
+	유용한 일을 해낼 수 있습니다.
+	\iffalse
 
 	In contrast, RCU readers can perform useful work even in presence
 	of concurrent RCU updaters.
+	\fi
+
+	하지만, 레퍼런스 카운터
+	(Section~\ref{sec:defer:Reference Counting}) 도
+	해저드 포인터
+	(Section~\ref{sec:defer:Hazard Pointers}) 도 업데이트 쓰레드와 읽기
+	쓰레드 모두 동시의 유용한 진행을 정말로 할 수 있게 합니다만 꽤 큰
+	비용을 수반합니다.
+	이 deferred-reclamation 문제에 대한 다른 해결책들을 비교하려면
+	Section~\ref{sec:defer:Which to Choose?} 을 보시기 바랍니다.
+	\iffalse
 
 	However, both reference counters
 	(Section~\ref{sec:defer:Reference Counting})
@@ -980,10 +1032,16 @@ RCU's read-side primitives have zero overhead.
 	Section~\ref{sec:defer:Which to Choose?}
 	for a comparison of these different solutions to the
 	deferred-reclamation problem.
+	\fi
 } \QuickQuizEnd
+
+하지만 이 기능들이 실제로 유용할까요?
+이 질문에 대해선 다음 섹션에서 다룹니다.
+\iffalse
 
 But are these properties actually useful in practice?
 This question is taken up by the next section.
+\fi
 
 \subsubsection{Practical Applicability}
 \label{sec:defer:Practical Applicability}
