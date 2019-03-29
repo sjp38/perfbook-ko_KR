@@ -199,12 +199,21 @@ scenarios, and memory-leak hazards that are inherent in schemes
 using explicit tracking.
 \fi
 
-RCU 의 경우에, 기다려지고 있는 일들은 ``RCU read-side 크리티컬 섹션'' 이라
+RCU 의 경우에, 기다려지고 있는 일들은 \emph{RCU read-side 크리티컬 섹션} 이라
 불립니다.
-하나의 RCU read-side 크리티컬 섹션은 \co{rcu_read_lock()} 함수로 시작되고, 그에
-연관되는 \co{rcu_read_unlock()} 함수로 종료됩니다.
+Section~\ref{sec:defer:Toy Implementation}
+에서 힌트를 준 것처럼, RCU read-side 크리티컬 섹션은 \co{rcu_read_lock()}
+함수로 시작되고, 그에 연관되는 \co{rcu_read_unlock()} 함수로 종료됩니다.
 RCU read-side 크리티컬 섹션들은 중첩될 수 있고, 어떤 코드든 그 코드가
-명시적으로 블락하거나 잠들지 않는 한 (SRCU~\cite{PaulEMcKenney2006c} 라고
+quiescent state 를 갖지 않는 한 그 안에 들어갈 수 있는데, 예를 들어 리눅스
+커널에서는 컨텍스트 스위치가 quiescent state 중 하나이기 때문에 RCU read-side
+크리티컬 섹션 내에서 sleep 을 하는건 불법입니다.\footnote{
+	하지만, SRCU~\cite{PaulEMcKenney2006c} 라고 하는 특수한 형태의 RCU 는
+	SRCU read-side 크리티컬 섹션 내에서의 sleep 을 허용합니다.}
+여러분이 이 규약을 준수한다면, 여러분은 \emph{모든} 이전부터 존재한 RCU
+read-side 크리티컬 섹션이 완료되길 기다리는데 RCU 를 사용할 수 있으며,
+\co{synchronize_rcu()} 가 실제 이 기다림을 행합니다.
+
 불리는 특별한 형태의 RCU 가 SRCU read-side 크리티컬 섹션 내에서의 일반적인
 잠들기를 가능하게 하긴 하지만), 그 안에 얼마든지 들어갈 수 있습니다.
 이런 규칙에 동의한다면, 코드의 \emph{모든} 원하는 부분이 완료되기를
@@ -240,6 +249,17 @@ pre-existing RCU read-side critical section to complete, and
 \label{fig:defer:RCU Reader and Later Grace Period}
 \end{figure}
 
+RCU read-side 크리티컬 섹션과 뒤의 RCU grace period 사이의 관계는
+Figure~\ref{fig:defer:RCU Reader and Later Grace Period} 에 그린 것처럼 if-then
+관계입니다.
+특정 크리티컬 섹션의 어떤 부분이 특정 grace period 의 시작을 앞선다면, RCU 는
+이 크리티컬 섹션 전체가 이 grace period 의 종료를 앞서게 될 것을 보장합니다.
+이 그림에서, \co{P0()} 의 \co{y} 접근이 \co{P1()} 의 해당 변수로의 접근을
+앞서므로, \co{P0()} 의 \co{x} 로의 접근은 \co{P1()} 의 액세스를 앞설 겁니다.
+이 경우, \co{y} 의 마지막 값이 2라면, \co{x} 의 마지막 값 역시 2가 될 것이
+보장됩니다.
+\iffalse
+
 The relationship between an RCU read-side critical section and a later
 RCU grace period is an if-then relationship, as illustrated by
 Figure~\ref{fig:defer:RCU Reader and Later Grace Period}.
@@ -251,16 +271,30 @@ In the figure, because \co{P0()}'s access to \co{y} precedes
 \co{P0()}'s access to \co{x} will precede \co{P1()}'s access.
 In this case, if \co{y}'s final value is 2, then \co{x}'s
 final value is guaranteed to also be 2.
+\fi
 
 \QuickQuiz{}
+	Figure~\ref{fig:defer:RCU Reader and Later Grace Period}
+	에서 \co{x} 와 \co{y} 의 마지막 값은 다른 어떤 값이 될수도 있을까요?
+	\iffalse
+
 	What other final values of \co{x} and \co{y} are possible in
 	Figure~\ref{fig:defer:RCU Reader and Later Grace Period}?
+	\fi
 \QuickQuizAnswer{
+	\co{x == 2 && y == 2} 일 가능성은 앞의 글에서 설명되었습니다.
+	\co{y == 2} 가 \co{x == 2} 일 것을 의미하므로, \co{x == 1 && y == 2} 는
+	불가능함을 알고 있습니다.
+	뒤의 토의는 \co{x == 1 && y == 1} 과 \co{x == 2 && y == 1} 이 가능함을
+	보입니다.
+	\iffalse
+
 	The \co{x == 2 && y == 2} possibility was called out in the text.
 	Given that \co{y == 2} implies \co{x == 2}, we know that
 	\co{x == 1 && y == 2} is forbidden.
 	The following discussion will show that both
 	\co{x == 1 && y == 1} and \co{x == 2 && y == 1} are possible.
+	\fi
 } \QuickQuizEnd
 
 \begin{figure}[tb]
@@ -269,6 +303,19 @@ final value is guaranteed to also be 2.
 \caption{RCU Reader and Earlier Grace Period}
 \label{fig:defer:RCU Reader and Earlier Grace Period}
 \end{figure}
+
+RCU read-side 크리티컬 섹션과 그 전의 RCU grace period 사이의 관계 역시 if-then
+관계이며,
+Figure~\ref{fig:defer:RCU Reader and Earlier Grace Period} 에 그려져 있습니다.
+특정 크리티컬 섹션의 어떤 부분이 특정 grace period 의 종료를 뒤따른다면, RCU 는
+이 크리티컬 섹션의 모든 부분이 이 grace period 의 시작을 뒤따를 것을
+보장합니다.
+이 그림에서, \co{P0()} 의 \co{x} 로의 접근이 \co{P1()} 의 같은 변수로의 접근을
+뒤따르므로, \co{P0()} 의 \co{y} 로의 접근은 \co{P1()} 의 접근을 앞설 것이
+보장됩니다.
+이 경우, 만약 \co{x} 의 마지막 값이 1이라면, \co{y} 의 마지막 값 역시 1일 것이
+보장됩니다.
+\iffalse
 
 The relationship between an RCU read-side critical section and an earlier
 RCU grace period is also an if-then relationship, as illustrated by
@@ -281,6 +328,7 @@ In the figure, because \co{P0()}'s access to \co{x} follows
 \co{P0()}'s access to \co{y} will precede \co{P1()}'s access.
 In this case, if \co{x}'s final value is 1, then \co{y}'s
 final value is guaranteed to also be 1.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -289,11 +337,35 @@ final value is guaranteed to also be 1.
 \label{fig:defer:RCU Reader Within Grace Period}
 \end{figure}
 
+마지막으로,
+Figure~\ref{fig:defer:RCU Reader Within Grace Period} 에 보인 것처럼, RCU
+read-side 크리티컬 섹션은 RCU grace period 에 의해 완전히 중복될 수 있습니다.
+여기서 \co{x} 의 마지막 값은 1이고 \co{y} 의 마지막 값은 2 입니다.
+\iffalse
+
 Finally, as shown in
 Figure~\ref{fig:defer:RCU Reader Within Grace Period},
 an RCU read-side critical section can be completely overlapped by
 an RCU grace period.
 In this case, \co{x}'s final value is 1 and \co{y}'s final value is 2.
+\fi
+
+하지만, \co{x} 의 마지막 값이 2 이고 \co{y} 의 마지막 값이 1일 수는 없습니다.
+이는 RCU read-side 크리티컬 섹션은 하나의 grace period 내에 완전히 파묻혀서,
+감춰져 버릴 수 있음을 의미합니다.
+RCU 의 wait-for-readers 보장은 따라서 두개의 부분으로 이루어집니다:
+(1)~만약 특정 RCU read-side 크리티컬 섹션의 어느 부분이 특정 grace period 의
+시작을 앞선다면, 이 크리티컬 섹션의 모든 부분이 이 grace period 의 끝을 앞선다.
+(2)~만약 특정 RCU read-side 크리티컬 섹션의 어느 부분이 특정 grace period 의
+끝을 뒤따른다면, 이 크리티컬 섹션의 모든 부분이 이 grace period 의 시작을
+뒤따른다.
+이 정의는 거의 모든 RCU 기반 알고리즘에 충분합니다만, 더 많은 걸 원하는
+사람들을 위해, RCU 의 간단한 수행에 대한 정형적 모델이 리눅스 커널 v4.17 과 그
+뒤 버전들의 부분으로 사용 가능하며,
+Section~\ref{sec:formal:Axiomatic Approaches and RCU} 에 설명되어 있습니다.
+추가로, RCU 의 순서 특성은 Section~\ref{sec:memorder:RCU} 에 훨씬 자세히
+설명되어 있습니다.
+\iffalse
 
 However, it cannot be the case that \co{x}'s final value is 2 and \co{y}'s
 final value is 1.
@@ -313,6 +385,15 @@ as part of Linux kernel v4.17 and later, as discussed in
 Section~\ref{sec:formal:Axiomatic Approaches and RCU}.
 In addition, RCU's ordering properties are examined in much
 greater detail in Section~\ref{sec:memorder:RCU}.
+\fi
+
+RCU 의 wait-for-readers 기능이
+Figure~\ref{fig:defer:RCU Reader and Later Grace Period}-\ref{fig:defer:RCU Reader Within Grace Period}
+에서 보인 것처럼 변수로의 값 할당 순서를 위해 가끔은 사용되지만,
+Section~\ref{sec:defer:Introduction to RCU} 에서 한것처럼 연결된 구조체에서
+제거된 데이터 원소를 안전히 해제하는데에 더 자주 사용됩니다.
+일반화된 프로세스는 다음 pseudocode 로 설명됩니다:
+\iffalse
 
 Although RCU's wait-for-readers capability really is sometimes used to
 order the assignment of values to variables as shown in
@@ -321,18 +402,33 @@ it is more frequently used to safely free data elements removed from
 a linked structure, as was done in
 Section~\ref{sec:defer:Introduction to RCU}.
 The general process is illustrated by the following pseudocode:
+\fi
 
 \begin{enumerate}
+\item	변경을 만드는데, 예를 들어 링크드 리스트에서 원소를 제거합니다.
+\item	모든 이전부터 존재한 RCU read-side 크리티컬 섹션이 완전히 종료되길
+	기다립니다 (예를 들면, \co{synchronize_rcu()} 를 사용해서).
+\item	해제를 진행합니다, 예를 들어 앞서 교체된 원소를 메모리에서
+	해제시킵니다.
+\iffalse
+
 \item	Make a change, for example, remove an element from a linked list.
 \item	Wait for all pre-existing RCU read-side critical sections to
 	completely finish (for example, by using
 	\co{synchronize_rcu()}).
 \item	Clean up, for example, free the element that was replaced above.
+\fi
 \end{enumerate}
+
+RCU 읽기 쓰레드는 업데이트가 진행중인 상황에서 진행될 수 있다는 점을 놓고 보면,
+다른 읽기 쓰레드는 데이터 구조의 상태에 대해 다른 의견을 가질 수 있는데, 이는
+다음 섹션에서 다루어지는 주제입니다.
+\iffalse
 
 Given that RCU readers can make forward progress while this update
 is in progress, different readers might disagree about the state
 of the data structure, a topic taken up by the next section.
+\fi
 
 \subsubsection{Maintain Multiple Versions of Recently Updated Objects}
 \label{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
