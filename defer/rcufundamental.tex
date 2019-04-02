@@ -49,6 +49,19 @@ For their part, updaters can be thought of as publishing new versions.
 \label{fig:defer:Publication/Subscription Constraints}
 \end{figure}
 
+불행히도,
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+에서 다뤄지고
+Section~\ref{sec:defer:Minimal Insertion and Deletion} 에서 한번 더 다뤄진
+것처럼, 이 출시와 구독 작업에 평범한 액세스를 사용하는건 현명치 못한
+처사입니다.
+그대신 컴파일러와 CPU 모두에게 주의를 요할 것을 알려야 하는데, 이는
+Figure~\ref{fig:defer:Publication/Subscription Constraints} 에서
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+의 \co{ins_route()} (와 그 호출자들) 그리고 \co{read_gptr()} 의 동시적 수행
+사이의 상호작용을 그리며 보이고 있습니다.
+\iffalse
+
 Unfortunately, as laid out in
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
 and reiterated in
@@ -61,6 +74,16 @@ Figure~\ref{fig:defer:Publication/Subscription Constraints},
 which illustrates interactions between concurrent executions of
 \co{ins_route()} (and its caller) and \co{read_gptr()} from
 Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}.
+\fi
+
+Figure~\ref{fig:defer:Publication/Subscription Constraints}
+에서의 \co{ins_route()} 열은 \co{ins_route()} 의 호출자가 새로운 \co{route}
+구조체를 할당하는 걸 보이는데, 이는 초기화 전의 쓰레기값을 가지고 있을 겁니다.
+이 호출자는 이어서 이 새로 할당된 구조체를 초기화 하고, 이어서 이 새로운
+\co{route} 구조체로의 포인터를 출시하기 위해 \co{ins_route()} 를 호출합니다.
+출시는 이 구조체의 내용물에 손대지 않으므로, 출시 후에도 그 내용물은
+유효합니다.
+\iffalse
 
 The \co{ins_route()} column from
 Figure~\ref{fig:defer:Publication/Subscription Constraints}
@@ -71,6 +94,16 @@ invokes \co{ins_route()} to publish a pointer to the new \co{route}
 structure.
 Publication does not affect the contents of the structure, which
 therefore remain valid after publication.
+\fi
+
+이 그림에서 \co{access_route()} 열은 구독되고 디레퍼런스 되는 포인터를
+보입니다.
+이 디레퍼런스 오퍼레이션은 초기화 전의 쓰레기값이 아닌 유효한 \co{route} 를
+봐야만 하는데, 쓰레기 값을 레퍼런스 하는건 메모리 오염, 크래시, 그리고 행을
+유발할 수 있기 때문입니다.
+앞서 이야기 되었듯, 그런 쓰레기 값을 방지하는 것은 이 출시와 구독 오퍼레이션이
+컴파일러와 CPU 모두에게 필요한 순서를 유지하도록 알려야 함을 의미합니다.
+\iffalse
 
 The \co{access_route()} column from this same figure shows
 the pointer being subscribed to and dereferenced.
@@ -80,6 +113,18 @@ garbage could result in memory corruption, crashes, and hangs.
 As noted earlier, avoiding such garbage means that the publish and
 subscribe operations must inform both the compiler and the CPU of the
 need to maintain the needed ordering.
+\fi
+
+출시는 \co{rcu_assign_pointer()} 을 통해 이루어지는데, 이 기능은
+\co{ins_route()} 의 호출자의 초기화가 실제 출시 오퍼레이션의 포인터 저장 전으로
+순서 이루어질 것을 보장합니다.
+추가로, \co{rcu_assign_pointer()} 는 동시의 읽기 쓰레드가 해당 포인터의 이전 값
+또는 새로운 값 중 하나만을 보지, 이 두 값이 합쳐진 이상한 값은 볼 수 없게끔
+어토믹하게 이루어집니다.
+이 요구사항은 C11 의 store-release 오퍼레이션으로 충족됩니다만, 실제 리눅스
+커널 내에서 \co{rcu_assign_pointer()} 는 C11 store-release 와 대략적으로는
+유사한 \co{smp_store_release()} 로 정의됩니다.
+\iffalse
 
 Publication is carried out by \co{rcu_assign_pointer()}, which ensures that
 \co{ins_route()}'s callers initialization is ordered before the actual
@@ -91,6 +136,19 @@ These requirements are met by the C11 store-release operation,
 and in fact in the Linux kernel, \co{rcu_assign_pointer()} is defined
 in terms of \co{smp_store_release()}, which is roughly similar to
 C11 store-release.
+\fi
+
+동시의 업데이트가 필요하다면, 같은 포인터로의 여러개의 동시적인
+\co{rcu_assign_pointer()} 호출들 사이의 동기화 메커니즘이 필요할 것임을
+알아두시기 바랍니다.
+리눅스 커널 내에서는 락킹이 선택된 방법입니다만, 어떤 다른 동기화 메커니즘도
+사용될 수 있습니다.
+특히나 가벼운 동기화 메커니즘의 한 예는
+Chapter~\ref{chp:Data Ownership} 의 데이터 소유권입니다: 각 포인터가 특정
+쓰레드에 의해 소유되어 있다면, 해당 쓰레드는 해당 포인터로의
+\co{rcu_assign_pointer()} 를 추가적인 동기화 오버헤드 없이 수행할 수 있을
+겁니다.
+\iffalse
 
 Note that if concurrent updates are required, some sort of synchronization
 mechanism will be required to mediate among multiple concurrent
@@ -102,12 +160,29 @@ Chapter~\ref{chp:Data Ownership}'s data ownership: If each pointer is
 owned by a particular thread, then that thread may execute
 \co{rcu_assign_pointer()} on that pointer with no additional
 synchronization overhead.
+\fi
 
 \QuickQuiz{}
+	RCU 업데이트 쓰레드를 위한 데이터 소유권의 사용은 이 업데이트 작업이
+	싱글쓰레드 버전의 코드와 동일한 인스트럭션들을 수행할 수 있다는 의미
+	아닌가요?
+	\iffalse
+
 	Wouldn't use of data ownership for RCU updaters mean that
 	the updates could use exactly the same sequence of instructions
 	as would the corresponding single-threaded code?
+	\fi
 \QuickQuizAnswer{
+	어떤 경우, 예를 들면 x86 이나 IBM mainframe 과 같이 store-release
+	오퍼레이션이 하나의 스토어 인스트럭션을 만들어낼 뿐인 TSO
+	시스템들에서는요.
+	하지만, 완화된 순서 규칙의 시스템들에서는 메모리 배리어 또는
+	store-release 인스트럭션 같은걸 추가적으로 수행해야만 합니다.
+	또한, 데이터를 제거하는 것은 약간의 추가적인 작업을 필요로 하는데, 이
+	제거된 데이터를 해제시키기 전에, 앞서 존재해온 읽기 쓰레드들을 기다려야
+	하기 때문입니다.
+	\iffalse
+
 	Sometimes, for example, on TSO systems such as x86 or the IBM
 	mainframe where a store-release operation emits a single store
 	instruction.
@@ -116,6 +191,7 @@ synchronization overhead.
 	In addition, removing data requires quite a bit of additional
 	work because it is necessary to wait for pre-existing readers
 	before freeing the removed data.
+	\fi
 } \QuickQuizEnd
 
 Subscription is carried out by \co{rcu_dereference()}, which ensures that
