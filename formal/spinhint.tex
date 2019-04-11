@@ -1488,9 +1488,15 @@ It would be nice to run three readers and three
 updaters, however, simple extrapolation indicates that this will
 require about half a terabyte of memory.
 What to do?
+\fi
+
+\co{./pan} 이 메모리가 동날 때 조언을 준다는 게 드러났는데, 예를 들어, 세개의
+읽기 쓰레드와 세개의 업데이트 쓰레드를 수행하려 하면:
+\iffalse
 
 It turns out that \co{./pan} gives advice when it runs out of memory,
 for example, when attempting to run three readers and three updaters:
+\fi
 
 \begin{VerbatimU}
 hint: to reduce memory, recompile with
@@ -1500,16 +1506,35 @@ hint: to reduce memory, recompile with
   -DBITSTATE # supertrace, approximation
 \end{VerbatimU}
 
+제안된 컴파일러 플래그 \co{-DMA=N} 을 시도해 봅시다, 이 플래그는 상당히 증가된
+탐색 오버헤드를 비용으로 해서 상태 공간을 적극적으로 압축시킵니다.
+필요한 커맨드는 아래와 같습니다:
+\iffalse
+
 Let's try the suggested compiler flag \co{-DMA=N},
 which generates code for aggressive compression of the
 state space at the cost of greatly increased search overhead.
 The required commands are as follows:
+\fi
 
 \begin{VerbatimU}
 spin -a qrcu.spin
 cc -DSAFETY -DMA=96 -O2 -o pan pan.c
 ./pan -m20000000
 \end{VerbatimU}
+
+여기서, 20,000,000 의 depth limit 은 간단한 외삽으로 나온 예상 depth 보다
+몇십배 가량 큽니다.
+비록 이게 눈에 띄는 메모리 사용량을 증가시키지만, 너무 타이트한 depth limit 로
+인해 발생하는 불완전한 탐색으로 인한 긴 수행의 낭비를 막습니다.
+이 수행은 \Power{9} 서버에서 3~일보다 조금 더 걸렸습니다.
+그 결과가
+Listing~\ref{lst:formal:spinhint:3 Readers 3 Updaters QRCU Spin Output with -DMA=96}
+에 보여져 있습니다.
+이 Spin 수행은 고작 6.5\,GB 의 총 메모리 사용량과 함께 성공적으로 마무리
+되었는데, 이는 약 0.5 테라바이트인 \co{-DCOLLAPSE} 사용의 경우에 비해 수백배
+가까이 낮은 크기입니다.
+\iffalse
 
 Here, the depth limit of 20,000,000 is an order of magnitude
 larger than the expected depth deduced from simple extrapolation.
@@ -1522,6 +1547,7 @@ Listing~\ref{lst:formal:spinhint:3 Readers 3 Updaters QRCU Spin Output with -DMA
 This Spin run completed successfully with a total memory
 usage of only 6.5\,GB, which is almost two orders of magnitude
 lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
+\fi
 
 \begin{listing}
 \VerbatimInput[numbers=none,fontsize=\scriptsize]{CodeSamples/formal/promela/qrcu.spin.33ma.lst}
@@ -1531,11 +1557,20 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 \end{listing}
 
 \QuickQuiz{}
+	압축률 0.48\,\% 는 상태들로 사용되는 메모리를 200-대-1 로 감소시켰군요!
+	이 상태공간 탐색은 \emph{정말로} 소모적입니까?
+	\iffalse
+
 	A compression rate of 0.48\,\% corresponds to a 200-to-1 decrease
 	in memory occupied by the states!
 	Is the state-space search \emph{really} exhaustive???
+	\fi
 \QuickQuizAnswer{
+	Spin 의 문서에 따르면, 네, 그렇습니다.
+	\iffalse
+
 	According to Spin's documentation, yes, it is.
+	\fi
 
 \begin{listing}
 \VerbatimInput[numbers=none,fontsize=\scriptsize]{CodeSamples/formal/promela/qrcu.spin.col-ma.diff.lst}
@@ -1544,6 +1579,14 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 \label{lst:formal:promela:Spin Output Diff of -DCOLLAPSE and -DMA=88}
 \end{listing}
 
+	간접적 증거로, \co{-DCOLLAPSE} 와 \co{-DMA=88} 의 결과를 비교해 봅시다
+	(두 읽기 쓰레드와 세 업데이트 쓰레드).
+	이 수행들에서의 출력의 차이점은
+	Listing~\ref{lst:formal:promela:Spin Output Diff of -DCOLLAPSE and -DMA=88}
+	에 보여져 있습니다.
+	볼 수 있듯이, 상태의 수는 (stored 와 matched) 둘 다 같습니다.
+	\iffalse
+
 	As an indirect evidence, let's compare the results of
 	runs with \co{-DCOLLAPSE} and with \co{-DMA=88}
 	(two readers and three updaters).
@@ -1551,6 +1594,7 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 	Listing~\ref{lst:formal:promela:Spin Output Diff of -DCOLLAPSE and -DMA=88}.
 	As you can see, they agree on the numbers of states
 	(stored and matched).
+	\fi
 } \QuickQuizEnd
 
 \begin{table*}[tbp]
@@ -1602,6 +1646,22 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 \label{tab:formal:promela:QRCU Spin Result Summary}
 \end{table*}
 
+참고로, Table~\ref{tab:formal:promela:QRCU Spin Result Summary} 은
+\co{-DCOLLAPSE} 와 \co{-DMA=N} 컴파일러 플래그와 함께 돌린 Spin 결과를 요약해
+보입니다.
+메모리 사용량은 최소의 충분한 탐색 깊이와 테이블에 보인 \co{-DMA=N} 패러미터와
+함께 얻어졌습니다.
+\co{-DCOLLAPSE} 수행을 위한 해시테이블 크기는 \co{./pan} 의 \co{-wN} 옵션에
+의해 너무 많은 메모리를 작은 상태 공간을 해싱하는데 사용하는 것을 막기 위해
+조절되었습니다.
+따라서 이 메모리 사용량은
+해시테이블 크기가 기본 \co{-w24} 에서 시작한
+Table~\ref{tab:advsync:Memory Usage of QRCU Model} 에 보인 것보다 작습니다.
+이 수행시간은 \Power{9} 서버에서의 것으로, 이 서버는 \co{-DMA=N} 은
+\co{-DCOLLAPSE} 에 비해 수십배 높은 CPU 오버헤드를 갖게 됩니다만, 반면에 메모리
+오버헤드를 수십배 가량 줄이게 됩니다.
+\iffalse
+
 For reference, Table~\ref{tab:formal:promela:QRCU Spin Result Summary}
 summarizes the Spin results with \co{-DCOLLAPSE} and \co{-DMA=N}
 compiler flags.
@@ -1617,6 +1677,15 @@ The runtime is from a \Power{9} server, which shows that \co{-DMA=N}
 suffers up to about an order of magnitude higher CPU overhead
 than does \co{-DCOLLAPSE}, but on the other hand reduces memory overhead
 by well over an order of magnitude.
+\fi
+
+적절합니다.
+하지만 약간의 업데이트 쓰레드 또는 읽기 쓰레드를 추가하면 \co{-DMA=N} 이
+있더라도 메모리를 소모시킬 겁니다.\footnote{
+	대안적으로, CPU 소모량이 소모적이 될수도 있습니다.}
+그래서 어떡할까요?
+여기 몇가지 가능한 방법이 있습니다:
+\iffalse
 
 So far so good.
 But adding a few more updaters or readers would exhaust memory, even
