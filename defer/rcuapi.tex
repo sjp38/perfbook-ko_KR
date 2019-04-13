@@ -1320,7 +1320,22 @@ lockdep support &
 \end{table}
 
 Table~\ref{tab:defer:RCU Diagnostic APIs}
+은 RCU 의 검사 API 들을 보입니다.
+\iffalse
+
+Table~\ref{tab:defer:RCU Diagnostic APIs}
 shows RCU's diagnostic APIs.
+\fi
+
+\co{__rcu} 는 RCU 로 보호되는 포인터를 마킹하는데, 예를 들어, \qco{strcut foo
+__rcu *p;} 같은 식입니다.
+\co{rcu_dereference()} 로 전달될 수도 있는 포인터들이 마킹될 수 있습니다만,
+\co{rcu_dereference()} 로부터 리턴되는 값을 잡고 있는 포인터는 그러지 않아도
+됩니다.
+이 마킹을 변수, 구조체 필드, 함수 패러미터, 그리고 리턴 값에 가하는 것은 리눅스
+커널의 \co{sparse} 도구가 RCU 로 보호되는 포인터가 올바르지 않게도 평범한
+C-언어 로드와 스토어로 접근되는 것을 알 수 있게 해줍니다.
+\iffalse
 
 The \co{__rcu} marks an RCU-protected pointer, for example,
 \qco{struct foo __rcu *p;}.
@@ -1331,6 +1346,20 @@ Providing these markings on variables, structure fields, function
 parameters, and return values allows the Linux kernel's \co{sparse}
 tool to detect situtations where RCU-protected pointers are
 incorrectly accessed using plain C-language loads and stores.
+\fi
+
+리눅스 커널의 메모리 할당자로부터 얻어지는 구조체의 \co{rcu_head} 구조체 부분은
+자동으로 디버그 오브젝트 지원을 받습니다만, 스스로의 특수 목적 메모리 할당자를
+만든 것들은 할당과 해제 시에 각각 \co{init_rcu_head()} 와
+\co{destroy_rcu_head()} 를 사용할 수 있습니다.
+함수 호출 스택에서 할당된 \co{rcu_head} 를 사용하는 경우 (진짜 이런 경우가
+있습니다!) 에는 첫 접근 전에 \co{init_rcu_head_on_stack()} 을, 마지막 접근
+후에, 그러나 그 함수에서 리턴하기 전에 \co{destroy_rcu_head_on_stack()} 을
+사용할 수 있습니다.
+디버그 오브젝트 지원은 같은 \co{rcu_head} 구조체를 \co{call_rcu()} 와 그 유사한
+것들에 보내는 경우를 파악할 수 있게 합니다, 이것은 유명한 double-free 클래스
+버그의 \co{call_rcu()} 버전이죠.
+\iffalse
 
 Debug-object support is automatic for any \co{rcu_head} structures
 that are part of a structure obtained from the Linux kernel's
@@ -1345,6 +1374,15 @@ Debug-object support allows detection of bugs involving passing the
 same \co{rcu_head} structure to \co{call_rcu()} and friends in
 quick succession, which is the \co{call_rcu()} counterpart to the
 infamous double-free class of bugs.
+\fi
+
+스톨 경고 제어는 \co{rcu_cpu_stall_reset()} 으로 제공되는데, 이는 호출자가 현재
+grace period 의 남은 기간 동안 RCU CPU 스톨 경고를 내지 않게끔 합니다.
+RCU CPU 스톨 경고는 RCU read-side 크리티컬 섹션이 지나치게 긴 시간 동안
+수행되는 상황을 집어낼 수 있게 도와주며, 커널 디버거와 같은 것들이
+브레이크포인트를 마주치거나 하는 경우에 이 경고를 막을 수 있게 하는게
+유용합니다.
+\iffalse
 
 Stall-warning control is provided by \co{rcu_cpu_stall_reset()}, which
 allows the caller to suppress RCU CPU stall warnings for the remainder
@@ -1353,6 +1391,14 @@ RCU CPU stall warnings help pinpoint situations where an RCU read-side
 critical section runs for an excessive length of time, and it is useful
 for things like kernel debuggers to be able to suppress them, for example,
 when encountering a breakpoint.
+\fi
+
+콜백 체크는 \co{rcu_head_init()} 와 \co{rcu_head_after_call_rcu()} 를 통해
+제공됩니다.
+앞의 것은 \co{rcu_head} 구조체에 의해, \co{call_rcu()} 에 이 구조체가 넘겨지기
+전에 수행되고, \co{rcu_head_after_call_rcu()} 는 이 콜백이 명시된 함수와 함께
+수행되었는지 체크합니다.
+\iffalse
 
 Callback checking is provided by \co{rcu_head_init()} and
 \co{rcu_head_after_call_rcu()}.
@@ -1360,6 +1406,15 @@ The former is invoked on an \co{rcu_head} structure before it is passed
 to \co{call_rcu()}, and then \co{rcu_head_after_call_rcu()} will
 check to see if the callback is has been invoked with the specified
 function.
+\fi
+
+Lockdep~\cite{JonathanCorbet2006lockdep} 을 위한 지원이
+\co{rcu_read_lock_held()},
+\co{rcu_read_lock_bh_held()},
+\co{rcu_read_lock_sched_held()}, 그리고
+\co{srcu_read_lock_held()} 에 포함되어 있는데, 이것들 각각은 연관된 RCU
+read-side 크리티컬 섹션 타입 내에서 실행된 경우 \co{true} 를 리턴합니다.
+\iffalse
 
 Support for lockdep~\cite{JonathanCorbet2006lockdep} includes
 \co{rcu_read_lock_held()},
@@ -1368,14 +1423,34 @@ Support for lockdep~\cite{JonathanCorbet2006lockdep} includes
 \co{srcu_read_lock_held()},
 each of which returns \co{true} if invoked within the corresponding
 type of RCU read-side critical section.
+\fi
 
 \QuickQuiz{}
+	Tasks RCU 를 위한 \co{rcu_read_lock_tasks()} 는 왜 없나요?
+	\iffalse
+
 	Why isn't there a \co{rcu_read_lock_tasks()} for Tasks RCU?
+	\fi
 \QuickQuizAnswer{
+	Tasks RCU 는 read-side 마커가 없기 때문입니다.
+	그대신, Tasks RCU read-side 크리티컬 섹션은 자발적인 컨텍스트 스위치로
+	제한됩니다.
+	\iffalse
+
 	Because Tasks RCU does not have read-side markers.
 	Instead, Tasks RCU read-side critical sections are
 	bounded by voluntary context switches.
+	\fi
 } \QuickQuizEnd
+
+\co{rcu_read_lock()} 은 idle 루프 내에서 사용될 수 없기 때문에, 그리고 에너지
+효율성에 대한 고려가 이 idle 루프가 지나치게 장식되게 했기 때문에,
+\co{rcu_is_watching()} 은 \co{rcu_read_lock()} 의 사용이 합법적인 컨텍스트에서
+호출된 경우 true 를 리턴합니다.
+\co{srcu_read_lock()} 은 idle 에서, 그리고 심지어 오프라인 CPU 에서도 호출될 수
+있음을 다시 말씀드리는데, 이는 \co{rcu_is_watching()} 은 SRCU 에 적용되지
+않음을 의미합니다.
+\iffalse
 
 Because \co{rcu_read_lock()} cannot be used from the idle loop,
 and because energy-efficiency concerns have caused the idle loop
@@ -1384,11 +1459,28 @@ invoked in a context where use of \co{rcu_read_lock()} is legal.
 Note again that \co{srcu_read_lock()} may be used from idle and
 even offline CPUs, which means that \co{rcu_is_watching()} does not
 apply to SRCU.
+\fi
+
+\co{RCU_LOCKDEP_WARN()} 은 lockdep 이 활성화 되어 있고 그 인자가 \co{true} 로
+평가되면 경고를 냅니다.
+예를 들어, \co{RCU_LOCKDEP_WARN(!rcu_read_lock_held())} 는 RCU read-side
+크리티컬 섹션 외에서 호출되었다면 경고를 내놓을 겁니다.
+\iffalse
 
 \co{RCU_LOCKDEP_WARN()} emits a warning if lockdep is enabled and if
 its argument evaluated to \co{true}.
 For example, \co{RCU_LOCKDEP_WARN(!rcu_read_lock_held())} would emit a
 warning if invoked outside of an RCU read-side critical section.
+\fi
+
+\co{RCU_NONIDLE()} 은 RCU 가 전체 인자로 넘어온 문장을 수행하는 시점을 보게
+강제하는데 사용될 수 있을 겁니다.
+예를 들어, \co{RCU_NONIDLE(WARN_ON(!rcu_is_watching()))} 은 결코 경고를 내지
+않을 겁니다.
+
+마지막으로, \co{rcu_sleep_check()} 는 RCU, RCU-bh, 또는 RCU-sched read-side
+크리티컬 섹션 내에서 호출되었을 때 경고를 내놓습니다.
+\iffalse
 
 \co{RCU_NONIDLE()} may be used to force RCU to watch when executing
 the statement that is passed in as the sole argument.
@@ -1397,6 +1489,7 @@ would never emit a warning.
 
 Finally,  \co{rcu_sleep_check()} emits a warning if invoked within
 an RCU, RCU-bh, or RCU-sched read-side critical section.
+\fi
 
 \subsubsection{Where Can RCU's APIs Be Used?}
 \label{sec:defer:Where Can RCU's APIs Be Used?}
