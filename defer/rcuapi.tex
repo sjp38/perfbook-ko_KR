@@ -788,12 +788,30 @@ Pointer subscribe (traveral) &
 \label{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
 \end{table*}
 
+이 기능들은 포인터에 직접 동작하고, RCU 로 보호되는 배열이나 트리들과 같은 RCU
+로 보호되는 링크된 데이터 구조체들을 만드는데 유용합니다.
+이 링크드 리스트의 특수 케이스는
+Section~\ref{sec:defer:RCU has List-Processing APIs} 에서 설명된 분리된 API
+집합으로 다루어집니다.
+\iffalse
+
 These primitives operate directly on pointers, and are useful for
 creating RCU-protected linked data structures, such as RCU-protected
 arrays and trees.
 The special case of linked lists is handled by a separate set of
 APIs described in
 Section~\ref{sec:defer:RCU has List-Processing APIs}.
+\fi
+
+이 첫번째 카테고리는 새로운 데이터 아이템으로의 포인터를 외부에 노출합니다.
+\co{rcu_assign_pointer()} 기능은 모든 앞의 초기화가 완화된 순서규칙 기계에서의
+이 포인터 할당 앞으로 순서지어져 있을 것을 보장합니다.
+\co{rcu_swap_protected()} 기능은 \co{rcu_assign_pointer()} 그러듯이 포인터를
+업데이트 합니다만, \co{rcu_dereference_protected()} 가 하듯이 기존 값을
+리턴하는데, lockdep 표현도 포함합니다.
+이 교환 작업은 업데이트 쓰레드가 새 포인터를 외부에 노출하고 기존 포인터에 의해
+레퍼런스 되던 구조체를 해제시켜야 할 때 유용합니다.
+\iffalse
 
 The first category publishes pointers to new data items. 
 The \co{rcu_assign_pointer()} primitive ensures that any
@@ -805,15 +823,35 @@ just like \co{rcu_dereference_protected()} (see below) would, including
 the lockdep expression.
 This swapping is convenient when the updater must both publish a new
 pointer and free the structure referenced by the old pointer.
+\fi
 
 \QuickQuiz{}
+	일반적으로 \co{rcu_dereference()} 를 사용하는 모든 포인터는
+	\emph{반드시}
+	Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
+	에 있는 포인터 외부 노출 함수들 가운데 하나, 예를 들면
+	\co{rcu_assign_pointer()} 같은 것을 통해서만 업데이트 되어야 합니다.
+
+	이 규칙에 대한 예외로는 뭐가 있나요?
+	\iffalse
+
 	Normally, any pointer subject to \co{rcu_dereference()} \emph{must}
 	always be updated using one of the pointer-publish functions in
 	Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs},
 	for example, \co{rcu_assign_pointer()}.
 
 	What is an exception to this rule?
+	\fi
 \QuickQuizAnswer{
+	한가지 그런 예외는 여러 원소가 링크된 데이터 구조체가 다른 CPU 들은
+	접근할 수 없는 사이에 초기화 되고, 이어서 하나의
+	\co{rcu_assign_pointer()} 가 전역 이 데이터 구조체로의 전역 포인터를
+	심는데 사용될 때입니다.
+	이 초기화 시점 퐁니터 할당은 \co{rcu_assign_pointer()} 를 사용할 필요가
+	없습니다, 이 구조체가 전역적으로 보여질 수 있게 된 후의 모든 그런
+	할당은 \emph{반드시} \co{rcu_assign_pointer()} 를 사용해야 하지만요.
+	\iffalse
+
 	One such exception is when a multi-element linked
 	data structure is initialized as a unit while inaccessible to other
 	CPUs, and then a single \co{rcu_assign_pointer()} is used
@@ -822,12 +860,20 @@ pointer and free the structure referenced by the old pointer.
 	\co{rcu_assign_pointer()}, though any such assignments that
 	happen after the structure is globally visible \emph{must} use
 	\co{rcu_assign_pointer()}.
+	\fi
+	하지만, 이 초기화 코드가 굉장히 핫한 코드 경로에 있다면, 어쨌든
+	\co{rcu_assign_pointer()} 를 사용하는게 현명할 겁니다, 이론적으로는
+	불필요하지만 말입니다.
+	``사소한'' 변경이 초기화는 사적으로 행해질 것이라는 여러분의 가정을
+	깨버리기는 너무도 쉽습니다.
+	\iffalse
 
 	However, unless this initialization code is on an impressively hot
 	code-path, it is probably wise to use \co{rcu_assign_pointer()}
 	anyway, even though it is in theory unnecessary.
 	It is all too easy for a ``minor'' change to invalidate your cherished
 	assumptions about the initialization happening privately.
+	\fi
 } \QuickQuizEnd
 
 \QuickQuiz{}
