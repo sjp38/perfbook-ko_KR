@@ -933,12 +933,30 @@ rcu_read_unlock();
 	\fi
 } \QuickQuizEnd
 
+\co{rcu_pointer_handoff()} 기능은 단순히 그 인자를 리턴합니다만, RCU read-side
+크리티컬 섹션에서 누출되는 포인터들을 체크하는 도구를 만들 때 유용합니다.
+\co{rcu_pointer_handoff()} 의 사용은 그런 도구 작성에 문제시되는 구조체의
+보호가 RCU 에서 다른 메커니즘, 예를 들면 락킹이나 레퍼런스 카운팅으로
+넘겨졌다는 것을 알리는데 사용됩니다.
+\iffalse
+
 The \co{rcu_pointer_handoff()} primitive simply returns its sole argument,
 but is useful to tooling checking for pointers being leaked from
 RCU read-side critical sections.
 Use of \co{rcu_pointer_handoff()} indicates to such tooling that protection
 of the structure in question has been handed off from RCU to some other
 mechanism, such as locking or reference counting.
+\fi
+
+\co{RCU_INIT_POINTER()} 매크로는 아직 읽기 쓰레드에게 노출되지 않았고 RCU 로
+보호되는 포인터들을 초기화하는데, 또는 RCU 로 보호되는 포인터들을 \co{NULL} 로
+만드는데 사용될 수 있습니다.
+이 제한적 경우들에서, \co{rcu_assign_pointer()} 에서 제공하는 메모리 배리어
+인스트럭션은 필요치 않습니다.
+유사하게, \co{RCU_POINTER_INITIALIZER()} 는 구조체 내의 RCU 로 보호되는
+포인터들의 쉬운 초기화를 가능하게 하기 위해 \GCC-스타일 구조체 초기화를
+제공합니다.
+\iffalse
 
 The \co{RCU_INIT_POINTER()} macro can be used to initialized RCU-protected
 pointers that have not yet been exposed to readers, or alternatively,
@@ -948,6 +966,21 @@ In these restricted cases, the memory-barrier instructions provided by
 Similarly, \co{RCU_POINTER_INITIALIZER()} provides a \GCC-style
 structure initializer to allow easy initialization of RCU-protected
 pointers in structures.
+\fi
+
+두번째 카테고리는 데이터 아이템으로의 포인터를 구독하거나, RCU 로 보호되는
+포인터들의 안전하게 횡단합니다.
+다시 말하지만, 단순히 C-언어 액세스를 사용해 이런 포인터들을 로드하는 건 이
+포인터들로 가리켜지는 데이터의 초기화 전 쓰레기 값을 볼 수 있게 할 수 있습니다.
+하지만, 만약 이 포인터가 단순히 테스트 될 뿐 디레퍼런스 되지 않는다면, 이
+보호는 필요치 않습니다.
+이 경우, \co{rcu_access_pointer()} 가 사용될 수 있습니다.
+하지만, 일반적으로는 보호가 필요하며, 따라서 \co{rcu_dereference()} 기능은 해당
+포인터를 디레퍼런스 하는 뒤따르는 코드가 연관된 \co{rcu_assign_pointer()} 앞의
+초기화 코드의 효과를 볼 수 있게, 심지어 Alpha CPU 에서도 보장합니다.
+Alpha CPU 가 아닌 경우, \co{rcu_dereference()} 는 어떤 포인터 디레퍼런스가 RCU
+보호를 필요로 하는지 문서화 할 수 있게 해줍니다.
+\iffalse
 
 The second category subscribes to pointers to data items, or,
 alternatively, safely traverses RCU-protected pointers.
@@ -962,6 +995,26 @@ dereferencing the pointer will see the effects of initialization code
 prior to the corresponding \co{rcu_assign_pointer()}, even on Alpha CPUs.
 On non-Alpha CPUs, \co{rcu_dereference()} documents which pointer
 dereferences require RCU protection.
+\fi
+
+보호가 필요치 않은 또다른 상황은 업데이트 쪽 코드가 업데이트 쪽 락을 잡은 채
+RCU 로 보호되는 포인터에 접근할 때 입니다.
+이런 상황을 위해 \co{rcu_dereference_protected()} API 멤버가 제공됩니다.
+이 기능의 첫번째 패러미터는 RCU 로 보호되는 포인터이고, 두번째 패러미터는 이
+액세스가 안전하기 위해선 어떤 락이 잡혀 있어야 하는지 설명하는 lockdep
+표현입니다.
+읽기 쓰레드와 업데이트 쓰레드 양쪽에서 호출되는 코드는
+\co{rcu_dereference_check()} 를 사용할 수 있는데, 이 기능 역시 lockdep 표현을
+받습니다만, 해당 락을 잡지 않은 채 read-side 코드에서도 호출될 수 있습니다.
+어떤 경우, 이 lockdep 표현은 매우 복잡할 수 있는데, 예를 들어, fine-grained
+락킹을 사용하는 경우, 매우 많은 수의 락들이 잡힐 수도 있고, 어떤게 적용되는지
+알기 매우 어려울 수도 있습니다.
+이런 (드물길 바라는) 경우에서, \co{rcu_dereference_raw()} 기능은 보호를
+제공하지만 읽기 쓰레드에서 또는 특정 락을 잡은 채 호출되었는지에 대한 체크를
+하지 않습니다.
+\co{rcu_dereference_raw_notrace()} API 멤버는 비슷하게 동작합니다만, trace 될
+수 없고, 따라서 trace 하는 코드에서 안전하게 사용될 수 있습니다.
+\iffalse
 
 Another situation where protection is not required is when update side code
 accesses the RCU protected pointer while holding the update-side lock.
@@ -981,11 +1034,19 @@ protection but does not check for being invoked within a reader or with
 any particular lock being held.
 The \co{rcu_dereference_raw_notrace()} API member acts similarly, but
 cannot be traced, and may therefore be safely used by tracing code.
+\fi
+
+비록 수많은 링크된 구조체가 포인터를 조작함으로써 접근될 수 있지만, 더 높은
+단계의 구조체들이 상당히 도움될 수 있습니다.
+따라서 다음 섹션은 리눅스 커널에서 사용되는 다양한 종류의 RCU 로 보호되는
+링크드 리스트를 알아봅니다.
+\iffalse
 
 Although pretty much any linked structure can be accessed by manipulating
 pointers, higher-level structures can be quite helpful.
 The next section therefore looks at various sorts of RCU-protected
 linked lists used by the Linux kernel.
+\fi
 
 \subsubsection{RCU has List-Processing APIs}
 \label{sec:defer:RCU has List-Processing APIs}
