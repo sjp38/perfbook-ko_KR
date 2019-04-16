@@ -1067,6 +1067,22 @@ linked lists used by the Linux kernel.
 \label{fig:defer:Linux Linked List Abbreviated}
 \end{figure}
 
+\co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 는 이론적으로 모든 있음직한
+RCU 로 보호되는 데이터 구조체를 만들 수 있지만, 실용적으로는 더 높은 수준의
+구조물을 사용하는게 나은 경우가 많습니다.
+그런 이유로, \co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 기능은
+리눅스의 리스트 조정 API 의 특수한 RCU 변종에 내재되었습니다.
+리눅스는 두 종류의 양방향 링크드 리스트를 갖는데, 서큘러 \co{struct list_head}
+와 리니어 \co{struct hlist_head}/\co{struct hlist_node} 쌍입니다.
+전자는
+Figure~\ref{fig:defer:Linux Circular Linked List (list)} 에 보인 것과 같이
+있는데, (왼쪽의) 초록색 상자는 리스트 헤더를 의미하고 (오른쪽의 세개의) 상자는
+이 리스트의 원소들을 의미합니다.
+이 표기법은 어색하고, 따라서
+Figure~\ref{fig:defer:Linux Linked List Abbreviated} 에 보인 것처럼 헤더가 아닌
+(파란색) 원소들만을 보이도록 축약될 겁니다.
+\iffalse
+
 Although \co{rcu_assign_pointer()} and
 \co{rcu_dereference()} can in theory be used to construct any
 conceivable RCU-protected data structure, in practice it is often better
@@ -1085,6 +1101,7 @@ where the green (leftmost) boxes represent the list header and the blue
 This notation is cumbersome, and will therefore be abbreviated as shown in
 Figure~\ref{fig:defer:Linux Linked List Abbreviated},
 which shows only the non-header (blue) elements.
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1092,6 +1109,16 @@ which shows only the non-header (blue) elements.
 \caption{Linux Linear Linked List (\tco{hlist})}
 \label{fig:defer:Linux Linear Linked List (hlist)}
 \end{figure}
+
+리눅스의 다른 양방향 링크드 리스트, hlist 는 선형 리스트로, 헤더에 순환형
+리스트를 위한 두개의 포인터가 아닌 하나의 리스트만 있어도 되는데,
+Figure~\ref{fig:defer:Linux Linear Linked List (hlist)} 가 이를 보입니다.
+따라서, hlist 의 사용은 커다란 해시 테이블의 해시 bucket 배열의 메모리 사용량을
+절반으로 줄일 수 있습니다.
+앞에서와 같이, 이 표기법은 다루기 어려우므로, hlist 는 list 와 같이 축약되어
+표시될 텐데,
+Figure~\ref{fig:defer:Linux Linked List Abbreviated} 와 같습니다.
+\iffalse
 
 Linux's other doubly linked list, the hlist,
 is a linear list, which means that
@@ -1103,6 +1130,7 @@ arrays of large hash tables.
 As before, this notation is cumbersome, so hlists will be abbreviated
 in the same way lists are, as shown in
 Figure~\ref{fig:defer:Linux Linked List Abbreviated}.
+\fi
 
 % @@@ Refer to \ref{fig:defer:Insertion With Concurrent Readers} and
 %	\ref{fig:defer:Deletion With Concurrent Readers}, mostly the latter.
@@ -1126,10 +1154,28 @@ kfree(p);				\lnlbl[kfree]
 \label{fig:defer:RCU Replacement in Linked List}
 \end{figure}
 
+리스트의 초기 상태는 포인터 \co{p} 를 포함해서, 삭제 예제의 것과 동일한데,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 첫번째 줄에 보여져
+있습니다.
+\iffalse
+
 The initial state of the list, including the pointer \co{p},
 is the same as for the deletion example, as shown on the
 first row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+\fi
+
+앞에서와 같이, 각 원소의 세개의 숫자는 필드 \co{a}, \co{b}, 그리고 \co{c} 의
+값을 각각 나타내고 있습니다.
+빨간색으로 칠해진 원소는 읽기 쓰레드에 의해 레퍼런스 될수도 있고, 읽기 쓰레드는
+업데이트 쓰레드와 직접적으로 동기화 하지 않으므로, 읽기 쓰레드는 이 전체 교체
+프로세스와 동시에 수행될 수도 있습니다.
+여기서도 역방향 포인터와 리스트의 tail 에서 head 로의 링크를 명료성을 위해
+생략합니다.
+
+뒤따르는 글은 어떻게 \co{5,6,7} 원소를 \co{5,2,3} 으로 모든 읽기 쓰레드가 이
+두개의 값 중 하나만을 보게 하면서 교체하는지 설명합니다.
+\iffalse
 
 @@@ As before,
 the triples in each element represent the values of fields \co{a},
@@ -1144,25 +1190,61 @@ of the list to the head for clarity.
 The following text describes how to replace the \co{5,6,7} element
 with \co{5,2,3} in such a way that any given reader sees one of these
 two values.
+\fi
 
 \begin{lineref}[ln:defer:Canonical RCU Replacement Example (2nd)]
+Line~\lnref{kamlloc} 은 교체할 원소를 \co{kmalloc()} 하는데, 이에 따라
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 두번째 줄의 상태를
+초래합니다.
+이 시점에서는 어떤 읽기 쓰레드도 이 새로 할당된 원소를 레퍼런스 할 수 없고 (이
+사실이 초록색으로 보여져 있습니다), 이 새로 할당된 원소는 초기화 되어있지
+않습니다 (물음표로 보여져 있습니다).
+\iffalse
+
 Line~\lnref{kmalloc} \co{kmalloc()}s a replacement element, as follows,
 resulting in the state as shown in the second row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 At this point, no reader can hold a reference to the newly allocated
 element (as indicated by its green shading), and it is uninitialized
 (as indicated by the question marks).
+\fi
+
+Line~\lnref{copy} 는 과거의 원소를 새로운 원소로 복사해서,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 세번째 줄의 상태를
+초래합니다.
+새로 할당된 원소는 여전히 읽기 쓰레드에 의해 레퍼런스 될 수 없지만, 이제 초기화
+되어 있습니다.
+\iffalse
 
 Line~\lnref{copy} copies the old element to the new one, resulting in the
 state as shown in the third row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 The newly allocated element still cannot be referenced by readers, but
 it is now initialized.
+\fi
+
+Line~\lnref{update1} 은 \co{q->b} 를 값 ``2'' 로 업데이트 하고,
+line~\lnref{update2} 는 \co{q->c} 를 값 ``3'' 으로 업데이트 해서,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 네번째 줄의 상태를
+만듭니다.
+\iffalse
 
 Line~\lnref{update1} updates \co{q->b} to the value ``2'', and
 line~\lnref{update2} updates \co{q->c} to the value ``3'',
 as shown on the fourth row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+\fi
+
+이제, line~\lnref{replace} 가 이 교체를 수행해서, 새 원소가 마침내 읽기
+쓰레드에게 보여지게 되며, 따라서
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 다섯째 줄에 보인
+것처럼 빨간색으로 칠해집니다.
+이 시점에서, 앞에서 본 것처럼, 우린 리스트의 두 버전을 갖습니다.
+기존부터 존재한 읽기 쓰레드는 \co{5,6,7} 원소를 볼 수도 있지만 (따라서
+노란색으로 칠해져 있습니다), 새로운 읽기 쓰레드는 그대신 \co{5,2,3} 원소를 볼
+겁니다.
+하지만 어떤 읽기 쓰레드이든 제대로 정의된 리스트를 볼 수 있습니다.
+\iffalse
 
 Now, line~\lnref{replace} does the replacement, so that the new element is
 finally visible to readers, and hence is shaded red, as shown on
@@ -1173,6 +1255,21 @@ Pre-existing readers might see the \co{5,6,7} element (which is
 therefore now shaded yellow), but
 new readers will instead see the \co{5,2,3} element.
 But any given reader is guaranteed to see some well-defined list.
+\fi
+
+Line~\lnref{sync_rcu} 에서의 \co{synchronize_rcu()} 가 리턴한 후에는, 하나의
+grace period 가 지났고, 따라서 \co{list_replace_rcu()} 전에 시작된 모든 읽기
+쓰레드는 완료되었습니다.
+특히, \co{5,6,7} 원소로의 레퍼런스를 쥐고 있었을 수 있는 모든 읽기 쓰레드는
+그것들의 RCU read-side 크리티컬 섹션을 빠져나왔을 것이 보장되며, 따라서
+레퍼런스를 계속 가지고 있는게 금지되었습니다.
+따라서, 과거의 원소로의 레퍼런스를 가지고 있는 읽기 쓰레드는 더이상 존재하지
+않는데,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 여섯번째 줄에
+초록색으로 표시되었습니다.
+읽기 쓰레드들이 생각하기로, 우리는 리스트의 하나의 버전으로 돌아왔습니다만,
+새로운 원소가 기존 것의 위치에 있게 되었습니다.
+\iffalse
 
 After the \co{synchronize_rcu()} on line~\lnref{sync_rcu} returns,
 a grace period will have elapsed, and so all reads that started before the
@@ -1186,16 +1283,30 @@ to the old element, as indicated its green shading in the sixth row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 As far as the readers are concerned, we are back to having a single version
 of the list, but with the new element in place of the old.
+\fi
+
+Line~\lnref{kfree} 에서의 \co{kfree()} 가 완료되면, 이 리스트는
+Figure~\ref{fig:defer:RCU Replacement in Linked List}
+의 마지막 줄에 보인 것처럼 됩니다.
+\iffalse
 
 After the \co{kfree()} on line~\lnref{kfree} completes, the list will
 appear as shown on the final row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
+\fi
 \end{lineref}
+
+RCU 가 이 교체 경우에 의해 이름지어졌긴 하지만, 리눅스 커널 내에서의 많은 RCU
+사용 경우는
+Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
+에 보인 간단한 삭제의 경우에 의존합니다.
+\iffalse
 
 Despite the fact that RCU was named after the replacement case,
 the vast majority of RCU usage within the Linux kernel relies on
 the simple deletion case shown in
 Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}.
+\fi
 
 \begin{sidewaystable*}[htbp]
 \rowcolors{1}{}{lightgray}
