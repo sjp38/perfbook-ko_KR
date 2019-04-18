@@ -9,6 +9,20 @@
 	  {\emph{Pythagoras}}
 
 Section~\ref{sec:defer:Which to Choose? (Overview)}
+은 높은 수준에서의 개론을 제공하고
+Section~\ref{sec:defer:Which to Choose? (Details)}
+에서는 이 챕터에서 소개된 미뤄서 처리하기 테크닉들 사이의 차이점을 알아봅니다.
+이 해설은 충분히 커서 읽기 쓰레드가 하나의 횡단에서 다른 곳으로 레퍼런스를
+가져가지 않고, 원소들이 언제든지 어디에든지 추가되고 삭제될 수 있는 링크된
+데이터 구조를 가정합니다.
+Section~\ref{sec:defer:Which to Choose? (Production Use)}
+은 이어서 해저드 포인터, 시퀀스 락킹, 그리고 RCU 의 제품 단계에서의 사용을
+짚어봅니다.
+이 해설은 여러분이 이 기술들 중에서 어떤 걸 골라야 할지 선택하는데 도움을 줄 수
+있을 겁니다.
+\iffalse
+
+Section~\ref{sec:defer:Which to Choose? (Overview)}
 provides a high-level overview and then
 Section~\ref{sec:defer:Which to Choose? (Details)}
 provides a more detailed view
@@ -23,6 +37,7 @@ then points out a few publicly visible production uses of
 hazard pointers, sequence locking, and RCU.
 This discussion should help you to make an informed choice between
 these techniques.
+\fi
 
 \subsection{Which to Choose? (Overview)}
 \label{sec:defer:Which to Choose? (Overview)}
@@ -72,6 +87,16 @@ these techniques.
 \end{table*}
 
 Table~\ref{tab:defer:Which Deferred Technique to Choose? (Overview)}
+이 deferred-reclamation 기술을 다른 것들과 차별화 시키는 높은 단계에서의
+속성들을 일부 보입니다.
+
+``Readers'' 행은
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR}
+에 보인 결과들을 요약하는데, 레퍼런스 카운팅을 제외한 모든 것이 합리적인 속도와
+확장 가능한 읽기 쓰레드를 가짐을 보입니다.
+\iffalse
+
+Table~\ref{tab:defer:Which Deferred Technique to Choose? (Overview)}
 shows a few high-level properties that distinguish the deferred-reclamation
 techniques from one another.
 
@@ -79,6 +104,20 @@ The ``Readers'' row summarizes the results presented in
 Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR},
 which shows that all but reference counting are enjoy reasonably
 fast and scalable readers.
+\fi
+
+``Number of Protected Objects'' 행은 각 기술의 읽기 쓰레드의 보호를 기록하는
+외부 저장소 필요를 평가합니다.
+RCU 는 quiescent state 에 기반하며, 따라서 읽기 쓰레드를 표현하는 저장소를
+오브젝트 내에도 외부에도 필요로 하지 않습니다.
+레퍼런스 카운팅은 각 오브젝트 구조체 내에 하나의 정수를 사용할 수 있으며,
+추가적인 저장소는 필요로 하지 않습니다.
+해저드 포인터는 외부에서 오브젝트로의 포인터들이 준비될 것을 필요로 하며,
+주어진 CPU 나 쓰레드가 동시에 레퍼런스 할 수 있는 최대 갯수의 오브젝트를 다룰
+수 있기에 충분한 포인터가 있을 것을 필요로 합니다.
+물론, 시퀀스 락은 포인터 횡단 보호를 제공하지 않는데, 이게 일반적으로 정적
+데이터에 사용되는 이유입니다.
+\iffalse
 
 The ``Number of Protected Objects'' row evaluates each technique's need
 for external storage with which to record reader protection.
@@ -91,15 +130,37 @@ and that there be sufficient pointers to handle the maximum number of
 objects that a given CPU or thread might need to reference simultaneously.
 Of course, sequence locks provides no pointer-traversal protection,
 which is why it is normally used on static data.
+\fi
 
 \QuickQuiz{}
+	왜 사용자들이 필요할 때마다 해저드 포인터들을 동적으로 할당하면
+	안되나요?
+	\iffalse
+
 	Why can't users dynamically allocate the hazard pointers as they
 	are needed?
+	\fi
 \QuickQuizAnswer{
+	그럴 수 있습니다만 추가적인 읽기 쓰레드의 횡단 오버헤드를 필요로 하며,
+	어떤 환경에서는 메모리 할당 실패에 대한 처리도 해야합니다.
+	\iffalse
+
 	They can, but at the expense of additional reader-traversal
 	overhead and, in some environments, the need to handle
 	memory-allocation failure.
+	\fi
 } \QuickQuizEnd
+
+``Duration of Protection'' 은 얼마나 긴 시간동안 사용자가 특정 오브젝트를
+보호할 수 있는지에 대한 제약을 (존재한다면) 보이고 있습니다.
+레퍼런스 카운팅과 해저드 포인터는 둘 다 오브젝트를 별다른 사이드 이펙트 없이
+확장된 시간 동안 보호할 수 있습니다만, 하나의 오브젝트를 위한 것이라도 RCU
+레퍼런스를 유지하는건 모든 다른 RCU 가 메모리 해제를 행하는 걸 막습니다.
+따라서 RCU 읽기 쓰레드는 시스템이 메모리 부족 현상을 겪는 걸 막기 위해
+상대적으로 짧게 수행되어야 합니다.
+다시 말하지만, 시퀀스 락은 포인터 횡단 보호를 제공하지 않으며, 이게 일반적으로
+정적 데이터에 사용되는 이유입니다.
+\iffalse
 
 The ``Duration of Protection'' describes constraints (if any) on how
 long a period of time a user may protect a given object.
@@ -111,6 +172,18 @@ RCU readers must therefore be relatively short in order to avoid running
 the system out of memory.
 Again, sequence locks provides no pointer-traversal protection,
 which is why it is normally used on static data.
+\fi
+
+``Need for Traversal Retries'' 행은 특정 오브젝트로의 새로운 레퍼런스가 RCU
+에서와 같이 조건 없이 얻어질 수 있는지, 또는 레퍼런스 카운팅, 해저드 포인터,
+그리고 시퀀스 락의 경우와 같이 레퍼런스 획득이 실패할 수 있어서 재시도
+오퍼레이션을 초래하는지를 이야기 합니다.
+레퍼런스 카운팅과 해저드 포인터의 경우, 재시도는 특정 오브젝트로의 레퍼런스의
+획득 시도가 해당 프로세스가 삭제되는 과정 중에 있었다면 필요시 되는데, 이
+주제는 다음 섹션에서 더 자세히 다뤄집니다.
+시퀀스 락킹은 물론 업데이트와 동시에 수행되었을 때 그 크리티컬 섹션을 재시도
+해야 합니다.
+\iffalse
 
 The ``Need for Traversal Retries'' row tells whether a new reference to
 a given object may be acquired unconditionally, as it can with RCU, or
@@ -123,18 +196,48 @@ that object is in the processof being deleted, a topic covered in more
 detail in the next section.
 Sequence locking must of course retry its critical section should it
 run concurrently with any update.
+\fi
 
 \QuickQuiz{}
+	하지만 리눅스 커널의 \co{kref} 레퍼런스 카운터는 무조건적인 레퍼런스
+	획득을 보장하지 않던가요?
+	\iffalse
+
 	But don't Linux-kernel \co{kref} reference counters allow
 	guaranteed unconditional reference acquisition?
+	\fi
 \QuickQuizAnswer{
+	맞습니다, 하지만 그 보장은 레퍼런스가 이미 잡혀 있을 때에만
+	무조건적으로 적용됩니다.
+	이를 명심하고,
+	Section~\ref{sec:defer:Which to Choose?} 의 시작 부분의 문단을 다시
+	읽어보시기 바랍니다, 특히 ``읽기 쓰레드들이 하나의 횡단에서 다른
+	횡단으로 레퍼런스를 쥐지 못할 정도로 충분히 크다면'' 부분을요.
+	\iffalse
+
 	Yes they do, but the guarantee only applies unconditionally
 	in cases where a reference is already held.
 	With this in mind, please review the paragraph at the beginning of
 	Section~\ref{sec:defer:Which to Choose?}, especially the part
 	saying ``large enough that readers do not hold references from
 	one traversal to another''.
+	\fi
 } \QuickQuizEnd
+
+물론, 다른 열은 다른 상황에서 다른 중요도를 가질 겁니다.
+예를 들어, 여러분의 현재 코드가 해저드 포인터를 사용해서 읽기 쪽 확장성 문제를
+가지고 있다면, 해저드 포인터가 레퍼런스 획득 재시도를 필요로 한다는 건 문제가
+되지 않는데 여러분의 현재 코드가 이미 이를 다루고 있기 때문입니다.
+비슷하게, 만약 응답시간 고려사항이 이미 읽기 쓰레드의 횡단 기간을 제한하고
+있다면, 커널과 낮은 단계 어플리케이션들이 이 경우죠, RCU 가 기간 제한을
+요구한다는 건 문제가 되지 않는데, 여러분의 코드가 이미 그 필요성을 만족하고
+있기 때문입니다.
+같은 맥락에서, 만약 읽기 쓰레드가 자신이 횡단 중인 오브젝트에 쓰기를 해야만
+하는 상황이라면, 레퍼런스 카운터의 읽기 쪽 오버헤드는 그렇게 중요하지 않을 수
+있습니다.
+마지막으로, 만약 보호되어야 하는 데이터가 정적으로 할당된 변수라면, 시퀀스
+락킹의 포인터 보호 기능 부족은 큰 문제가 되지 않습니다.
+\iffalse
 
 Of course, different rows will have different levels of importance in
 different situations.
@@ -151,10 +254,16 @@ are traversing, the read-side overhead of reference counters might
 not be so important.
 Finally, if the data to be protected is in statically allocated variables,
 then sequence locking's inability to protect pointers is irrelevant.
+\fi
+
+그러나, 이 표는 이 기술들 중 하나를 고를 때 큰 도움이 될 겁니다.
+하지만 더 자세한 내용은 다음 섹션으로 이어집니다.
+\iffalse
 
 Nevertheless, this table should be of great help when choosing between
 these techniques.
 But those wishing more detail should continue on to the next section.
+\fi
 
 \subsection{Which to Choose? (Details)}
 \label{sec:defer:Which to Choose? (Details)}
