@@ -222,7 +222,7 @@ store, for example, the compiler must not tear the load.\footnote{
 	smaller loads, as described under ``load tearing'' in
 	Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}.}
 Unfortunately, compiler support for \co{rcu_dereference()} is at best
-a work in progress~\cite{PaulEMcKennneyConsumeP0190R4,PaulEMcKenney2017markconsumeP0462R1}. @@@ Add JF Bastien's consume paper. @@@
+a work in progress~\cite{PaulEMcKennneyConsumeP0190R4,PaulEMcKenney2017markconsumeP0462R1,JFBastien2018P0750R1consume}.
 In the meantime, the Linux kernel relies on volatile loads, the details of
 the various CPU architectures, coding
 restrictions~\cite{PaulEMcKenney2014rcu-dereference},
@@ -393,12 +393,9 @@ state.\footnote{
 	does permit general sleeping in SRCU read-side critical sections.}
 If you abide by these conventions, you can use RCU to wait for \emph{any}
 pre-existing RCU read-side critical section to complete, and
-\co{synchronize_rcu()} does the actual waiting.
+\co{synchronize_rcu()} uses indirect means to do the actual
+waiting~\cite{MathieuDesnoyers2012URCU,McKenney:2013:SDS:2483852.2483867}.
 \fi
-
-% @@@ citations? @@@ RCU accomplishes this feat by indirectly determining
-% when these other things have finished~\cite{PaulEMcKenney2007whatisRCU,
-% PaulEMcKenney2007PreemptibleRCU}.
 
 \begin{figure}[tb]
 \centering
@@ -578,15 +575,29 @@ The general process is illustrated by the following pseudocode:
 \fi
 \end{enumerate}
 
-RCU 읽기 쓰레드는 업데이트가 진행중인 상황에서 진행될 수 있다는 점을 놓고 보면,
-다른 읽기 쓰레드는 데이터 구조의 상태에 대해 다른 의견을 가질 수 있는데, 이는
-다음 섹션에서 다루어지는 주제입니다.
-\iffalse
+\begin{figure}[tb]
+\centering
+\resizebox{3in}{!}{\includegraphics{defer/RCUGPordering}}
+\caption{RCU Grace-Period Ordering Guarantees}
+\label{fig:defer:RCU Grace-Period Ordering Guarantees}
+\end{figure}
 
-Given that RCU readers can make forward progress while this update
-is in progress, different readers might disagree about the state
+% TODO: Apply
+This more abstract procedure requires a more abstract diagram than
+Figures~\ref{fig:defer:RCU Reader and Later Grace Period}--\ref{fig:defer:RCU Reader Within Grace Period},
+which are specific to a particular litmus test.
+Figure~\ref{fig:defer:RCU Grace-Period Ordering Guarantees}
+fills this need, showing how the RCU read-side critical sections
+in the upper left and lower right are ordered with a grace period
+that starts with a \co{call_rcu()} at the upper right and ends
+with the invocation of the corresponding callback at the lower left.
+This diagram illustrates RCU's wait-for-readers functionality:
+Given a grace period, each reader either ends before the end of that
+grace period or starts after the beginning of that grace period.
+
+Given that RCU readers can make forward progress while updates
+are in progress, different readers might disagree about the state
 of the data structure, a topic taken up by the next section.
-\fi
 
 \subsubsection{Maintain Multiple Versions of Recently Updated Objects}
 \label{sec:defer:Maintain Multiple Versions of Recently Updated Objects}

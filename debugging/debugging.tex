@@ -3897,6 +3897,9 @@ to creep in, including:
 	number of iterations, or it can often be eliminated entirely
 	by running a few warm-up iterations before starting the
 	measurement period.
+	Most systems have ways of detecting whether a given process
+	incurred a page fault, and you should make use of this to
+	reject runs whose performance has been thus impeded.
 \item	Some types of interference, for example, random memory errors,
 	are so rare that they can be dealt with by running a number
 	of sets of iterations of the test.
@@ -3922,6 +3925,18 @@ to creep in, including:
 	their effect can be minimized by reducing the number of
 	iterations.
 \fi
+% TODO: Apply
+\item	Thermal throttling can understate scalability because increasing
+	CPU activity increases heat generation, and on systems without
+	adequate cooling (most of them!), this can result in the CPU
+	frequency decreasing as the number of CPUs increases.\footnote{
+		Systems with adequate cooling tend to look like gaming systems.}
+	Of course, if you are testing an application to evaluate its
+	expected behavior when run in production, such thermal throttling
+	is simply a fact of life.
+	Otherwise, if you are interested in theoretical scalability,
+	use a system with adequate cooling or reduce the CPU clock rate
+	to a level that the cooling system can handle.
 \end{enumerate}
 
 간섭 유발 사건들 중 첫번째와 네번째 것은 서로 상충되는 조언을 하고 있는데, 이는
@@ -3962,6 +3977,19 @@ The remainder of this section looks at ways of resolving this conflict.
 	using huge pages (or within the kernel or on bare metal) in
 	order to completely control the memory layout.
 	\fi
+
+	% TODO: Apply
+	But note that there are many different possible memory-layout
+	bottlenecks.
+	Benchmarks sensitive to memory bandwidth (such as those involving
+	matrix arithmetic) should spread the running threads across the
+	available cores and sockets to maximize memory parallelism.
+	They should also spread the data across NUMA nodes, memory
+	controllers, and DRAM chips to the extent possible.
+	In contrast, benchmarks sensitive to memory latency (including
+	most poorly scaling applications) should instead maximize
+	locality, filling each core and socket in turn before adding
+	another one.
 } \QuickQuizEnd
 
 다음의 섹션들은 측정 에러들을 처리하는 방법들을 이야기 하는데,

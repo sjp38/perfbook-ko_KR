@@ -8,6 +8,157 @@
 	  may be; custom will soon render it easy and agreeable.}
 	  {\emph{Pythagoras}}
 
+Section~\ref{sec:defer:Which to Choose? (Overview)}
+provides a high-level overview and then
+Section~\ref{sec:defer:Which to Choose? (Details)}
+provides a more detailed view
+of the differences between the deferred-processing techniques presented
+in this chapter.
+This discussion assumes a linked data structure that is large enough
+that readers do not hold references from one traversal to another,
+and where elements might be added to and removed from the structure
+at any location and at any time.
+Section~\ref{sec:defer:Which to Choose? (Production Use)}
+then points out a few publicly visible production uses of
+hazard pointers, sequence locking, and RCU.
+This discussion should help you to make an informed choice between
+these techniques.
+
+\subsection{Which to Choose? (Overview)}
+\label{sec:defer:Which to Choose? (Overview)}
+
+\begin{table*}
+\rowcolors{1}{}{lightgray}
+\renewcommand*{\arraystretch}{1.25}
+\footnotesize
+\centering\OneColumnHSpace{-.3in}
+\begin{tabularx}{5.3in}{>{\raggedright\arraybackslash}p{1.1in}
+    >{\raggedright\arraybackslash}p{1.0in}
+    >{\raggedright\arraybackslash}X
+    >{\raggedright\arraybackslash}X
+    >{\raggedright\arraybackslash}p{.9in}}
+	\toprule
+	Property
+		& Reference Counting
+			& Hazard Pointers
+				& Sequence Locks
+					& RCU \\
+%		  RC	  HP	  SL	  RCU \\
+	\midrule
+	Readers
+		& Slow and unscalable
+			& Fast and scalable
+				& Fast and scalable
+					& Fast and scalable \\
+	Number of Protected Objects
+		& Scalable
+			& Unscalable
+				& No protection
+					& Scalable \\
+	Duration of Protection
+		& Can be long
+			& Can be long
+				& No protection
+					& User must bound duration \\
+	Need for Traversal Retries
+		& If race with object deletion
+			& If race with object deletion
+				& If race with any update
+					& Never \\
+	\bottomrule
+\end{tabularx}
+\caption{Which Deferred Technique to Choose? (Overview)}
+\label{tab:defer:Which Deferred Technique to Choose? (Overview)}
+\end{table*}
+
+Table~\ref{tab:defer:Which Deferred Technique to Choose? (Overview)}
+shows a few high-level properties that distinguish the deferred-reclamation
+techniques from one another.
+
+The ``Readers'' row summarizes the results presented in
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR},
+which shows that all but reference counting are enjoy reasonably
+fast and scalable readers.
+
+The ``Number of Protected Objects'' row evaluates each technique's need
+for external storage with which to record reader protection.
+RCU relies on quiescent states, and thus needs no storage to represent
+readers, whether within or outside of the object.
+Reference counting can use a single integer within each object in the
+structure, and no additional storage is required.
+Hazard pointers requires external-to-object pointers be provisioned,
+and that there be sufficient pointers to handle the maximum number of
+objects that a given CPU or thread might need to reference simultaneously.
+Of course, sequence locks provides no pointer-traversal protection,
+which is why it is normally used on static data.
+
+\QuickQuiz{}
+	Why can't users dynamically allocate the hazard pointers as they
+	are needed?
+\QuickQuizAnswer{
+	They can, but at the expense of additional reader-traversal
+	overhead and, in some environments, the need to handle
+	memory-allocation failure.
+} \QuickQuizEnd
+
+The ``Duration of Protection'' describes constraints (if any) on how
+long a period of time a user may protect a given object.
+Reference counting and hazard pointers can both protect objects for
+extended time periods with no untoward side effects, but
+maintaining an RCU reference to even one object prevents all other RCU
+from being freed.
+RCU readers must therefore be relatively short in order to avoid running
+the system out of memory.
+Again, sequence locks provides no pointer-traversal protection,
+which is why it is normally used on static data.
+
+The ``Need for Traversal Retries'' row tells whether a new reference to
+a given object may be acquired unconditionally, as it can with RCU, or
+whether the reference acquisition can fail, resulting in a retry
+operation, which is the case for reference counting, hazard pointers,
+and sequence locks.
+In the case of reference counting and hazard pointers, retries are only
+required if an attempt to acquire a reference to a given object while
+that object is in the processof being deleted, a topic covered in more
+detail in the next section.
+Sequence locking must of course retry its critical section should it
+run concurrently with any update.
+
+\QuickQuiz{}
+	But don't Linux-kernel \co{kref} reference counters allow
+	guaranteed unconditional reference acquisition?
+\QuickQuizAnswer{
+	Yes they do, but the guarantee only applies unconditionally
+	in cases where a reference is already held.
+	With this in mind, please review the paragraph at the beginning of
+	Section~\ref{sec:defer:Which to Choose?}, especially the part
+	saying ``large enough that readers do not hold references from
+	one traversal to another''.
+} \QuickQuizEnd
+
+Of course, different rows will have different levels of importance in
+different situations.
+For example, if your current code is having read-side scalability problems
+with hazard pointers, then it does not matter that hazard pointers can require
+retrying reference acquisition because your current code already handles
+this.
+Similarly, if response-time considerations already limit the duration
+of reader traversals, as is often the case in kernels and low-level
+applications, then it does not matter that RCU has duration-limit
+requirements because your code already meets them.
+In the same vein, if readers must already write to the objects that they
+are traversing, the read-side overhead of reference counters might
+not be so important.
+Finally, if the data to be protected is in statically allocated variables,
+then sequence locking's inability to protect pointers is irrelevant.
+
+Nevertheless, this table should be of great help when choosing between
+these techniques.
+But those wishing more detail should continue on to the next section.
+
+\subsection{Which to Choose? (Details)}
+\label{sec:defer:Which to Choose? (Details)}
+
 \begin{table*}
 \rowcolors{1}{}{lightgray}
 \renewcommand*{\arraystretch}{1.25}
@@ -85,11 +236,11 @@
 					& 73 \\
 	\bottomrule
 \end{tabularx}
-\caption{Which Deferred Technique to Choose?}
-\label{tab:defer:Which Deferred Technique to Choose?}
+\caption{Which Deferred Technique to Choose?  (Details)}
+\label{tab:defer:Which Deferred Technique to Choose?  (Details)}
 \end{table*}
 
-Table~\ref{tab:defer:Which Deferred Technique to Choose?}
+Table~\ref{tab:defer:Which Deferred Technique to Choose? (Details)}
 는 이 챕터에서 소개한 네개의 미뤄두고 처리하기 테크닉들 중 무엇을
 선택해야할지를 돕는 간단한 경험적 법칙을 제공합니다.
 
@@ -99,8 +250,8 @@ Table~\ref{tab:defer:Which Deferred Technique to Choose?}
 read-side 크리티컬 섹션의 재시도 기능을 제공합니다.
 \iffalse
 
-Table~\ref{tab:defer:Which Deferred Technique to Choose?}
-provides some rough rules of thumb that can help you choose among the
+Table~\ref{tab:defer:Which Deferred Technique to Choose? (Details)}
+provides more-detailed rules of thumb that can help you choose among the
 four deferred-processing techniques presented in this chapter.
 
 As shown in the ``Existence Guarantee'' row,
@@ -161,6 +312,35 @@ The overhead of RCU implementations vary from nothing to that of a pair of
 memory barriers for each read-side critical section, thus providing RCU
 with the best performance, particularly for read-side critical sections
 that traverse many data elements.
+% TODO: Apply
+Of course, the read-side overhead of all deferred-processing variants can
+be reduced by batching, so that each read-side operation covers more data.
+
+\QuickQuiz{}
+	But didn't the answer to one of the quick quizzes in
+	Section~\ref{sec:defer:Hazard Pointers}
+	say that pairwise asymmetric barriers could eliminate the
+	read-side \co{smp_mb()} from hazard pointers?
+\QuickQuizAnswer{
+	Yes, it did.
+	However, doing this could be argued to change hazard pointers's
+	``Reclamation Forward Progress'' row (discussed later) from
+	lock-free to blocking because a CPU spinning with interrupts
+	disabled in the kernel would prevent the update-side portion of
+	the asymmetric barrier from completing.
+	In the Linux kernel, such blocking could in theory be prevented
+	by building the kernel with \co{CONFIG_NO_HZ_FULL}, designating
+	the relevant CPUs as \co{nohz_full} at boot time, ensuring that
+	only one thread was ever runnable on a given CPU at a given
+	time, and avoiding ever calling into the kernel.
+	Alternatively, you could ensure that the kernel was free of any
+	bugs that might cause CPUs to spin with interrupts disabled.
+
+	Given that CPUs spinning in the Linux kernel with interrupts
+	disabled seems to be rather rare, one might counter-argue that
+	asymmetric-barrier hazard-pointer updates are non-blocking
+	in practice, if not in theory.
+} \QuickQuizEnd
 \fi
 
 ``Reader Forward Progress Guarantee'' 열은 RCU 만이 bounded wait-free
@@ -365,3 +545,116 @@ and in combination, the rules of thumb laid out in this section will
 need to be refined.
 However, this section does reflect the current state of the art.
 \fi
+
+\subsection{Which to Choose? (Production Use)}
+\label{sec:defer:Which to Choose? (Production Use)}
+
+This section points out a few publicly visible production uses of
+hazard pointers, sequence locking, and RCU.
+Reference counting is omitted, not because it is unimportant, but rather
+because it is not only used pervasively, but heavily documented in textbooks
+going back a half century.
+One of the hoped-for benefits of listing production uses of these other
+techniques is to provide examples to study---or to find bugs in, as
+the case may be.\footnote{
+	Kudos to Mathias Stearn, Matt Wilson, David Goldblatt,
+	LiveJournal user fanf, Nadav Har'El, Avi Kivity, Dmitry Vyukov,
+	Raul Guitterez S., and Twitter user @peo3 for locating a
+	great many of these use cases.}
+
+\subsubsection{Production Uses of Hazard Pointers}
+\label{sec:defer:Production Uses of Hazard Pointers}
+
+In 2010, Keith Bostic added hazard pointers to
+WiredTiger~\cite{KeithBostic2010WiredTigerhazptr}.
+MongoDB 3.0, released in 2015, included WiredTiger and thus hazard pointers.
+
+In 2011, Samy Al Bahra added hazard pointers to the Concurrency Kit
+library~\cite{SamyAlBahra2011ckhp}.
+
+In 2014, Maxim Khizhinsky added hazard pointers to
+libcds~\cite{MaximKhizhinsky2014libcdsHazptr}.
+
+In 2015, David Gwynne introduced shared reference pointers, a form
+of hazard pointers, to OpenBSD~\cite{DavidGwynne2015srp}.
+
+In 2018, Maged Michael added hazard pointers to Facebook's Folly
+library~\cite{MagedMichael2018FollyHazptr}, where it is used heavily.
+
+\subsubsection{Production Uses of Sequence Locking}
+\label{sec:defer:Production Uses of Sequence Locking}
+
+The Linux kernel added sequence locking in
+v2.5.60~\cite{JonathanCorbet2003seqlock}, having been generalized from
+an ad-hoc technique used in x86's implementation of the
+\co{gettimeofday()} system call.
+
+In 2011, Samy Al Bahra added sequence locking to the Concurrency Kit
+library~\cite{SamyAlBahra2011ckseqlock}.
+
+A simple sequence locking implementation was added to \co{jemalloc()}
+in 2018~\cite{DavidGoldblatt2018seqlock}.
+The eigen library also has a special-purpose queue that is managed by
+a mechanism resembling sequence locking.\footnote{
+	\url{https://bitbucket.org/eigen/eigen/src/9fdbc9e653c1adc64db1078fd2ec899c1e33ba0c/unsupported/Eigen/CXX11/src/ThreadPool/RunQueue.h?at=default&fileviewer=file-view-default\#RunQueue.h-202}}
+
+\subsubsection{Production Uses of RCU}
+\label{sec:defer:Production Uses of RCU}
+
+IBM's VM/XA is adopted passive serialization, a mechanism similar to
+RCU, some time in the 1980s~\cite{Hennessy89}.
+
+DYNIX/ptx adopted RCU in 1993~\cite{McKenney98,Slingwine95}.
+
+The Linux kernel adopted Dipankar Sarma's implementation of RCU in
+2002~\cite{Torvalds2.5.43}.
+
+The userspace RCU project started in 2009~\cite{MathieuDesnoyers2009URCU}.
+
+The Knot DNS project started using the userspace RCU
+library in 2010~\cite{LubosSlovak2010KnotDNSRCU}.
+
+In 2011, Samy Al Bahra added epochs
+(a form of RCU~\cite{KeirAnthonyFraserPhD,KeirFraser2007withoutLocks})
+to the Concurrency Kit
+library~\cite{SamyAlBahra2011ckEpoch}.
+
+NetBSD began using the aforementioned passive serialization with v6.0 in
+2012~\cite{NetBSD2012pserialize}.
+Among other things, passive serialization is used in
+NetBSD packet filter (NPF)~\cite{MindaugasRasiukevicius2014NPFRCU}.
+
+The OSv kernel added an RCU implementation in 2010~\cite{AviKivity2013OSvRCU},
+later adding an RCU-protected linked list~\cite{AviKivity2013OSvRCUlist}
+and an RCU-protected hash table~\cite{AviKivity2013OSvRCUhash}.
+
+In 2015, Maxim Khizhinsky added RCU to
+libcds~\cite{MaxKhiszinsky2015C++RCU}.
+
+Mindaugas Rasiukevicius implemented libqsbr in 2016, which features
+QSBR and epoch-based reclamation
+(EBR)~\cite{MindaugasRasiukevicius2016libqsbr},
+both of which are types of implementations of RCU.
+
+Sheth et al.~\cite{HarshalSheth2016goRCU}
+demonstrated the value of leveraging golang's garbage
+collector to provide RCU-like functionality, and
+the golang programming language provides a \co{Value} type that can
+provide this functionality.\footnote{
+	See \url{https://golang.org/pkg/sync/atomic/\#Value}, particularly
+	the ``Example (ReadMostly)''.}
+
+Matt Klein describes an RCU-like mechanism that is used in the Envoy
+Proxy~\cite{MattKlein2017EnvoyRCU}.
+
+\subsubsection{Summary of Production Uses}
+\label{sec:defer:Summary of Production Uses}
+
+Perhaps the time will come when sequence locking, hazard pointers, and
+RCU are all as heavily used and as well known as are reference counters.
+Until that time comes, the current production uses of these mechanisms
+should help guide the choice of mechanism as well as showing how best
+to apply each of them.
+
+The next section discusses updates, a ticklish issue for many of the
+read-mostly mechanisms described in this chapter.
