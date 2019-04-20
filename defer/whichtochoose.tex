@@ -406,6 +406,8 @@ RCU 구현의 오버헤드는 아예 없는 경우부터 각각의 read-side 크
 한쌍의 메모리 배리어까지 다양하고, 따라서 RCU 는 최고의 성능을 제공하는데, 많은
 데이터 원소들을 마주치게 되는 read-side 크리티컬 섹션들에 대해서는 특히
 그렇습니다.
+물론, 모든 deferred-processing 변종의 이 읽기쪽 오버헤드는 batching 을 통해 각
+읽기쪽 오퍼레이션이 더 많은 데이터를 다루게 함으로써 줄일 수 있습니다.
 \iffalse
 
 The ``Contention Among Readers'', ``Reader Per-Critical-Section Overhead'',
@@ -421,16 +423,35 @@ The overhead of RCU implementations vary from nothing to that of a pair of
 memory barriers for each read-side critical section, thus providing RCU
 with the best performance, particularly for read-side critical sections
 that traverse many data elements.
-% TODO: Apply
 Of course, the read-side overhead of all deferred-processing variants can
 be reduced by batching, so that each read-side operation covers more data.
+\fi
 
 \QuickQuiz{}
+	하지만 Section~\ref{sec:defer:Hazard Pointers}
+	의 quick quizz 중 하나의 답은 해저드 포인터에서 읽기쪽의 \co{smp_mb()}
+	를 비대칭적인 배리어 짝으로 없앨 수 있다고 하지 않았나요?
+	\iffalse
+
 	But didn't the answer to one of the quick quizzes in
 	Section~\ref{sec:defer:Hazard Pointers}
 	say that pairwise asymmetric barriers could eliminate the
 	read-side \co{smp_mb()} from hazard pointers?
+	\fi
 \QuickQuizAnswer{
+	맞아요, 그랬습니다.
+	하지만, 그렇게 하는건 해저드 포인터의 (뒤에서 다루어질) ``Reclamation
+	Forward Progress'' 행을 lock-free 에서 blocking 으로 바꿔야 한다는
+	의견을 가능하게 할텐데, 인터럽트가 불능화 된 채 커널에서 스피닝 하는
+	CPU 는 업데이트쪽 비대칭 배리어가 완료되는 걸 막을 것이기 때문입니다.
+	리눅스 커널에서, 그런 블록킹은 이론적으로 커널을 \co{CONFIG_NO_HZ_FULL}
+	로 빌드하고 관련된 CPU 들을 부팅 시점에 \co{nohz_full} 로 지정함으로써
+	하나의 쓰레드만이 하나의 CPU 에서 한번에 돌아갈 수 있음을 보장하고 커널
+	내로 호출하는 것을 방지함으로써 막을 수 있습니다.
+	대안적으로, 커널이 인터럽트가 불능화 된 채 CPU 스피닝을 유발하는 모든
+	버그로부터 안전하다는 것을 보장해 볼 수도 있습니다.
+	\iffalse
+
 	Yes, it did.
 	However, doing this could be argued to change hazard pointers's
 	``Reclamation Forward Progress'' row (discussed later) from
@@ -444,13 +465,19 @@ be reduced by batching, so that each read-side operation covers more data.
 	time, and avoiding ever calling into the kernel.
 	Alternatively, you could ensure that the kernel was free of any
 	bugs that might cause CPUs to spin with interrupts disabled.
+	\fi
+
+	인터럽트가 불능화 된 채 리눅스 커널 내에서 스피닝하는 CPU 는 드물다는
+	걸 놓고 볼 때, 비대칭 배리어 해저드 포인터 업데이트는 이론 외적으로
+	보면 실질적으로 non-blocking 이라고 말할 수도 있겠습니다.
+	\iffalse
 
 	Given that CPUs spinning in the Linux kernel with interrupts
 	disabled seems to be rather rare, one might counter-argue that
 	asymmetric-barrier hazard-pointer updates are non-blocking
 	in practice, if not in theory.
+	\fi
 } \QuickQuizEnd
-\fi
 
 ``Reader Forward Progress Guarantee'' 열은 RCU 만이 bounded wait-free
 forward-progress 보장을 가짐을 보이는데, 이는 유한한 갯수의 인스트럭션들을
