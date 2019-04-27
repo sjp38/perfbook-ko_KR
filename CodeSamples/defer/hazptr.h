@@ -48,7 +48,7 @@ typedef struct hazptr_head {
 } hazptr_head_t;
 
 typedef struct hazard_pointer_s {
-	hazptr_head_t *  __attribute__ ((__aligned__ (CACHE_LINE_SIZE))) p;
+	void *  __attribute__ ((__aligned__ (CACHE_LINE_SIZE))) p;
 } hazard_pointer;
 
 /* Must be dynamically initialized to be an array of size H. */
@@ -60,26 +60,45 @@ void hazptr_scan();
 void hazptr_free_later(hazptr_head_t *);
 void hazptr_free(void *ptr); /* supplied by caller. */
 
-static inline void *hp_record(void **p, hazard_pointer *hp)
-{
-	hazptr_head_t *tmp;
+#define HAZPTR_POISON 0x8
 
-	do {
-		tmp = READ_ONCE(*p);
-		WRITE_ONCE(hp->p, tmp);
-		smp_mb();
-	} while (tmp != READ_ONCE(*p));
-	return tmp;
+/* This can be used when reading a pointer from an immortal structure. */
+//\begin{snippet}[labelbase=ln:defer:hazptr:record_clear,commandchars=\\\[\]]
+static inline void *_h_t_r_impl(void **p,		//\lnlbl{htr:b}
+                                hazard_pointer *hp)
+{
+	void *tmp;
+
+	tmp = READ_ONCE(*p);				//\lnlbl{htr:ro1}
+	if (!tmp || tmp == (void *)HAZPTR_POISON)
+		return tmp;				//\lnlbl{htr:race1}
+	WRITE_ONCE(hp->p, tmp);				//\lnlbl{htr:store}
+	smp_mb();					//\lnlbl{htr:mb}
+	if (tmp == READ_ONCE(*p))			//\lnlbl{htr:ro2}
+		return tmp;				//\lnlbl{htr:success}
+	return (void *)HAZPTR_POISON;			//\lnlbl{htr:race2}
 }
 
-static inline void hp_clear(hazard_pointer *hp)
+#define hp_try_record(p, hp) _h_t_r_impl((void **)(p), hp) //\lnlbl{htr:e}
+
+static inline void *hp_record(void **p,			//\lnlbl{hr:b}
+                              hazard_pointer *hp)
+{
+	void *tmp;
+
+	do {
+		tmp = hp_try_record(*p, hp);
+	} while (tmp == (void *)HAZPTR_POISON);
+	return tmp;
+}							//\lnlbl{hr:e}
+
+static inline void hp_clear(hazard_pointer *hp)		//\lnlbl{hc:b}
 {
 	smp_mb();
 	WRITE_ONCE(hp->p, NULL);
-}
+}							//\lnlbl{hc:e}
+//\end{snippet}
 
 #define hazptr_clean_pointer(p) ((typeof(p))((unsigned long)(p) & ~0x1UL))
-
-#define HAZPTR_POISON 0x8
  
 #endif /* #ifndef __HAZPTR_H */

@@ -81,8 +81,8 @@ Unfortunately, a quick review of
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
 dashes these hopes.
 Therefore, the updater cannot use a simple C-language assignment, but
-must instead use something like \co{smp_store_release()}, or, as will be seen,
-\co{rcu_assign_pointer()}.
+must instead use \co{smp_store_release()} as shown in the figure,
+or, as will be seen, \co{rcu_assign_pointer()}.
 \fi
 
 비슷하게, 어떤 사람은 읽기 쓰레드가 \co{gptr} 의 값을 읽어오는데 간단한 C-언어
@@ -151,9 +151,13 @@ being referenced by concurrent readers.
 As can be seen in
 Figure~\ref{fig:defer:Deletion With Concurrent Readers},
 the first step is easy.
-Taking the lessons from
+Again taking the lessons from
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
-to heart, use \co{WRITE_ONCE()} to \co{NULL} the pointer,
+to heart, use \co{smp_store_release()} to \co{NULL} the pointer,\footnote{
+	Strictly speaking, \co{WRITE_ONCE()} suffices for a \co{NULL}
+	pointer, but \co{smp_store_release()} is absolutely required
+	when storing non-\co{NULL} pointers.
+	Or, as we will see, \co{rcu_assign_pointer()}.}
 thus moving from the first row to the second in the figure.
 At this point, pre-existing readers will see the old structure with
 \co{->addr} of 42 and \co{->iface} of 1, but new readers will see
@@ -167,15 +171,20 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	않을까요?
 	\iffalse
 
-	Shouldn't
-	Figure~\ref{fig:defer:Deletion With Concurrent Readers}'s
-	\co{WRITE_ONCE()} instead be \co{smp_store_release()}?
+	% TODO: Apply
+	Why does
+	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+	use \co{smp_store_release()} given that it is storing
+	a \co{NULL} pointer?
+	Wouldn't \co{WRITE_ONCE()} work just as well in this case,
+	given that there is no structure initialization to order
+	against the store of the \co{NULL} pointer?
 	\fi
 \QuickQuizAnswer{
 	아뇨, 그렇지 않습니다.
 	\iffalse
 
-	No, it need not be.
+	Yes, it would.
 	\fi
 
 	\co{NULL} 포인터가 할당되었으므로, 순서를 엇갈리게 할 것이 존재치
@@ -196,11 +205,13 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	necessary to use \co{smp_store_release()} in order to ensure
 	that initialization of the pointed-to structure is carried
 	out before assignment of the pointer.
-	But in this case, the \co{NULL} pointer means that there is
-	no pointed-to structure, and thus no need for ordering.
 
-	In short, \co{smp_store_release()} would work, but could
-	incur unnecessary overhead.
+	% TODO: Apply
+	In short, \co{WRITE_ONCE()} would work, and would
+	save a little bit of CPU time on some architectures.
+	However, as we will see, software-engineering concerns
+	will motivate use of a special \co{rcu_assign_pointer()}
+	that is quite similar to \co{smp_store_release()}.
 	\fi
 } \QuickQuizEnd
 
@@ -668,7 +679,7 @@ void synchronize_rcu(void)
 	int cpu;
 
 	for_each_online_cpu(cpu)
-		run_on(cpu);
+		sched_setaffinity(current->pid, cpumask_of(cpu));
 }
 \end{VerbatimN}
 
@@ -681,9 +692,9 @@ void synchronize_rcu(void)
 \iffalse
 
 The \co{for_each_online_cpu()} primitive iterates over all CPUs, and
-the \co{run_on()} function causes the current thread to execute on the
-specified CPU, which forces the destination CPU to execute a context
-switch.
+the \co{sched_setaffinity_on()} function causes the current thread to
+execute on the specified CPU, which forces the destination CPU to execute
+a context switch.
 Therefore, once the \co{for_each_online_cpu()} has completed, each CPU
 has executed a context switch, which in turn guarantees that
 all pre-existing reader threads have completed.
@@ -771,9 +782,12 @@ Correct handling of a number of corner cases and the need for a number
 of powerful optimizations mean that production-quality implementations
 have significant additional complexity.
 In addition, RCU implementations for preemptible environments
-require that readers actually do something.\footnote{
-	Some toy RCU implementations that handle preemptive
-	environments are shown in
+require that readers actually do something, which in non-real-time
+Linux-kernel environments can be as simple as defining
+\co{rcu_read_lock()} and \co{rcu_read_unlock()} as \co{preempt_disable()}
+and \co{preempt_enable()}, respectively.\footnote{
+	Some toy RCU implementations that handle preempted
+	read-side critical sections are shown in
 	Appendix~\ref{chp:app:``Toy'' RCU Implementations}.}
 However, this simple non-preemptible approach is conceptually complete,
 and demonstrates that it really is possible to provide read-side
