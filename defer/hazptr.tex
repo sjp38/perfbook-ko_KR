@@ -46,34 +46,37 @@ may safely be freed.
 물론, 이 말은 해저드 포인터 획득은 동시의 삭제들에 의한 버그 (파멸의
 경주-destructive race- 라고도 합니다)를 막기 위해 매우 조심스럽게 행해져야만
 함을 의미합니다.
-그런 한가지 구현이
-Listing~\ref{lst:defer:Hazard-Pointer Storage and Erasure} 에 보여져 있는데,
-line~1-14 에서 \co{hp_store()} 를 보이고 line~16-21 에서 \co{hp_erase()} 를
-보이고 있습니다.
-\co{smp_mb()} 기능은
-Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서 자세히
-설명될 겁니다만, 이 간단한 개략적 설명의 목표를 위해서는 무시되어도 될 겁니다.
-
-\co{hp_store()} 함수는 동시의 수정을 체크하면서 \co{p} 에 의해 레퍼런스되는
-포인터가 있는 데이터 원소를 위한 해저드 포인터를 \co{hp} 에 저장합니다.
-동시의 수정이 이뤄졌다면, \co{hp_store()} 는 해저드 포인터를 저장하는 것을
-거부하고 0을 리턴함으로써 호출자는 처음부터 데이터 접근을 다시 시작해야 함을
-알립니다.
-그렇지 않다면, \co{hp_store()} 는 해당 데이터 원소를 위한 해저드 포인터를
-성공적으로 기록했음을 알리기 위해 1을 리턴합니다.
 \iffalse
 
 Of course, this means that hazard-pointer acquisition must be carried
 out quite carefully in order to avoid destructive races with concurrent
 deletion.
+\fi
 \begin{lineref}[ln:defer:hazptr:record_clear]
+그런 한가지 구현이
+Listing~\ref{lst:defer:Hazard-Pointer Recording and Clearing} 에 보여져 있는데,
+line~\lnref{htr:b}-\lnref{htr:e} 에 \co{hp_try_record()} 를,
+line~\lnref{hr:b}-\lnref{hr:e} 에 \co{hp_record()} 를, 그리고
+line~\lnref{hc:b}-\lnref{hc:e} 에 \co{hp_clear()} 를 보이고 있습니다
+(\path{hazptr.h}).
+\iffalse
+
 One implementation is shown in
-% TODO: Apply
 Listing~\ref{lst:defer:Hazard-Pointer Recording and Clearing},
 which shows \co{hp_try_record()} on lines~\lnref{htr:b}-\lnref{htr:e},
 \co{hp_record()} on lines~\lnref{hr:b}-\lnref{hr:e}, and
 \co{hp_clear()} on
 lines~\lnref{hc:b}-\lnref{hc:e} (\path{hazptr.h}).
+\fi
+
+Line~\lnref{htr:e} 의 \co{hp_try_record()} 매크로는 단순히 \co{_h_t_r_impl()}
+함수로의 캐스팅 wrapper 로, \co{p} 로 레퍼런스 되는 포인터를 \co{hp} 로
+레퍼런스 되는 해저드 포인터 안에 저장하려 시도합니다.
+이에 성공하면, 저장된 포인터의 값을 리턴합니다.
+포인터가 \co{NULL} 이어서 실패한다면, \co{NULL} 을 리턴합니다.
+마지막으로, 업데이트와의 경주상황으로 인해 실패한다면, \co{HAZPTR_POISON}
+이라는 특수한 토큰을 리턴합니다.
+\iffalse
 
 The \co{hp_try_record()} macro on line~\lnref{htr:e} is simply a casting
 wrapper for the \co{_h_t_r_impl()} function, which attempts to store
@@ -125,8 +128,22 @@ Finally, if it fails due to racing with an update, it returns a special
 	\fi
 } \QuickQuizEnd
 
+Line~\lnrefPhtr:ro1} 은 보호되야 하는 오브젝트로의 포인터를 읽습니다.
+Line~\lnref{htr:race1} 이 이 포인터가 \co{NULL} 이거나 특수한 삭제된 오브젝트
+토큰인 \co{HAZPTR_POISON} 이라면, 호출자에게 실패를 알리기 위해 이 포인터의
+값을 리턴합니다.
+그렇지 않다면, line~\lnref{htr:store} 는 명시된 해저드 포인터로의 포인터를
+저장하고, line~\lnref{htr:mb} 에서 이 저장을 line~\lnref{htr:ro2} 에서의 원래
+포인터의 다시 읽기와 완전히 순서맞춰질 것을 강제합니다.
+(메모리 순서 규칙에 대한 더 많은 정보를 위해선
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 를 참고하세요.)
+원래 포인터의 값이 변하지 않았다면, 이 해저드 포인터는 가리켜진 오브젝트를
+보호하며, 이 경우, line~\lnref{htr:success} 는 해당 오브젝트로의 포인터를
+리턴하는데, 이는 호출자에게 성공을 의미하기도 합니다.
+그렇지 않고, 포인터가 두개의 \co{READ_ONCE()} 호출 사이에 변했다면,
+line~\lnref{htr:race2} 가 실패를 알립니다.
+
 \iffalse
-% TODO: Apply
 Line~\lnref{htr:ro1} reads the pointer to the object to be protected.
 If line~\lnref{htr:race1} finds that this pointer was either \co{NULL} or
 the special \co{HAZPTR_POISON} deleted-object token, it returns
@@ -142,22 +159,41 @@ line~\lnref{htr:success} returns a pointer to that object, which also
 indicates success to the caller.
 Otherwise, if the pointer changed between the two \co{READ_ONCE()}
 invocations, line~\lnref{htr:race2} indicates failure.
+\fi
 
 \QuickQuiz{}
+	Listing~\ref{lst:defer:Hazard-Pointer Recording and Clearing}
+	의 \co{hp_try_record()} 는 왜 데이터 원소로의 이중 간접 접근을
+	취하나요?
+	왜 \co{void *} 대신 \co{void **} 인가요?
+	\iffalse
+
 	Why does \co{hp_try_record()} in
 	Listing~\ref{lst:defer:Hazard-Pointer Recording and Clearing}
 	take a double indirection to the data element?
 	Why not \co{void *} instead of \co{void **}?
+	\fi
 \QuickQuizAnswer{
+	\co{hp_try_record()} 는 동시의 수정을 체크해야 하기 때문입니다.
+	이 일을 하기 위해선, 해당 원소로의 포인터로의 포인터가 있어서 해당
+	원소로의 포인터로의 수정을 체크할 수 있어야 합니다.
+	\iffalse
+
 	Because \co{hp_try_record()} must check for concurrent modifications.
 	To do that job, it needs a pointer to a pointer to the element,
 	so that it can check for a modification to the pointer to the
 	element.
+	\fi
 } \QuickQuizEnd
+
+이 \co{hp_record()} 함수는 상당히 직관적입니다: 리턴값이 \co{HAZPTR_POISON} 이
+아닌 무언가일 때까지 반복적으로 \co{hp_try_record()} 를 호출합니다.
+\iffalse
 
 The \co{hp_record()} function is quite straightforward: It repeatedly
 invokes \co{hp_try_record()} until the return value is something other
 than \co{HAZPTR_POISON}.
+\fi
 
 \QuickQuiz{}
 	Why bother with \co{hp_try_record()}?
@@ -266,14 +302,23 @@ page~\pageref{lst:defer:Sequential Pre-BSD Routing Table},
 so only differences will be discussed.
 \fi
 
-Figure~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Lookup} 부터 보면,
-line~2 에서는 해저드 포인터가 해제되길 지연시키는 오브젝트들을 넣어두기 위한
-\co{->hh} 필드를 보이며, line~6 는 해제 후 사용 버그를 발견하기 위한
-\co{->re_freed} 필드를 보이며 line~24-30 에서는 해저드 포인터를 획득하려
-시도하고, 실패하면 line~18 의 \co{retry} 라벨로 브랜치 하게 됩니다.
+\begin{lineref}[ln:defer:route_hazptr:lookup]
+Listing~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Lookup}
+에서 시작해서, line~\lnref{hh} 는 해저드 포인터 메모리 해제를 지연시키는
+오브젝트를 대기열에 넣는데 사용되는 \co{->hh} 필드를 보이며,
+line~\lnref{re_freed} 는 메모리 해제 후 사용 버그를 발견하기 위해 사용되는
+\co{->re_freed} 필드를 보이며, line~\lnref{tryrecord} 는 해저드 포인터를 얻기
+위해 \co{hp_try_record()} 를 호출합니다.
+리턴값이 \co{NULL} 이라면, line~\lnref{NULL} 은 발견되지 않았음 신호를
+호출자에게 리턴합니다.
+만약 \co{hp_try_record()} 호출이 삭제와 경주를 행했다면, line~\lnref{deleted}
+는 line~\lnref{retry} 의 \co{retry} 로 되돌아가 리스트를 시작부터 다시
+횡단합니다.
+이 \co{do}-\co{while} 루프는 원하는 원소가 찾아졌을 때 끝납니다만, 만약 이
+원소가 이미 메모리 해제되었다면, line~\lnref{abort} 가 프로그램을 종료시킵니다.
+그렇지 않다면, 이 원소의 \co{->iface} 필드가 호출자에게 리턴됩니다.
 \iffalse
 
-\begin{lineref}[ln:defer:route_hazptr:lookup]
 Starting with
 Listing~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Lookup},
 line~\lnref{hh} shows the \co{->hh} field used to queue objects pending
@@ -290,6 +335,15 @@ The \co{do}-\co{while} loop falls through when the desired element is
 located, but if this element has already been freed, line~\lnref{abort}
 terminates the program.
 Otherwise, the element's \co{->iface} field is returned to the caller.
+\fi
+
+Line~\lnref{tryrecord} 가 더 사용하기 쉬운 \co{hp_record()} 대신
+\co{hp_try_record()} 를 호출해서, \co{hp_try_record()} 의 실패 시에
+전체 탐색을 재시작 함을 알아 두시기 바랍니다.
+그리고 그런 재시작은 정확성을 위해 분명 필요합니다.  이를 보기 위해, 원소~A, B,
+그리고~C 를 가지고 있고 해저드 포인터로 보호되는 링크드 리스트가 다음 이벤트를
+겪는다고 생각해 봅시다:
+\iffalse
 
 Note that line~\lnref{tryrecord} invokes \co{hp_try_record()} rather
 than the easier-to-use \co{hp_record()}, restarting the full search
@@ -297,8 +351,8 @@ upon \co{hp_try_record()} failure.
 And such restarting is absolutely required for correctness.  To see this,
 consider a hazard-pointer-protected linked list containing elements~A,
 B, and~C that is subjected to the following sequence of events:
-\end{lineref}
 \fi
+\end{lineref}
 
 Figure~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Add/Delete}
 에서, line~11 에서는 \co{->re_freed} 를 초기화 시키고, line~32 와~33 에서는
