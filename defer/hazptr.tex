@@ -196,13 +196,23 @@ than \co{HAZPTR_POISON}.
 \fi
 
 \QuickQuiz{}
+	왜 \co{hp_try_record()} 로 귀찮게 하죠?
+	실패에 문제 없는 \co{hp_record()} 함수를 대신 사용하는게 어때요?
+	\iffalse
+
 	Why bother with \co{hp_try_record()}?
 	Wouldn't it be easier to just use the failure-immune
 	\co{hp_record()} function?
+	\fi
 \QuickQuizAnswer{
+	어떤 면에선 그게 더 쉽겠지만, 앞으로 Pre-BSD 라우팅 예제에서 보게
+	되겠지만, \co{hp_record()} 가 먹히지 않는 경우도 있습니다.
+	\iffalse
+
 	It might be easier in some sense, but as will be seen in the
 	Pre-BSD routing example, there are situations for which
 	\co{hp_record()} simply does not work.
+	\fi
 } \QuickQuizEnd
 
 The \co{hp_clear()} function is even more straightforward, with
@@ -365,6 +375,21 @@ Figure~\ref{lst:defer:Reference-Counted Pre-BSD Routing Table Add/Delete}
 \iffalse
 
 \begin{enumerate}
+\item	Thread~0 가 원소~B 로의 해저드 포인터를 저장합니다 (이에 앞서 원소~A
+	에서 원소~B 로 횡단했습니다).
+\item	Thread~1 이 원소~B 를 리스트에서 제거하는데, 이 과정에서 이 삭제 작업을
+	표시하기 위해 원소~B 에서 원소~C 로의 포인터를 \co{HAZPTR_POISON}
+	값으로 설정합니다.
+	Thread~0 가 원소~B 로의 해저드 포인터를 가지고 있기 때문에, 이 원소는
+	아직 메모리 해제될 수 없습니다.
+\item	Thread~1 이 리스트에서 원소~C 를 제거합니다.
+	원소~C 를 레퍼런스 하는 해저드 포인터는 없으므로, 곧바로 해제될 수
+	있습니다.
+\item	Thread~0 이 이제 제거된 원소~B 의 다음 원소로의 해저드 포인터를
+	획득하고자 합니다만, \co{hp_try_record()} 가 \co{HAZPTR_POISON} 값을
+	리턴해서, 호출자가 리스트의 처음부터 횡단을 재시작하게 만듭니다.
+\iffalse
+
 \item	Thread~0 stores a hazard pointer to element~B
 	(having presumably traversed to element~B from element~A).
 \item	Thread~1 removes element~B from the list, which sets
@@ -379,7 +404,20 @@ Figure~\ref{lst:defer:Reference-Counted Pre-BSD Routing Table Add/Delete}
 	element~B's successor, but \co{hp_try_record()} returns the
 	\co{HAZPTR_POISON} value, forcing the caller to restart its
 	traversal from the beginning of the list.
+\fi
 \end{enumerate}
+
+이는 매우 잘된 일인데, B 의 다음 원소는 이제 메모리 해제된 원소~C 이므로, 이는
+Thread~0 의 뒤따르는 액세스가 임의의 공포스런 메모리 오염을 초래할 수 있음을
+의미하는데, 특히 원소~C 를 위한 메모리가 뭔가 다른 목적으로 재할당 되었다면
+더욱 그렇습니다.
+따라서, 해저드 포인터의 읽기 스레드들은 보통 동시의 삭제가 있는 경우 전체
+횡단을 재시작 해야만 합니다.
+조종이 재시작은 어떤 전역적인 (그리고 따라서 불변하는) 포인터로 되돌아가야
+합니다만, 만약 특정 위치가 여전히 살아있다는게 보장된다면 해당 중간 위치로부터
+재시작하는 것도 가능한데, 예를 들면 현재 쓰레드가 락을 잡고 있거나, 레퍼런스
+카운트를 가지고 있거나 등의 경우입니다.
+\iffalse
 
 Which is a very good thing, because B's successor is the now-freed
 element~C, which means that Thread~0's subsequent accesses might have
@@ -391,32 +429,72 @@ Often the restart must go back to some global (and thus immortal) pointer,
 but it is sometimes possible to restart at some intermediate location
 if that location is guaranteed to still be live, for example, due to
 the current thread holding a lock, a reference count, etc.
+\fi
 
 \QuickQuiz{}
+	읽기 쓰레드들이 ``보통은'' 재시작해야 한다?
+	그에 대한 예외는 어느 경우인가요?
+	\iffalse
+
 	Readers must ``typically'' restart?
 	What are some exceptions?
+	\fi
 \QuickQuizAnswer{
+	해당 포인터가 어떤 전역 변수로부터 퍼져나오거나 메모리 해제될 수
+	없다면, \co{hp_record()} 는 이 해저드 퐁니터를 기록하기 위해 반복적으로
+	시도될 수 있는데, 동시의 삭제가 존재하는 경우에도 그렇습니다.
+	\iffalse
+
 	If the pointer emanates from a global variable or is otherwise
 	not subject to being freed, then \co{hp_record()} may be
 	used to repeatedly attempt to record the hazard pointer,
 	even in the face of concurrent deletions.
+	\fi
 	% @@@ Add more use cases subject to Maged Michael's approval.
 } \QuickQuizEnd
+
+해저드 포인터를 사용하는 알고리즘들은 링크된 데이터 구조체들의 횡단 도중
+어디서든 재시작될 수 있기 때문에, 그런 알고리즘은 일반적으로 이 데이터 구조에
+업데이트 하고자 하는데 필요한 모든 해저드 포인터를 획득하기 전까지는 변경을
+가하지 않도록 조심해야 합니다.
+\iffalse
 
 Because algorithms using hazard pointers might be restarted at any
 step of their traversal through the linked data structure, such algorithms
 must typically take care to avoid making any changes to the data
 structure until after they have acquired all the hazard pointers that
 are required for the update in question.
+\fi
 
 \QuickQuiz{}
+	하지만 이런 해저드 포인터에 대한 제한점은 레퍼런스 카운팅의 다른
+	형태에도 적용되지 않나요?
+	\iffalse
+
 	But don't these restrictions on hazard pointers also apply
 	to other forms of reference counting?
+	\fi
 \QuickQuizAnswer{
+	그렇기도 하고 아니기도 합니다.
+	이 제한점들은 레퍼런스 획득이 실패할 수 있는 레퍼런스 카운팅
+	메커니즘에만 적용됩니다.
+	\iffalse
+
 	Yes and no.
 	These restrictions apply only to reference-counting mechanisms whose
 	reference acquisition can fail.
+	\fi
 } \QuickQuizEnd
+
+이런 해저드 포인터 제한은 읽기 쓰레드에게 상당한 장점을 초래하는데, 해저드
+포인터들이 각 CPU 또는 쓰레드 지역적으로 저장된다는 점 때문으로, 횡단이
+횡단되는 데이터 구조로의 어떤 쓰기도 없이 진행될 수 있게 합니다.
+Page~\pageref{fig:count:Optimization and the Four Parallel-Programming Tasks}
+의
+Figure~\ref{fig:count:Optimization and the Four Parallel-Programming Tasks}
+로 돌아가서, 해저드 포인터는 CPU 캐시가 리소스 복제를 가능하게 해서, 결국
+병렬-접근-제어 메커니즘을 약화시킬 수 있게 해서 성능과 확장성을 증가시킵니다.
+\iffalse
 
 These hazard-pointer restrictions result in great benefits to readers,
 courtesy of the fact that the hazard pointers are stored local to each
@@ -429,6 +507,16 @@ page~\pageref{fig:count:Optimization and the Four Parallel-Programming Tasks},
 hazard pointers enable the CPU caches to do resource replication, which
 in turn allows weakening of the parallel-access-control mechanism,
 thus boosting performance and scalability.
+\fi
+
+해저드 포인터의 재시작의 또다른 장점은 최소 메모리 사용량의 감소입니다:
+현재 어떤 해저드 퐁니터로 레퍼런스되고 있지 않은 모든 오브젝트는 곧바로 메모리
+해제될 수 있습니다.
+반면에,
+Section~\ref{sec:defer:Read-Copy Update (RCU)}
+은 읽기 쪽 재시도를 회피할 수 있는 (그리고 읽기 쪽 오버헤드를 최소화 시키는),
+그러나 훨씬 큰 메모리 사용량을 초래할 수 있는 메커니즘을 이야기 합니다.
+\iffalse
 
 Another advantage of hazard pointers's restarting is a reduction in its
 minimal memory footprint:
@@ -439,6 +527,7 @@ Section~\ref{sec:defer:Read-Copy Update (RCU)}
 will discuss a mechanism that avoids read-side retries (and minimizes
 read-side overhead), but which can result in a much larger memory
 footprint.
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/defer/route_hazptr@add_del.fcv}
@@ -476,8 +565,12 @@ Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Reference Counting}
 레퍼런스의 로컬리티를 제공합니다), 각 오브젝트 방문마다 메모리 배리어와 재시도
 여부 검사를 필요로 합니다.
 그로 인해 해저드 포인터의 성능은 이상적인 것에 비하면 훨씬 떨어집니다.
-반면에, 해저드 포인터는 동시의 업데이트가 존재할 때에도 올바르게 동작하며,
-2019년초 기준으로 Facebook 과 MongoDB 에서 사용되고 있습니다.
+반면에, 동시의 레퍼런스 카운팅으로의 순진한 접근법들과 달리, 해저드 포인터는
+동시의 업데이트가 섞인 워크로드에도 정확히 동작합니다.
+다른 메커니즘들과의 추가적인 성능 비교는
+Chapter~\ref{chp:Data Structures} 와 다른
+출간물들~\cite{ThomasEHart2007a,McKenney:2013:SDS:2483852.2483867,MagedMichael04a}
+에서 찾을 수 있습니다
 \iffalse
 
 Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
@@ -490,7 +583,6 @@ memory (albeit with much improved locality of reference),
 and also require a full memory barrier and retry check for each
 object traversed.
 Therefore, hazard pointers's performance is far short of ideal.
-% TODO: Apply
 On the other hand, unlike naive approaches to concurrent reference-counting,
 hazard pointers do operate correctly for workloads
 involving concurrent updatesa.
