@@ -166,12 +166,13 @@ the state, as indicated by the ``2 Versions'' in the figure.
 \fi
 
 \QuickQuiz{}
+	왜
 	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
-	의 \co{WRITE_ONCE()} 는 \co{smp_store_release()} 가 되어야 하지
-	않을까요?
+	는 \co{NULL} 포인터를 저장하는데 \co{smp_store_release()} 를 사용하죠?
+	이 경우에는 \co{NULL} 포인터 저장에 대해 순서 맞춰야 할 구조체 초기화가
+	없으니 \co{WRITE_ONCE()} 만으로도 충분하지 않나요?
 	\iffalse
 
-	% TODO: Apply
 	Why does
 	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
 	use \co{smp_store_release()} given that it is storing
@@ -181,7 +182,7 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	against the store of the \co{NULL} pointer?
 	\fi
 \QuickQuizAnswer{
-	아뇨, 그렇지 않습니다.
+	네, 그렇습니다.
 	\iffalse
 
 	Yes, it would.
@@ -192,11 +193,12 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	반대로, \co{NULL} 이 아닌 포인터를 할당할 때에는
 	\co{smp_store_release()} 가 사용되어야 하는데 가리켜지는 구조체의
 	초기화가 이 포인터 할당 전에 완료되었을 것을 보장하기 위함입니다.
-	하지만 이 경우에, \co{NULL} 포인터는 가리켜지는 구조체가 없음을
-	의미하므로, 순서가 필요없습니다.
 
-	요약해서, \co{smp_store_release()} 로도 동작할 겁니다만, 불필요한
-	오버헤드를 일으킬 수 있습니다.
+	요약해서, \co{WRITE_ONCE()} 로도 동작합니다, 그리고 그게 일부
+	아키텍쳐에서는 CPU 시간을 아주 조금은 더 아낄 겁니다.
+	하지만, 우리가 보게 되겠지만, 소프트웨어 엔지니어링에 대한 주의가
+	\co{smp_store_release()} 와 매우 유사한 \co{rcu_assign_pointer()} 의
+	사용을 자극하게 될겁니다.
 	\iffalse
 
 	Because a \co{NULL} pointer is being assigned, there is nothing
@@ -206,7 +208,6 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	that initialization of the pointed-to structure is carried
 	out before assignment of the pointer.
 
-	% TODO: Apply
 	In short, \co{WRITE_ONCE()} would work, and would
 	save a little bit of CPU time on some architectures.
 	However, as we will see, software-engineering concerns
