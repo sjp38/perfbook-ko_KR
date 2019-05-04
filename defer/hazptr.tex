@@ -228,6 +228,18 @@ the hazard pointer to \co{NULL}.
 \end{listing}
 
 \begin{lineref}[ln:defer:hazptr:scan_free:free]
+해저드 포인터로 보호되는 객체가 자신의 연결된 데이터 구조에서 제거되어서 미래의
+해저드 포인터 읽기 쓰레드에게 접근될 수 없게 되었다면, 이 객체는
+\co{hazptr_free_later()} 에 넘겨지는데, 이 함수는
+Listing~\ref{lst:defer:Hazard-Pointer Scanning and Freeing}
+(\path{hazptr.c}) 에 의 line~\lnref{b}-\lnref{e} 에 보여져 있습니다.
+Line~\lnref{enq:b} 와~\lnref{enq:e} 는 이 객체를 쓰레드별 리스트 \co{rlist} 에
+집어넣고 line~\lnref{count} 는 \co{rcount} 내의 객체 수를 셉니다.
+만약 line~\lnref{check} 가 이제 충분히 많은 객체가 들어와 있음을 보게 되면,
+line~\lnref{scan} 이 이것들 중 일부를 메모리 해제시키기 위해 \co{hazptr_scan()}
+을 호출합니다.
+\iffalse
+
 Once a hazard-pointer-protected object has been removed from its
 linked data structure, so that it is now inaccessible to future
 hazard-pointer readers, it is passed to \co{hazptr_free_later()},
@@ -240,9 +252,29 @@ and line~\lnref{count} counts the object in \co{rcount}.
 If line~\lnref{check} sees that a sufficiently large number of objects are now
 queued, line~\lnref{scan} invokes \co{hazptr_scan()} to attempt to
 free some of them.
+\fi
 \end{lineref}
 
 \begin{lineref}[ln:defer:hazptr:scan_free:scan]
+\co{hazptr_scan()} 함수가 이 리스트의 line~\lnref{b}-\lnref{e} 에 보여져
+있습니다.
+이 함수는 고정된 쓰레드 최대 갯수 (\co{NR_THREADS}) 와 쓰레드별 해저드 포인터의
+최대 갯수 (\co{K}) 에 의존적인데, 이는 해저드 포인터들의 고정된 크기 배열이
+사용될 수 있게 합니다.
+어떤 쓰레드건 이 해저드 포인터들을 스캔해야 할 수 있으므로, 각 쓰레드는 자신의
+배열을 유지하는데, 이는 쓰레드별 변수 \co{gplist} 에 의해 레퍼런스 됩니다.
+Line~\lnref{check} 가 이 쓰레드가 아직 자신의 \co{gplist} 를 할당받지 않았음을
+파악하게 되면, line~\lnref{alloc:b}-\lnref{alloc:e} 가 이 할당을 진행합니다.
+Line~\lnref{mb1} 의 메모리 배리어는 모든 쓰레드가 이 쓰레드에 의한 모든 객체의
+제거를 line~\lnref{loop:b}-\lnref{loop:e} 가 모든 해저드 포인터를 스캔하고 NULL
+이 아닌 포인터들을 \co{plist} 배열에 저장하고 그 갯수를 \co{psize} 에 세기 전에
+보게 될 것을 보장합니다.
+Line~\lnref{mb2} 의 메모리 배리어는 해저드 포인터의 읽기가 모든 객체의 메모리
+해제 전에 일어날 것을 보장합니다.
+Line~\lnref{sort} 는 이제 이 배열을 정렬시켜서 아래에 설명할 바이너리 탐색이
+가능하게 합니다.
+\iffalse
+
 The \co{hazptr_scan()} function is shown on lines~\lnref{b}-\lnref{e}
 of the listing.
 This function relies on a fixed maximum number of threads (\co{NR_THREADS})
@@ -262,6 +294,19 @@ The memory barrier on line~\lnref{mb2} ensures that the reads of
 the hazard pointers
 happen before any objects are freed.
 Line~\lnref{sort} then sorts this array to enable use of binary search below.
+\fi
+
+Line~\lnref{rem:b} 와~\lnref{rem:e} 는 이 쓰레드의 메모리 해제 되기 위한
+오브젝트들의 리스트에서 모든 원소들을 제거하고, 그것들을 로컬 \co{tmplist} 에
+위치시키며 line~\lnref{zero} 는 그 카운트를 0으로 만듭니다.
+Line~\lnref{loop2:b}-\lnref{loop2:e} 의 루프의 각 패스는 앞으로 메모리 해제될
+오브젝트들 각각을 처리합니다.
+Line~\lnref{rem1st:b} 와~\lnref{rem1st:e} 는 이 첫번째 오브젝트를 \co{tmplist}
+에서 제거하고, line~\lnref{chkhazp:b} 와~\lnref{chkhazp:e} 가 이 오브젝트를
+보호하는 해저드 포인터가 있음을 파악하면, line~\lnref{back:b}-\lnref{back:e} 는
+이걸 도로 \co{rlist} 에 위치시킵니다.
+그렇지 않다면, line~\lnref{free} 가 이 오브젝트를 해제시킵니다.
+\iffalse
 
 Lines~\lnref{rem:b} and~\lnref{rem:e}
 remove all elements from this thread's list of
@@ -277,6 +322,7 @@ determine that there is a hazard pointer
 protecting this object, lines~\lnref{back:b}-\lnref{back:e}
 place it back onto \co{rlist}.
 Otherwise, line~\lnref{free} frees the object.
+\fi
 \end{lineref}
 
 \begin{listing}[tbp]
