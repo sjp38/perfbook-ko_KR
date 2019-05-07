@@ -2006,44 +2006,8 @@ thread-local accesses to one, as is done in the next section.
 \end{listing}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
- 1 static void rcu_read_lock(void)
- 2 {
- 3   __get_thread_var(rcu_reader_gp) =
- 4     ACCESS_ONCE(rcu_gp_ctr) + 1;
- 5   smp_mb();
- 6 }
- 7 
- 8 static void rcu_read_unlock(void)
- 9 {
-10   smp_mb();
-11   __get_thread_var(rcu_reader_gp) =
-12     ACCESS_ONCE(rcu_gp_ctr);
-13 }
-14 
-15 void synchronize_rcu(void)
-16 {
-17   int t;
-18 
-19   smp_mb();
-20   spin_lock(&rcu_gp_lock);
-21   ACCESS_ONCE(rcu_gp_ctr) += 2;
-22   smp_mb();
-23   for_each_thread(t) {
-24     while ((per_thread(rcu_reader_gp, t) & 0x1) &&
-25             ((per_thread(rcu_reader_gp, t) -
-26               ACCESS_ONCE(rcu_gp_ctr)) < 0)) {
-27       poll(NULL, 0, 10);
-28     }
-29   }
-30   spin_unlock(&rcu_gp_lock);
-31   smp_mb();
-32 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/defer/rcu@read_lock_unlock.fcv}\vspace*{-11pt}\fvset{firstnumber=last}
+\input{CodeSamples/defer/rcu@synchronize.fcv}\fvset{firstnumber=auto}
 \caption{Free-Running Counter Using RCU}
 \label{lst:app:toyrcu:Free-Running Counter Using RCU}
 \end{listing}
@@ -2067,11 +2031,14 @@ that takes on only even-numbered values, with data shown in
 Listing~\ref{lst:app:toyrcu:Data for Free-Running Counter Using RCU}.
 The resulting \co{rcu_read_lock()} implementation is extremely
 straightforward.
-Lines~3 and~4 simply add one to the global free-running \co{rcu_gp_ctr}
+\begin{lineref}[ln:defer:rcu:read_lock_unlock:lock]
+Lines~\lnref{gp1} and~\lnref{gp2} simply
+add one to the global free-running \co{rcu_gp_ctr}
 variable and stores the resulting odd-numbered value into the
 \co{rcu_reader_gp} per-thread variable.
-Line~5 executes a memory barrier to prevent the content of the
+Line~\lnref{mb} executes a memory barrier to prevent the content of the
 subsequent RCU read-side critical section from ``leaking out''.
+\end{lineref}
 \fi
 
 \co{rcu_read_unlock()} 구현 역시 비슷합니다.
@@ -2082,10 +2049,12 @@ Line~11 과 12 는 \co{rcu_gp_ctr} 글로벌 변수의 값을 쓰레드별 변�
 동시의 \co{synchronize_rcu()} 인스턴스가 이를 무시해도 좋을 것임을 알립니다.
 \iffalse
 
+\begin{lineref}[ln:defer:rcu:read_lock_unlock:unlock]
 The \co{rcu_read_unlock()} implementation is similar.
-Line~10 executes a memory barrier, again to prevent the prior RCU
+Line~\lnref{mb} executes a memory barrier, again to prevent the prior RCU
 read-side critical section from ``leaking out''.
-Lines~11 and~12 then copy the \co{rcu_gp_ctr} global variable to the
+Lines~\lnref{gp1} and~\lnref{gp2} then
+copy the \co{rcu_gp_ctr} global variable to the
 \co{rcu_reader_gp} per-thread variable, leaving this per-thread
 variable with an even-numbered value so that a concurrent instance
 of \co{synchronize_rcu()} will know to ignore it.
@@ -2098,10 +2067,13 @@ of \co{synchronize_rcu()} will know to ignore it.
 	은 왜 단순히 \co{rcu_reader_gp} 에 0을 할당하지 않나요?
 	\iffalse
 
+	\begin{lineref}[ln:defer:rcu:read_lock_unlock:unlock]
 	If any even value is sufficient to tell \co{synchronize_rcu()}
-	to ignore a given task, why don't lines~10 and~11 of
+	to ignore a given task, why don't lines~\lnref{gp1}
+	and~\lnref{gp2} of
 	Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	simply assign zero to \co{rcu_reader_gp}?
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	0을 (또는 어떤 다른 짝수의 상수를) 할당하는 것은 실제로 동작할
@@ -2142,32 +2114,37 @@ Line~27 에서는 앞서 존재해온 RCU read-side 크리티컬 섹션을 기�
 앞으로 재배치 되지 않도록 보장합니다.
 \iffalse
 
+\begin{lineref}[ln:defer:rcu:synchronize:syn]
 Thus, \co{synchronize_rcu()} could wait for all of the per-thread
 \co{rcu_reader_gp} variables to take on even-numbered values.
 However, it is possible to do much better than that because
 \co{synchronize_rcu()} need only wait on \emph{pre-existing}
 RCU read-side critical sections.
-Line~19 executes a memory barrier to prevent prior manipulations
+Line~\lnref{mb1} executes a memory barrier to prevent prior manipulations
 of RCU-protected data structures from being reordered (by either
-the CPU or the compiler) to follow the increment on line~21.
-Line~20 acquires the \co{rcu_gp_lock} (and line~30 releases it)
+the CPU or the compiler) to follow the increment on
+line~\lnref{increasegp}.
+Line~\lnref{spinlock} acquires the \co{rcu_gp_lock}
+(and line~\lnref{spinunlock} releases it)
 in order to prevent multiple
 \co{synchronize_rcu()} instances from running concurrently.
-Line~21 then increments the global \co{rcu_gp_ctr} variable by
+Line~\lnref{increasegp} then increments the global \co{rcu_gp_ctr} variable by
 two, so that all pre-existing RCU read-side critical sections will
 have corresponding per-thread \co{rcu_reader_gp} variables with
 values less than that of \co{rcu_gp_ctr}, modulo the machine's
 word size.
 Recall also that threads with even-numbered values of \co{rcu_reader_gp}
 are not in an RCU read-side critical section,
-so that lines~23-29 scan the \co{rcu_reader_gp} values until they
-all are either even (line~24) or are greater than the global
-\co{rcu_gp_ctr} (lines~25-26).
-Line~27 blocks for a short period of time to wait for a
+so that lines~\lnref{scan:b}-\lnref{scan:e}
+scan the \co{rcu_reader_gp} values until they
+all are either even (line~\lnref{even}) or are greater than the global
+\co{rcu_gp_ctr} (lines~\lnref{gt1}-\lnref{gt2}).
+Line~\lnref{poll} blocks for a short period of time to wait for a
 pre-existing RCU read-side critical section, but this can be replaced with
 a spin-loop if grace-period latency is of the essence.
-Finally, the memory barrier at line~31 ensures that any subsequent
+Finally, the memory barrier at line~\lnref{mb3} ensures that any subsequent
 destruction will not be reordered into the preceding loop.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -2177,11 +2154,13 @@ destruction will not be reordered into the preceding loop.
 	않나요?
 	\iffalse
 
-	Why are the memory barriers on lines~19 and~31 of
+	\begin{lineref}[ln:defer:rcu:synchronize:syn]
+	Why are the memory barriers on lines~\lnref{mb1} and~\lnref{mb3} of
 	Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	needed?
 	Aren't the memory barriers inherent in the locking
-	primitives on lines~20 and~30 sufficient?
+	primitives on lines~\lnref{spinlock} and~\lnref{spinunlock} sufficient?
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	락킹 기능들은 단지 크리티컬 섹션을 가두는 것만을 보장하기 때문에 이
@@ -2252,11 +2231,12 @@ line~3 에서 preemption 당하고 \co{rcu_gp_ctr} 카운터가 가질 수 있�
 수 있는 소프트웨어 환경에 들어가 있을 것을 필요로 합니다.
 \iffalse
 
+\begin{lineref}[ln:defer:rcu:read_lock_unlock:lock]
 This implementation suffers from some serious shortcomings in
 addition to the high update-side overhead noted earlier.
 First, it is no longer permissible to nest RCU read-side critical
 sections, a topic that is taken up in the next section.
-Second, if a reader is preempted at line~3 of
+Second, if a reader is preempted at line~\lnref{gp1} of
 Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU} after fetching from
 \co{rcu_gp_ctr} but before storing to \co{rcu_reader_gp},
 and if the \co{rcu_gp_ctr} counter then runs through more than half
@@ -2265,6 +2245,7 @@ will ignore the subsequent RCU read-side critical section.
 Third and finally, this implementation requires that the enclosing software
 environment be able to enumerate threads and maintain per-thread
 variables.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -2276,13 +2257,16 @@ variables.
 	있을까요?
 	\iffalse
 
+	\begin{lineref}[ln:defer:rcu:read_lock_unlock:lock]
 	Is the possibility of readers being preempted in
-	lines~3-4 of Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
+	lines~\lnref{gp1}-\lnref{gp2} of
+	Listing~\ref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	a real problem, in other words, is there a real sequence
 	of events that could lead to failure?
 	If not, why not?
 	If so, what is the sequence of events, and how can the
 	failure be addressed?
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	진짜 문제입니다, 그리고 실패를 이끌어내는 일련의 이벤트들이 존재하며,
@@ -2823,44 +2807,12 @@ overhead.
 \end{listing}
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 static void rcu_read_lock(void)
-  2 {
-  3 }
-  4
-  5 static void rcu_read_unlock(void)
-  6 {
-  7 }
-  8
-  9 rcu_quiescent_state(void)
- 10 {
- 11   smp_mb();
- 12   __get_thread_var(rcu_reader_qs_gp) =
- 13     ACCESS_ONCE(rcu_gp_ctr) + 1;
- 14   smp_mb();
- 15 }
- 16
- 17 static void rcu_thread_offline(void)
- 18 {
- 19   smp_mb();
- 20   __get_thread_var(rcu_reader_qs_gp) =
- 21     ACCESS_ONCE(rcu_gp_ctr);
- 22   smp_mb();
- 23 }
- 24
- 25 static void rcu_thread_online(void)
- 26 {
- 27   rcu_quiescent_state();
- 28 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/defer/rcu_qs@read_lock_unlock.fcv}
 \caption{Quiescent-State-Based RCU Read Side}
 \label{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 \end{listing}
 
+\begin{lineref}[ln:defer:rcu_qs:read_lock_unlock]
 Listing~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 (\path{rcu_qs.h})
 는 조용한 상태에 기반한 사용자 레벨 RCU 구현을 만드는데에
@@ -2894,7 +2846,8 @@ Listing~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 shows the read-side primitives used to construct a user-level
 implementation of RCU based on quiescent states, with the data shown in
 Listing~\ref{lst:app:toyrcu:Data for Quiescent-State-Based RCU}.
-As can be seen from lines~1-7 in the listing, the \co{rcu_read_lock()}
+As can be seen from lines~\lnref{lock:b}-\lnref{unlock:e} in the listing,
+the \co{rcu_read_lock()}
 and \co{rcu_read_unlock()} primitives do nothing, and can in fact
 be expected to be inlined and optimized away, as they are in
 server builds of the Linux kernel.
@@ -2902,11 +2855,14 @@ This is due to the fact that quiescent-state-based RCU implementations
 \emph{approximate} the extents of RCU read-side critical sections
 using the aforementioned quiescent states.
 Each of these quiescent states contains a call to
-\co{rcu_quiescent_state()}, which is shown from lines~9-15 in the listing.
+\co{rcu_quiescent_state()}, which is shown from
+lines~\lnref{qs:b}-\lnref{qs:e} in the listing.
 Threads entering extended quiescent states (for example, when blocking)
-may instead call \co{rcu_thread_offline()} (lines~17-23) when entering
+may instead call \co{rcu_thread_offline()}
+(lines~\lnref{offline:b}-\lnref{offline:e}) when entering
 an extended quiescent state and then call
-\co{rcu_thread_online()} (lines~25-28) when leaving it.
+\co{rcu_thread_online()}
+(lines~\lnref{online:b}-\lnref{online:e}) when leaving it.
 As such, \co{rcu_thread_online()} is analogous to \co{rcu_read_lock()}
 and \co{rcu_thread_offline()} is analogous to \co{rcu_read_unlock()}.
 In addition, \co{rcu_quiescent_state()} can be thought of as a
@@ -2919,6 +2875,7 @@ In addition, \co{rcu_quiescent_state()} can be thought of as a
 	performance optimizations.}
 It is illegal to invoke \co{rcu_quiescent_state()}, \co{rcu_thread_offline()},
 or \co{rcu_thread_online()} from an RCU read-side critical section.
+\end{lineref}
 \fi
 
 \co{rcu_quiescent_state()} 에서, line~11 에서는 이 quiescent state (조용한
@@ -2936,12 +2893,14 @@ Line~12-13 에서는 글로벌 변수 \co{rcu_gp_ctr} 의 복사본을 가져오
 섹션을 포함해서) 뒤따르는 코드가 line~12-13 과 재배치 되는 일을 방지합니다.
 \iffalse
 
-In \co{rcu_quiescent_state()}, line~11 executes a memory barrier
+\begin{lineref}[ln:defer:rcu_qs:read_lock_unlock:qs]
+In \co{rcu_quiescent_state()}, line~\lnref{mb1} executes a memory barrier
 to prevent any code prior to the quiescent state (including possible
 RCU read-side critical sections) from being reordered
 into the quiescent state.
-Lines~12-13 pick up a copy of the global \co{rcu_gp_ctr}, using
-\co{ACCESS_ONCE()} to ensure that the compiler does not employ any
+Lines~\lnref{gp1}-\lnref{gp2} pick up
+a copy of the global \co{rcu_gp_ctr}, using
+\co{READ_ONCE()} to ensure that the compiler does not employ any
 optimizations that would result in \co{rcu_gp_ctr} being fetched
 more than once,
 and then adds one to the value fetched and stores it into
@@ -2950,9 +2909,10 @@ instance of \co{synchronize_rcu()} will see an odd-numbered value,
 thus becoming aware that a new RCU read-side critical section has started.
 Instances of \co{synchronize_rcu()} that are waiting on older
 RCU read-side critical sections will thus know to ignore this new one.
-Finally, line~14 executes a memory barrier, which prevents subsequent
+Finally, line~\lnref{mb2} executes a memory barrier, which prevents subsequent
 code (including a possible RCU read-side critical section) from being
-re-ordered with the lines~12-13.
+re-ordered with the lines~\lnref{gp1}-\lnref{gp2}.
+\end{lineref}
 \fi
 
 \QuickQuiz{}
@@ -2961,9 +2921,11 @@ re-ordered with the lines~12-13.
 	오버헤드를 많이 늘리지 않을까요?
 	\iffalse
 
-	Doesn't the additional memory barrier shown on line~14 of
+	\begin{lineref}[ln:defer:rcu_qs:read_lock_unlock:qs]
+	Doesn't the additional memory barrier shown on line~\lnref{mb2} of
 	Listing~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 	greatly increase the overhead of \co{rcu_quiescent_state}?
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	실제로 그렇습니다!
@@ -2976,6 +2938,7 @@ re-ordered with the lines~12-13.
 	있도록 하기 위해 반드시 필요합니다.
 	\iffalse
 
+	\begin{lineref}[ln:defer:rcu_qs:read_lock_unlock:qs]
 	Indeed it does!
 	An application using this implementation of RCU should therefore
 	invoke \co{rcu_quiescent_state} sparingly, instead using
@@ -2983,9 +2946,11 @@ re-ordered with the lines~12-13.
 	time.
 
 	However, this memory barrier is absolutely required so that
-	other threads will see the store on lines~12-13 before any
+	other threads will see the store on
+	lines~\lnref{gp1}-\lnref{gp2} before any
 	subsequent RCU read-side critical sections executed by the
 	caller.
+	\end{lineref}
 	\fi
 } \QuickQuizEnd
 
@@ -3028,9 +2993,11 @@ ignore this thread.
 	의 line~19 와 22 의 메모리 배리어들은 왜 필요한 건가요?
 	\iffalse
 
-	Why are the two memory barriers on lines~19 and 22 of
+	\begin{lineref}[ln:defer:rcu_qs:read_lock_unlock:qs]
+	Why are the two memory barriers on lines~\lnref{mb1} and \lnref{mb2} of
 	Listing~\ref{lst:app:toyrcu:Quiescent-State-Based RCU Read Side}
 	needed?
+	\end{lineref}
 	\fi
 \QuickQuizAnswer{
 	Line~19 의 메모리 배리어는 \co{rcu_thread_offline()} 에 앞서는 어떤 RCU
@@ -3041,13 +3008,16 @@ ignore this thread.
 	금지된 행위이기 때문입니다.
 	\iffalse
 
-	The memory barrier on line~19 prevents any RCU read-side
+	\begin{lineref}[ln:defer:rcu_qs:read_lock_unlock:qs]
+	The memory barrier on line~\lnref{mb1} prevents any RCU read-side
 	critical sections that might precede the
 	call to \co{rcu_thread_offline()} won't be reordered by either
-	the compiler or the CPU to follow the assignment on lines~20-21.
-	The memory barrier on line~22 is, strictly speaking, unnecessary,
+	the compiler or the CPU to follow the assignment on
+	lines~\lnref{gp1}-\lnref{gp2}.
+	The memory barrier on line~\lnref{mb2} is, strictly speaking, unnecessary,
 	as it is illegal to have any RCU read-side critical sections
 	following the call to \co{rcu_thread_offline()}.
+	\end{lineref}
 	\fi
 } \QuickQuizEnd
 
@@ -3061,30 +3031,7 @@ quiescent state.
 \fi
 
 \begin{listing}[tbp]
-{ \scriptsize
-\begin{verbbox}
-  1 void synchronize_rcu(void)
-  2 {
-  3   int t;
-  4
-  5   smp_mb();
-  6   spin_lock(&rcu_gp_lock);
-  7   rcu_gp_ctr += 2;
-  8   smp_mb();
-  9   for_each_thread(t) {
- 10     while (rcu_gp_ongoing(t) &&
- 11            ((per_thread(rcu_reader_qs_gp, t) -
- 12              rcu_gp_ctr) < 0)) {
- 13       poll(NULL, 0, 10);
- 14     }
- 15   }
- 16   spin_unlock(&rcu_gp_lock);
- 17   smp_mb();
- 18 }
-\end{verbbox}
-}
-\centering
-\theverbbox
+\input{CodeSamples/defer/rcu_qs@synchronize.fcv}
 \caption{RCU Update Side Using Quiescent States}
 \label{lst:app:toyrcu:RCU Update Side Using Quiescent States}
 \end{listing}
