@@ -2239,16 +2239,16 @@ excessive real-time latencies.
 
 그래서 Preemptible RCU 구현 하나가 리눅스 커널에 추가되었습니다.
 이 구현은 현재 RCU read-side 크리티컬 섹션 내에서 preemption 당한 태스크들의
-리스트를 유지하면서 커널 내의 모든 각각의 task 의 상태를 개별적으로 추적해야
+리스트를 유지하면서 커널 내의 모든 각각의 태스크의 상태를 개별적으로 추적해야
 하는 필요성을 막습니다.
 하나의 grace period 는 다음과 같이 종료될 수 있습니다: (1)~일단 모든 CPU 들이
 현재의 grace period 시작 전부터 효과를 발휘하고 있던 모든 RCU read-side
 크리티컬 섹션들을 완료했을때, 그리고 (2)~모든 그런 이전부터 존재했던 크리티컬
-섹션의 중간에 preemption 당했던 모든 task 들이 그들의 리스트로부터 그 자신을
+섹션의 중간에 preemption 당했던 모든 태스크가 그들의 리스트로부터 그 자신을
 제거했을 때.
 이 구현의 간단화된 버전이
 Listing~\ref{lst:advsync:Preemptible Linux-Kernel RCU} 에 보여져 있습니다.
-\co{__rcu_read_lock()} 함수는 line~1-5 에, 그리고 \co{__rcu_read_unlock()}
+\co{__rcu_read_lock()} 함수가 line~1-5 에, 그리고 \co{__rcu_read_unlock()}
 함수가 line~7-22 에 있습니다.
 \iffalse
 
@@ -2269,9 +2269,9 @@ the \co{__rcu_read_unlock()} function spans lines~7-22.
 \fi
 
 \co{__rcu_read_lock()} 의 line~3 은 \co{rcu_read_lock()} 함수의 중첩된 호출
-횟수의 task 별 카운트를 증가시키며, line~4 는 컴파일러가 RCU read-side 크리티컬
-섹션의 뒤따르는 코드가 앞의 \co{rcu_read_lock()} 보다 앞으로 컴파일러가 재배치
-하는 것을 막습니다.
+횟수의 태스크별 카운트를 증가시키며, line~4 는 컴파일러가 RCU read-side
+크리티컬 섹션의 뒤따르는 코드가 앞의 \co{rcu_read_lock()} 보다 앞으로
+컴파일러가 재배치 하는 것을 막습니다.
 
 \co{__rcu_read_unlock()} 의 line~11 에서는 중첩 수준 카운트가 1인지
 확인해보는데, 달리 말하자면, 이 함수 호출이 \co{rcu_read_unlock()} 호출의
@@ -2317,8 +2317,8 @@ invokes \co{rcu_read_unlock_special()} to carry out that special handling.
 \fi
 
 필요한 특수 처리에는 여러 종류가 있습니다만, 우리는 RCU read-side 크리티컬
-섹션이 preemption 되었을 때에 필요한 것들에만 집중하도록 하겠스빈다.
-이 경우, 해당 task 는 자신의 RCU read-side 크리티컬 섹션 중에 처음 preemption
+섹션이 preemption 되었을 때에 필요한 부분에만 집중하도록 하겠습니다.
+이 경우, 해당 태스크는 자신의 RCU read-side 크리티컬 섹션 중에 처음 preemption
 되었을 때에 자신이 추가되었던 리스트로부터 자신을 제거해야만 합니다.
 하지만, 이런 리스트들은 lock 으로 보호된다는 점을 알 필요가 있는데, 이는
 \co{rcu_read_unlock()} 이 더이상 lockless 하지 않음을 의미합니다.
@@ -2356,7 +2356,7 @@ count on line~20.
 	의 line~17 에서의 \co{t->rcu_read_unlock.special.s} 의 로드 직후에
 	preemption 이 발생했다고 생각해 봅시다.
 	그렇게 되면 해당 task 가 \co{rcu_read_unlock_special()} 를 수행시키지
-	못하게 되어서, 자기 자신을 현재 grace period 를 막고 있는 task 들의
+	못하게 되어서, 자기 자신을 현재 grace period 를 막고 있는 태스크들의
 	리스트로부터 삭제하는 것을 막아서, 그 grace period 가 무한정 길어질 수
 	있도록 할 수 있지 않을까요?
 	\iffalse
@@ -2384,7 +2384,7 @@ count on line~20.
 	\fi
 } \QuickQuizEnd
 
-이 preemptible RCU 구현은 읽기가 대부분인 데이터 구조에게 많은 수의 읽기
+이 preemptible RCU 구현은 읽기가 대부분인 데이터 구조에 많은 수의 읽기
 쓰레드들의 우선순위 증가에 피할 수 없는 지연 없이 real-time 응답시간을 가능하게
 합니다.
 \iffalse
