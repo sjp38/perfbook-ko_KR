@@ -4579,7 +4579,7 @@ involved, the corresponding \co{exists} clause cannot trigger.
 \label{lst:memorder:Long ISA2 Release-Acquire Chain}
 \end{listing}
 
-release-acquire 체인이 본질적으로 store-to-load 이긴 하지만, 이것들은
+Release-acquire 체인이 본질적으로 store-to-load 이긴 하지만, 이것들은
 Figure~\ref{fig:memorder:Load-to-Store is Counter-Temporal}
 에 보인 것처럼 반 임시적이긴 하지만 하나의 load-to-store 단계를 처리할 수 있는
 것으로 밝혀졌습니다.
@@ -4589,15 +4589,6 @@ Listing~\ref{lst:memorder:Long ISA2 Release-Acquire Chain}
 은 세단계의 release-acquire 체인을 보입니다만, \co{P3()} 의 마지막 액세스는
 \co{P0()} 에 의해 \co{WRITE_ONCE()} 된 \co{x0} 로부터의 \co{READ_ONCE()} 여서,
 임시적이지 않은 load-to-store 링크를 두 프로세스 사이에 형성합니다.
-하지만, \co{P0()} 의 \co{smp_store_release()} (line~8) 는 cumulativity 를
-가지므로, \co{P3()} 의 \co{READ_ONCE()} 가 0 을 리턴한다면, 이 cumulativity 는
-이 \co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()} 앞으로
-순서지어지게 강제할 겁니다.
-또한, 이 release-acquire 체인 (line~8, 16, 17, 24, 25, 그리고~33) 은 \co{P3()}
-의 \co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()} 뒤로 순서지어지게
-강제합니다.
-\co{P3()} 의 \co{READ_ONCE()} 는 \co{P0()} 의 \co{smp_store_release()} 앞뒤에
-있을 수 없으므로, 다음 두가지 중 하나 또는 모두가 진실이어야만 합니다:
 \iffalse
 
 Although release-acquire chains are inherently store-to-load creatures,
@@ -4611,8 +4602,20 @@ shows a three-step release-acquire chain, but where \co{P3()}'s
 final access is a \co{READ_ONCE()} from \co{x0}, which is
 accessed via \co{WRITE_ONCE()} by \co{P0()}, forming a non-temporal
 load-to-store link between these two processes.
-% TODO: Apply
+\fi
 \begin{lineref}[ln:formal:litmus:C-ISA2+o-r+a-r+a-r+a-o:whole]
+하지만, \co{P0()} 의 \co{smp_store_release()} (line~\lnref{P0:rel}) 는
+cumulativity 를 가지므로, \co{P3()} 의 \co{READ_ONCE()} 가 0 을 리턴한다면, 이
+cumulativity 는 이 \co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()}
+앞으로 순서지어지게 강제할 겁니다.
+또한, 이 release-acquire 체인 (line~\lnref{P0:rel}, \lnref{P1:acq},
+\lnref{P1:rel}, \lnref{P2:acq}, \lnref{P2:rel}, 그리고~\lnref{P3:acq}) 은
+\co{P3()} 의 \co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()} 뒤로
+순서지어지게 강제합니다.
+\co{P3()} 의 \co{READ_ONCE()} 는 \co{P0()} 의 \co{smp_store_release()} 앞뒤에
+있을 수 없으므로, 다음 두가지 중 하나 또는 모두가 진실이어야만 합니다:
+\iffalse
+
 However, because \co{P0()}'s \co{smp_store_release()} (line~\lnref{P0:rel})
 is cumulative, if \co{P3()}'s \co{READ_ONCE()} returns zero,
 this cumulativity will force the \co{READ_ONCE()} to be ordered
@@ -4625,6 +4628,7 @@ forces \co{P3()}'s \co{READ_ONCE()} to be ordered after \co{P0()}'s
 Because \co{P3()}'s \co{READ_ONCE()} cannot be both before and after
 \co{P0()}'s \co{smp_store_release()}, either or both of two things must
 be true:
+\fi
 \end{lineref}
 \fi
 
