@@ -6687,6 +6687,17 @@ These questions are addressed in the following sections.
 \label{lst:memorder:RCU Readers Provide No Lock-Like Ordering}
 \end{listing}
 
+RCU 의 읽기 쪽 기능인 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 은 그들
+스스로는 어떤 순서 규칙도 제공하지 않습니다.
+특히, 그 이름에도 불구하고,
+Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}
+(\path{C-LB+rl-o-o-rul+rl-o-o-rul.litmus})
+에서 보이듯, 이것들은 락처럭 동작하지도 않습니다.
+이 리트머스 테스트에 \co{herd} 를 돌리면 볼 수 있듯, 이 리트머스 테스트의
+사이클은 허용되어 있습니다: \co{rc1} 레지스터의 두 인스턴스는 마지막 값 1을
+가질 수 있습니다.
+\iffalse
+
 On their own, RCU's read-side primitives \co{rcu_read_lock()} and
 \co{rcu_read_unlock()} provide no ordering whatsoever.
 In particular, despite their names, they do not act like locks, as can
@@ -6696,12 +6707,26 @@ Listing~\ref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}
 As can be seen by running \co{herd} on this litmus test, this litmus
 test's cycle is allowed: Both instances of the \co{r1} register can
 have final values of 1.
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-LB+o-rl-rul-o+o-rl-rul-o@whole.fcv}
 \caption{RCU Readers Provide No Barrier-Like Ordering}
 \label{lst:memorder:RCU Readers Provide No Barrier-Like Ordering}
 \end{listing}
+
+이 기능들은
+Listing~\ref{lst:memorder:RCU Readers Provide No Barrier-Like Ordering}
+(\path{C-LB+o-rl-rul-o+o-rl-rul-o.litmus})
+에서 보이는 것처럼 grace period 와 섞이거나 하지 않은 한은 배리어 같은 순서
+속성을 갖지 않습니다.
+이 리트머스 테스트의 사이클은 허용되어 있는데, \co{herd} 로 이 리트머스
+테스트를 돌리면 검증할 수 있습니다.
+
+물론, 이 두개의 리트머스 테스트에서의 순서규칙 부재는 RCU 의 QSBR 구현에서
+\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 이 no-op 이란 걸 고려하면 전혀
+놀라운 일이 아닙니다.
+\iffalse
 
 Nor do these primitives have barrier-like ordering properties,
 at least not unless there is a grace period in the mix, as can be seen in
@@ -6713,6 +6738,7 @@ This litmus test's cycle is allowed, as can be verified by running
 Of course, lack of ordering in both these litmus tests should be absolutely
 no surprise, given that both \co{rcu_read_lock()} and \co{rcu_read_unlock()}
 are no-ops in the QSBR implementation of RCU.
+\fi
 
 \subsubsection{RCU Update-Side Ordering}
 \label{sec:memorder:RCU Update-Side Ordering}
