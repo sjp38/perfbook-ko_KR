@@ -6773,17 +6773,39 @@ Table~\ref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
 \subsubsection{RCU Readers: Before and After}
 \label{sec:memorder:RCU Readers: Before and After}
 
+이 섹션을 읽기 전에, 사용 가능한 보장들과 유지 가능한 소프트웨어가 의존해야
+하는 보장들 사이의 차이를 생각해 봅시다.
+이를 기억해 두고, 이 섹션은 보다 이국적인 RCU 보장사항들을 몇가지 보입니다.
+\iffalse
+
 Before reading this section, it would be well to reflect on the distinction
 between guarantees that are available and guarantees that maintainable
 software should rely on.
 Keeping that firmly in mind, this section presents a few of the
 more exotic RCU guarantees.
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-SB+o-rcusync-o+o-rl-o-rul@whole.fcv}
 \caption{What Happens Before RCU Readers?}
 \label{lst:memorder:What Happens Before RCU Readers?}
 \end{listing}
+
+Listing~\ref{lst:memorder:What Happens Before RCU Readers?}
+(\path{C-SB+o-rcusync-o+o-rl-o-rul.litmus})
+은
+Listing~\ref{lst:memorder:RCU Fundamental Property}
+의 것과 유사한 리트머스 테스트를 보입니다만, RCU 읽기 쓰레드의 첫 읽기는 RCU
+read-side 크리티컬 섹션을 앞서는데, 이는 읽기를 크리티컬 섹션 안에 두는
+관례적인 (그리고 유지가능한!) 방법과는 다른 것입니다.
+아마도 놀랍겠지만, 이 리트머스 테스트를 \co{herd} 에서 돌리면
+Listing~\ref{lst:memorder:RCU Fundamental Property}
+에서와 같은 결과가 나옵니다:
+사이클이 나타나지 않습니다.
+
+왜 이렇게 될까요?
+\iffalse
+
 
 Listing~\ref{lst:memorder:What Happens Before RCU Readers?}
 (\path{C-SB+o-rcusync-o+o-rl-o-rul.litmus})
@@ -6798,6 +6820,20 @@ Listing~\ref{lst:memorder:RCU Fundamental Property}:
 The cycle is forbidden.
 
 Why would this be the case?
+\fi
+
+\co{P1()} 의 액세스는 둘 다 volatile 이기 때문에,
+Section~\ref{sec:toolsoftrade:A Volatile Solution}
+에서 이야기 된 바와 같이, 컴파일러는 이것들을 재배치 하지 못합니다.
+이는 \co{P1()} 의 \co{WRITE_ONCE()} 가 만들어낸 코드는 \co{P1()} 의
+\co{READ_ONCE()} 를 앞섭니다.
+따라서, 메모리 배리어 명령어를 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()}
+안에 위치시키는 RCU 구현은 \co{P1()} 의 두 액세스의 순서를 하드웨어 레벨까지
+지켜줄 겁니다.
+한편, 인터럽트 기반의 상태 머신에 의존하는 RCU 구현 역시 이 순서를 \emps{grace
+period 에 상대적으로} 지켜줄 텐데, 인터럽트는 인터럽트된 코드의 수행 사이에
+정확히 자리하기 때문입니다.
+\iffalse
 
 Because both of \co{P1()}'s accesses are volatile,
 as discussed in
@@ -6812,6 +6848,16 @@ On the other hand, RCU implementations that rely on interrupt-based
 state machines will also fully preserve this ordering
 \emph{relative to the grace period} due to the fact that interrupts take
 place at a precise location in the execution of the interrupted code.
+\fi
+
+이는 결국 \co{WRITE_ONCE()} 가 특정 RCU grace period 의 종료 뒤에 온다면, 이
+RCU read-side critical section 안에서의 액세스는 같은 grace period 의 시작을
+뒤따라야만 합니다.
+사실, 일부 RCU 구현에서는, 이 크리티컬 섹션의 액세스들은 (이 구현에서의
+사고로!) 또한 이 grace period 의 처음만이 아니라 종료를 뒤따를 겁니다.
+비슷하게, 이 critical section 안의, 그리고 \emph{앞서는} 모든 것이 같은 grace
+period 의 종료를 앞서야만 합니다.
+\iffalse
 
 This in turn means that if the \co{WRITE_ONCE()} follows the end of a given
 RCU grace period, then the accesses within the RCU read-side critical
@@ -6822,12 +6868,22 @@ that grace period, rather than merely the beginning of it.
 Similarly, if the \co{READ_ONCE()} precedes the beginning of the grace
 period, everything within \emph{and preceding} that critical section
 must precede the end of that same grace period.
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-SB+o-rcusync-o+rl-o-rul-o@whole.fcv}
 \caption{What Happens After RCU Readers?}
 \label{lst:memorder:What Happens After RCU Readers?}
 \end{listing}
+
+Listing~\ref{lst:memorder:What Happens After RCU Readers?}
+(\path{C-SB+o-rcusync-o+rl-o-rul-o.litmus})
+은 유사하지만, 이 RCU read-side critical section 뒤에 액세스들을 봅니다.
+이 테스트의 사이클 역시 금지되어 있는데, \co{herd} 툴로 확인할 수 있습니다.
+그 이유는
+Listing~\ref{lst:memorder:What Happens Before RCU Readers?}
+에서의 것과 유사하며 독자 여러분의 몫으로 두겠습니다.
+\iffalse
 
 Listing~\ref{lst:memorder:What Happens After RCU Readers?}
 (\path{C-SB+o-rcusync-o+rl-o-rul-o.litmus})
@@ -6838,6 +6894,7 @@ tool.
 The reasoning is similar to that for
 Listing~\ref{lst:memorder:What Happens Before RCU Readers?},
 and is left as an exercise for the reader.
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-SB+o-rcusync-o+o-rl-rul-o@whole.fcv}
