@@ -6904,10 +6904,32 @@ and is left as an exercise for the reader.
 
 Listing~\ref{lst:memorder:What Happens With Empty RCU Readers?}
 (\path{C-SB+o-rcusync-o+o-rl-rul-o.litmus})
+은 이걸 한발짝 더 나아가서, \co{P1()} 의 \co{WRITE_ONCE()} 를 RCU read-side
+크리티컬 섹션을 앞서게 옮기고 \co{P1()} 의 \co{READ_ONCE()} 가 이를 앞서게
+해서, 텅 빈 RCU read-side 크리티컬 섹션을 만듭니다.
+\iffalse
+
+Listing~\ref{lst:memorder:What Happens With Empty RCU Readers?}
+(\path{C-SB+o-rcusync-o+o-rl-rul-o.litmus})
 takes things one step farther, moving \co{P1()}'s \co{WRITE_ONCE()}
 to precede the RCU read-side critical section and moving
 \co{P1()}'s \co{READ_ONCE()} to follow it, resulting in an
 empty RCU read-side critical section.
+\fi
+
+아마도 놀랍겠지만, 이 텅 빈 크리티컬 섹션에도 불구하고, RCU 는 여전히 사이클을
+막습니다.
+이는 역시 \co{herd} 를 통해 체크될 수 있습니다.
+더 나아가서, 그 이유는
+Listing~\ref{lst:memorder:What Happens Before RCU Readers?} 과 같은데, 다시
+말하자면, \co{P1()} 의 \co{WRITE_ONCE()} 가 주어진 grace period 의 끝을
+뒤따른다면 \co{P1()} 의 RCU read-side 크리티컬 섹션은---그리고 그것을 뒤따르는
+모든 것들은---이 grace period 의 시작을 뒤따라야 합니다.
+유사하게, \co{P1()} 의 \co{READ_ONCE()} 가 특정 grace period 의 시작을
+앞선다면, \co{P1()} 의 RCU read-side 크리티컬 섹션은---그리고 그걸 앞서는
+모든것들은---이 grace period 의 끝을 앞서야 합니다.
+두 경우 모두, 크리티컬 섹션의 텅비어있음은 관계 없습니다.
+\iffalse
 
 Perhaps surprisingly, despite the empty critical section, RCU nevertheless
 still manages to forbid the cycle.
@@ -6922,8 +6944,19 @@ Similarly, if \co{P1()}'s \co{READ_ONCE()} precedes the beginning of a
 given grace period, then \co{P1()}'s RCU read-side critical section---and
 everything preceding it---must precede the end of that same grace period.
 In both cases, the critical section's emptiness is irrelevant.
+\fi
 
 \QuickQuiz{}
+	잠깐만요!
+	RCU 의 QSBR 구현에서는 \co{rcu_read_lock()} \co{rcu_read_unlock()} 모두
+	어떤 코드도 만들어내지 않습니다.
+	이 말은
+	Listing~\ref{lst:memorder:What Happens With Empty RCU Readers?}
+	의 RCU read-side 크리티컬 섹션이 단순히 비어있을 뿐 아니라 완전
+	존재하지 않는단 뜻이예요!!!
+	그런데 어떻게 존재하지도 않는 것이 순서에 어떤 영향을 줄 수 있는거죠???
+	\iffalse
+
 	Wait a minute!
 	In QSBR implementations of RCU, no code is emitted for
 	\co{rcu_read_lock()} and \co{rcu_read_unlock()}.
@@ -6932,7 +6965,19 @@ In both cases, the critical section's emptiness is irrelevant.
 	isn't just empty, it is completely nonexistent!!!
 	So how can something that doesn't exist at all possibly have
 	any effect whatsoever on ordering???
+	\fi
 \QuickQuizAnswer{
+	QSBR 내에서, RCU read-side 크리티컬 섹션은 실제로 사라지지 않기
+	때문입니다.
+	대신, 그것들은 quiescent state 를 만날 때까지 양방향으로 확장됩니다.
+	예를 들어, 리눅스 커널에서, 이 크리티컬 섹션은 \co{schedule()} 호출
+	한쌍까지 확장되는데, 하나는 이 크리티컬 섹션을 앞서고 하나는 뒤따르는
+	데까지이죠.\footnote{
+		물론, QSBR 구현이 아닌 곳에서 \co{rcu_read_lock()} 과
+		\co{rcu_read_unlock()} 은 진짜로 코드를 만들어낼 수 있는데, 이
+		때엔 분명한 순서를 제공합니다.}
+	\ifflase
+
 	Because in QSBR, RCU read-side critical sections don't
 	actually disappear.
 	Instead, they are extended in both directions until a quiescent
@@ -6943,10 +6988,16 @@ In both cases, the critical section's emptiness is irrelevant.
 		Of course, in non-QSBR implementations,
 		\co{rcu_read_lock()} and \co{rcu_read_unlock()} really
 		do emit code, which can clearly provide ordering.}
+	\fi
+
+	따라서, 이상하게 보이겠지만, 텅 빈 RCU read-side 크리티컬 섹션은 정말로
+	일부 정도의 순서 규칙을 제공합니다.
+	\iffalse
 
 	Therefore, strange though it might seem, empty RCU read-side
 	critical sections really can and do provide some degree of
 	ordering.
+	\fi
 } \QuickQuizEnd
 
 \begin{listing}[tb]
@@ -6955,6 +7006,15 @@ In both cases, the critical section's emptiness is irrelevant.
 \label{lst:memorder:What Happens With No RCU Readers?}
 \end{listing}
 
+이 상황은
+Listing~\ref{lst:memorder:What Happens With No RCU Readers?}
+(\path{C-SB+o-rcusync-o+o-o.litmus})
+에 보인 것과 같이 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 이 완전히
+사라지면 무슨 일이 일어나는지에 대한 질문을 일으킵니다.
+\co{herd} 로 체크되겠지만, 이 리트머스 테스트의 사이클은 허용되어 있는데, 즉,
+\co{r2} 의 인스턴스 두개가 최종값 0을 가질 수 있습니다.
+\iffalse
+
 This situation leads to the question of what happens if
 \co{rcu_read_lock()} and \co{rcu_read_unlock()} are omitted
 entirely, as shown in
@@ -6962,6 +7022,15 @@ Listing~\ref{lst:memorder:What Happens With No RCU Readers?}
 (\path{C-SB+o-rcusync-o+o-o.litmus}).
 As can be checked with \co{herd}, this litmus test's cycle is allowed,
 that is, both instances of \co{r2} can have final values of zero.
+\fi
+
+이는 텅빈 RCU read-side 크리티컬 섹션이 순서를 제공할 수 있다는 사실을 놓고 볼
+때 이상하게 보일 수 있습니다.
+그리고 RCU 의 QSBR 구현은 실제로 이 결과를 막을 것이라는 것도 사실입니다.
+하지만, RCU 는 또한 QSBR 이 아닌 구현도 가지고 있으며, 이런 구현들은 이 경우에
+순서를 강제할 방법이 없습니다.
+따라서, 다시 말하지만, 이 리트머스 테스트의 사이클은 허용됩니다.
+\iffalse
 
 This might seem strange in light of the fact that empty RCU
 read-side critical sections can provide ordering.
@@ -6970,6 +7039,7 @@ forbid this outcome.
 However, RCU also has non-QSBR implementations, and these implementations
 have no way to enforce ordering in this case.
 Again, therefore, this litmus test's cycle is allowed.
+\fi
 
 \QuickQuiz{}
 	Listing~\ref{lst:memorder:What Happens Before RCU Readers?},
