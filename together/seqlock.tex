@@ -1,0 +1,117 @@
+% together/seqlock.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\section{Sequence-Locking Specials}
+\label{sec:together:Sequence-Locking Specials}
+%
+\epigraph{The girl who can't dance says the band can't play.}
+	 {\emph{Yiddish proverb}}
+
+This section looks at some special uses of sequence counters.
+
+\subsection{Correlated Data Elements}
+\label{sec:together:Correlated Data Elements}
+
+Suppose we have a hash table where we need correlated views of two or
+more of the elements.
+These elements are updated together, and we do not want to see an old
+version of the first element along with new versions of the other
+elements.
+For example, Schr\"odinger decided to add his extended family to his
+in-memory database along with all his animals.
+Although Schr\"odinger understands that marriages and divorces do not
+happen instantaneously, he is also a traditionalist.
+As such, he absolutely does not want his database ever to show that the
+bride is now married, but the groom is not, and vice versa.
+Plus, if you think Schr\"odinger is a traditionalist, you just
+try conversing with some of his family members!
+In other words, Schr\"odinger wants to be able to carry out a
+wedlock-consistent traversal of his database.
+
+One approach is to use sequence locks
+(see \cref{sec:defer:Sequence Locks}),
+so that wedlock-related updates are carried out under the
+protection of \co{write_seqlock()}, while reads requiring
+wedlock consistency are carried out within
+a \co{read_seqbegin()} / \co{read_seqretry()} loop.
+Note that sequence locks are not a replacement for RCU protection:
+Sequence locks protect against concurrent modifications, but RCU
+is still needed to protect against concurrent deletions.
+
+This approach works quite well when the number of correlated elements is
+small, the time to read these elements is short, and the update rate is
+low.
+Otherwise, updates might happen so quickly that readers might never complete.
+Although Schr\"odinger does not expect that even his least-sane relatives
+will marry and divorce quickly enough for this to be a problem,
+he does realize that this problem could well arise in other situations.
+One way to avoid this reader-starvation problem is to have the readers
+use the update-side primitives if there have been too many retries,
+but this can degrade both performance and scalability.
+Another way to avoid starvation is to have multiple sequence locks,
+in Schr\"odinger's case, perhaps one per species.
+
+In addition, if the update-side primitives are used too frequently,
+poor performance and scalability will result due to lock contention.
+One way to avoid this is to maintain a per-element sequence lock,
+and to hold both spouses' locks when updating their marital status.
+Readers can do their retry looping on either of the spouses' locks
+to gain a stable view of any change in marital status involving both
+members of the pair.
+This avoids contention due to high marriage and divorce rates, but
+complicates gaining a stable view of all marital statuses during a
+single scan of the database.
+
+If the element groupings are well-defined and persistent, which marital
+status is hoped to be,
+then one approach is to add pointers to the data elements to link
+together the members of a given group.
+Readers can then traverse these pointers to access all the data elements
+in the same group as the first one located.
+
+This technique is used heavily in the Linux kernel, perhaps most
+notably in the dcache subsystem~\cite{NeilBrown2015RCUwalk}.
+Note that it is likely that similar schemes also work with hazard
+pointers.
+
+Another approach is to shard the data elements, and then have each update
+write-acquire all the sequence locks needed to cover the data elements
+affected by that update.
+Of course, these write acquisitions must be done carefully in order to
+avoid deadlock.
+Readers would also need to read-acquire multiple sequence locks, but
+in the surprisingly common case where readers only look up one data
+element, only one sequence lock need be read-acquired.
+
+This approach provides sequential consistency to successful readers,
+each of which will either see the effects of a given update or not,
+with any partial updates resulting in a read-side retry.
+Sequential consistency is an extremely strong guarantee, incurring equally
+strong restrictions and equally high overheads.
+In this case, we saw that readers might be starved on the one hand, or
+might need to acquire the update-side lock on the other.
+Although this works very well in cases where updates are infrequent,
+it unnecessarily forces read-side retries even when the update does not
+affect any of the data that a retried reader accesses.
+\Cref{sec:together:Correlated Fields} therefore covers a much weaker form
+of consistency that not only avoids reader starvation, but also avoids
+any form of read-side retry.
+
+\subsection{Upgrade to Writer}
+\label{sec:together:Upgrade to Writer}
+
+As discussed in
+\cref{sec:defer:RCU is a Reader-Writer Lock Replacement},
+RCU permits readers to upgrade to writers.
+This capability can be quite useful when a reader scanning an
+RCU-protected data structure notices that the current element
+needs to be updated.
+What happens when you try this trick with sequence locking?
+
+It turns out that this sequence-locking trick is actually used in
+the Linux kernel, for example, by the \co{sdma_flush()} function in
+\path{drivers/infiniband/hw/hfi1/sdma.c}.
+The effect is to doom the enclosing reader to retry.
+This trick is therefore used when the reader detects some condition
+that requires a retry.

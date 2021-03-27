@@ -1,0 +1,622 @@
+% together/refcnt.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\section{Refurbish Reference Counting}
+\label{sec:together:Refurbish Reference Counting}
+%
+\epigraph{Counting is the religion of this generation.  It is its
+	  hope and its salvation.}
+	 {\emph{Gertrude Stein}}
+
+Although reference counting is a conceptually simple technique,
+many devils hide in the details when it is applied to concurrent
+software.
+After all, if the object was not subject to premature disposal,
+there would be no need for the reference counter in the first place.
+But if the object can be disposed of, what prevents disposal during
+the reference-acquisition process itself?
+
+There are a number of ways to refurbish reference counters for
+use in concurrent software, including:
+
+\begin{enumerate}
+\item	A lock residing outside of the object must be held while
+	manipulating the reference count.
+\item	The object is created with a non-zero reference count, and new
+	references may be acquired only when the current value of
+	the reference counter is non-zero.
+	If a thread does not have a reference to a given object, it
+	might seek help from another thread that already has a reference.
+\item	In some cases, hazard pointers may be used as a drop-in
+	replacement for reference counters.
+\item	An existence guarantee is provided for the object, thus preventing
+	it from being freed while some other entity might be attempting
+	to acquire a reference.
+	Existence guarantees are often provided by automatic
+	garbage collectors, and, as is seen in
+	\cref{sec:defer:Hazard Pointers,sec:defer:Read-Copy Update (RCU)},
+	by hazard pointers and RCU, respectively.
+\item	A type-safety guarantee is provided for the object.
+	An additional identity check must be performed once
+	the reference is acquired.
+	Type-safety guarantees can be provided by special-purpose
+	memory allocators, for example, by the
+	\co{SLAB_TYPESAFE_BY_RCU} feature within the Linux kernel,
+	as is seen in \cref{sec:defer:Read-Copy Update (RCU)}.
+\end{enumerate}
+
+Of course, any mechanism that provides existence guarantees
+by definition also provides type-safety guarantees.
+This results in four general categories of reference-acquisition
+protection:
+Reference counting, hazard pointers, sequence locking, and RCU\@.
+
+\QuickQuiz{
+	Why not implement reference-acquisition using
+	a simple compare-and-swap operation that only
+	acquires a reference if the reference counter is
+	non-zero?
+}\QuickQuizAnswer{
+	Although this can resolve the race between the release of
+	the last reference and acquisition of a new reference,
+	it does absolutely nothing to prevent the data structure
+	from being freed and reallocated, possibly as some completely
+	different type of structure.
+	It is quite likely that the ``simple compare-and-swap
+	operation'' would give undefined results if applied to the
+	differently typed structure.
+
+	In short, use of atomic operations such as compare-and-swap
+	absolutely requires either type-safety or existence guarantees.
+
+	But what if it is absolutely necessary to let the type change?
+
+	One approach is for each such type to have the reference counter
+	at the same location, so that as long as the reallocation results
+	in an object from this group of types, all is well.
+	If you do this in C, make sure you comment the reference counter
+	in each structure in which it appears.
+	In C++, use inheritance and templates.
+}\QuickQuizEnd
+
+\begin{table}[tb]
+\renewcommand*{\arraystretch}{1.25}
+\rowcolors{3}{}{lightgray}
+\small
+\centering
+\begin{tabular}{lcccc}
+	\toprule
+	& \multicolumn{4}{c}{Release} \\
+	\cmidrule(l){2-5}
+	Acquisition	& Locks
+				& \parbox[c]{.5in}{Reference\\Counts}
+					& \parbox[c]{.5in}{Hazard\\Pointers}
+						& RCU \\
+	\cmidrule{1-1} \cmidrule(l){2-5}
+	Locks		& $-$	& CAM	& M	& CA  \\
+	\parbox[c][6ex]{.6in}{Reference\\Counts}
+			& A	& AM    & M	& A   \\
+	\parbox[c][6ex]{.6in}{Hazard\\Pointers}
+			& M	& M	& M	& M   \\
+	RCU		& CA	& MCA	& M	& CA  \\
+	\bottomrule
+\end{tabular}
+\caption{Synchronizing Reference Counting}
+\label{tab:together:Synchronizing Reference Counting}
+\end{table}
+
+Given that the key reference-counting issue
+is synchronization between acquisition
+of a reference and freeing of the object, we have nine possible
+combinations of mechanisms, as shown in
+\cref{tab:together:Synchronizing Reference Counting}.
+This table
+divides reference-counting mechanisms into the following broad categories:
+\begin{enumerate}
+\item	Simple counting with neither atomic operations, memory
+	barriers, nor alignment constraints (``$-$'').
+\item	Atomic counting without memory barriers (``A'').
+\item	Atomic counting, with memory barriers required only on release
+	(``AM'').
+\item	Atomic counting with a check combined with the atomic acquisition
+	operation, and with memory barriers required only on release
+	(``CAM'').
+\item	Atomic counting with a check combined with the atomic acquisition
+	operation (``CA'').
+\item	Simple counting with a check combined with full memory barriers
+	(``M'').
+\item	Atomic counting with a check combined with the atomic acquisition
+	operation, and with memory barriers also required on acquisition
+	(``MCA'').
+\end{enumerate}
+However, because all Linux-kernel atomic operations that return a
+value are defined to contain memory barriers,\footnote{
+	With \co{atomic_read()} and \co{ATOMIC_INIT()} being the
+	exceptions that prove the rule.}
+all release operations
+contain memory barriers, and all checked acquisition operations also
+contain memory barriers.
+Therefore, cases ``CA'' and ``MCA'' are equivalent to ``CAM'', so that
+there are sections below for only the first four cases and the sixth case:
+``$-$'', ``A'', ``AM'', ``CAM'', and ``M''.
+Later sections describe optimizations that can improve performance
+if reference acquisition and release is very frequent, and the
+reference count need be checked for zero only very rarely.
+
+\subsection{Implementation of Reference-Counting Categories}
+\label{sec:together:Implementation of Reference-Counting Categories}
+
+Simple counting protected by locking (``$-$'') is described in
+\cref{sec:together:Simple Counting},
+atomic counting with no memory barriers (``A'') is described in
+\cref{sec:together:Atomic Counting},
+atomic counting with acquisition memory barrier (``AM'') is described in
+\cref{sec:together:Atomic Counting With Release Memory Barrier},
+and
+atomic counting with check and release memory barrier (``CAM'') is described in
+\cref{sec:together:Atomic Counting With Check and Release Memory Barrier}.
+Use of hazard pointers is described in
+\cref{sec:defer:Hazard Pointers}
+on page~\ref{sec:defer:Hazard Pointers}
+and in
+\cref{sec:together:Hazard-Pointer Helpers}.
+
+\subsubsection{Simple Counting}
+\label{sec:together:Simple Counting}
+
+Simple counting, with neither atomic operations nor memory barriers,
+can be used when the reference-counter acquisition and release are
+both protected by the same lock.
+In this case, it should be clear that the reference count itself
+may be manipulated non-atomically, because the lock provides any
+necessary exclusion, memory barriers, atomic instructions, and disabling
+of compiler optimizations.
+This is the method of choice when the lock is required to protect
+other operations in addition to the reference count, but where
+a reference to the object must be held after the lock is released.
+\cref{lst:together:Simple Reference-Count API} shows a simple
+API that might be used to implement simple non-atomic reference
+counting---although simple reference counting is almost always
+open-coded instead.
+
+\begin{listing}[tbp]
+\begin{fcvlabel}[ln:together:Simple Reference-Count API]
+\begin{VerbatimL}[commandchars=\\\[\]]
+struct sref {
+	int refcount;
+};
+
+void sref_init(struct sref *sref)
+{
+	sref->refcount = 1;
+}
+
+void sref_get(struct sref *sref)
+{
+	sref->refcount++;
+}
+
+int sref_put(struct sref *sref,
+             void (*release)(struct sref *sref))
+{
+	WARN_ON(release == NULL);
+	WARN_ON(release == (void (*)(struct sref *))kfree);
+
+	if (--sref->refcount == 0) {
+		release(sref);
+		return 1;
+	}
+	return 0;
+}
+\end{VerbatimL}
+\end{fcvlabel}
+\caption{Simple Reference-Count API}
+\label{lst:together:Simple Reference-Count API}
+\end{listing}
+
+\subsubsection{Atomic Counting}
+\label{sec:together:Atomic Counting}
+
+Simple atomic counting may be used in cases where any CPU acquiring
+a reference must already hold a reference.
+This style is used when a single CPU creates an object for its own private
+use, but must allow for accesses from other CPUs, tasks, timer handlers,
+and so on.
+Any CPU that hands the object off must first acquire a new reference on
+behalf of the recipient on the one hand, or refrain from further accesses
+after the handoff on the other.
+In the Linux kernel, the \co{kref} primitives are used to implement
+this style of reference counting, as shown in
+\cref{lst:together:Linux Kernel kref API}.\footnote{
+	As of Linux v4.10.
+	Linux v4.11 introduced a \co{refcount_t} API that improves
+	efficiency weakly ordered platforms, but which is functionally
+	equivalent to the \co{atomic_t} that it replaced.}
+
+Atomic counting is required in this case because locking does not protect
+all reference-count operations, which means that two different CPUs
+might concurrently manipulate the reference count.
+If normal increment and decrement were used, a pair of CPUs might both
+fetch the reference count concurrently, perhaps both obtaining
+the value ``3''.
+If both of them increment their value, they will both obtain ``4'',
+and both will store this value back into the counter.
+Since the new value of the counter should instead be ``5'', one
+of the increments has been lost.
+Therefore, atomic operations must be used both for counter increments
+and for counter decrements.
+
+If releases are guarded by locking, hazard pointers, or RCU,
+memory barriers are \emph{not} required, but for different reasons.
+In the case of locking, the locks provide any needed memory barriers
+(and disabling of compiler optimizations), and the locks also
+prevent a pair of releases from running concurrently.
+In the case of hazard pointers and RCU, cleanup will be deferred,
+and any needed memory barriers or disabling of compiler optimizations
+will be provided by the hazard-pointers or RCU infrastructure.
+Therefore, if two CPUs release the final two references concurrently, the
+actual cleanup will be deferred until both CPUs have released their hazard
+pointers or exited their RCU read-side critical sections, respectively.
+
+\QuickQuiz{
+	Why isn't it necessary to guard against cases where one CPU
+	acquires a reference just after another CPU releases the last
+	reference?
+}\QuickQuizAnswer{
+	Because a CPU must already hold a reference in order to legally
+	acquire another reference.
+	Therefore, if one CPU releases the last reference, there had
+	better not be any CPU acquiring a new reference!
+}\QuickQuizEnd
+
+\begin{listing}[tbp]
+\begin{fcvlabel}[ln:together:Linux Kernel kref API]
+\begin{VerbatimL}[commandchars=\\\[\]]
+struct kref {						\lnlbl[kref:b]
+	atomic_t refcount;
+};							\lnlbl[kref:e]
+
+void kref_init(struct kref *kref)			\lnlbl[init:b]
+{
+	atomic_set(&kref->refcount, 1);
+}							\lnlbl[init:e]
+
+void kref_get(struct kref *kref)			\lnlbl[get:b]
+{
+	WARN_ON(!atomic_read(&kref->refcount));
+	atomic_inc(&kref->refcount);
+}							\lnlbl[get:e]
+
+static inline int					\lnlbl[sub:b]
+kref_sub(struct kref *kref, unsigned int count,
+         void (*release)(struct kref *kref))
+{
+	WARN_ON(release == NULL);
+
+	if (atomic_sub_and_test((int) count,		\lnlbl[check]
+	                        &kref->refcount)) {
+		release(kref);				\lnlbl[rel]
+		return 1;				\lnlbl[ret:1]
+	}
+	return 0;
+}							\lnlbl[sub:e]
+\end{VerbatimL}
+\end{fcvlabel}
+\caption{Linux Kernel \tco{kref} API}
+\label{lst:together:Linux Kernel kref API}
+\end{listing}
+
+\begin{fcvref}[ln:together:Linux Kernel kref API]
+The \co{kref} structure itself, consisting of a single atomic
+data item, is shown in \clnrefrange{kref:b}{kref:e} of
+\cref{lst:together:Linux Kernel kref API}.
+The \co{kref_init()} function on \clnrefrange{init:b}{init:e}
+initializes the counter to the value ``1''.
+Note that the \co{atomic_set()} primitive is a simple
+assignment, the name stems from the data type of \co{atomic_t}
+rather than from the operation.
+The \co{kref_init()} function must be invoked during object creation,
+before the object has been made available to any other CPU\@.
+
+The \co{kref_get()} function on \clnrefrange{get:b}{get:e}
+unconditionally atomically increments the counter.
+The \co{atomic_inc()} primitive does not necessarily explicitly
+disable compiler
+optimizations on all platforms, but the fact that the \co{kref}
+primitives are in a separate module and that the Linux kernel build
+process does no cross-module optimizations has the same effect.
+
+The \co{kref_sub()} function on \clnrefrange{sub:b}{sub:e}
+atomically decrements the
+counter, and if the result is zero, \clnref{rel} invokes the specified
+\co{release()} function and \clnref{ret:1} returns, informing the caller
+that \co{release()} was invoked.
+Otherwise, \co{kref_sub()} returns zero, informing the caller that
+\co{release()} was not called.
+\end{fcvref}
+
+\QuickQuizSeries{%
+\QuickQuizB{
+	\begin{fcvref}[ln:together:Linux Kernel kref API]
+	Suppose that just after the \co{atomic_sub_and_test()}
+	on \clnref{check} of
+	\cref{lst:together:Linux Kernel kref API} is invoked,
+	that some other CPU invokes \co{kref_get()}.
+	Doesn't this result in that other CPU now having an illegal
+	reference to a released object?
+        \end{fcvref}
+}\QuickQuizAnswerB{
+	This cannot happen if these functions are used correctly.
+	It is illegal to invoke \co{kref_get()} unless you already
+	hold a reference, in which case the \co{kref_sub()} could
+	not possibly have decremented the counter to zero.
+}\QuickQuizEndB
+%
+\QuickQuizM{
+	Suppose that \co{kref_sub()} returns zero, indicating that
+	the \co{release()} function was not invoked.
+	Under what conditions can the caller rely on the continued
+	existence of the enclosing object?
+}\QuickQuizAnswerM{
+	The caller cannot rely on the continued existence of the
+	object unless it knows that at least one reference will
+	continue to exist.
+	Normally, the caller will have no way of knowing this, and
+	must therefore carefully avoid referencing the object after
+	the call to \co{kref_sub()}.
+
+	Interested readers are encouraged to work around this limitation
+	using RCU, in particular, \co{call_rcu()}.
+}\QuickQuizEndM
+%
+\QuickQuizE{
+	Why not just pass \co{kfree()} as the release function?
+}\QuickQuizAnswerE{
+	Because the \co{kref} structure normally is embedded in
+	a larger structure, and it is necessary to free the entire
+	structure, not just the \co{kref} field.
+	This is normally accomplished by defining a wrapper function
+	that does a \co{container_of()} and then a \co{kfree()}.
+}\QuickQuizEndE
+}
+
+\subsubsection{Atomic Counting With Release Memory Barrier}
+\label{sec:together:Atomic Counting With Release Memory Barrier}
+
+Atomic reference counting with release memory barriers is used by the
+Linux kernel's networking layer to track the destination caches that
+are used in packet routing.
+The actual implementation is quite a bit more involved; this section
+focuses on the aspects of \co{struct dst_entry} reference-count
+handling that matches this use case,
+shown in \cref{lst:together:Linux Kernel dst-clone API}.\footnote{
+	As of Linux v4.13.
+	Linux v4.14 added a level of indirection to permit more
+	comprehensive debugging checks, but the overall effect in the
+	absence of bugs is identical.}
+
+\begin{listing}[tbp]
+\begin{fcvlabel}[ln:together:Linux Kernel dst-clone API]
+\begin{VerbatimL}[commandchars=\\\[\]]
+static inline
+struct dst_entry * dst_clone(struct dst_entry * dst)
+{
+	if (dst)
+		atomic_inc(&dst->__refcnt);
+	return dst;
+}
+
+static inline
+void dst_release(struct dst_entry * dst)
+{
+	if (dst) {
+		WARN_ON(atomic_read(&dst->__refcnt) < 1);
+		smp_mb__before_atomic_dec();		\lnlbl[mb]
+		atomic_dec(&dst->__refcnt);
+	}
+}
+\end{VerbatimL}
+\end{fcvlabel}
+\caption{Linux Kernel \tco{dst_clone} API}
+\label{lst:together:Linux Kernel dst-clone API}
+\end{listing}
+
+The \co{dst_clone()} primitive may be used if the caller
+already has a reference to the specified \co{dst_entry},
+in which case it obtains another reference that may be handed off
+to some other entity within the kernel.
+Because a reference is already held by the caller, \co{dst_clone()}
+need not execute any memory barriers.
+The act of handing the \co{dst_entry} to some other entity might
+or might not require a memory barrier, but if such a memory barrier
+is required, it will be embedded in the mechanism used to hand the
+\co{dst_entry} off.
+
+\begin{fcvref}[ln:together:Linux Kernel dst-clone API]
+The \co{dst_release()} primitive may be invoked from any environment,
+and the caller might well reference elements of the \co{dst_entry}
+structure immediately prior to the call to \co{dst_release()}.
+The \co{dst_release()} primitive therefore contains a memory
+barrier on \clnref{mb} preventing both the compiler and the CPU
+from misordering accesses.
+\end{fcvref}
+
+Please note that the programmer making use of \co{dst_clone()} and
+\co{dst_release()} need not be aware of the memory barriers, only
+of the rules for using these two primitives.
+
+\subsubsection{Atomic Counting With Check and Release Memory Barrier}
+\label{sec:together:Atomic Counting With Check and Release Memory Barrier}
+
+Consider a situation where the caller must be able to acquire a new
+reference to an object to which it does not already hold a reference,
+but where that object's existence is guaranteed.
+The fact that initial reference-count acquisition can now run concurrently
+with reference-count release adds further complications.
+Suppose that a reference-count release finds that the new
+value of the reference count is zero, signaling that it is
+now safe to clean up the reference-counted object.
+We clearly cannot allow a reference-count acquisition to
+start after such clean-up has commenced, so the acquisition
+must include a check for a zero reference count.
+This check must be part of the atomic increment operation,
+as shown below.
+
+\QuickQuiz{
+	Why can't the check for a zero reference count be
+	made in a simple ``if'' statement with an atomic
+	increment in its ``then'' clause?
+}\QuickQuizAnswer{
+	Suppose that the ``if'' condition completed, finding
+	the reference counter value equal to one.
+	Suppose that a release operation executes, decrementing
+	the reference counter to zero and therefore starting
+	cleanup operations.
+	But now the ``then'' clause can increment the counter
+	back to a value of one, allowing the object to be
+	used after it has been cleaned up.
+
+	This use-after-cleanup bug is every bit as bad as a
+	full-fledged use-after-free bug.
+}\QuickQuizEnd
+
+The Linux kernel's \co{fget()} and \co{fput()} primitives
+use this style of reference counting.
+Simplified versions of these functions are shown in
+\cref{lst:together:Linux Kernel fget/fput API}.\footnote{
+	As of Linux v2.6.38.
+	Additional \co{O_PATH} functionality was added in v2.6.39,
+	refactoring was applied in v3.14, and \co{mmap_sem} contention
+	was reduced in v4.1.}
+
+\begin{listing}[tbp]
+\begin{fcvlabel}[ln:together:Linux Kernel fget/fput API]
+\begin{VerbatimL}[commandchars=\\\@\$]
+struct file *fget(unsigned int fd)
+{
+	struct file *file;
+	struct files_struct *files = current->files;	\lnlbl@fetch$
+
+	rcu_read_lock();				\lnlbl@rrl$
+	file = fcheck_files(files, fd);			\lnlbl@lookup$
+	if (file) {
+		if (!atomic_inc_not_zero(&file->f_count)) { \lnlbl@acq$
+			rcu_read_unlock();		\lnlbl@rru1$
+			return NULL;			\lnlbl@ret:null$
+		}
+	}
+	rcu_read_unlock();				\lnlbl@rru2$
+	return file;					\lnlbl@ret:file$
+}
+
+struct file *
+fcheck_files(struct files_struct *files, unsigned int fd)
+{
+	struct file * file = NULL;
+	struct fdtable *fdt = rcu_dereference((files)->fdt);  \lnlbl@deref:fdt$
+
+	if (fd < fdt->max_fds)				\lnlbl@range$
+		file = rcu_dereference(fdt->fd[fd]);	\lnlbl@deref:fd$
+	return file;					\lnlbl@ret:file2$
+}
+
+void fput(struct file *file)
+{
+	if (atomic_dec_and_test(&file->f_count))	\lnlbl@dec$
+		call_rcu(&file->f_u.fu_rcuhead, file_free_rcu);  \lnlbl@call$
+}
+
+static void file_free_rcu(struct rcu_head *head)
+{
+	struct file *f;
+
+	f = container_of(head, struct file, f_u.fu_rcuhead); \lnlbl@obtain$
+	kmem_cache_free(filp_cachep, f);		\lnlbl@free$
+}
+\end{VerbatimL}
+\end{fcvlabel}
+\caption{Linux Kernel \tco{fget}/\tco{fput} API}
+\label{lst:together:Linux Kernel fget/fput API}
+\end{listing}
+
+\begin{fcvref}[ln:together:Linux Kernel fget/fput API]
+\Clnref{fetch} of \co{fget()} fetches the pointer to the current
+process's file-descriptor table, which might well be shared
+with other processes.
+\Clnref{rrl} invokes \co{rcu_read_lock()}, which
+enters an RCU read-side critical section.
+The callback function from any subsequent \co{call_rcu()} primitive
+will be deferred until a matching \co{rcu_read_unlock()} is reached
+(\clnref{rru1} or~\lnref{rru2} in this example).
+\Clnref{lookup} looks up the file structure corresponding to the file
+descriptor specified by the \co{fd} argument, as will be
+described later.
+If there is an open file corresponding to the specified file descriptor,
+then \clnref{acq} attempts to atomically acquire a reference count.
+If it fails to do so, \clnrefrange{rru1}{ret:null} exit the RCU read-side critical
+section and report failure.
+Otherwise, if the attempt is successful, \clnrefrange{rru2}{ret:file}
+exit the read-side
+critical section and return a pointer to the file structure.
+
+The \co{fcheck_files()} primitive is a helper function for
+\co{fget()}.
+\Clnref{deref:fdt} uses \co{rcu_dereference()} to safely fetch an
+RCU-protected pointer to this task's current file-descriptor table,
+and \clnref{range} checks to see if the specified file descriptor is in range.
+If so, \clnref{deref:fd} fetches the pointer to the file structure, again using
+the \co{rcu_dereference()} primitive.
+\Clnref{ret:file2} then returns a pointer to the file structure or \co{NULL}
+in case of failure.
+
+The \co{fput()} primitive releases a reference to a file structure.
+\Clnref{dec} atomically decrements the reference count, and, if the
+result was zero, \clnref{call} invokes the \co{call_rcu()} primitives
+in order to free up the file structure (via the \co{file_free_rcu()}
+function specified in \co{call_rcu()}'s second argument), but only after
+all currently-executing RCU read-side critical sections complete, that
+is, after an RCU grace period has elapsed.
+
+Once the grace period completes, the \co{file_free_rcu()} function
+obtains a pointer to the file structure on \clnref{obtain}, and frees it
+on \clnref{free}.
+\end{fcvref}
+
+This code fragment thus demonstrates how RCU can be used to guarantee
+existence while an in-object reference count is being incremented.
+
+\subsection{Counter Optimizations}
+\label{sec:together:Counter Optimizations}
+
+In some cases where increments and decrements are common, but checks
+for zero are rare, it makes sense to maintain per-CPU or per-task
+counters, as was discussed in \cref{chp:Counting}.
+For example, see the paper on sleepable read-copy update (SRCU), which
+applies this technique to RCU~\cite{PaulEMcKenney2006c}.
+This approach eliminates the need for atomic instructions or memory
+barriers on the increment and decrement primitives, but still requires
+that code-motion compiler optimizations be disabled.
+In addition, the primitives such as \co{synchronize_srcu()}
+that check for the aggregate reference
+count reaching zero can be quite slow.
+This underscores the fact that these techniques are designed
+for situations where the references are frequently acquired and
+released, but where it is rarely necessary to check for a zero
+reference count.
+
+% @@@ Difficulty of managing reference counts: leaks, premature freeing.
+
+However, it is usually the case that use of reference counts requires
+writing (often atomically) to a data structure that is otherwise
+read only.
+In this case, reference counts are imposing expensive cache misses
+on readers.
+
+It is therefore worthwhile to look into synchronization mechanisms
+that do not require readers to write to the data structure being
+traversed.
+One possibility is the hazard pointers covered in
+\cref{sec:defer:Hazard Pointers}
+and another is RCU, which is covered in
+\cref{sec:defer:Read-Copy Update (RCU)}.

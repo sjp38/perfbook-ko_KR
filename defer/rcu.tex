@@ -1,0 +1,61 @@
+% defer/rcu.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\section{Read-Copy Update (RCU)}
+\label{sec:defer:Read-Copy Update (RCU)}
+%
+\epigraph{``Free'' is a \emph{very} good price!}{\emph{Tom Peterson}}
+
+All of the mechanisms discussed in the preceding sections
+used one of a number of approaches to defer specific actions
+until they may be carried out safely.
+The reference counters discussed in
+Section~\ref{sec:defer:Reference Counting}
+use explicit counters to defer actions that could disturb readers,
+which results in read-side contention and thus poor scalability.
+The hazard pointers covered by
+Section~\ref{sec:defer:Hazard Pointers}
+uses implicit counters in the guise of per-thread lists of pointer.
+This avoids read-side contention, but requires readers to do stores and
+conditional branches, as well as either full memory barriers in read-side
+primitives or real-time-unfriendly inter-processor interrupts in
+update-side primitives.\footnote{
+	In some important special cases, this extra work can be avoided
+	by using link counting as exemplified by the UnboundedQueue
+	and ConcurrentHashMap data structures implemented in Folly
+	open-source library
+	(\url{https://github.com/facebook/folly}).}
+The sequence lock presented in
+Section~\ref{sec:defer:Sequence Locks}
+also avoids read-side contention, but does not protect pointer
+traversals and, like hazard pointers, requires either full memory barriers
+in read-side primitives, or inter-processor interrupts in update-side
+primitives.
+These schemes' shortcomings raise the question of
+whether it is possible to do better.
+
+This section introduces \emph{read-copy update} (RCU), which provides
+an API that allows readers to be associated with regions in the source code,
+rather than with expensive updates to frequently updated shared data.
+The remainder of this
+section examines RCU from a number of different perspectives.
+\Cref{sec:defer:Introduction to RCU} provides the classic
+introduction to RCU,
+\cref{sec:defer:RCU Fundamentals} covers fundamental RCU
+concepts,
+\cref{sec:defer:RCU Linux-Kernel API} presents the Linux-kernel
+API,
+\cref{sec:defer:RCU Usage} introduces some common RCU use cases,
+\cref{sec:defer:RCU Related Work} covers recent work related
+to RCU,
+\cref{sec:defer:RCU Exercises} provides some RCU exercises,
+and finally
+\cref{sec:defer:What About Updates?}
+discusses updates.
+
+\input{defer/rcuintro}
+\input{defer/rcufundamental}
+\input{defer/rcuapi}
+\input{defer/rcuusage}
+\input{defer/rcurelated}

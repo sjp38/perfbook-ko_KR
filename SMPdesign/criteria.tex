@@ -1,0 +1,195 @@
+% SMPdesign/criteria.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\section{Design Criteria}
+\label{sec:SMPdesign:Design Criteria}
+%
+\epigraph{One pound of learning requires ten pounds of commonsense to apply it.}
+	 {\emph{Persian proverb}}
+
+One way to obtain the best performance and scalability is to simply
+hack away until you converge on the best possible parallel program.
+Unfortunately, if your program is other than microscopically tiny,
+the space of possible parallel programs is so huge
+that convergence is not guaranteed in the lifetime of the universe.
+Besides, what exactly is the ``best possible parallel program''?
+After all, Section~\ref{sec:intro:Parallel Programming Goals}
+called out no fewer than three parallel-programming goals of
+performance, productivity, and generality,
+and the best possible performance will likely come at a cost in
+terms of productivity and generality.
+We clearly need to be able to make higher-level choices at design
+time in order to arrive at an acceptably good parallel program
+before that program becomes obsolete.
+
+However, more detailed design criteria are required to
+actually produce a real-world design, a task taken up in this section.
+This being the real world, these criteria often conflict to a
+greater or lesser degree, requiring that the designer carefully
+balance the resulting tradeoffs.
+
+As such, these criteria may be thought of as the ``forces''
+acting on the design, with particularly good tradeoffs between
+these forces being called ``design patterns''~\cite{Alexander79,GOF95}.
+
+The design criteria for attaining the three parallel-programming goals
+are speedup,
+contention, overhead, read-to-write ratio, and complexity:
+\begin{description}
+\item[Speedup:]  As noted in
+	Section~\ref{sec:intro:Parallel Programming Goals},
+	increased performance is the major reason
+	to go to all of the time and trouble
+	required to parallelize it.
+	Speedup is defined to be the ratio of the time required
+	to run a sequential version of the program to the time
+	required to run a parallel version.
+\item[Contention:]  If more CPUs are applied to a parallel
+	program than can be kept busy by that program,
+	the excess CPUs are prevented from doing
+	useful work by contention.
+	This may be lock contention, memory contention, or a host
+	of other performance killers.
+\item[Work-to-Synchronization Ratio:]  A uniprocessor,
+	single\-/threaded, non-preemptible, and non\-/interruptible\footnote{
+		Either by masking interrupts or by being oblivious to them.}
+	version of a given parallel
+	program would not need any synchronization primitives.
+	Therefore, any time consumed by these primitives
+	(including communication cache misses as well as
+	message latency, locking primitives, atomic instructions,
+	and memory barriers)
+	is overhead that does not contribute directly to the useful
+	work that the program is intended to accomplish.
+	Note that the important measure is the
+	relationship between the synchronization overhead
+	and the overhead of the code in the critical section, with larger
+	critical sections able to tolerate greater synchronization overhead.
+	The work-to-synchronization ratio is related to
+	the notion of synchronization efficiency.
+\item[Read-to-Write Ratio:]  A data structure that is
+	rarely updated may often be replicated rather than partitioned,
+	and furthermore may be protected with asymmetric
+	synchronization primitives that reduce readers' synchronization
+	overhead at the expense of that of writers, thereby
+	reducing overall synchronization overhead.
+	Corresponding optimizations are possible for frequently
+	updated data structures, as discussed in
+	Chapter~\ref{chp:Counting}.
+\item[Complexity:]  A parallel program is more complex than
+	an equivalent sequential program because the parallel program
+	has a much larger state space than does the sequential program,
+	although large state spaces having regular structures can in
+	some cases be easily understood.
+	A parallel programmer must
+	consider synchronization primitives, messaging, locking design,
+	critical-section identification,
+	and deadlock in the context of this larger state space.
+
+	This greater complexity often translates
+	to higher development and maintenance costs.
+	Therefore, budgetary constraints can
+	limit the number and types of modifications made to
+	an existing program, since a given degree of speedup is
+	worth only so much time and trouble.
+	Worse yet, added complexity can actually \emph{reduce}
+	performance and scalability.
+
+	Therefore, beyond a certain point,
+	there may be potential sequential optimizations
+	that are cheaper and more effective than parallelization.
+	As noted in
+	Section~\ref{sec:intro:Performance},
+	parallelization is but one performance optimization of
+	many, and is furthermore an optimization that applies
+	most readily to CPU-based bottlenecks.
+\end{description}
+These criteria will act together to enforce a maximum speedup.
+The first three criteria are deeply interrelated, so
+the remainder of this section analyzes these
+interrelationships.\footnote{
+	A real-world parallel system will be subject to many additional
+	design criteria, such as data-structure layout,
+	memory size, memory-hierarchy latencies, bandwidth limitations,
+	and I/O issues.}
+
+Note that these criteria may also appear as part of the requirements
+specification.
+For example, speedup may act as a relative desideratum
+(``the faster, the better'')
+or as an absolute requirement of the workload (``the system
+must support at least 1,000,000 web hits per second'').
+Classic design pattern languages describe relative desiderata as forces
+and absolute requirements as context.
+
+An understanding of the relationships between these design criteria can
+be very helpful when identifying appropriate design tradeoffs for a
+parallel program.
+\begin{enumerate}
+\item	The less time a program spends in exclusive-lock critical sections,
+	the greater the potential speedup.
+	This is a consequence of Amdahl's Law~\cite{GeneAmdahl1967AmdahlsLaw}
+	because only one CPU may execute within a given
+	exclusive-lock critical section at a given time.
+
+	More specifically, for unbounded linear scalability, the fraction
+	of time that the program spends in a given exclusive critical
+	section must decrease as the number of CPUs increases.
+	For example, a program will not scale to 10~CPUs
+	unless it spends much less than one tenth of its time in the
+	most-restrictive exclusive-lock critical section.
+\item	Contention effects consume the excess CPU and/or
+	wallclock time when the actual speedup is less than
+	the number of available CPUs.  The
+	larger the gap between the number of CPUs
+	and the actual speedup, the less efficiently the
+	CPUs will be used.
+	Similarly, the greater the desired efficiency, the smaller
+	the achievable speedup.
+\item	If the available synchronization primitives have
+	high overhead compared to the critical sections
+	that they guard, the best way to improve speedup
+	is to reduce the number of times that the primitives
+	are invoked.
+	This can be accomplished by batching critical sections,
+	using data ownership (see \cref{chp:Data Ownership}),
+	using asymmetric primitives
+	(see Section~\ref{chp:Deferred Processing}),
+	or by using a coarse-grained design such as code locking.
+\item	If the critical sections have high overhead compared
+	to the primitives guarding them, the best way
+	to improve speedup is to increase parallelism
+	by moving to reader/writer locking, data locking, asymmetric,
+	or data ownership.
+\item	If the critical sections have high overhead compared
+	to the primitives guarding them and the data structure
+	being guarded is read much more often than modified,
+	the best way to increase parallelism is to move
+	to reader/writer locking or asymmetric primitives.
+\item	Many changes that improve SMP performance, for example,
+	reducing lock contention, also improve real-time
+	latencies~\cite{PaulMcKenney2005h}.
+\end{enumerate}
+
+\QuickQuiz{
+	Don't all these problems with critical sections mean that
+	we should just always use
+	non-blocking synchronization~\cite{MauriceHerlihy90a},
+	which don't have critical sections?
+}\QuickQuizAnswer{
+	Although non-blocking synchronization can be very useful
+	in some situations, it is no panacea, as discussed in
+	\cref{sec:advsync:Non-Blocking Synchronization}.
+	Also, non-blocking synchronization really does have
+	critical sections, as noted by Josh Triplett.
+	For example, in a non-blocking algorithm based on
+	compare-and-swap operations, the code starting at the
+	initial load and continuing to the compare-and-swap
+	is analogous to a lock-based critical section.
+}\QuickQuizEnd
+
+It is worth reiterating that contention has many guises, including
+lock contention, memory contention, cache overflow, thermal throttling,
+and much else besides.
+This chapter looks primarily at lock and memory contention.

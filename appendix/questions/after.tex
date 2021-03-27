@@ -1,0 +1,206 @@
+% appendix/questions/after.tex
+% mainfile: ../../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\section{What Does ``After'' Mean?}
+\label{sec:app:questions:What Does ``After'' Mean?}
+
+``After'' is an intuitive, but surprisingly difficult concept.
+An important non-intuitive issue is that code can be delayed at
+any point for any amount of time.
+Consider a producing and a consuming thread that communicate using
+a global struct with a timestamp ``t'' and integer fields ``a'', ``b'',
+and ``c''.
+The producer loops recording the current time
+(in seconds since 1970 in decimal),
+then updating the values of ``a'', ``b'', and ``c'',
+as shown in \cref{lst:app:questions:After Producer Function}.
+The consumer code loops, also recording the current time, but also
+copying the producer's timestamp along with the fields ``a'',
+``b'', and ``c'', as shown in
+\cref{lst:app:questions:After Consumer Function}.
+At the end of the run, the consumer outputs a list of anomalous recordings,
+e.g., where time has appeared to go backwards.
+
+\begin{listing}[htbp]
+\input{CodeSamples/api-pthreads/QAfter/time@producer.fcv}
+\caption{``After'' Producer Function}
+\label{lst:app:questions:After Producer Function}
+\end{listing}
+
+\begin{listing}[htbp]
+\input{CodeSamples/api-pthreads/QAfter/time@consumer.fcv}
+\caption{``After'' Consumer Function}
+\label{lst:app:questions:After Consumer Function}
+\end{listing}
+
+\QuickQuiz{
+	What SMP coding errors can you see in these examples?
+	See \path{time.c} for full code.
+}\QuickQuizAnswer{
+	\begin{enumerate}
+	\item	Missing barrier() or volatile on tight loops.
+	\item	Missing memory barriers on update side.
+	\item	Lack of synchronization between producer and consumer.
+	\end{enumerate}
+}\QuickQuizEnd
+
+One might intuitively expect that the difference between the producer
+and consumer timestamps would be quite small, as it should not take
+much time for the producer to record the timestamps or the values.
+An excerpt of some sample output on a dual-core 1\,GHz x86 is shown in
+\cref{tab:app:questions:After Program Sample Output}.
+Here, the ``seq'' column is the number of times through the loop,
+the ``time'' column is the time of the anomaly in seconds, the ``delta''
+column is the number of seconds the consumer's timestamp follows that
+of the producer (where a negative value indicates that the consumer
+has collected its timestamp before the producer did), and the
+columns labelled ``a'', ``b'', and ``c'' show the amount that these
+variables increased since the prior snapshot collected by the consumer.
+
+\begin{table}[htbp]
+\rowcolors{1}{}{lightgray}
+\renewcommand*{\arraystretch}{1.2}
+\sisetup{group-digits=false}
+\centering
+\scriptsize
+\begin{tabular}{rS[table-format=7.6]rS[table-format=3.0]S[table-format=3.0]S[table-format=3.0]}
+\toprule
+seq    & \multicolumn{1}{c}{time (seconds)} & delta~  &  a &  b &  c \\
+\midrule
+17563: & 1152396.251585 & ($-16.928$) & 27 & 27 & 27 \\
+18004: & 1152396.252581 & ($-12.875$) & 24 & 24 & 24 \\
+18163: & 1152396.252955 & ($-19.073$) & 18 & 18 & 18 \\
+18765: & 1152396.254449 & ($-148.773$) & 216 & 216 & 216 \\
+19863: & 1152396.256960 & ($-6.914$) & 18 & 18 & 18 \\
+21644: & 1152396.260959 & ($-5.960$) & 18 & 18 & 18 \\
+23408: & 1152396.264957 & ($-20.027$) & 15 & 15 & 15 \\
+\bottomrule
+\end{tabular}
+\caption{``After'' Program Sample Output}
+\label{tab:app:questions:After Program Sample Output}
+\end{table}
+
+Why is time going backwards?
+The number in parentheses is the difference in microseconds, with
+a large number exceeding 10 microseconds, and one exceeding even
+100 microseconds!
+Please note that this CPU can potentially execute more than 100,000
+instructions in that time.
+
+\begin{fcvref}[ln:api-pthreads:QAfter:time]
+One possible reason is given by the following sequence of events:
+\begin{enumerate}
+\item	Consumer obtains timestamp
+	(\Cref{lst:app:questions:After Consumer Function},
+	\clnref{consumer:tod}).
+\item	Consumer is preempted.
+\item	An arbitrary amount of time passes.
+\item	Producer obtains timestamp
+	(\Cref{lst:app:questions:After Producer Function},
+	\clnref{producer:tod}).
+\item	Consumer starts running again, and picks up the producer's
+	timestamp
+	(\Cref{lst:app:questions:After Consumer Function},
+	\clnref{consumer:prodtod}).
+\end{enumerate}
+
+In this scenario, the producer's timestamp might be an arbitrary
+amount of time after the consumer's timestamp.
+
+How do you avoid agonizing over the meaning of ``after'' in your
+SMP code?
+
+Simply use SMP primitives as designed.
+
+In this example, the easiest fix is to use locking, for example,
+acquire a lock in the producer before \clnref{producer:tod} in
+\cref{lst:app:questions:After Producer Function} and in
+the consumer before \clnref{consumer:tod} in
+\cref{lst:app:questions:After Consumer Function}.
+This lock must also be released after \clnref{producer:upd:c} in
+\cref{lst:app:questions:After Producer Function} and
+after \clnref{consumer:upd:c} in
+\cref{lst:app:questions:After Consumer Function}.
+These locks cause the code segments in
+\clnrefrange{producer:tod}{producer:upd:c} of
+\cref{lst:app:questions:After Producer Function} and in
+\clnrefrange{consumer:tod}{consumer:upd:c} of
+\cref{lst:app:questions:After Consumer Function} to {\em exclude}
+each other, in other words, to run atomically with respect to each other.
+This is represented in
+\cref{fig:app:questions:Effect of Locking on Snapshot Collection}:
+the locking prevents any of the boxes of code from overlapping in time, so
+that the consumer's timestamp must be collected after the prior
+producer's timestamp.
+The segments of code in each box in this figure are termed
+``critical sections''; only one such critical section may be executing
+at a given time.
+\end{fcvref}
+
+\begin{figure}[htb]
+\centering
+\includegraphics{appendix/questions/after-snapshot}
+\caption{Effect of Locking on Snapshot Collection}
+\label{fig:app:questions:Effect of Locking on Snapshot Collection}
+\end{figure}
+
+This addition of locking results in output as shown in
+\cref{fig:app:questions:Locked After Program Sample Output}.
+Here there are no instances of time going backwards, instead,
+there are only cases with more than 1,000 counts difference between
+consecutive reads by the consumer.
+
+\begin{table}[htbp]
+\renewcommand*{\arraystretch}{1.2}
+\sisetup{group-digits=false}
+\centering
+\scriptsize
+\begin{tabular}{rS[table-format=7.6]rS[table-format=4.0]S[table-format=4.0]S[table-format=4.0]}
+\toprule
+seq    & \multicolumn{1}{c}{time (seconds)} & delta~  &  a &  b &  c \\
+\midrule
+58597:  & 1156521.556296 & ($3.815$) & 1485 & 1485 & 1485 \\
+403927: & 1156523.446636 & ($2.146$) & 2583 & 2583 & 2583 \\
+\bottomrule
+\end{tabular}
+\caption{Locked ``After'' Program Sample Output}
+\label{fig:app:questions:Locked After Program Sample Output}
+\end{table}
+
+\QuickQuiz{
+	How could there be such a large gap between successive
+	consumer reads?
+	See \path{timelocked.c} for full code.
+}\QuickQuizAnswer{
+	\begin{enumerate}
+	\item	The consumer might be preempted for long time periods.
+	\item	A long-running interrupt might delay the consumer.
+	\item	Cache misses might delay the consumer.
+	\item	The producer might also be running on a faster CPU than is the
+		consumer (for example, one of the CPUs might have had to
+		decrease its
+		clock frequency due to heat-dissipation or power-consumption
+		constraints).
+	\end{enumerate}
+}\QuickQuizEnd
+
+In summary, if you acquire an exclusive lock, you {\em know} that
+anything you do while holding that lock will appear to happen after
+anything done by any prior holder of that lock, at least give or
+take transactional lock elision
+(see Section~\ref{sec:future:Semantic Differences}).
+No need to worry about which CPU did or did not execute a memory
+barrier, no need to worry about the CPU or compiler reordering
+operations---life is simple.
+Of course, the fact that this locking prevents these two pieces of
+code from running concurrently might limit the program's ability
+to gain increased performance on multiprocessors, possibly resulting
+in a ``safe but slow'' situation.
+\Cref{cha:Partitioning and Synchronization Design} describes ways of
+gaining performance and scalability in many situations.
+
+However, in most cases, if you find yourself worrying about what happens
+before or after a given piece of code, you should take this as a hint to
+make better use of the standard primitives.
+Let these primitives do the worrying for you.

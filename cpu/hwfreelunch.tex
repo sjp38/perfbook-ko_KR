@@ -1,0 +1,297 @@
+% cpu/hwfreelunch.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\section{Hardware Free Lunch?}
+\label{sec:cpu:Hardware Free Lunch?}
+%
+\epigraph{The great trouble today is that there are too many people looking
+	  for someone else to do something for them.
+	  The solution to most of our troubles is to be found in everyone
+	  doing something for themselves.}
+	 {\emph{Henry Ford, updated}}
+
+The major reason that concurrency has been receiving so much focus over
+the past few years is the end of \IXalt{Moore's-Law}{Moore's Law}
+induced single-threaded
+performance increases
+(or ``free lunch''~\cite{HerbSutter2008EffectiveConcurrency}),
+as shown in
+Figure~\ref{fig:intro:Clock-Frequency Trend for Intel CPUs} on
+page~\pageref{fig:intro:Clock-Frequency Trend for Intel CPUs}.
+This section briefly surveys a few ways that hardware designers
+might bring back the ``free lunch''.
+
+However, the preceding section presented some substantial hardware
+obstacles to exploiting concurrency.
+One severe physical limitation that hardware designers face is the
+finite speed of light.
+As noted in
+Figure~\ref{fig:cpu:System Hardware Architecture} on
+page~\pageref{fig:cpu:System Hardware Architecture},
+light can manage only about an 8-centimeters round trip in a vacuum
+during the duration of a 1.8\,GHz clock period.
+This distance drops to about 3~centimeters for a 5\,GHz clock.
+Both of these distances are relatively small compared to the size
+of a modern computer system.
+
+To make matters even worse, electric waves in silicon move from three to
+thirty times more slowly than does light in a vacuum, and common
+clocked logic constructs run still more slowly, for example, a
+memory reference may need to wait for a local cache lookup to complete
+before the request may be passed on to the rest of the system.
+Furthermore, relatively low speed and high power drivers are required
+to move electrical signals from one silicon die to another, for example,
+to communicate between a CPU and main memory.
+
+\QuickQuiz{
+	But individual electrons don't move anywhere near that fast,
+	even in conductors!!!
+	The electron drift velocity in a conductor under semiconductor
+	voltage levels is on the order of only one \emph{millimeter}
+	per second.
+	What gives???
+}\QuickQuizAnswer{
+	Electron drift velocity tracks the long-term movement of individual
+	electrons.
+	It turns out that individual electrons bounce around quite
+	randomly, so that their instantaneous speed is very high, but
+	over the long term, they don't move very far.
+	In this, electrons resemble long-distance commuters, who
+	might spend most of their time traveling at full highway
+	speed, but over the long term go nowhere.
+	These commuters' speed might be 70 miles per hour
+	(113 kilometers per hour), but their long-term drift velocity
+	relative to the planet's surface is zero.
+
+	Therefore, we should pay attention not to the electrons'
+	drift velocity, but to their instantaneous velocities.
+	However, even their instantaneous velocities are nowhere near
+	a significant fraction of the speed of light.
+	Nevertheless, the measured velocity of electric waves
+	in conductors \emph{is} a substantial fraction of the
+	speed of light, so we still have a mystery on our hands.
+
+	The other trick is that electrons interact with each other at
+	significant distances (from an atomic perspective, anyway),
+	courtesy of their negative charge.
+	This interaction is carried out by photons, which \emph{do}
+	move at the speed of light.
+	So even with electricity's electrons, it is photons
+	doing most of the fast footwork.
+
+	Extending the commuter analogy, a driver might use a smartphone
+	to inform other drivers of an accident or congestion, thus
+	allowing a change in traffic flow to propagate much faster
+	than the instantaneous velocity of the individual cars.
+	Summarizing the analogy between electricity and traffic flow:
+
+	\begin{enumerate}
+	\item	The (very low) drift velocity of an electron is similar
+		to the long-term velocity of a commuter, both being
+		very nearly zero.
+	\item	The (still rather low) instantaneous velocity of
+		an electron is similar to the instantaneous velocity
+		of a car in traffic.
+		Both are much higher than the drift velocity, but
+		quite small compared to the rate at which changes
+		propagate.
+	\item	The (much higher) propagation velocity of an electric
+		wave is primarily due to photons transmitting
+		electromagnetic force among the electrons.
+		Similarly, traffic patterns can change quite quickly
+		due to communication among drivers.
+		Not that this is necessarily of much help to the
+		drivers already stuck in traffic, any more than it
+		is to the electrons already pooled in a given capacitor.
+	\end{enumerate}
+
+	Of course, to fully understand this topic, you should read
+	up on electrodynamics.
+}\QuickQuizEnd
+
+There are nevertheless some technologies (both hardware and software)
+that might help improve matters:
+
+\begin{enumerate}
+\item	3D integration,
+\item	Novel materials and processes,
+\item	Substituting light for electricity,
+\item	Special-purpose accelerators, and
+\item	Existing parallel software.
+\end{enumerate}
+
+Each of these is described in one of the following sections.
+
+\subsection{3D Integration}
+\label{sec:cpu:3D Integration}
+
+3-dimensional integration (3DI) is the practice of bonding
+very thin silicon dies to each other in a vertical stack.
+This practice provides potential benefits, but also poses
+significant fabrication challenges~\cite{JohnKnickerbocker2008:3DI}.
+
+\begin{figure}[tb]
+\centering
+\resizebox{3in}{!}{\includegraphics{cpu/3DI}}
+\caption{Latency Benefit of 3D Integration}
+\label{fig:cpu:Latency Benefit of 3D Integration}
+\end{figure}
+
+Perhaps the most important benefit of 3DI is decreased path length through
+the system, as shown in
+Figure~\ref{fig:cpu:Latency Benefit of 3D Integration}.
+A 3-centimeter silicon die is replaced with a stack of four 1.5-centimeter
+dies, in theory decreasing the maximum path through the system by a factor
+of two, keeping in mind that each layer is quite thin.
+In addition, given proper attention to design and placement,
+long horizontal electrical connections (which are both slow and
+power hungry) can be replaced by short vertical electrical connections,
+which are both faster and more power efficient.
+
+However, delays due to levels of clocked logic will not be decreased
+by 3D integration, and significant manufacturing, testing, power-supply,
+and heat-dissipation problems must be solved for 3D integration to
+reach production while still delivering on its promise.
+The heat-dissipation problems might be solved using
+semiconductors based on diamond, which is a good conductor
+for heat, but an electrical insulator.
+That said, it remains difficult to grow large single diamond crystals,
+to say nothing of slicing them into wafers.
+In addition, it seems unlikely that any of these technologies will be able to
+deliver the exponential increases to which some people have become accustomed.
+That said, they may be necessary steps on the path to the late Jim Gray's
+``smoking hairy golf balls''~\cite{JimGray2002SmokingHairyGolfBalls}.
+
+\subsection{Novel Materials and Processes}
+\label{sec:cpu:Novel Materials and Processes}
+
+Stephen Hawking is said to have claimed that semiconductor manufacturers
+have but two fundamental problems: (1) the finite speed of light and
+(2) the atomic nature of matter~\cite{BryanGardiner2007}.
+It is possible that semiconductor manufacturers are approaching these
+limits, but there are nevertheless a few avenues of research and
+development focused on working around these fundamental limits.
+
+One workaround for the atomic nature of matter are so-called
+``high-K dielectric'' materials, which allow larger devices to mimic the
+electrical properties of infeasibly small devices.
+These materials pose some severe fabrication challenges, but nevertheless
+may help push the frontiers out a bit farther.
+Another more-exotic workaround stores multiple bits in a single electron,
+relying on the fact that a given electron can exist at a number of
+energy levels.
+It remains to be seen if this particular approach can be made to work
+reliably in production semiconductor devices.
+
+Another proposed workaround is the ``quantum dot'' approach that
+allows much smaller device sizes, but which is still in the research
+stage.
+
+One challenge is that many recent hardware-device-level breakthroughs
+require very tight control of which atoms are placed
+where~\cite{MichaelJKelly2017DeviceLevel}.
+It therefore seems likely that whoever finds a good way to hand-place
+atoms on each of the billions of devices on a chip will have most
+excellent bragging rights, if nothing else!
+
+\subsection{Light, Not Electrons}
+\label{sec:cpu:Light, Not Electrons}
+
+Although the speed of light would be a hard limit, the fact is that
+semiconductor devices are limited by the speed of electricity rather
+than that of light, given that electric waves in semiconductor materials
+move at between 3\,\% and 30\,\% of the speed of light in a vacuum.
+The use of copper connections on silicon devices is one way to increase
+the speed of electricity, and it is quite possible that additional
+advances will push closer still to the actual speed of light.
+In addition, there have been some experiments with tiny optical fibers
+as interconnects within and between chips, based on the fact that
+the speed of light in glass is more than 60\,\% of the speed of light
+in a vacuum.
+One obstacle to such optical fibers is the inefficiency conversion
+between electricity and light and vice versa, resulting in both
+power-consumption and heat-dissipation problems.
+
+That said, absent some fundamental advances in the field of physics,
+any exponential increases in the speed of data flow
+will be sharply limited by the actual speed of light in a vacuum.
+
+\subsection{Special-Purpose Accelerators}
+\label{sec:cpu:Special-Purpose Accelerators}
+
+A general-purpose CPU working on a specialized problem is often spending
+significant time and energy doing work that is only tangentially related
+to the problem at hand.
+For example, when taking the dot product of a pair of vectors, a
+general-purpose CPU will normally use a loop (possibly unrolled)
+with a loop counter.
+Decoding the instructions, incrementing the loop counter, testing this
+counter, and branching back to the
+top of the loop are in some sense wasted effort: the real goal is
+instead to multiply corresponding elements of the two vectors.
+Therefore, a specialized piece of hardware designed specifically to
+multiply vectors could get the job done more quickly and with less
+energy consumed.
+
+This is in fact the motivation for the vector instructions present in
+many commodity microprocessors.
+Because these instructions operate on multiple data items simultaneously,
+they would permit a dot product to be computed with less instruction-decode
+and loop overhead.
+
+Similarly, specialized hardware can more efficiently encrypt and decrypt,
+compress and decompress, encode and decode, and many other tasks besides.
+Unfortunately, this efficiency does not come for free.
+A computer system incorporating this specialized hardware will contain
+more transistors, which will consume some power even when not in use.
+Software must be modified to take advantage of this specialized hardware,
+and this specialized hardware must be sufficiently generally useful
+that the high up-front hardware-design costs can be spread over enough
+users to make the specialized hardware affordable.
+In part due to these sorts of economic considerations, specialized
+hardware has thus far appeared only for a few application areas,
+including graphics processing (GPUs), vector processors (MMX, SSE,
+and VMX instructions), and, to a lesser extent, encryption.
+And even in these areas, it is not always easy to realize the expected
+performance gains, for example, due to thermal
+throttling~\cite{VladKrasnov2017SIMDfreqscale,DanielLemire2018SIMDfreqscale,TravisDowns2020SIMDfreqscale}.
+
+Unlike the server and PC arena, smartphones have long used a wide
+variety of hardware accelerators.
+These hardware accelerators are often used for media decoding,
+so much so that a high-end MP3 player might be able to play audio
+for several minutes---with its CPU fully powered off the entire time.
+The purpose of these accelerators is to improve energy efficiency
+and thus extend battery life: special purpose hardware can often
+compute more efficiently than can a general-purpose CPU\@.
+This is another example of the principle called out in
+Section~\ref{sec:intro:Generality}: Generality is almost never free.
+
+Nevertheless, given the end of \IXalt{Moore's-Law}{Moore's Law}-induced
+single-threaded performance increases, it seems safe to assume that
+increasing varieties of special-purpose hardware will appear.
+
+\subsection{Existing Parallel Software}
+\label{sec:cpu:Existing Parallel Software}
+
+Although multicore CPUs seem to have taken the computing industry
+by surprise, the fact remains that shared-memory parallel computer
+systems have been commercially available for more than a quarter
+century.
+This is more than enough time for significant parallel software
+to make its appearance, and it indeed has.
+Parallel operating systems are quite commonplace, as are parallel
+threading libraries, parallel relational database management systems, 
+and parallel numerical software.
+Use of existing parallel software can go a long ways towards solving any
+parallel-software crisis we might encounter.
+
+Perhaps the most common example is the parallel relational database
+management system.
+It is not unusual for single-threaded programs, often written in
+high-level scripting languages, to access a central relational
+database concurrently.
+In the resulting highly parallel system, only the database need actually
+deal directly with parallelism.
+A very nice trick when it works!

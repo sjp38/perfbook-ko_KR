@@ -1,0 +1,117 @@
+% defer/defer.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\QuickQuizChapter{chp:Deferred Processing}{Deferred Processing}{qqzdefer}
+%
+\Epigraph{All things come to those who wait.}{\emph{Violet Fane}}
+
+The strategy of deferring work goes back before the dawn of recorded
+history. It has occasionally been derided as procrastination or
+even as sheer laziness.
+However, in the last few decades workers have recognized this strategy's value
+in simplifying and streamlining parallel algorithms~\cite{Kung80,HMassalinPhD}.
+Believe it or not, ``laziness'' in parallel programming often outperforms and
+out-scales industriousness!
+These performance and scalability benefits stem from the fact that
+deferring work can enable weakening of synchronization primitives,
+thereby reducing synchronization overhead.
+General approaches of work deferral include
+reference counting (\cref{sec:defer:Reference Counting}),
+hazard pointers (\cref{sec:defer:Hazard Pointers}),
+sequence locking (\cref{sec:defer:Sequence Locks}),
+and RCU (\cref{sec:defer:Read-Copy Update (RCU)}).
+Finally, \cref{sec:defer:Which to Choose?}
+describes how to choose among the work-deferral schemes covered in
+this chapter and \cref{sec:defer:What About Updates?}
+discusses updates.
+But first, \cref{sec:defer:Running Example} will introduce an example
+algorithm that will be used to compare and contrast these approaches.
+
+\section{Running Example}
+\label{sec:defer:Running Example}
+%
+\epigraph{An ounce of application is worth a ton of abstraction.}
+	 {\emph{Booker T.~Washington}}
+
+This chapter will use a simplified packet-routing algorithm to demonstrate
+the value of these approaches and to allow them to be compared.
+Routing algorithms are used in operating-system kernels to
+deliver each outgoing TCP/IP packets to the appropriate network interface.
+This particular algorithm is a simplified version of the classic 1980s
+packet-train-optimized algorithm used in BSD UNIX~\cite{VanJacobson88},
+consisting of a simple linked list.\footnote{
+	In other words, this is not OpenBSD, NetBSD, or even
+	FreeBSD, but none other than Pre-BSD.}
+Modern routing algorithms use more complex data structures, however a
+simple algorithm will help highlight issues specific to parallelism in
+a straightforward setting.
+
+We further simplify the algorithm by reducing the search key from
+a quadruple consisting of source and destination IP addresses and
+ports all the way down to a simple integer.
+The value looked up and returned will also be a simple integer,
+so that the data structure is as shown in
+Figure~\ref{fig:defer:Pre-BSD Packet Routing List}, which
+directs packets with address~42 to interface~1, address~56 to
+interface~3, and address~17 to interface~7.
+This list will normally be searched frequently and updated rarely.
+In Chapter~\ref{chp:Hardware and its Habits}
+we learned that the best ways to evade inconvenient laws of physics, such as
+the finite speed of light and the atomic nature of matter, is to
+either partition the data or to rely on read-mostly sharing.
+This chapter applies read-mostly sharing techniques to Pre-BSD packet
+routing.
+
+\begin{figure}[tb]
+\centering
+\resizebox{3in}{!}{\includegraphics{defer/RouteList}}
+\caption{Pre-BSD Packet Routing List}
+\label{fig:defer:Pre-BSD Packet Routing List}
+\end{figure}
+
+\begin{listing}[tb]
+\input{CodeSamples/defer/route_seq@lookup_add_del.fcv}
+\caption{Sequential Pre-BSD Routing Table}
+\label{lst:defer:Sequential Pre-BSD Routing Table}
+\end{listing}
+
+Listing~\ref{lst:defer:Sequential Pre-BSD Routing Table} (\path{route_seq.c})
+shows a simple single-threaded implementation corresponding to
+Figure~\ref{fig:defer:Pre-BSD Packet Routing List}.
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:entry]
+\Clnrefrange{b}{e} define a \co{route_entry} structure and
+line~\lnref{header} defines
+the \co{route_list} header.
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:lookup]
+\Clnrefrange{b}{e} define \co{route_lookup()}, which sequentially searches
+\co{route_list}, returning the corresponding \co{->iface}, or
+\co{ULONG_MAX} if there is no such route entry.
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:add]
+\Clnrefrange{b}{e} define \co{route_add()}, which allocates a
+\co{route_entry} structure, initializes it, and adds it to the
+list, returning \co{-ENOMEM} in case of memory-allocation failure.
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:del]
+Finally, \clnrefrange{b}{e} define \co{route_del()}, which removes and
+frees the specified \co{route_entry} structure if it exists,
+or returns \co{-ENOENT} otherwise.
+\end{fcvref}
+
+This single-threaded implementation serves as a prototype for the various
+concurrent implementations in this chapter, and also as an estimate of
+ideal scalability and performance.
+
+\input{defer/refcnt}
+\input{defer/hazptr}
+\IfTwoColumn{}{\FloatBarrier}
+\input{defer/seqlock}
+\IfTwoColumn{}{\FloatBarrier}
+\input{defer/rcu}
+\input{defer/rcuexercises}
+\input{defer/whichtochoose}
+\input{defer/updates}
+
+\QuickQuizAnswersChp{qqzdefer}

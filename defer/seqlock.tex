@@ -1,0 +1,401 @@
+% defer/seqlock.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\section{Sequence Locks}
+\label{sec:defer:Sequence Locks}
+%
+\epigraph{It'll be just like starting over.}{\emph{John Lennon}}
+
+The published sequence-lock
+record~\cite{10.1145/800212.806505,10.1145/359863.359878}
+extends back as far as that of reader-writer locking, but sequence locks
+nevertheless remain in relative obscurity.
+Sequence locks are used in the Linux kernel for read-mostly data that
+must be seen in a consistent state by readers.
+However, unlike reader-writer locking, readers do not exclude writers.
+Instead, like hazard pointers, sequence locks force readers to
+\emph{retry} an operation if they detect activity from a concurrent writer.
+As can be seen from
+Figure~\ref{fig:defer:Reader And Uncooperative Sequence Lock},
+it is important to design code using sequence locks so that readers
+very rarely need to retry.
+
+\begin{figure}[tb]
+\centering
+\resizebox{3in}{!}{\includegraphics{cartoons/r-2014-Start-over}}
+\caption{Reader And Uncooperative Sequence Lock}
+\label{fig:defer:Reader And Uncooperative Sequence Lock}
+\end{figure}
+
+\QuickQuiz{
+	Why isn't this sequence-lock discussion in Chapter~\ref{chp:Locking},
+	you know, the one on \emph{locking}?
+}\QuickQuizAnswer{
+	The sequence-lock mechanism is really a combination of two
+	separate synchronization mechanisms, sequence counts and
+	locking.
+	In fact, the sequence-count mechanism is available separately
+	in the Linux kernel via the
+	\co{write_seqcount_begin()} and \co{write_seqcount_end()}
+	primitives.
+
+	However, the combined \co{write_seqlock()} and
+	\co{write_sequnlock()} primitives are used much more heavily
+	in the Linux kernel.
+	More importantly, many more people will understand what you
+	mean if you say ``sequence lock'' than if you say
+	``sequence count''.
+
+	So this section is entitled ``Sequence Locks'' so that people
+	will understand what it is about just from the title, and
+	it appears in the ``Deferred Processing'' because (1) of the
+	emphasis on the ``sequence count'' aspect of ``sequence locks''
+	and (2) because a ``sequence lock'' is much more than merely
+	a lock.
+}\QuickQuizEnd
+
+\begin{listing}[bp]
+\begin{VerbatimL}
+do {
+	seq = read_seqbegin(&test_seqlock);
+	/* read-side access. */
+} while (read_seqretry(&test_seqlock, seq));
+\end{VerbatimL}
+\caption{Sequence-Locking Reader}
+\label{lst:defer:Sequence-Locking Reader}
+\end{listing}
+
+\begin{listing}[bp]
+\begin{VerbatimL}
+write_seqlock(&test_seqlock);
+/* Update */
+write_sequnlock(&test_seqlock);
+\end{VerbatimL}
+\caption{Sequence-Locking Writer}
+\label{lst:defer:Sequence-Locking Writer}
+\end{listing}
+
+The key component of sequence locking is the sequence number, which has
+an even value in the absence of updaters and an odd value if there
+is an update in progress.
+Readers can then snapshot the value before and after each access.
+If either snapshot has an odd value, or if the two snapshots differ,
+there has been a concurrent update, and the reader must discard
+the results of the access and then retry it.
+Readers therefore use the \co{read_seqbegin()} and \co{read_seqretry()}
+functions shown in Listing~\ref{lst:defer:Sequence-Locking Reader}
+when accessing data protected by a sequence lock.
+Writers must increment the value before and after each update,
+and only one writer is permitted at a given time.
+Writers therefore use the \co{write_seqlock()} and \co{write_sequnlock()}
+functions shown in Listing~\ref{lst:defer:Sequence-Locking Writer}
+when updating data protected by a sequence lock.
+
+As a result, sequence-lock-protected data can have an arbitrarily
+large number of concurrent readers, but only one writer at a time.
+Sequence locking is used in the Linux kernel to protect calibration
+quantities used for timekeeping.
+It is also used in pathname traversal to detect concurrent rename operations.
+
+\begin{listing}[tb]
+\input{CodeSamples/defer/seqlock@impl.fcv}
+\caption{Sequence-Locking Implementation}
+\label{lst:defer:Sequence-Locking Implementation}
+\end{listing}
+
+A simple implementation of sequence locks is shown in
+Listing~\ref{lst:defer:Sequence-Locking Implementation}
+(\path{seqlock.h}).
+\begin{fcvref}[ln:defer:seqlock:impl:typedef]
+The \co{seqlock_t} data structure is shown on
+\clnrefrange{b}{e}, and contains
+the sequence number along with a lock to serialize writers.
+\end{fcvref}
+\begin{fcvref}[ln:defer:seqlock:impl:init]
+\Clnrefrange{b}{e} show \co{seqlock_init()}, which, as the name indicates,
+initializes a \co{seqlock_t}.
+\end{fcvref}
+
+\begin{fcvref}[ln:defer:seqlock:impl:read_seqbegin]
+\Clnrefrange{b}{e} show \co{read_seqbegin()}, which begins a sequence-lock
+read-side critical section.
+Line~\lnref{fetch} takes a snapshot of the sequence counter, and
+line~\lnref{mb} orders
+this snapshot operation before the caller's critical section.
+Finally, line~\lnref{ret} returns the value of the snapshot (with the least-significant
+bit cleared), which the caller
+will pass to a later call to \co{read_seqretry()}.
+\end{fcvref}
+
+\QuickQuiz{
+	Why not have \co{read_seqbegin()} in
+	Listing~\ref{lst:defer:Sequence-Locking Implementation}
+	check for the low-order bit being set, and retry
+	internally, rather than allowing a doomed read to start?
+}\QuickQuizAnswer{
+	That would be a legitimate implementation.
+	However, if the workload is read-mostly, it would likely
+	increase the overhead of the common-case successful read,
+	which could be counter-productive.
+	However, given a sufficiently large fraction of updates
+	and sufficiently high-overhead readers, having the
+	check internal to \co{read_seqbegin()} might be preferable.
+}\QuickQuizEnd
+
+\begin{fcvref}[ln:defer:seqlock:impl:read_seqretry]
+\Clnrefrange{b}{e} show \co{read_seqretry()}, which returns true if there
+was at least one writer since the time of the corresponding
+call to \co{read_seqbegin()}.
+Line~\lnref{mb} orders the caller's prior critical section before line~\lnref{fetch}'s
+fetch of the new snapshot of the sequence counter.
+Line~\lnref{ret} checks whether the sequence counter has changed,
+in other words, whether there has been at least one writer, and returns
+true if so.
+\end{fcvref}
+
+\QuickQuizSeries{%
+\QuickQuizB{
+	Why is the \co{smp_mb()} on
+	line~\ref{ln:defer:seqlock:impl:read_seqretry:mb} of
+	Listing~\ref{lst:defer:Sequence-Locking Implementation}
+	needed?
+}\QuickQuizAnswerB{
+	If it was omitted, both the compiler and the CPU would be
+	within their rights to move the critical section preceding
+	the call to \co{read_seqretry()} down below this function.
+	This would prevent the sequence lock from protecting the
+	critical section.
+	The \co{smp_mb()} primitive prevents such reordering.
+}\QuickQuizEndB
+%
+\QuickQuizM{
+	Can't weaker memory barriers be used in the code in
+	Listing~\ref{lst:defer:Sequence-Locking Implementation}?
+}\QuickQuizAnswerM{
+	In older versions of the Linux kernel, no.
+
+	\begin{fcvref}[ln:defer:seqlock:impl]
+	In very new versions of the Linux kernel,
+        line~\lnref{read_seqbegin:fetch} could use
+	\co{smp_load_acquire()} instead of \co{READ_ONCE()}, which
+	in turn would allow the \co{smp_mb()} on
+        line~\lnref{read_seqbegin:mb} to be dropped.
+	Similarly, line~\lnref{write_sequnlock:inc} could use an
+        \co{smp_store_release()}, for
+	example, as follows:
+
+\begin{VerbatimU}
+smp_store_release(&slp->seq, READ_ONCE(slp->seq) + 1);
+\end{VerbatimU}
+
+	This would allow the \co{smp_mb()} on
+	line~\lnref{write_sequnlock:mb} to be dropped.
+	\end{fcvref}
+}\QuickQuizEndM
+%
+\QuickQuizE{
+	What prevents sequence-locking updaters from starving readers?
+}\QuickQuizAnswerE{
+	Nothing.
+	This is one of the weaknesses of sequence locking, and as a
+	result, you should use sequence locking only in read-mostly
+	situations.
+	Unless of course read-side starvation is acceptable in your
+	situation, in which case, go wild with the sequence-locking updates!
+}\QuickQuizEndE
+}
+
+\begin{fcvref}[ln:defer:seqlock:impl:write_seqlock]
+\Clnrefrange{b}{e} show \co{write_seqlock()}, which simply acquires the lock,
+increments the sequence number, and executes a memory barrier to ensure
+that this increment is ordered before the caller's critical section.
+\end{fcvref}
+\begin{fcvref}[ln:defer:seqlock:impl:write_sequnlock]
+\Clnrefrange{b}{e} show \co{write_sequnlock()}, which executes a memory barrier
+to ensure that the caller's critical section is ordered before the
+increment of the sequence number on line~\lnref{inc}, then releases the lock.
+\end{fcvref}
+
+\QuickQuizSeries{%
+\QuickQuizB{
+	What if something else serializes writers, so that the lock
+	is not needed?
+}\QuickQuizAnswerB{
+	In this case, the \co{->lock} field could be omitted, as it
+	is in \co{seqcount_t} in the Linux kernel.
+}\QuickQuizEndB
+%
+\QuickQuizE{
+	Why isn't \co{seq} on
+	line~\ref{ln:defer:seqlock:impl:typedef:seq} of
+	Listing~\ref{lst:defer:Sequence-Locking Implementation}
+	\co{unsigned} rather than \co{unsigned long}?
+	After all, if \co{unsigned} is good enough for the Linux
+	kernel, shouldn't it be good enough for everyone?
+}\QuickQuizAnswerE{
+	Not at all.
+	The Linux kernel has a number of special attributes that allow
+	it to ignore the following sequence of events:
+	\begin{enumerate}
+	\item	Thread~0 executes \co{read_seqbegin()}, picking up
+		\co{->seq} in
+		line~\ref{ln:defer:seqlock:impl:read_seqbegin:fetch},
+		noting that the value is even,
+		and thus returning to the caller.
+	\item	Thread~0 starts executing its read-side critical section,
+		but is then preempted for a long time.
+	\item	Other threads repeatedly invoke \co{write_seqlock()} and
+		\co{write_sequnlock()}, until the value of \co{->seq}
+		overflows back to the value that Thread~0 fetched.
+	\item	Thread~0 resumes execution, completing its read-side
+		critical section with inconsistent data.
+	\item	Thread~0 invokes \co{read_seqretry()}, which incorrectly
+		concludes that Thread~0 has seen a consistent view of
+		the data protected by the sequence lock.
+	\end{enumerate}
+
+	The Linux kernel uses sequence locking for things that are
+	updated rarely, with time-of-day information being a case
+	in point.
+	This information is updated at most once per millisecond,
+	so that seven weeks would be required to overflow the counter.
+	If a kernel thread was preempted for seven weeks, the Linux
+	kernel's soft-lockup code would be emitting warnings every two
+	minutes for that entire time.
+
+	In contrast, with a 64-bit counter, more than five centuries
+	would be required to overflow, even given an update every
+	\emph{nano}second.
+	Therefore, this implementation uses a type for \co{->seq}
+	that is 64 bits on 64-bit systems.
+}\QuickQuizEndE
+}
+
+\begin{listing}[tbp]
+\input{CodeSamples/defer/route_seqlock@lookup.fcv}
+\caption{Sequence-Locked Pre-BSD Routing Table Lookup (BUGGY!!!)}
+\label{lst:defer:Sequence-Locked Pre-BSD Routing Table Lookup}
+\end{listing}
+
+\begin{listing}[tbp]
+\input{CodeSamples/defer/route_seqlock@add_del.fcv}
+\caption{Sequence-Locked Pre-BSD Routing Table Add\slash Delete (BUGGY!!!)}
+\label{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete}
+\end{listing}
+
+So what happens when sequence locking is applied to the Pre-BSD
+routing table?
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Lookup}
+shows the data structures and \co{route_lookup()}, and
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete}
+shows \co{route_add()} and \co{route_del()} (\path{route_seqlock.c}).
+This implementation is once again similar to its counterparts in earlier
+sections, so only the differences will be highlighted.
+
+\begin{fcvref}[ln:defer:route_seqlock:lookup]
+In
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Lookup},
+line~\lnref{struct:re_freed} adds \co{->re_freed}, which is checked on
+lines~\lnref{lookup:chk_freed} and~\lnref{lookup:abort}.
+Line~\lnref{struct:sl} adds a sequence lock, which is used by \co{route_lookup()}
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seqlock:lookup:lookup]
+on lines~\lnref{r_sqbegin}, \lnref{r_sqretry1}, and~\lnref{r_sqretry2},
+with lines~\lnref{goto_retry1} and~\lnref{goto_retry2} branching back to
+the \co{retry} label on line~\lnref{retry}.
+The effect is to retry any lookup that runs concurrently with an update.
+\end{fcvref}
+
+\begin{fcvref}[ln:defer:route_seqlock:add_del]
+In
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete},
+lines~\lnref{add:w_sqlock}, \lnref{add:w_squnlock}, \lnref{del:w_sqlock},
+\lnref{del:w_squnlock1}, and~\lnref{del:w_squnlock2}
+acquire and release the sequence lock,
+while lines~\lnref{add:clr_freed} and~\lnref{del:set_freed} handle \co{->re_freed}.
+This implementation is therefore quite straightforward.
+\end{fcvref}
+
+\begin{figure}[tb]
+\centering
+\resizebox{2.5in}{!}{\includegraphics{CodeSamples/defer/perf-seqlock}}
+\caption{Pre-BSD Routing Table Protected by Sequence Locking}
+\label{fig:defer:Pre-BSD Routing Table Protected by Sequence Locking}
+\end{figure}
+
+It also performs better on the read-only workload, as can be seen in
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Sequence Locking},
+though its performance is still far from ideal.
+Worse yet, it suffers use-after-free failures.
+The problem is that the reader might encounter a segmentation violation
+due to accessing an already-freed structure before \co{read_seqretry()}
+has a chance to warn of the concurrent update.
+
+\QuickQuiz{
+	Can this bug be fixed?
+	In other words, can you use sequence locks as the \emph{only}
+	synchronization mechanism protecting a linked list supporting
+	concurrent addition, deletion, and lookup?
+}\QuickQuizAnswer{
+	One trivial way of accomplishing this is to surround all
+	accesses, including the read-only accesses, with
+	\co{write_seqlock()} and \co{write_sequnlock()}.
+	Of course, this solution also prohibits all read-side
+	parallelism, resulting in massive lock contention,
+	and furthermore could just as easily be implemented
+	using simple locking.
+
+	If you do come up with a solution that uses \co{read_seqbegin()}
+	and \co{read_seqretry()} to protect read-side accesses, make
+	sure that you correctly handle the following sequence of events:
+
+	\begin{enumerate}
+	\item	CPU~0 is traversing the linked list, and picks up a pointer
+		to list element~A.
+	\item	CPU~1 removes element~A from the list and frees it.
+	\item	CPU~2 allocates an unrelated data structure, and gets
+		the memory formerly occupied by element~A\@.
+		In this unrelated data structure, the memory previously
+		used for element~A's \co{->next} pointer is now occupied
+		by a floating-point number.
+	\item	CPU~0 picks up what used to be element~A's \co{->next}
+		pointer, gets random bits, and therefore gets a
+		segmentation fault.
+	\end{enumerate}
+
+	One way to protect against this sort of problem requires use
+	of ``type-safe memory'', which will be discussed in
+	Section~\ref{sec:defer:RCU Provides Type-Safe Memory}.
+	Roughly similar solutions are possible using the hazard pointers
+	discussed in
+	Section~\ref{sec:defer:Hazard Pointers}.
+	But in either case, you would be using some other synchronization
+	mechanism in addition to sequence locks!
+}\QuickQuizEnd
+
+Both the read-side and write-side critical sections of a sequence lock
+can be thought of as transactions, and sequence locking therefore
+can be thought of as a limited form of transactional memory, which
+will be discussed in Section~\ref{sec:future:Transactional Memory}.
+The limitations of sequence locking are: (1)~Sequence locking restricts
+updates and (2)~sequence locking does not permit traversal of pointers
+to objects that might be freed by updaters.
+These limitations are of course overcome by transactional memory, but
+can also be overcome by combining other synchronization primitives
+with sequence locking.
+
+Sequence locks allow writers to defer readers, but not vice versa.
+This can result in unfairness and even starvation
+in writer-heavy workloads.\footnote{
+	Dmitry Vyukov describes one way to reduce (but, sadly, not eliminate)
+	reader starvation:
+	\url{http://www.1024cores.net/home/lock-free-algorithms/reader-writer-problem/improved-lock-free-seqlock}.}
+On the other hand, in the absence of writers, sequence-lock readers are
+reasonably fast and scale linearly.
+It is only human to want the best of both worlds: fast readers without
+the possibility of read-side failure, let alone starvation.
+In addition, it would also be nice to overcome sequence locking's limitations
+with pointers.
+The following section presents a synchronization mechanism with exactly
+these properties.

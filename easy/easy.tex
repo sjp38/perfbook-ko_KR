@@ -1,0 +1,320 @@
+% easy/easy.tex
+% mainfile: ../perfbook.tex
+% SPDX-License-Identifier: CC-BY-SA-3.0
+
+\QuickQuizChapter{chp:Ease of Use}{Ease of Use}{qqzeasy}
+%
+\Epigraph{Creating a perfect API is like committing the perfect crime.
+	  There are at least fifty things that can go wrong, and if you are
+	  a genius, you might be able to anticipate twenty-five of them.}
+	 {\emph{With apologies to any Kathleen Turner fans who might
+	  still be alive.}}
+
+\section{What is Easy?}
+\label{sec:easy:What is Easy?}
+%
+\epigraph{When someone says ``I want a programming language in which I
+	  need only say what I wish done,'' give them a lollipop.}
+	 {\emph{Alan J.~ Perlis, updated}}
+% http://www.cs.yale.edu/homes/perlis-alan/quotes.html
+
+If you are tempted to look down on ease-of-use requirements, please
+consider that an ease-of-use bug in Linux-kernel RCU resulted in an
+exploitable Linux-kernel security bug in a use of
+RCU~\cite{McKenney:2019:CRS:3319647.3325836}.
+It is therefore clearly important that even in-kernel APIs be easy to use.
+
+Unfortunately, ``easy'' is a relative term.
+For example, many people would consider a 15-hour airplane flight to be
+a bit of an ordeal---unless they stopped to consider alternative modes
+of transportation, especially swimming.
+This means that creating an easy-to-use API requires that you understand
+your intended users well enough to know what is easy for them.
+Which might or might not have anything to do with what is easy for you.
+
+The following question illustrates this point: ``Given a randomly chosen
+person among everyone alive today, what one change would
+improve that person's life?''
+
+There is no single change that would be guaranteed to help everyone's life.
+After all, there is an extremely wide range of people, with a correspondingly
+wide range of needs, wants, desires, and aspirations.
+A starving person might need food, but additional food might well hasten
+the death of a morbidly obese person.
+The high level of excitement so fervently desired by many young people
+might well be fatal to someone recovering from a heart attack.
+Information critical to the success of one person might contribute to
+the failure of someone suffering from information overload.
+In short, if you are working on a software project that is intended to
+help people you know nothing about, you should not be surprised when
+those people find fault with your project.
+
+If you really want to help a given group of people, there is simply no
+substitute for working closely with them over an extended period of time,
+as in years.
+Nevertheless, there are some simple things that you can do to increase
+the odds of your users being happy with your software, and some of these
+things are covered in the next section.
+
+\section{Rusty Scale for API Design}
+\label{sec:easy:Rusty Scale for API Design}
+%
+\epigraph{Finding the appropriate measurement is thus not a mathematical
+	  exercise.  It is a risk-taking judgment.}
+	 {\emph{Peter Drucker}}
+% http://billhennessy.com/simple-strategies/2015/09/09/i-wish-drucker-never-said-it
+% Rusty is OK with this: July 19, 2006.
+
+This section is adapted from portions of Rusty Russell's 2003 Ottawa Linux
+Symposium keynote address~\cite[Slides~39--57]{RustyRussell2003OLSkeynote}.
+Rusty's key point is that the goal should not be merely to make an API
+easy to use, but rather to make the API hard to misuse.
+To that end, Rusty proposed his ``Rusty Scale'' in decreasing order
+of this important hard-to-misuse property.
+
+The following list attempts to generalize the Rusty Scale beyond the
+Linux kernel:
+
+\begin{enumerate}
+\item	It is impossible to get wrong.
+	Although this is the standard to which all API designers should
+	strive, only the mythical \co{dwim()}\footnote{
+		The \co{dwim()} function is an acronym that expands to
+		``do what I mean''.}
+	command manages to come close.
+\item	The compiler or linker won't let you get it wrong.
+\item	The compiler or linker will warn you if you get it wrong.
+	\co{BUILD_BUG_ON()} is your users' friend.
+\item	The simplest use is the correct one.
+\item	The name tells you how to use it.
+	But names can be two-edged swords.
+	Although \co{rcu_read_lock()} is plain enough for someone
+	converting code from reader-writer locking, it might cause
+	some consternation for someone converting code from
+	reference counting.
+\item	Do it right or it will always break at runtime.
+	\co{WARN_ON_ONCE()} is your users' friend.
+\item	Follow common convention and you will get it right.
+	The \co{malloc()} library function is a good example.
+	Although it is easy to get memory allocation wrong, a
+	great many projects do manage to get it right, at least most
+	of the time.
+	Using \co{malloc()} in conjunction with
+	Valgrind~\cite{ValgrindHomePage} moves \co{malloc()}
+	almost up to the ``do it right or it will always break at runtime''
+	point on the scale.
+\item	Read the documentation and you will get it right.
+\item	Read the implementation and you will get it right.
+\item	Read the right mailing-list archive and you will get it right.
+\item	Read the right mailing-list archive and you will get it wrong.
+\item	Read the implementation and you will get it wrong.
+	The original non-\co{CONFIG_PREEMPT} implementation of
+	\co{rcu_read_lock()}~\cite{PaulEMcKenney2007PreemptibleRCU}
+	is an infamous example of this point on the scale.
+\item	Read the documentation and you will get it wrong.
+	For example, the DEC Alpha \co{wmb} instruction's
+	documentation~\cite{ALPHA2002} fooled a
+	number of developers into thinking that this instruction
+	had much stronger memory-order semantics than it actually does.
+	Later documentation clarified this
+	point~\cite{Compaq01,WilliamPugh2000Gharachorloo},
+	moving the \co{wmb} instruction up to the
+	``read the documentation and you will get it right'' point on
+	the scale.
+\item	Follow common convention and you will get it wrong.
+	The \co{printf()} statement is an example of this point on the
+	scale because
+	developers almost always fail to check \co{printf()}'s error return.
+\item	Do it right and it will break at runtime.
+\item	The name tells you how not to use it.
+\item	The obvious use is wrong.
+	The Linux kernel \co{smp_mb()} function is an example of
+	this point on the scale.
+	Many developers assume that this function has much
+	stronger ordering semantics than it actually possesses.
+	Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} contains the
+	information needed to avoid this mistake, as does the
+	Linux-kernel source tree's \path{Documentation} and
+	\path{tools/memory-model} directories.
+\item	The compiler or linker will warn you if you get it right.
+\item	The compiler or linker won't let you get it right.
+\item	It is impossible to get right.
+	The \co{gets()} function is a famous example of this point on
+	the scale.
+	In fact, \co{gets()} can perhaps best be described as
+	an unconditional buffer-overflow security hole.
+\end{enumerate}
+
+\section{Shaving the Mandelbrot Set}
+\label{sec:easy:Shaving the Mandelbrot Set}
+%
+\epigraph{Simplicity does not precede complexity, \\ but follows it.}
+	 {\emph{Alan J.~Perlis}}
+
+The set of useful programs resembles the Mandelbrot set
+(shown in Figure~\ref{fig:easy:Mandelbrot Set})
+in that it does
+not have a clear-cut smooth boundary---if it did, the halting problem
+would be solvable.
+But we need APIs that real people can use, not ones that require a
+Ph.D. dissertation be completed for each and every potential use.
+So, we ``shave the Mandelbrot set'',\footnote{
+	Due to Josh Triplett.}
+restricting the use of the
+API to an easily described subset of the full set of potential uses.
+
+\begin{figure}[tbp]
+\centering
+\resizebox{2.5in}{!}{\includegraphics{easy/Mandel_zoom_00_mandelbrot_set}}
+\caption{Mandelbrot Set (Courtesy of Wikipedia)}
+\label{fig:easy:Mandelbrot Set}
+\end{figure}
+
+Such shaving may seem counterproductive.
+After all, if an algorithm works, why shouldn't it be used?
+
+To see why at least some shaving is absolutely necessary, consider
+a locking design that avoids deadlock, but in perhaps the worst possible way.
+This design uses a circular doubly linked list, which contains one
+element for each thread in the system along with a header element.
+When a new thread is spawned, the parent thread must insert a new
+element into this list, which requires some sort of synchronization.
+
+One way to protect the list is to use a global lock.
+However, this might be a bottleneck if threads were being created and
+deleted frequently.\footnote{
+	Those of you with strong operating-system backgrounds, please
+	suspend disbelief.
+	Those unable to suspend disbelief are encouraged to provide
+	better examples.}
+Another approach would be to use a hash table and to lock the individual
+hash buckets, but this can perform poorly when scanning the list in order.
+
+A third approach is to lock the individual list elements, and to require
+the locks for both the predecessor and successor to be held during the
+insertion.
+Since both locks must be acquired, we need to decide which order to
+acquire them in.
+Two conventional approaches would be to acquire the locks in address
+order, or to acquire them in the order that they appear in the list,
+so that the header is always acquired first when it is one of the two
+elements being locked.
+However, both of these methods require special checks and branches.
+
+The to-be-shaven solution is to unconditionally acquire the locks in
+list order.
+But what about deadlock?
+
+Deadlock cannot occur.
+
+To see this, number the elements in the list starting with zero for the
+header up to $N$ for the last element in the list (the one preceding the
+header, given that the list is circular).
+Similarly, number the threads from zero to $N-1$.
+If each thread attempts to lock some consecutive pair of elements,
+at least one of the threads is guaranteed to be able to acquire both
+locks.
+
+Why?
+
+Because there are not enough threads to reach all the way around the list.
+Suppose thread~0 acquires element~0's lock.
+To be blocked, some other thread must have already acquired element~1's
+lock, so let us assume that thread~1 has done so.
+Similarly, for thread~1 to be blocked, some other thread must have acquired
+element~2's lock, and so on, up through thread~$N-1$, who acquires
+element~$N-1$'s lock.
+For thread~$N-1$ to be blocked, some other thread must have acquired
+element~$N$'s lock.
+But there are no more threads, and so thread~$N-1$ cannot be blocked.
+Therefore, deadlock cannot occur.
+
+So why should we prohibit use of this delightful little algorithm?
+
+The fact is that if you \emph{really} want to use it, we cannot stop you.
+We \emph{can}, however, recommend against such code being included
+in any project that we care about.
+
+But, before you use this algorithm, please think through the following
+Quick Quiz.
+
+\QuickQuiz{
+	Can a similar algorithm be used when deleting elements?
+}\QuickQuizAnswer{
+	Yes.
+	However, since each thread must hold the locks of three
+	consecutive elements to delete the middle one, if there
+	are $N$ threads, there must be $2N+1$ elements (rather than
+	just $N+1$) in order to avoid deadlock.
+}\QuickQuizEnd
+
+The fact is that this algorithm is extremely specialized (it only works
+on certain sized lists), and also quite fragile.
+Any bug that accidentally failed to add a node to the list could result
+in deadlock.
+In fact, simply adding the node a bit too late could result in deadlock,
+as could increasing the number of threads.
+
+In addition, the other algorithms described above are ``good and sufficient''.
+For example, simply acquiring the locks in address order is fairly simple
+and quick, while allowing the use of lists of any size.
+Just be careful of the special cases presented by empty lists and lists
+containing only one element!
+
+\QuickQuiz{
+	Yetch!
+	What ever possessed someone to come up with an algorithm
+	that deserves to be shaved as much as this one does???
+}\QuickQuizAnswer{
+	That would be Paul.
+
+	He was considering the \emph{Dining Philosopher's Problem}, which
+	involves a rather unsanitary spaghetti dinner attended by
+	five philosophers.
+	Given that there are five plates and but five forks on the table, and
+	given that each philosopher requires two forks at a time to eat,
+	one is supposed to come up with a fork-allocation algorithm that
+	avoids deadlock.
+	Paul's response was ``Sheesh!  Just get five more forks!''
+
+	This in itself was OK, but Paul then applied this same solution to
+	circular linked lists.
+
+	This would not have been so bad either, but he had to go and tell
+	someone about it!
+}\QuickQuizEnd
+
+\begin{figure}[tbp]
+\centering
+\resizebox{2.5in}{!}{\includegraphics{cartoons/r-2014-shaving-the-mandelbrot}}
+\caption{Shaving the Mandelbrot Set}
+\ContributedBy{Figure}{fig:easy:Shaving the Mandelbrot Set}{Melissa Broussard}
+\end{figure}
+
+In summary, we do not use algorithms simply because they happen to work.
+We instead restrict ourselves to algorithms that are useful enough to
+make it worthwhile learning about them.
+The more difficult and complex the algorithm, the more generally useful
+it must be in order for the pain of learning it and fixing its bugs to
+be worthwhile.
+
+\QuickQuiz{
+	Give an exception to this rule.
+}\QuickQuizAnswer{
+	One exception would be a difficult and complex algorithm that
+	was the only one known to work in a given situation.
+	Another exception would be a difficult and complex algorithm
+	that was nonetheless the simplest of the set known to work in
+	a given situation.
+	However, even in these cases, it may be very worthwhile to spend
+	a little time trying to come up with a simpler algorithm!
+	After all, if you managed to invent the first algorithm
+	to do some task, it shouldn't be that hard to go on to
+	invent a simpler one.
+}\QuickQuizEnd
+
+Exceptions aside, we must continue to shave the software ``Mandelbrot
+set'' so that our programs remain maintainable, as shown in
+Figure~\ref{fig:easy:Shaving the Mandelbrot Set}.
+
+\QuickQuizAnswersChp{qqzeasy}
