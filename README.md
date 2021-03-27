@@ -12,8 +12,8 @@ This translation is just for fun.
 That said, if things goes luckily, the translation would help Korean
 programmers to understand the parallel programming well.
 Also, this translation is official; The original author, Paul E. McKenney, also
-references this repository:
-- https://goo.gl/b8gqMS
+[references](https://git.kernel.org/pub/scm/linux/kernel/git/paulmck/perfbook.git/commit/?id=edbfcdee0460)
+this repository.
 
 
 Usage
@@ -28,9 +28,7 @@ Complete PDF Version
 --------------------
 
 For those who has problem about building the book by themselves, we provide
-complete book in PDF format.
-To get it, follow the link below:
- - https://github.com/sjp38/perfbook-ko_KR-pdf
+complete book in PDF format: https://github.com/sjp38/perfbook-ko_KR-pdf
 
 
 License
