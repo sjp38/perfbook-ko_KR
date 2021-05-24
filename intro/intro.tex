@@ -1619,6 +1619,33 @@ development effort.
 \subsection{Performance Optimization}
 \label{sec:intro:Performance Optimization}
 
+2000년대 초반까지, CPU 클락 주파수는 매 18개월마다 두배가 되었습니다.
+때문에, 주의 깊게 성능을 최적화 하는 것보다 새로운 기능을 만드는게 일반적으로
+더 중요했습니다.
+이제 \IX{무어의 법칙} 은 트랜지스터 집적도와 트랜지스터당 성능을 모두
+증가시키는 대신, ``오로지'' 트랜지스터 집적도만 증가시키므로, 성능 최적화의
+중요성을 다시 생각해 보기 좋은 때일지도 모릅니다.
+어쨌건, 새로운 하드웨어 세대는 더이상 대단한 싱글쓰레드 성능 개선을 가져오지
+않습니다.
+더 나아가서, 많은 성능 최적화는 전력을 아끼기도 합니다.
+
+이런 관점에서, 병렬 프로그래밍은 그저 하나의 성능 최적화일 뿐이지만, 병렬
+시스템이 점점 저렴해지고 더 쉽게 접근 가능해져 가고 있기 때문에 훨씬 매력적이
+되어가고 있습니다.
+하지만, 병렬화를 통해 얻을 수 있는 속도 개선은 CPU 갯수에 대략적으로 제한됨을
+명심하기 바랍니다 (하지만 흥미로운 예외 경우를 위해
+\cref{sec:SMPdesign:Beyond Partitioning} 을 보기 바랍니다).
+반대로, 전통적인 싱글쓰레드 소프트웨어 최적화로 얻을 수 있는 속도 증가는 훨씬
+클 수 있습니다.
+예를 들어, 긴 링크드 리스트를 해시 테이블 또는 탐색 트리로 교체하는 것은
+수십수백배 성능을 개선할 수 있습니다.
+이 고도로 최적화된 싱글쓰레드 프로그램은 최적화 되지 않은 병렬 버전에 비해 훨씬
+빠를 수 있어서, 병렬화를 불필요하게 만들 수도 있습니다.
+물론, 고도로 최적화된 병렬 프로그램은 그보다도 나을 겁니다, 추가적인 개발
+작업이 필요하겠지만요.
+
+\iffalse
+
 Up through the early 2000s, CPU clock frequencies doubled every 18 months.
 It was therefore usually more important to create new functionality than to
 carefully optimize performance.
@@ -1647,6 +1674,22 @@ unnecessary.
 Of course, a highly optimized parallel program would be even better,
 aside from the added development effort required.
 
+\fi
+
+더 나아가서, 다른 프로그램은 다른 성능 병목지점을 가질 수도 있습니다.
+예를 들어, 여러분의 프로그램이 디스크 드라이브로부터 데이터를 기다리는데 시간을
+대부분 소모하고 있다면, 여러 CPU 를 사용하는건 디스크를 기다리는 시간만
+증가시킬 뿐일 겁니다.
+사실, 그 프로그램이 회전형 디스크에 직렬로 놓여진 거대한 하나의 파일을 읽고
+있었다면, 그걸 병렬화 하는건 추가된 탐색 오버헤드 때문에 더 느려진 결과를 낼
+겁니다.
+여러분은 그 대신 그 데이터의 배치를 변경해서 그 파일을 더 작게 만들고 (따라서
+더 빨리 읽을 수 있고), 그 파일을 다른 드라이브들로부터 병렬로 접근될 수 있게
+조각들로 쪼개고, 자주 접근되는 데이터를 메인 메모리에 캐쉬하고, 또는, 만약
+가능하다면 읽어야만 하는 데이터의 양 자체를 줄여야 합니다.
+
+\iffalse
+
 Furthermore, different programs might have different performance
 bottlenecks.
 For example, if your program spends most of its time
@@ -1663,10 +1706,43 @@ cache frequently accessed data in main memory,
 or, if possible,
 reduce the amount of data that must be read.
 
+\fi
+
 \QuickQuiz{
+	어떤 다른 병목지점이 추가된 CPU 가 성능을 개선하는 걸 막을 수 있을까요?
+
+	\iffalse
+
 	What other bottlenecks might prevent additional CPUs from
 	providing additional performance?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여러 잠재적 병목이 있을 수 있습니다:
+	\begin{enumerate}
+	\item	메인 메모리.  하나의 쓰레드가 모든 가용한 메모리를 소비한다면,
+		추가된 쓰레드는 그저 우습게도 스스로를 페이징 인/아웃 시킬 뿐일
+		겁니다.
+	\item	캐쉬.  하나의 쓰레드의 캐쉬 사용량이 모든 공유 CPU 캐쉬(들) 을
+		완전히 채울 정도라면 더 많은 쓰레드를 추가하는 것은 그저 그
+		캐쉬를 쓰래슁 하게 만들 텐데, 이걸 \cref{chp:Data Structures}
+		에서 보게 될 겁니다.
+	\item	메모리 대역폭.  하나의 쓰레드가 모든 가용한 메모리 대역폭을
+		소비한다면, 추가된 쓰레드는 그저 시스템 인터컨넥트에 일감이 더
+		쌓이는 결과가 될 겁니다.
+	\item	I/O 대역폭.  하나의 쓰레드가 I/O 에 매여 있다면, 더 많은
+		쓰레드를 추가하는건 그 모든 쓰레드가 영향받는 I/O 자원에 줄서서
+		기다리는 결과를 초래할 겁니다.
+	\end{enumerate}
+
+	특정한 하드웨어 시스템은 추가적인 병목을 얼마든 가지고 있을 수
+	있습니다.
+	중요한 사실은 여러 CPU 또는 쓰레드 사이에 공유되는 모든 자원이 잠재적
+	병목이라는 겁니다.
+
+	\iffalse
+
 	There are any number of potential bottlenecks:
 	\begin{enumerate}
 	\item	Main memory.  If a single thread consumes all available
@@ -1688,7 +1764,19 @@ reduce the amount of data that must be read.
 	bottlenecks.
 	The fact is that every resource which is shared between
 	multiple CPUs or threads is a potential bottleneck.
+
+	\fi
+
 }\QuickQuizEnd
+
+병렬성은 강력한 최적화 기술이 될 수 있지만, 그게 유일한 기술도 아니고 모든
+상황에 적합한 것도 아닙니다.
+물론, 여러분의 프로그램이 병렬화 하기 더 쉬울수록, 병렬화는 더 매력적인 최적화
+수단이 됩니다.
+병렬화는 상당히 어렵다는 평판이 있어서, ``구체적으로 무엇이 병렬 프로그래밍을
+그렇게 어렵게 만드는가?'' 라는 질문을 이끌어 냅니다.
+
+\iffalse
 
 Parallelism can be a powerful optimization technique, but
 it is not the only such technique, nor is it appropriate for all
@@ -1698,6 +1786,8 @@ more attractive parallelization becomes as an optimization.
 Parallelization has a reputation of being quite difficult,
 which leads to the question ``exactly what makes parallel
 programming so difficult?''
+
+\fi
 
 \section{What Makes Parallel Programming Hard?}
 \label{sec:intro:What Makes Parallel Programming Hard?}
