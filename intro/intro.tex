@@ -1891,6 +1891,17 @@ each of which is covered in the following sections.
 \subsection{Work Partitioning}
 \label{sec:intro:Work Partitioning}
 
+일 분할하기는 병렬 수행에 절대적으로 필수적입니다: 단 하나의 일 ``덩어리'' 만이
+존재한다면, 그건 한번에 하나의 CPU 를 통해서만 수행될 수 있는데, 이는 곧 순차적
+수행의 정의입니다.
+하지만, 코드를 분할하는 건 상당한 주의가 필요합니다.
+예를 들어, 비동일한 크기로 분할하는 것은 작은 조각들이 완료된 후에는 순차적
+수행이 이뤄지는 결과를 낳습니다~\cite{GeneAmdahl1967AmdahlsLaw}.
+덜 극단적인 경우에는, 사용 가능한 하드웨어가 모두 사용되도록 함으로써 성능과
+확장성을 회복하게 하기 위해 로드밸런싱이 사용될 수 있습니다.
+
+\iffalse
+
 Work partitioning is absolutely required for parallel execution:
 if there is but one ``glob'' of work, then it can be executed by at
 most one CPU at a time, which is by definition sequential execution.
@@ -1899,6 +1910,28 @@ For example, uneven partitioning can result in sequential execution
 once the small partitions have completed~\cite{GeneAmdahl1967AmdahlsLaw}.
 In less extreme cases, load balancing can be used to fully utilize
 available hardware and restore performance and scalabilty.
+
+\fi
+
+분할하기가 성능과 확장성을 크게 개선할 수 있지만, 이는 또한 복잡성을 늘릴 수
+있습니다.
+예를 들어, 분할하기는 전역적 에러와 이벤트의 처리를 복잡하게 만들 수 있습니다:
+어떤 병렬 프로그램은 그런 전역적 이벤트를 안전하게 처리하기 위해 사소하지 않은
+수준의 동기화를 해야만 할 수 있습니다.
+더 일반적으로, 각각의 조각은 소통 같은 걸 필요로 합니다:
+어쨌건, 어떤 쓰레드가 전혀 소통을 하지 않는다면, 그 쓰레드는 어떤 영향도 끼치지
+못할 테고 그러니 수행될 필요도 없습니다.
+하지만, 소통은 오버헤드를 일으키므로, 주의깊지 않게 분할하기를 선택하는 것은
+상당한 성능 하락을 초래할 수 있습니다.
+
+더 나아가서, 동시에 수행되는 쓰레드의 수는 많은 경우 제어되어야만 하는데, 그런
+쓰레드 각각은 예를 들면 CPU 캐쉬 공간과 같은 공유 자원을 사용하기 때문입니다.
+너무 많은 쓰레드가 동시에 수행될 수 있다면, 이 CPU 캐쉬가 넘쳐나서, 높은 캐쉬
+미스율을 초래하고, 이는 성능 하락을 의미합니다.
+거꾸로, 연산과 I/O 를 겹치게 함으로써 I/O 기기가 완전히 사용되게 하기 위해 많은
+수의 쓰레드가 요구되는 경우도 많습니다.
+
+\iffalse
 
 Although partitioning can greatly improve performance and scalability,
 it can also increase complexity.
@@ -1922,10 +1955,43 @@ turn degrades performance.
 Conversely, large numbers of threads are often required to
 overlap computation and I/O so as to fully utilize I/O devices.
 
+\fi
+
 \QuickQuiz{
+	CPU 캐쉬 용량 외에, 어떤 것이 동시에 수행되는 쓰레드의 수를 제한할 수
+	있을까요?
+
+	\iffalse
+
 	Other than CPU cache capacity, what might require limiting the
 	number of concurrent threads?
+
+	\fi
+
 }\QuickQuizAnswer{
+	쓰레드의 수를 제한할 수 있는 잠재적인 것들은 얼마든지 있습니다:
+	\begin{enumerate}
+	\item	메인 메모리.
+		각 쓰레드가 메모리를 일부 소비하므로 (다른게 전혀 없다면 스택을
+		위해서라도), 극단적으로 많은 쓰레드는 메모리를 고갈시켜서
+		극단적인 페이징이나 메모리 할당 실패를 초래합니다.
+	\item	I/O 대역폭.  각 쓰레드가 특정량의 대용량 저장장치 I/O 또는
+		네트워킹 트래픽을 만든다면, 극단적으로 많은 수의 쓰레드는
+		극단적인 I/O 대기 지연을 초래해, 역시 성능을 하락시킵니다.
+		어떤 네트워킹 프로토콜은 쓰레드가 너무 많아 어떤 네트워킹
+		이벤트가 특정 시간 내에 응답을 받지 못한다면 타임아웃 또는 다른
+		실패를 할 수 있습니다.
+	\item	동기화 오버헤드.
+		많은 동기화 프로토콜에 있어, 극단적으로 많은 수의 쓰레드는
+		극단적인 스피닝, 블락킹, 롤백을 초래해 성능을 하락시킬 수
+		있습니다.
+	\end{enumerate}
+
+	구체적인 어플리케이션과 플랫폼에 따라서 추가적인 제한적 요소가 얼마든
+	더 있을 수 있습니다.
+
+	\iffalse
+
 	There are any number of potential limits on the number of
 	threads:
 	\begin{enumerate}
@@ -1949,7 +2015,27 @@ overlap computation and I/O so as to fully utilize I/O devices.
 
 	Specific applications and platforms may have any number of additional
 	limiting factors.
+
+	\fi
+
 }\QuickQuizEnd
+
+마지막으로, 쓰레드들이 동시에 수행될 수 있도록 하는 것은 프로그램의 상태 공간을
+상당히 증가시키며, 이는 이 프로그램을 이해하고 디버깅 하기 어렵게 만들어
+생산성을 하락시킵니다.
+다른 모든게 동일하다면, 더 일반적인 구조를 갖는 더 작은 상태공간이 더 이해하기
+쉽습니다만, 이는 그게 기술적이나 수학적 이야기인 만큼 인간적 요소에 대한
+이야기입니다.
+좋은 병렬 프로그램 설계는 극단적으로 큰 상태 공간을 가질 수도 있지만, 그
+일반적인 구조 덕분에 이해하기가 쉬운 반면, 안좋은 설계는 상대적으로 작은 상태
+공간을 가지고도 불가해할 수 있습니다.
+최선의 설계는 부끄러운 병렬성을 활용하거나, 그 문제를 부끄러운 병렬성 해결책을
+갖는 것으로 변형시킵니다.
+어느 쪽이든, ``부끄러운 병렬성'' 은 실제로 부자들의 부끄러움입니다.
+좋은 설계에 대한 것들 중 현재로써 가장 훌륭한 것은 다음과 같습니다; 상태공간
+크기와 구조에 대한 일반적 평가를 위해선 더 많은 연구가 필요하다.
+
+\iffalse
 
 Finally, permitting threads to execute concurrently greatly increases
 the program's state space, which can make the program difficult to
@@ -1968,6 +2054,8 @@ an embarrassment of riches.
 The current state of the art enumerates good designs; more work is
 required to make more general judgments on
 state-space size and structure.
+
+\fi
 
 \subsection{Parallel Access Control}
 \label{sec:Parallel Access Control}
