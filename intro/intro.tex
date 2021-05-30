@@ -2060,6 +2060,25 @@ state-space size and structure.
 \subsection{Parallel Access Control}
 \label{sec:Parallel Access Control}
 
+싱글쓰레드의 순차적 프로그램이 있다면, 그 쓰레드는 이 프로그램의 자원 전체에
+대한 접근 권한을 갖습니다.
+이 자원은 대부분의 경우 메모리 내에 존재하는 데이터 구조들입니다만, CPU, 메모리
+(캐쉬 포함), I/O 기기, 연산 가속기, 파일, 그외에도 여러가지가 될 수 있습니다.
+
+병렬 접근 제어 문제 중 첫번째는 특정 자원에 대한 접근의 형태가 해당 자원의
+위치에 종속적이냐는 것입니다.
+예를 들어, 많은 메세지 패싱 환경에서, 지역 변수에 대한 접근은 표현 (expression)
+과 할당 (assignment) 을 통해 이루어지는 반면, 원격 변수로의 접근은 메세징이
+포함되는, 전혀 다른 구문을 사용합니다.
+POSIX 쓰레드 환경~\cite{OpenGroup1997pthreads}, Structured Query Language
+(SQL)~\cite{DIS9075SQL92}, 그리고 Universal Parallel C
+(UPC)~\cite{ElGhazawi2003UPC,UPCConsortium2013} 같은 분할된 전역 어드레스 공간
+(PGAS) 환경은 암묵적 접근을 제공하지만, Message Passing Interface
+(MPI)~\cite{MPIForum2008} 은 원격 데이터로의 접근은 명시적 메세징을필요로 하기
+때문에 명시적 접근을 제공합니다.
+
+\iffalse
+
 Given a single-threaded sequential program, that single
 thread has full access to all of the program's resources.
 These resources are most often in-memory data structures, but can be CPUs,
@@ -2081,6 +2100,22 @@ while Message Passing Interface (MPI)~\cite{MPIForum2008} offers
 explicit access because access to remote data requires explicit
 messaging.
 
+\fi
+
+다른 병렬 접근 제어 문제는 여러 쓰레드 간에 자원으로의 접근을 어떻게 조정할
+것인가 입니다.
+이 조정은 다양한 병렬 언어와 환경에서 제공되는 많은 동기화 메커니즘을 통해
+이루어지는데, 메세지 패싱, 락킹, 트랜잭션, 레퍼런스 카운팅, 명시적 타이밍, 공유
+원자적 변수, 그리고 데이터 소유권 등이 포함됩니다.
+많은 전통적 병렬 프로그래밍 이 조정으로부터 발생하는 데드락, 라이브락, 트랜잭션
+롤백 등을 걱정해 왔습니다.
+이 프레임웍은 이 동기화 메커니즘들의 비교를 포함하도록 더 개선될 수 있겠는데, 예를 들어 락킹 대 트랜잭셔널 메모리~\cite{McKenney2007PLOSTM} 같은 것입니다만, 그런 개선은 이 섹션의 볌위를 벗어나는 것입니다.
+(트랜잭셔널 메모리에 대한 더 많은 정보를 위해선
+Section~\ref{sec:future:Transactional Memory}
+과~\ref{sec:future:Hardware Transactional Memory} 를 참고하세요.)
+
+\iffalse
+
 The other parallel-access-control issue is how threads coordinate
 access to the resources.
 This coordination is carried out by
@@ -2100,9 +2135,34 @@ Sections~\ref{sec:future:Transactional Memory}
 and~\ref{sec:future:Hardware Transactional Memory}
 for more information on transactional memory.)
 
+\fi
+
 \QuickQuiz{
+	``명시적 타이밍'' 이 정확히 뭔가요???
+
+	\iffalse
+
 	Just what is ``explicit timing''???
+
+	\fi
+
 }\QuickQuizAnswer{
+	각 쓰레드가 특정 자원 집합으로의 접근을 서로 동의된 시간 동안 허락받는
+	것입니다.
+	예를 들어, 여덟개의 쓰레드를 갖는 병렬 프로그램은 8밀리세컨드 시간
+	간격으로 조직되어서, 첫번째 쓰레드는 각 간격의 첫번째 밀리세컨드 동안
+	접근 권한을 갖고, 두번째 쓰레드는 두번째 밀리세컨드 동안, 그런
+	식입니다.
+	이 방법은 주의 깊게 동기화 된 시계와 수행 시간에 대한 주의를 분명히
+	필요로 하며, 따라서 상당히 조심해야 합니다.
+
+	사실, 하드 리얼타임 환경 외에서는 여러분은 이것 대신 다른 걸 사용하고자
+	할 겁니다.
+	명시적 타이밍은 그래도 언급할 가치가 있는데, 여러분이 필요로 할 때엔
+	항상 거기 있을 것이기 때문입니다.
+
+	\iffalse
+
 	Where each thread is given access to some set of resources during
 	an agreed-to slot of time.
 	For example, a parallel program with eight threads might be
@@ -2118,6 +2178,9 @@ for more information on transactional memory.)
 	certainly want to use something else instead.
 	Explicit timing is nevertheless worth a mention, as it is
 	always there when you need it.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Resource Partitioning and Replication}
