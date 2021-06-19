@@ -54,6 +54,30 @@ These changes are described in the following sections.
 \ContributedBy{Figure}{fig:cpu:CPUs Old and New}{Melissa Broussard}
 \end{figure}
 
+1980년대에 일반적인 마이크로프로세서는 명령을 (instruction) 가져와 (fetch)
+해석하고 (decode) 수행했는데 (execute), 하나의 명령을 완료하는데 일반적으로
+\emph{최소} 세개의 클락 사이클을 필요로 했습니다.
+반면에, 1990년대 후반과 2000년대의 CPU 는 CPU 를 거치는 명령 과 데이터의 처리
+흐름을 최적화 하기 위해 \emph{파이프라인}; \emph{슈퍼스칼라} 기술;
+\emph{비순차} 명령과 데이터 처리; \emph{투기적 실행}  기술 등을 사용해 여러
+명령을 동시에 수행합니다
+일부 코어는 두개 이상의 하드웨어 쓰레드를 갖는데, 이는 \emph{simultaneous
+multithreading} (SMT) 또는 \emph{하이퍼쓰레딩} (HT)~\cite{JFennel1973SMT} 이라
+불리며, 이 쓰레드 각각은 소프트웨어에게 적어도 기능적 관점에서는 개별 CPU 로
+보이게 됩니다.
+이런 근대의 하드웨어 기능들은 Figure~\ref{fig:cpu:CPUs Old and New} 에 보여진
+것처럼 성능을 상당히 개선할 수 있습니다.
+
+긴 파이프라인을 갖는 CPU 에서 완전한 성능을 이끌어 내는데에는 프로그램의 상당히
+예측 가능한 제어 흐름이 필요합니다.
+그런 제어 흐름은 예를 들어 거대한 행렬이나 벡터를 가지고 행해지는 계산과 같이
+기본적으로 타이트한 반복문을 수행하는 프로그램에서 제공될 수 있습니다.
+그럼 CPU 는 이 루프의 끝에서의 브랜치가 거의 모든 경우 취해짐을 제대로 예측할
+수 있어서, 파이프라인이 꽉 차게 만들고 CPU 가 완전한 속도로 수행될 수 있게 할
+수 있습니다.
+
+\iffalse
+
 In the 1980s, the typical microprocessor fetched an instruction, decoded
 it, and executed it, typically taking \emph{at least} three clock cycles
 to complete one instruction before even starting the next.
@@ -79,12 +103,35 @@ The CPU can then correctly predict that the branch at the end of the loop
 will be taken in almost all cases,
 allowing the pipeline to be kept full and the CPU to execute at full speed.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{cartoons/r-2014-branch-error}}
 \caption{CPU Meets a Pipeline Flush}
 \ContributedBy{Figure}{fig:cpu:CPU Meets a Pipeline Flush}{Melissa Broussard}
 \end{figure}
+
+하지만, 브랜치 예측은 항상 쉽지는 않습니다.
+예를 들어, 프로그램이 여러 반복문을 포함하며 각각의 반복문은 작은 무작위
+횟수만큼 반복되는 경우를 생각해 볼 수 있겠습니다.
+또다른 예로, 자주 호출되는 멤버 함수를 갖는 서로 다른 구현체를 갖는 여러 다른
+실제 오브젝트를 참조하는 많은 가상 오브젝트를 가져서 결과적으로 많은 수의
+포인터 기반 함수 호출을 하게 되는 고전적 객체 지향 프로그램을 생각해 봅시다.
+이런 경우, CPU 가 다음 브랜치는 어떻게 될지를 예측하기는 어려우며 불가능할 수도
+있습니다.
+그럼 CPU 는 그 브랜치가 어느 방향을 향하게 될지 확신할 수 있을 때까지 수행이
+진행될 때까지 기다리거나, 추측을 해보고 투기적 수행을 진행해야 합니다.
+예측 가능한 제어 흐름을 갖는 프로그램에 대해서는 추측이 매우 잘 동작하지만,
+(바이너리 탐색 등의) 예측 불가능한 브랜치들에 대해서는 그 추측이 자주 틀립니다.
+잘못된 추측은 그 비용이 비쌀 수 있는데, CPU 는 해당 브랜치를 따라가서
+투기적으로 수행된 모든 명령의 결과를 버려야 해서 파이프라인 비우기를 해야 하기
+때문입니다.
+파이프라인 비우기가 너무 자주 행해지면,
+Figure~\ref{fig:cpu:CPU Meets a Pipeline Flush} 에 그려진 것처럼 전체 성능이
+무척 감소됩니다.
+
+\iffalse
 
 However, branch prediction is not always so easy.
 For example, consider a program with many loops, each of which iterates
@@ -108,12 +155,32 @@ If pipeline flushes appear too frequently, they drastically reduce
 overall performance, as fancifully depicted in
 Figure~\ref{fig:cpu:CPU Meets a Pipeline Flush}.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{cpu/microarch}}
 \caption{Rough View of Modern Micro-Architecture}
 \label{fig:cpu:Rough View of Modern Micro-Architecture}
 \end{figure}
+
+이는 갈수록 더 흔해져가는 하이퍼쓰레딩 (또는, 여러분이 그 이름을 선호한다면,
+SMT) 에서는 더 나빠지는데, 특히 투기적 수행을 하는 파이프라인 기반의 슈버스칼라
+비순차 CPU 에서는 더 그렇습니다.
+점점 더 흔해지는 이와 같은 경우, 코어를 공유하는 모든 하드웨어 쓰레드는 이
+코어의 레지스터, 캐쉬, 수행 유닛, 등등의 자원을 공유합니다.
+명령은 종종 마이크로-오퍼레이션으로 해석되고, 공유된 수행 유닛과 수백개의
+하드웨어 레지스터의 사용은 마이크로-오퍼레이션 스케쥴러에 의해 조정됩니다.
+그런 두개 쓰레드를 제공하는 코어에 대한 다이어그램이
+\cref{fig:cpu:Rough View of Modern Micro-Architecture} 에 그려져 있으며, 더
+정확한 (그리고 따라서 더 복잡한) 다이어그램은 교재와 학술 논문에 많이
+있습니다.\footnote{
+	2010년대 후반 인텔 코어를 위한 예 하나가 여기 있습니다:
+	\url{https://en.wikichip.org/wiki/intel/microarchitectures/skylake_(server)}.}
+따라서, 한 하드웨어 쓰레드의 수행은 해당 코어를 공유하는 다른 하드웨어 쓰레드의
+동작에 의해 자주 방해받을 수 있습니다.
+
+\iffalse
 
 This gets even worse in the increasingly common case of hyperthreading
 (or SMT, if you prefer), especially on pipelined superscalar out-of-order
@@ -133,6 +200,23 @@ textbooks and scholarly papers.\footnote{
 Therefore, the execution of one hardware thread can and often is perturbed
 by the actions of other hardware threads sharing that core.
 
+\fi
+
+오직 하나의 하드웨어 쓰레드만이 활동중이라도 (예를 들어, 단 하나의 쓰레드만
+존재하는 고전적 CPU 설계의 경우), 반직관적인 결과는 상당히 흔합니다.
+수행 유닛은 겹치는 능력을 가진 경우가 흔해서, CPU 의 수행 유닛 선택이 다음
+명령을 위한 해당 수행 유닛에 대한 경쟁이 파이프라인 지연을 야기할 수 있습니다.
+이론적으로, 이 경쟁은 회피될 수 있습니다만, 실제로는 CPU 는 천리안 없이도 이
+선택을 매우 빨리 해야만 합니다.
+특히, 타이트한 반복문에 명령을 추가하는 것은 간혹 수행을 \emph{더 빠르게} 하는
+경우도 있습니다.
+
+불행히도, 파이프라인 비우기와 공유 자원 경쟁은 근대의 CPU 가 맞닥뜨리는
+장애물의 전부가 아닙니다.
+다음 섹션은 메모리 참조에서의 문제를 다룹니다.
+
+\iffalse
+
 Even if only one hardware thread is active (for example, in old-school
 CPU designs where there is only one thread), counterintuitive results
 are quite common.
@@ -147,6 +231,8 @@ actually cause execution to \emph{speed up}.
 Unfortunately, pipeline flushes and shared-resource contention are not
 the only hazards in the obstacle course that modern CPUs must run.
 The next section covers the hazards of referencing memory.
+
+\fi
 
 \subsection{Memory References}
 \label{sec:cpu:Memory References}
