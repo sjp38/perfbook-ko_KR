@@ -241,6 +241,25 @@ The next section covers the hazards of referencing memory.
 \subsection{Memory References}
 \label{sec:cpu:Memory References}
 
+1980년대에는 마이크로프로세서가 메모리로부터 값을 읽어오는데 걸리는 시간이
+하나의 명령을 수행하는데 걸리는 시간보다 적은 경우가 많았습니다.
+최근에는, 마이크로프로세서는 메모리를 액세스하는데 걸리는 시간동안 수백, 또는
+심지어 수천개의 명령을 수행할 수도 있습니다.
+이 격차는 \IX{무어의 법칙} 이 메모리 반응속도의 감소보다 훨씬 큰 폭으로 CPU
+성능을 향상시켰다는 사실 때문입니다.
+이는 부분적으로는 메모리 크기 증가 비율 때문이기도 합니다.
+예를 들어, 일반적인 1970년대 미니컴퓨터는 4\,KB (그래요, 메가바이트가 아니라
+킬로바이트) 메인 메모리를 가졌으며 액세스하는데 단 하나의 사이클이
+필요했습니다.\footnote{
+	이 단 하나의 사이클이란 게 1.6\emph{마이크로세컨드} 이상의 시간이었음을
+	말해두는게 공평하겠습니다.}
+오늘날의 CPU 설계자들은 여전히 4\,KB 메모리를 단일 사이클에 액세스 할 수 있도록
+할 수도 있는데, 수 GHz 클락 주파수의 시스템에서도 그렇습니다.
+그리고 실제로 그런 메모리를 자주 구성합니다만, 그들은 이제 그걸 ``레벨-0 캐쉬''
+라 부르며, 그것들은 4\,KB 보다도 상당히 클 수 있습니다.
+
+\iffalse
+
 In the 1980s, it often took less time for a microprocessor to load a value
 from memory than it did to execute an instruction.
 More recently, microprocessors might execute hundreds or even thousands
@@ -258,12 +277,31 @@ access, even on systems with multi-GHz clock frequencies.
 And in fact they frequently do construct such memories, but they now
 call them ``level-0 caches'', plus they can be quite a bit bigger than 4\,KB.
 
+\fi
+
 \begin{figure}[htb]
 \centering
 \resizebox{3in}{!}{\includegraphics{cartoons/r-2014-memory-reference}}
 \caption{CPU Meets a Memory Reference}
 \ContributedBy{Figure}{fig:cpu:CPU Meets a Memory Reference}{Melissa Broussard}
 \end{figure}
+
+현대 마이크로프로세서에서 찾을 수 있는 대용량 캐쉬가 메모리 접근 반응시간을
+해결하는데 상당한 도움이 되지만, 이 캐쉬는 그 반응시간을 숨기는데 성공하기 위해
+상당히 예측 가능한 데이터 액세스 패턴을 필요로 합니다.
+불행히도, 링크드 리스트를 순회하는 것과 같은 일반적인 오퍼레이션들은 상당히
+예측 불가능한 메모리 액세스 패턴을 갖습니다---어쨌건, 그 패턴이 예측
+가능하다면, 우리 소프트웨어 측은 포인터를 가지고 고생하지도 않았을 겁니다,
+그렇죠?
+따라서,
+Figure~\ref{fig:cpu:CPU Meets a Memory Reference} 에 보인 것과 같이, 메모리
+참조는 현대 CPU 에게 상당한 장애물을 야기합니다.
+
+지금까지 우리는 CPU 가 싱글쓰레드 코드를 수행할 때 마주칠 수 있는 장애물에 대해
+생각해 봤습니다.
+멀티쓰레딩은 CPU 에 추가적인 장애물을 제공하는데, 다음 섹션들에서 설명합니다.
+
+\iffalse
 
 Although the large caches found on modern microprocessors can do quite
 a bit to help combat memory-access latencies,
@@ -282,8 +320,28 @@ a given CPU's execution of single-threaded code.
 Multi-threading presents additional obstacles to the CPU, as
 described in the following sections.
 
+\fi
+
 \subsection{Atomic Operations}
 \label{sec:cpu:Atomic Operations}
+
+그런 장애물 중 하나는 어토믹 오퍼레이션들입니다.
+여기서의 문제는 어토믹 오퍼레이션의 개념 자체가 CPU 파이프라인의 한번에 한
+조각씩 조립해 나간다는 원칙과 충돌한다는 것입니다.
+하드웨어 설계자들 덕분에, 현대의 CPU 는 그런 오퍼레이션들이 실제로는 한번에
+한조각씩만 실행됨에도 원자적으로 수행되는 것으로 \emph{보이게} 하는 상당히
+영리한 속임수를 사용하는데, 흔히 사용되는 속임수 중 하나는 원자적으로 처리하려
+하는 데이터를 포함하고 있는 전체 캐시라인을 인식하고, 해당 캐시라인은 이 어토믹
+오퍼레이션을 수행하고 있는 CPU 에게 소유됨을 보장하고, 그런 상태에서만 이
+어토믹 오퍼레이션을 진행하는 것입니다.
+이 모든 데이터가 이 CPU 에 사적으로 소유되기 때문에, 다른 CPU 들은 CPU 의
+한번에 한조각씩 처리하는 파이프라인의 본성에도 불구하고 어토믹 오퍼레이션을
+간섭할 수 없습니다.
+말할 필요도 없이, 이런 종류의 속임수는 어토믹 오퍼레이션이 올바르게 완료될 수
+있도록 하기 위해 이 셋업을 수행하기 위해 파이프라인이 지연되거나 심지어
+비워져야만 할 것을 요구할 수도 있습니다.
+
+\iffalse
 
 One such obstacle is atomic operations.
 The problem here is that the whole idea of an atomic operation conflicts with
@@ -304,12 +362,29 @@ the pipeline must be delayed or even flushed in order to
 perform the setup operations that
 permit a given atomic operation to complete correctly.
 
+\fi
+
 \begin{figure}[htb]
 \centering
 \resizebox{3in}{!}{\includegraphics{cartoons/r-2014-Atomic-reference}}
 \caption{CPU Meets an Atomic Operation}
 \ContributedBy{Figure}{fig:cpu:CPU Meets an Atomic Operation}{Melissa Broussard}
 \end{figure}
+
+반면, 비 어토믹 오퍼레이션을 수행할 때에는, CPU 는 캐시라인 소유권을 기다릴
+필요 없이 데이터가 나타나자마자 캐시 라인으로부터 값을 읽어들일 수 있으며, 수행
+결과를 스토어 버퍼에 저장할 수 있습니다.
+가끔 캐쉬 응답시간을 숨길 수 있는 다양한 하드웨어 최적화가 존재하긴 하지만,
+이로 인한 성능에의 영향은 너무나도 종종
+Figure~\ref{fig:cpu:CPU Meets an Atomic Operation}
+에 보인 것과 같습니다.
+
+불행히도, 어토믹 오퍼레이션은 데이터의 단일 원소에만 적용됩니다.
+많은 병렬 알고리즘은 순서 규칙이 다수의 데이터 요소의 업데이트 중에도 유지될
+것을 필요로 하기 때문에, 대부분의 CPU 는 메모리 배리어를 제공합니다.
+이 메모리 배리어는 또한 성능 제약으로 작용하는데, 다음 섹션에서 설명합니다.
+
+\iffalse
 
 In contrast, when executing a non-atomic operation, the CPU can load
 values from cachelines as they appear and place the results in the
@@ -327,10 +402,41 @@ provide memory barriers.
 These memory barriers also serve as performance-sapping obstacles,
 as described in the next section.
 
+\fi
+
 \QuickQuiz{
+
+	대체 어떤 기계가 다양한 데이터 원소에 대한 어토믹 오퍼레이션을 허용할
+	수 있죠?
+
+	\iffalse
+
 	What types of machines would allow atomic operations on
 	multiple data elements?
+
+	\fi
+
 }\QuickQuizAnswer{
+
+	이 질문에 대한 답변 중 하나는 데이터의 여러 원소들을 하나의 기계 단어에
+	담을 수 있으며, 그렇게 되면 그것들은 원자적으로 처리될 수 있다는
+	것입니다.
+
+	좀 더 시대에 맞춘 답변은 트랜잭셔널 메모리 (transactional memory) 를
+	지원하는 기계가 존재한다는 것일
+	겁니다~\cite{DBLomet1977SIGSOFT,Knight:1986:AMF:319838.319854,Herlihy93a}.
+	2014년 초 기준으로, 여러 주류 시스템이 제한적인 하드웨어 트랜잭셔널
+	메모리 구현을 제공하고 있는데,
+	Section~\ref{sec:future:Hardware Transactional Memory} 에서 좀 더
+	자세한 내용을 다룹니다.
+	소프트웨어 트랜잭셔널 메모리의 적용성에 대해선 여전히 평가가
+	유보적인데~\cite{McKenney2007PLOSTM,DonaldEPorter2007TRANSACT,
+	ChistopherJRossbach2007a,CalinCascaval2008tmtoy,
+	AleksandarDragovejic2011STMnotToy,AlexanderMatveev2012PessimisticTM},
+	Section~\ref{sec:future:Transactional Memory} 에서 다루겠습니다.
+
+	\iffalse
+
 	One answer to this question is that it is often possible to
 	pack multiple elements of data into a single machine word,
 	which can then be manipulated atomically.
@@ -346,6 +452,9 @@ as described in the next section.
 	ChistopherJRossbach2007a,CalinCascaval2008tmtoy,
 	AleksandarDragovejic2011STMnotToy,AlexanderMatveev2012PessimisticTM},
 	which is covered in Section~\ref{sec:future:Transactional Memory}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Memory Barriers}
