@@ -33,6 +33,29 @@ architecture, which is the subject of the next section.
 \end{figure}
 
 Figure~\ref{fig:cpu:System Hardware Architecture}
+는 여덟개 코어를 가진 컴퓨터 시스템의 대략적 모습을 보입니다.
+각 다이는 한쌍의 CPU 코어를 가지는데, 각 코어는 캐쉬를 가지며, 이 한쌍의
+CPU들이 서로간에 통신을 할 수 있게 하는 인터컨넥트 (interconnect) 역시
+있습니다.
+시스템 인터컨넥트 (system interconnect) 는 이 네개의 다이들이 서로간에, 그리고
+메인 메모리와 통신할 수
+있게 합니다.
+
+데이터는 ``캐쉬 라인'' 단위로 이 시스템 내에서 이동하는데, 이는 2의 n승의
+고정된 크기로 정렬된 메모리 블록이며, 일반적으로 그 크기는 32 에서 256 바이트
+사이입니다.
+CPU 가 메모리로부터 레지스터로 변수를 로드할 때에는 그 변수를 담고 있는
+캐쉬라인을 자신의 캐쉬로 먼저 읽어와야 합니다.
+비슷하게, CPU 가 변수를 자신의 레지스터로부터 메모리로 저장할 때에도 해당
+변수를 담고 있는 캐쉬라인을 자신의 캐쉬로 읽어와야 합니다만, 또한 다른 CPU 가
+그 캐쉬라인의 복사본을 가지고 있지 않음을 보장해야 합니다.
+
+예를 들어, CPU~0 이 CPU~7 의 캐쉬에 있는 캐쉬라인의 변수에 쓰기를 하려 했다면,
+다음과 같은 무척 단순화된 일들이 순차적으로 벌어질 수 있습니다:
+
+\iffalse
+
+Figure~\ref{fig:cpu:System Hardware Architecture}
 shows a rough schematic of an eight-core computer system.
 Each die has a pair of CPU cores, each with its cache, as well as an
 interconnect allowing the pair of CPUs to communicate with each other.
@@ -53,7 +76,31 @@ For example, if CPU~0 were to write to a variable whose cacheline
 resided in CPU~7's cache, the following over-simplified sequence of
 events might ensue:
 
+\fi
+
 \begin{enumerate}
+\item	CPU~0 이 자신의 캐쉬를 검사하고, 해당 캐쉬라인이 거기 없음을
+	알아차립니다.
+	따라서 이 쓰기를 자신의 스토어 버퍼 (store buffer) 에 기록합니다.
+\item	이 캐쉬라인에 대한 요청이 CPU~0 과~1 의 인터컨넥트로 전달되는데, 이
+	요청은 CPU~1 의 캐쉬를 검사하고 거기서도 이 캐쉬라인을 찾지 못합니다.
+\item	이 요청은 이제 시스템 인터컨넥트로 전달되어, 다른 세개의 다이를 모두
+	검사하고, 이 캐쉬라인이 CPU~6 와~7 을 가지고 있는 다이 안에 있음을 알게
+	됩니다.
+\item	이 요청은 이제 CPU~6 과~7 의 인터컨넥트로 전달되어, 두 CPU 의 캐쉬를
+	검사하고, 이 값이 CPU~7 의 캐쉬에 있음을 발견하게 됩니다.
+\item	CPU~7 은 이 캐쉬라인을 자신의 인터컨넥트로 전달하고, 자신의 캐쉬로부터
+	이 캐쉬라인을 제거합니다.
+\item	CPU~6 과~7 의 인터컨넥트는 이 캐쉬라인을 시스템 인터컨넥트로
+	전달합니다.
+\item	시스템 인터컨넥트는 이 캐쉬라인을 CPU~0 과~1 의 인터컨넥트로
+	전달합니다.
+\item	CPU~0 과~1 의 인터컨넥트는 이 캐쉬라인을 CPU~0 의 캐쉬로 전달합니다.
+\item	CPU~0 은 이제 이 쓰기를 완료하고, 새로 도착한 이 캐쉬라인의 연관된
+	부분을 스토어 버퍼에 기록된 기존 값으로부터 업데이트합니다.
+
+\iffalse
+
 \item	CPU~0 checks its local cache, and does not find the cacheline.
 	It therefore records the write in its store buffer.
 \item	A request for this cacheline is forwarded to CPU~0's and~1's
@@ -75,13 +122,46 @@ events might ensue:
 \item	CPU~0 can now complete the write, updating the relevant portions
 	of the newly arrived cacheline from the value previously
 	recorded in the store buffer.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	이게 \emph{단순화된} 거라구요?
+	어떻게 이보다 더 복잡한 일이 \emph{가능한가요}?
+
+	\iffalse
+
 	This is a \emph{simplified} sequence of events?
 	How could it \emph{possibly} be any more complex?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이건 여러 가능한 복잡 요소를 무시하고 있는데, 다음과 같은 것들입니다:
+
+	\begin{enumerate}
+	\item	다른 CPU 들이 이 캐쉬라인이 연관되는 메모리 참조 오퍼레이션을
+		동시에 수행할 수도 있습니다.
+	\item	이 캐쉬라인은 여러 CPU 의 캐쉬에 읽기 전용으로 복사되어
+		있을수도 있는데, 이 경우는 모든 캐쉬로부터 이 캐쉬라인이
+		제거되어야 합니다.
+	\item	CPU~7 은 자신의 캐쉬로부터 이 캐쉬라인을 제거해서 (예를 들어,
+		다른 데이터를 위한 공간을 만들기 위해), 이 요청이 도착한
+		시점에서는 이 캐쉬라인이 메모리로 향하고 있을 수 있습니다.
+	\item	고쳐질 수 있는 어떤 에러가 이 캐쉬라인에 발생했을 수 있는데,
+		그렇다면 데이터가 사용되기 전 언젠가는 이 에러가 고쳐져야
+		합니다.
+	\end{enumerate}
+
+	제품 수준의 캐쉬 일관성 메커니즘은 이런 종류의 고려할 부분들 때문에
+	굉장히
+	복잡합니다~\cite{Hennessy95a,DavidECuller1999,MiloMKMartin2012scale,DanielJSorin2011MemModel}.
+
+	\iffalse
+
 	This sequence ignored a number of possible complications,
 	including:
 
@@ -108,18 +188,55 @@ events might ensue:
 	complicated due to these sorts of
 	considerations~\cite{Hennessy95a,DavidECuller1999,MiloMKMartin2012scale,DanielJSorin2011MemModel}.
 %
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	왜 이 캐쉬라인을 CPU~7 의 캐쉬로부터 제거해야 하나요?
+
+	\iffalse
+
 	Why is it necessary to flush the cacheline from CPU~7's cache?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	이 캐쉬라인이 CPU~7 의 캐쉬로부터 제거되지 않았다면, CPU~0 과~7 은 이
+	캐쉬라인의 변수들에 다른 값을 가질 수 있습니다.
+	이런 종류의 비일관성은 병렬 소프트웨어를 무척 복잡하게 만들 수
+	있으므로, 현명한 하드웨어 설계자들은 이를 막습니다.
+
+	\iffalse
+
 	If the cacheline was not flushed from CPU~7's cache, then
 	CPUs~0 and~7 might have different values for the same set
 	of variables in the cacheline.
 	This sort of incoherence greatly complicates parallel software,
 	which is why so wise hardware architects avoid it.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 단순화된 이벤트 나열은 \emph{캐쉬 일관성 프로토콜(cache-coherency
+protocols)}~\cite{Hennessy95a,DavidECuller1999,MiloMKMartin2012scale,DanielJSorin2011MemModel}
+이라 불리는 규칙의 시작에 불과한데, 이는
+Appendix~\ref{chp:app:whymb:Why Memory Barriers?} 에서 더 자세하게 다뤄집니다.
+CAS 오퍼레이션에 의해 일어나는 이벤트들로부터 볼 수 있듯이, 하나의 명령이
+상당한 프로토콜 트래픽을 야기할 수 있으며, 이는 여러분의 병렬 프로그램의 성능을
+심각하게 하락시킬 수 있습니다.
+
+다행히도, 어떤 변수가 업데이트는 없이 특정 기간동안 빈번하게 읽혀지기만 한다면,
+해당 변수는 모든 CPU 의 캐쉬에 복사될 수 있습니다.
+이 복사는 모든 CPU 가 이 \emph{읽기가 대부분인} 변수로의 매우 빠른 액세스를 할
+수 있게 합니다.
+Chapter~\ref{chp:Deferred Processing} 이 중요한 하드웨어 기반의 읽기가 대부분인
+경우를 위한 최적화의 장점을 온전히 취하기 위한 동기화 메커니즘을 소개합니다.
+
+\iffalse
 
 This simplified sequence is just the beginning of a discipline called
 \emph{cache-coherency protocols}~\cite{Hennessy95a,DavidECuller1999,MiloMKMartin2012scale,DanielJSorin2011MemModel},
@@ -137,6 +254,8 @@ this \emph{read-mostly} variable.
 Chapter~\ref{chp:Deferred Processing} presents synchronization
 mechanisms that take full advantage of this important hardware read-mostly
 optimization.
+
+\fi
 
 \subsection{Costs of Operations}
 \label{sec:cpu:Costs of Operations}
