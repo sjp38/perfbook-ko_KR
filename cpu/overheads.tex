@@ -297,6 +297,28 @@ optimization.
 \label{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
 \end{table*}
 
+병렬 프로그램에 중요한 일부 일반적 오퍼레이션들의 오버헤드가
+Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
+에 표시되어 있습니다.
+이 시스템의 클락 기간은 대략 0.5\,ns 입니다.
+현대의 마이크로프로세서가 클락 기간당 여러 명령을 처리할 수 있는건 흔하지만,
+오퍼레이션의 비용은 ``Ratio'' 라고 라벨링 된 세번째 행에 클락 기간으로
+얼만큼의 비율인지 표시되어 있습니다.
+이 표에 대해 말씀드릴 첫번째 것은 그런 비율 중 큰 값이 여럿 있다는 것입니다.
+
+같은 CPU 에서의 compare-and-swap (CAS) 오퍼레이션은 대략 7 나노세컨드를
+소비하는데, 이는 클락 기간의 10배가 넘는 기간입니다.
+CAS 는 하드웨어가 특정 메모리 위치의 내용을 특정 ``기존'' 값과 비교하고,
+그것들이 동일하다면 특정한 ``새로운'' 값을 저장하는, 즉 CAS 오퍼레이션이
+성공하는, 원자적 오퍼레이션입니다.
+만약 그 값들이 동일하지 않았다면, 해당 메모리 위치는 그 (예상되지 않았던) 값을
+유지하게 되고, CAS 오퍼레이션은 실패한 게 됩니다.
+해당 메모리 위치의 값은 이 비교와 저장 사이에 바뀌지 않음을 하드웨어가
+보장하므로 이 오퍼레이션은 원자적입니다.
+CAS 의 기능은 x86 에서는 \co{lock;cmpxchg} 로 제공됩니다.
+
+\iffalse
+
 The overheads of some common operations important to parallel programs are
 displayed in
 Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}.
@@ -319,6 +341,32 @@ and the CAS operation fails.
 The operation is atomic in that the hardware guarantees that the memory
 location will not be changed between the compare and the store.
 CAS functionality is provided by the \co{lock;cmpxchg} instruction on x86.
+
+\fi
+
+``same-CPU'' 접두어는 특정 변수에 CAS 오퍼레이션을 수행하는 CPU 가 이 변수를
+마지막으로 액세스한 CPU 임을, 따라서 여기 연관된 캐쉬라인이 이 CPU 의 캐쉬에
+있음을 의미합니다.
+비슷하게, same-CPU lock 오퍼레이션 (락 획득과 해제 한쌍의 ``왕복'' 작업) 은 15
+나노세컨드, 달리 말하면 30 클락 사이클을 소비합니다.
+이 락 오퍼레이션은 락 데이터 구조에 한번은 획득을 위해, 또한번은 해제를 위해,
+두번의 어토믹 오퍼레이션을 할 것을 필요로 하기 때문에 CAS 보다 비용이 높습니다.
+
+하나의 코어를 공유하는 하드웨어 쓰레드간의 상호작용을 하게 되는 in-core
+오퍼레이션은 same-CPU 오퍼레이션과 거의 같습니다.
+이 두개의 하드웨어 쓰레드는 전체 캐쉬 구조를 공유함을 생각하면 이는 크게 놀랍진
+않을겁니다.
+
+Blind CAS 의 경우, 소프트웨어는 메모리 위치를 고려치 않은 채 기존 값을
+특정합니다.
+이는 락을 획득하고자 하는 시도에 적합합니다.
+락이 잡히지 않은 상태가 값 0 으로 표현되고 락이 잡힌 상태는 값 1 로 표현된다면,
+0 을 기존값으로, 1 을 새 값으로 하는, 이 락에의 CAS 오퍼레이션은 이 락이 아직
+잡히지 않은 상태라면 획득하게 됩니다.
+핵심은 이 메모리 위치로의 액세스는 오직 하나, 이 CAS 오퍼레이션이 있다는
+겁니다.
+
+\iffalse
 
 The ``same-CPU'' prefix means that the CPU now performing the CAS operation
 on a given variable was also the last CPU to access this variable, so
@@ -344,6 +392,8 @@ that specifies zero for the old value and one for the new value
 will acquire the lock if it is not already held.
 The key point is that there is only one access to the memory
 location, namely the CAS operation itself.
+
+\fi
 
 In contrast, a normal CAS operation's old value is derived from
 some earlier load.
