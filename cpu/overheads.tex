@@ -395,6 +395,27 @@ location, namely the CAS operation itself.
 
 \fi
 
+반면, 이 평범한 CAS 오퍼레이션의 기존값은 앞서 행해진 어떤 로드로부터
+얻어집니다.
+예를 들어, 어떤 어토믹 증가 오퍼레이션을 구현하기 위해서는, 해당 위치의 현재
+값이 읽혀지고, 새 값을 만들기 위해 그 값을 증가시킵니다.
+그러고 나서는 이 CAS 오퍼레이션에 앞서 읽혀진 값이 기존값으로, 이 증가된 값은
+새 값으로 명세됩니다.
+이 값이 이 읽기와 CAS 사이에 변경되지 않았다면, 이는 해당 메모리 위치의 값을
+증가시킬 겁니다.
+하지만, 이 값이 바뀌었다면, 기존 값이 다름을 알게 되어서, 이 CAS 오퍼레이션이
+실패하게 할겁니다.
+핵심은 이제 해당 메모리 위치로의 두개의 액세스, 즉 읽기와 CAS 가 존재한다는
+겁니다.
+
+따라서, in-core blind CAS 는 대략 7 나노세컨드만 소비하는 반면 in-core CAS 는
+약 18 나노세컨드를 소비한다는 게 놀랍지 않습니다.
+이 blind 가 아닌 경우의 추가적인 로드는 공짜로 오지 않습니다.
+그렇다곤 하나, 이 오퍼레이션들의 오버헤드는 단일 CPU 의 CAS 와 락에 각각
+비슷합니다.
+
+\iffalse
+
 In contrast, a normal CAS operation's old value is derived from
 some earlier load.
 For example, to implement an atomic increment, the current value of
@@ -416,11 +437,35 @@ The non-blind case's extra load does not come for free.
 That said, the overhead of these operations are similar to single-CPU
 CAS and lock, respectively.
 
+\fi
+
 \QuickQuiz{
+	\Cref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
+	는 CPU~0 가 CPU~224 와 코어를 공유한다고 하는데요.
+	그건 CPU~1 이 되어야 하는거 아닌가요???
+
+	\iffalse
+
 	\Cref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
 	shows CPU~0 sharing a core with CPU~224.
 	Shouldn't that instead be CPU~1???
+
+	\fi
+
 }\QuickQuizAnswer{
+	이것에 대해 이상하다고 생각하기 쉽지만,
+	\path{/sys/devices/system/cpu/cpu0/cache/index0/shared_cpu_list}
+	파일은 정말로 \co{0,224} 라는 문자열을 가지고 있습니다.
+	따라서, CPU~0 의 하이퍼쓰레드 쌍둥이는 정말로 CPU~224 입니다.
+	어떤 사람들은 많은 워크로드에서 두번째 하이퍼쓰레드는 추가적 성능을
+	크게 내지는 못함을 인용하며 이 숫자 규칙이 순진한 어플리케이션과
+	스케쥴러가 더 나은 성능을 낼 수 있을 거라 예상합니다.
+	이 예상은 순진한 어플리케이션과 스케쥴러는 CPU 를 숫자 순서로 활용해서,
+	더 약한 하이퍼쓰레드 쌍둥이 CPU 들을 다른 모든 코어들이 사용되기
+	전까지는 사용되지 않게 놔둘거라 가정합니다.
+
+	\iffalse
+
 	It is easy to be sympathetic to this view, but the file
 	\path{/sys/devices/system/cpu/cpu0/cache/index0/shared_cpu_list}
 	really does contain the string \co{0,224}.
@@ -432,7 +477,25 @@ CAS and lock, respectively.
 	This speculation assumes that naive applications and schedulers
 	would utilize CPUs in numerical order, leaving aside the weaker
 	hyperthread twin CPUs until all cores are in use.
+
+	\fi
+
 }\QuickQuizEnd
+
+다른 코어에 있지만 같은 소켓에 위치한 CPU 들이 연관되는 blind CAS 는 대략 50
+나노세컨드, 달리 말하면 약 100 클락 사이클을 소모합니다.
+이 캐쉬미스 측정을 위해 사용된 코드는 해당 캐쉬라인을 한쌍의 CPU 사이에서
+주고받게 하므로, 이 캐쉬 미스는 메모리에서가 아니라 다른 CPU 의 캐쉬에서
+이뤄집니다.
+앞서 이야기 되었듯 변수의 기존 값을 보고 새 값을 저장도 해야 하는 non-blind CAS
+오퍼레이션은 약 100 나노세컨드, 즉 약 200 클락 사이클을 소모합니다.
+이를 좀 더 생각해 봅시다.
+CAS 오퍼레이션 \emph{하나} 를 위해 필요한 시간동안, 이 CPU 는 \emph{200개의}
+평범한 명령을 수행했을 수도 있었습니다.
+이는 fine-grained 락킹만이 아니라 모든 다른 동기화 메커니즘이 잘게 쪼개진
+전역적 동의사항에 의존하고 있음을 보일겁니다.
+
+\iffalse
 
 A blind CAS involving CPUs in different cores but on the same socket
 consumes almost fifty nanoseconds, or almost one hundred clock cycles.
@@ -448,6 +511,8 @@ executed more than \emph{two hundred} normal instructions.
 This should demonstrate the limitations not only of fine-grained locking,
 but of any other synchronization mechanism relying on fine-grained
 global agreement.
+
+\fi
 
 If the pair of CPUs are on different sockets, the operations are considerably
 more expensive.
