@@ -514,6 +514,23 @@ global agreement.
 
 \fi
 
+이 한쌍의 CPU 가 서로 다른 소켓에 위치해 있다면, 이 오퍼레이션들은 상당히 더
+비싸집니다.
+하나의 blind CAS 오퍼레이션은 대략 150~나노세컨드, 즉 300 클락 사이클 이상을
+소모합니다.
+일반적인 CAS 오퍼레이션은 400~나노세컨드, 즉 거의 \emph{1000} 클락 사이클
+이상을 소모합니다.
+
+더 나쁜 것이, 모든 소켓 쌍이 똑같이 만들어지지는 않습니다.
+이 시스템은 네개짜리 소켓 컴포넌트의 한 쌍으로 구성되어 있는데, 서로 다른
+컴포넌트에 위치한 CPU 사이에는 추가적인 응답시간 페널티가 존재합니다.
+이 경우, 하나의 blind CAS 오퍼레이션은 300 나노세컨드 이상, 즉 700 클락 사이클
+이상을 소모합니다.
+하나의 CAS 오퍼레이션은 거의 1 마이크로세컨드, 즉 거의 2000 클락 사이클을
+소모합니다.
+
+\iffalse
+
 If the pair of CPUs are on different sockets, the operations are considerably
 more expensive.
 A blind CAS operation consumes almost 150~nanoseconds, or more than
@@ -530,12 +547,34 @@ nanoseconds, or more than seven hundred clock cycles.
 A CAS operation consumes almost a full microsecond, or almost two
 thousand clock cycles.
 
+\fi
+
 \QuickQuiz{
+	분명 하드웨어 설계자들은 이 상황을 개선하려 노력했을 수 있을 거예요!
+	왜 그들은 이 단일 명령 오퍼레이션의 끔찍한 성능에 만족하고 있는거죠?
+
+	\iffalse
+
 	Surely the hardware designers could be persuaded to improve
 	this situation!
 	Why have they been content with such abysmal performance
 	for these single-instruction operations?
+
+	\fi
+
 }\QuickQuizAnswer{
+	하드웨어 설계자들은 이 문제를 위해 일을 \emph{해왔습니다}, 그리고
+	물리학자 Stephen Hawking 같은 선각자들에게 자문을 구했습니다.
+	Hawking 의 발견은 하드웨어 설계자들이 두개의 기본적
+	문제를~\cite{BryanGardiner2007} 가지고 있다는 것이었습니다.
+
+	\begin{enumerate}
+	\item	빛의 유한한 속도, 그리고
+	\item	물질의 원자적 본성.
+	\end{enumerate}
+
+	\iffalse
+
 	The hardware designers \emph{have} been working on this
 	problem, and have consulted with no less a luminary than
 	the late physicist Stephen Hawking.
@@ -546,6 +585,8 @@ thousand clock cycles.
 	\item	The finite speed of light, and
 	\item	The atomic nature of matter.
 	\end{enumerate}
+
+	\fi
 
 \begin{table}
 \rowcolors{1}{}{lightgray}
@@ -584,6 +625,24 @@ thousand clock cycles.
 \label{tab:cpu:Performance of Synchronization Mechanisms on 16-CPU 2.8GHz Intel X5550 (Nehalem) System}
 \end{table}
 
+	이 첫번째 문제는 기본 속도를 제한하며, 두번째 문제는 소형화를 제한해서,
+	결국 빈도를 제한합니다.
+	그리고 이는 현재 제품들의 주파수를 10\,GHz 아래로 제한하고 있는 에너지
+	소비 이슈를 회피하기도 합니다.
+
+	또한,
+	page~\pageref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz} 의
+	Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
+	은 448~하드웨어 쓰레드의 거대 시스템을 보입니다.
+	16~하드웨어 쓰레드를 갖는 훨씬 작은 시스템을 보이는
+	\cref{tab:cpu:Performance of Synchronization Mechanisms on 16-CPU 2.8GHz Intel X5550 (Nehalem) System}
+	에 나타난 것처럼 더 작은 시스템은 종종 더 나은 응답시간을 갖습니다.
+	비슷한 모습이
+	Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
+	의 두개의 ``Off-core'' 열까지에 보여져 있습니다.
+
+	\iffalse
+
 	The first problem limits raw speed, and the second limits
 	miniaturization, which in turn limits frequency.
 	And even this sidesteps the power-consumption issue that
@@ -602,6 +661,8 @@ thousand clock cycles.
 	A similar view is provided by the rows of
 	Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
 	down to and including the two ``Off-core'' rows.
+
+	\fi
 
 \begin{table*}
 \rowcolors{1}{}{lightgray}
@@ -636,6 +697,19 @@ thousand clock cycles.
 \label{tab:cpu:CPU 0 View of Synchronization Mechanisms on 12-CPU Intel Core i7-8750H CPU @ 2.20GHz}
 \end{table*}
 
+	더 나아가서, 제가 이걸 타이핑 하고 있는 랩톱과 같은 더 작은 새로운 단일
+	소켓 시스템은 더욱 합리적인 응답시간을 갖는데,
+	\cref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 12-CPU Intel Core i7-8750H CPU @ 2.20GHz}
+	에 이 점이 보여져 있습니다.
+
+	대안적으로, 1990년대 중반의 64-CPU 시스템은 5 마이크로세컨드를 넘는
+	인터컨넥트간 응답시간을 가졌고, 따라서
+	Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
+	에 보인 8 소켓 448 하드웨어 쓰레드의 괴물 같은 머신은 25년전의 비슷했던
+	것에 비하면 5배가 넘는 개선을 이뤘음을 보입니다.
+
+	\iffalse
+
 	Furthermore, newer small-scale single-socket systems such
 	as the laptop on which I am typing this also have more
 	reasonable latencies, as can be seen in
@@ -647,6 +721,24 @@ thousand clock cycles.
 	Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
 	represents more than a five-fold improvement over its
 	25-years-prior counterparts.
+
+	\fi
+
+	하드웨어 쓰레드를 하나의 다이 위의 단일 코어와 여러 코어들에
+	병합시키는게 응답시간을 상당히 개선시켰는데, 최소한 단일 코어 또는 단일
+	다이 내로 국한해서는 그렇습니다.
+	전체 시스템 응답시간에 있어서도 약간 개선이 있었습니다만, 대략 100배
+	정도에 그쳤습니다.
+	불행히도, 빛의 속도도 물질의 원자적 본성도 지난 수년간 크게 바뀌지
+	않았습니다~\cite{NoBugsHare2016CPUoperations}.
+	따라서, 공간적/시간적 지역성은 동시성 소프트웨어의 최우선
+	걱정거리입니다, 상대적으로 작은 시스템에서 돌아가고 있다 해도 말이죠.
+
+	Section~\ref{sec:cpu:Hardware Free Lunch?}
+	은 병렬 프로그래머들의 역겨을 완화시키기 위해 하드웨어 설계자들이 다른
+	어떤 걸 할 수 있을지 알아봅니다.
+
+	\iffalse
 
 	Integration of hardware threads in a single core and multiple
 	cores on a die have improved latencies greatly, at least within the
@@ -663,6 +755,9 @@ thousand clock cycles.
 	Section~\ref{sec:cpu:Hardware Free Lunch?}
 	looks at what else hardware designers might be
 	able to do to ease the plight of parallel programmers.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{table}
