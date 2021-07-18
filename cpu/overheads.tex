@@ -778,6 +778,25 @@ thousand clock cycles.
 \label{tab:cpu:Cache Geometry for 8-Socket System With Intel Xeon Platinum 8176 CPUs @ 2.10GHz}
 \end{table}
 
+불행히도, 코어 내에서와 소켓 내에서의 통신의 빠른 속도는 공짜로 오지 않습니다.
+첫째로, 하나의 코어 내에는 두개의 CPU 만 있으며 하나의 소켓 내에는 56개의
+코어만 있는 반면, 이 시스템 전체에는 448개의 코어가 있습니다.
+둘째로,
+\cref{tab:cpu:Cache Geometry for 8-Socket System With Intel Xeon Platinum 8176 CPUs @ 2.10GHz}
+에 보인 것처럼, 코어 내의 캐쉬는 소켓 내 캐쉬에 비해 상당히 작으며, 소캣 내
+캐쉬 역시 시스템 전체에 구성된 1.4\,TB 의 메모리에 비하면 상당히 작습니다.
+셋째로, 이 그림에 따르면, 캐쉬들은 버킷당 아이템의 수가 제한된 하드웨어
+해쉬테이블로 구성되어 있습니다.
+예를 들어, L3 캐쉬의 크기 (``Size'') 는 대략 40\,MB 입니다만, 각 버켓
+(``Line'') 은 11개의 메모리 블락만 (``Ways'') 가질 수 있으며, 각 블락은 최대 64
+바이트가 될 수 있습니다 (``Line Size'').
+이 말은 이 40\,MB 캐쉬를 오버플로우 시키는데 12 바이트의 메모리만으로도 (물론
+주의 깊게 골라진 주소들의 것으로) 충분하다는 말입니다.
+반면에, 역시 주의 깊게 골라진 주소들을 사용하면 전체 40\,MB 를 잘 사용할 수도
+있습니다.
+
+\iffalse
+
 Unfortunately, the high speed of within-core and within-socket communication
 does not come for free.
 First, there are only two CPUs within a given core and only 56 within
@@ -797,6 +816,23 @@ addresses) are required to overflow this 40\,MB cache.
 On the other hand, equally careful choice of addresses might make good
 use of the entire 40\,MB.
 
+\fi
+
+참조의 공간적 지역성은 데이터를 메모리 전역에 퍼트리는 것 만큼이나 무척
+중요합니다.
+
+I/O 오퍼레이션은 심지어 더 비쌉니다.
+``Comms Fabric'' 행에 보여진 것처럼, InfiniBand 나 다른 독점적 인터컨넥트들과
+같은 고성능의 (그리고 비싼!) 통신 장비는 단말간 왕복에 대략 5 마이크로세컨드의
+응답시간을 갖는데, 이는 \emph{만개가 넘는} 명령이 수행될 수도 있는 시간입니다.
+표준 기반의 통신 네트워크는 종종 일종의 프로토콜 처리를필요로 해서, 응답시간을
+더 늘립니다.
+물론, 지리적 거리 역시 응답시간을 늘리는데, 광섬유를 사용해 광속으로 지구를
+한바퀴 드는데 걸리는 시간은 ``Global Comms'' 행에 보인 것처럼 대략 195
+\emph{밀리세컨드}로, 달리 말하면 4억 클락 사이클이 넘습니다.
+
+\iffalse
+
 Spatial locality of reference is clearly extremely important, as is
 spreading the data across memory.
 
@@ -813,15 +849,43 @@ speed-of-light through optical fiber latency around the world coming to
 roughly 195 \emph{milliseconds}, or more than 400 million clock
 cycles, as shown in the ``Global Comms'' row.
 
+\fi
+
 % Reference for Infiniband latency:
 % http://www.hpcadvisorycouncil.com/events/2014/swiss-workshop/presos/Day_1/1_Mellanox.pdf
 %     page 6/76 'Leading Interconnect, Leading Performance'
 % Needs updating...
 
 \QuickQuiz{
+	이 숫자들은 미친듯이 크군요!
+	이걸 어떻게 제 머리로 이해할 수 있을까요?
+
+	\iffalse
+
 	These numbers are insanely large!
 	How can I possibly get my head around them?
+
+	\fi
+
 }\QuickQuizAnswer{
+	두루마리 휴지 한개를 가져와 보세요.
+	미국에서, 두루마리 휴지는 일반적으로 350--500 칸으로 되어 있습니다.
+	하나의 클락 사이클을 나타내기 위해 한 칸을 떼어서 한쪽에 두세요.
+	이제 두루마루 휴지의 나머지를 펼쳐보세요.
+
+	그 결과 나오는 두루마리 휴지의 더미가 하나의 CAS 캐쉬 미스를 나타낼
+	겁니다.
+
+	더 비싼 시스템간 통신 응답시간을 위해선, 그 응답시간을 나타내기 위해
+	두루마리 휴지 여러개 (또는 여러 상자) 를 사용하세요.
+
+	중요한 절약 팁: 두루마리 휴지를 준비할 때에는 그것들이 여러분의 일생
+	동안 모두 사용될 양인지도 생각해 두세요!\footnote{
+		특히나 2020년 초, 코로나 바이러스가 창궐하는 한가운데 상점들에
+		두루마리 휴지가 잘 남아있지 않은 상황에서는요!}
+
+	\iffalse
+
 	Get a roll of toilet paper.
 	In the USA, each roll will normally have somewhere around
 	350--500 sheets.
@@ -840,6 +904,9 @@ cycles, as shown in the ``Global Comms'' row.
 		Especially here in early 2020, in the midst of the
 		coronavirus excitement that is keeping store shelves
 		free of toilet paper and much else besides!}
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Hardware Optimizations}
