@@ -912,6 +912,24 @@ cycles, as shown in the ``Global Comms'' row.
 \subsection{Hardware Optimizations}
 \label{sec:cpu:Hardware Optimizations}
 
+하드웨어가 어떻게 도움을 주는지 묻는건 자연스러운 일입니다, 그리고 그에 대한
+대답은 ``무척!'' 입니다.
+
+그런 하드웨어 최적화 중 하나는 큰 캐쉬라인입니다.
+이는 특히 소프트웨어가 메모리를 순차적으로 액세스할 때 큰 성능 향상을
+제공합니다.
+예를 들어, 64 바이트 캐쉬라인이 있고 소프트웨어가 64비트 변수들을 접근한다면,
+첫번째 액세스는 빛의 속도에 의한 (그 외의 것들이 없다면) 지연 때문에 여전히
+느리겠지만, 뒤따르는 일곱번의 액세스는 무척 빠를 수 있습니다.
+하지만, 이 최적화는 이른바 false sharing 이라 불리는, 같은 캐쉬라인에 있는 다른
+변수들이 다른 CPU 에 의해 업데이트 되어 높은 캐쉬미스율을 초래하는 어두운
+부분을 가지고 있습니다.
+소프트웨어는 false sharing 을 방지하기 위해 많은 컴파일러에서 사용 가능한 정렬
+지시어를 사용할 수 있으며, 그런 지시어를 추가하는 것은 병렬 소프트웨어 튜닝에서
+흔한 단계입니다.
+
+\iffalse
+
 It is only natural to ask how the hardware is helping, and the answer
 is ``Quite a bit!''
 
@@ -927,6 +945,27 @@ being updated by different CPUs, resulting in a high cache-miss rate.
 Software can use the alignment directives available in many compilers
 to avoid false sharing, and adding such directives is a common step
 in tuning parallel software.
+
+\fi
+
+관련된 두번째 하드웨어 최적화는 캐쉬 prefetching 으로, 연속적인 액세스에 대해
+뒤쪽 캐쉬라인을 미리 읽어들여오는 식으로 하드웨어가 반응함으로써 뒤따르는
+캐쉬라인들에 대한 빛의 속도에 의한 지연을 막습니다.
+물론, 하드웨어는 언제 미리 읽기를 할 지 판단하기 위해 간단한 휴리스틱을
+사용해야만 하며, 이 휴리스틱은 많은 어플리케이션이 갖는 복잡한 데이터 액세스
+패턴에 의해 바보같아질 수 있습니다.
+다행히도, 일부 CPU 제품군은 특수한 미리읽기 명령을 제공함으로써 이를 극복
+가능하게 합니다.
+불행히도, 일반적인 경우에서의 이 명령의 효과는 실망적입니다.
+
+세번째 하드웨어 최적화는 store buffer 로, 일련의 스토어 명령이 그 스토어
+명령들이 연속적이지 않은 주소를 향하더라도, 그리고 이 스토어 명령들에 필요한
+캐쉬라인들이 해당 CPU 의 캐쉬에 존재하지 않은 경우에도 빠르게 수행되게 합니다.
+이 최적화의 어두운 부분은 메모리 순서 오류인데,
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+를 참고하시기 바랍니다.
+
+\iffalse
 
 A second related hardware optimization is cache prefetching, in which
 the hardware reacts to consecutive accesses by prefetching subsequent
@@ -946,6 +985,31 @@ non-consecutive addresses and when none of the needed cachelines are
 present in the CPU's cache.
 The dark side of this optimization is memory misordering, for which see
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}.
+
+\fi
+
+네번째 하드웨어 최적화는 투기적 수행 (speculative execution) 으로, 하드웨어가
+메모리 순서 오류를 초래하지 않고 이 스토어 버퍼를 잘 사용할 수 있게 해줍니다.
+이 최적화의 어두운 부분은 이 투기적 수행이 뒤틀어지고 수행 결과가 되돌이켜지고
+재수행 되어야 할 때 발생하는 에너지 비효율성과 성능 하락입니다.
+더 나쁜 것이, Spectre 와 Meltdown~\cite{JannHorn2018MeltdownSpectre} 의 발전은
+하드웨어의 투기적 수행이 메모리 보호 하드웨어를 깨부수는 사이드 채널 공격을
+가능하게 해서 비특권 프로세스가 그들은 액세스하면 안되는 메모리를 읽을 수 있게
+할 수 있습니다.
+투기적 수행과 클라우드 컴퓨팅의 조합은 상당한 재작업이 필요함은 분명합니다!
+
+다섯번째 하드웨어 최적화는 커다란 캐쉬로, 개별 CPU 가 비싼 캐쉬 미스를 일으키지
+않고도 큰 데이터셋을 가지고 동작할 수 있게 합니다.
+커다란 캐쉬는 에너지 효율성과 캐쉬 미스 응답시간을 나쁘게 만들 수 있지만,
+마이크로프로세서 제품들의 지속적인 캐쉬 크기 증가 경향은 이 최적화의 힘을
+증명합니다.
+
+마지막 하드웨어 최적화는 읽기가 대부분인 경우를 위한 복사로, 자주 읽히지만
+가끔씩만 업데이트 되는 데이터는 모든 CPU 의 캐쉬에 존재하게 하는 겁니다.
+이 최적화는 읽기가 대부분인 데이터는 무척 효율적으로 액세스 될 수 있게 하며,
+Chapter~\ref{chp:Deferred Processing} 의 주제입니다.
+
+\iffalse
 
 A fourth hardware optimization is speculative execution, which can
 allow the hardware to make good use of the store buffers without
@@ -975,12 +1039,26 @@ This optimization allows the read-mostly data to be accessed
 exceedingly efficiently, and is the subject of
 Chapter~\ref{chp:Deferred Processing}.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{cartoons/Data-chasing-light-wave}}
 \caption{Hardware and Software: On Same Side}
 \ContributedBy{Figure}{fig:cpu:Hardware and Software: On Same Side}{Melissa Broussard}
 \end{figure}
+
+요약하자면, 하드웨어와 소프트웨어 엔지니어들은 정말로 같은 쪽에 있으며, 둘 다
+물질의 법칙의 최대의 노력에도 불구하고 컴퓨터를 더 빠르게 하기 위해
+Figure~\ref{fig:cpu:Hardware and Software: On Same Side}
+에 우리의 데이터 흐름이 빛의 속도를 넘기기 위해 노력하는 모습으로 그려진 것처럼
+노력하고 있습니다.
+다음 섹션은 최근의 연구가 실제 세계에 어떤 모습의 결과를 내게 되느냐에 따라
+하드웨어 엔지니어들이 할수도 (또는 하지 못할수도) 있는, 추가적인 것들을 이야기
+합니다.
+이 훌륭한 목표를 향한 소프트웨어의 기여는 이 책의 나머지 챕터들에 있습니다.
+
+\iffalse
 
 In short, hardware and software engineers are really on the same side,
 with both trying to make computers go fast despite the best efforts of
@@ -992,3 +1070,5 @@ might (or might not) be able to do, depending on how well recent
 research translates to practice.
 Software's contribution to this noble goal is outlined in the remaining
 chapters of this book.
+
+\fi
