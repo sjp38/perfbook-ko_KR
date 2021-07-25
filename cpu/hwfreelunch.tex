@@ -11,6 +11,27 @@
 	  doing something for themselves.}
 	 {\emph{Henry Ford, updated}}
 
+지난 몇년간 동시성이 그렇게 많은 주목을 받게 된 주요한 이유는
+page~\pageref{fig:intro:Clock-Frequency Trend for Intel CPUs} 의
+Figure~\ref{fig:intro:Clock-Frequency Trend for Intel CPUs}
+에도 보여져 있는, 무어의 법칙으로 인한 단일쓰레드 성능 증가 (또는 ``공짜
+점심-free lunch-''~\cite{HerbSutter2008EffectiveConcurrency}) 의 종료입니다.
+이 섹션은 하드웨어 설계자들이 이 ``공짜 점심'' 을 다시 가져올 수 있는 몇가지
+방법에 대해 간단히 알아봅니다.
+
+하지만, 앞의 섹션은 동시성을 노출시키는데 대한 상당한 하드웨어 상의 장애물
+몇가지를 보였습니다.
+하드웨어 설계자들이 마주치는 상당한 물리적 한계 중 하나는 제한된 빛의
+속도입니다.
+Page~\pageref{fig:cpu:System Hardware Architecture} 의
+Figure~\ref{fig:cpu:System Hardware Architecture}
+에서도 이야기 되었듯, 빛은 1.8\,GHz 클락 기간동안 진공관 내에서 8-센티미터
+거리밖에 왕복하지 못합니다.
+이는 5\,GHz 클락에서는 3~센티미터로 줄어듭니다.
+이 거리들 둘 다 현대 컴퓨터 시스템의 크기에 비교해 상대적으로 작습니다.
+
+\iffalse
+
 The major reason that concurrency has been receiving so much focus over
 the past few years is the end of \IXalt{Moore's-Law}{Moore's Law}
 induced single-threaded
@@ -35,6 +56,19 @@ This distance drops to about 3~centimeters for a 5\,GHz clock.
 Both of these distances are relatively small compared to the size
 of a modern computer system.
 
+\fi
+
+더 나빠질 여지가 있는 것이, 반도체 내에서의 전자기파는 빛이 진공 속에서 그런
+것에 비해 세배에서 서른배까지 느리게 움직이며, 일반적인 클락 기반의 하드웨어
+구조는 이를 더 느리게 만드는데, 예를 들어 하나의 메모리 참조는 이 요청이
+시스템의 나머지 부분에 넘겨지기 전까지 로컬 캐쉬 탐색이 완료되길 기다려야 할 수
+있습니다.
+더 나아가, 예를 들어 CPU 와 메인 메모리 간의 통신의 경우 전자신호를 하나의
+반도체에서 다음 것으로 이동시키기 위해 상대적으로 낮은 스피드와 높은 전력의
+드라이버가 필요합니다.
+
+\iffalse
+
 To make matters even worse, electric waves in silicon move from three to
 thirty times more slowly than does light in a vacuum, and common
 clocked logic constructs run still more slowly, for example, a
@@ -44,14 +78,44 @@ Furthermore, relatively low speed and high power drivers are required
 to move electrical signals from one silicon die to another, for example,
 to communicate between a CPU and main memory.
 
+\fi
+
 \QuickQuiz{
+	하지만 전자 각각은 그렇게 빠르게 전혀 움직이지 못해요, 컨덕터
+	(conductor) 내에서도요!!!
+	세미컨덕터 전압 수준에서의 컨덕터 내 전자의 속도는 초당 오직
+	\emph{밀리미터} 수준이라고요.
+	어떻게 된거죠???
+
+	\iffalse
+
 	But individual electrons don't move anywhere near that fast,
 	even in conductors!!!
 	The electron drift velocity in a conductor under semiconductor
 	voltage levels is on the order of only one \emph{millimeter}
 	per second.
 	What gives???
+
+	\fi
+
 }\QuickQuizAnswer{
+	전자의 표류 속도는 개별 전자의 장시간 이동을 추적해서 나옵니다.
+	개별 전자들은 상당히 무작위적으로 튀어다니며, 따라서 그들의 순간적
+	속도는 매우 높지만, 장시간으로 보면 그리 많이 움직이지 않았음이
+	드러났습니다.
+	여기서 전자는 그들의 시간 대부분을 완전한 고속도로에서의 속도로
+	여행하지만 장기적으로는 어디로도 가지 않는 장거리 통근자를 닮았습니다.
+	이런 커뮤터의 속도는 시간당 70마일 (시속 113 킬로미터) 는 될테지만, 이
+	행성의 표면에 상대적으로 측정한 그들의 장기간 표류 속도는 0에 수렴할
+	겁니다.
+
+	따라서, 우린 전자의 표류 속도가 아니라 순간 속도에 주목해야 합니다.
+	하지만, 그 순간 속도조차 빛의 속도의 발끝에도 가지 못합니다.
+	하지만, 컨덕터 내에서 측정된 전자기파의 속도는 빛의 속도에 조금은
+	근접하며, 따라서 여전히 미스터리가 남아있습니다.
+
+	\iffalse
+
 	Electron drift velocity tracks the long-term movement of individual
 	electrons.
 	It turns out that individual electrons bounce around quite
@@ -72,6 +136,20 @@ to communicate between a CPU and main memory.
 	in conductors \emph{is} a substantial fraction of the
 	speed of light, so we still have a mystery on our hands.
 
+	\fi
+
+	또다른 트릭은 전자가 (원자적 관점에서 보면) 상당한 거리에 있는 다른
+	전자들과 상호작용을 한다는 겁니다, 그것들의 음전하 덕분에요.
+	이 상호작용은 빛의 속도로 움직이는 포톤 (photon) 에 의해 행해집니다.
+	따라서 전자기파의 전자가 있지만, 빠른 일의 대부분을 하는건 포톤입니다.
+
+	통근자 비유를 연장해 보자면, 운전자는 사고나 교통체증을 다른 운전자에게
+	알리기 위해 스마트폰을 사용할 수도 있고, 따라서 교통 흐름 상의 변화는
+	개별 차의 순간 속도보다도 훨씬 빠르게 전파될 수 있습니다.
+	전자기파와 교통 흐름간의 비유를 요약하자면:
+
+	\iffalse
+
 	The other trick is that electrons interact with each other at
 	significant distances (from an atomic perspective, anyway),
 	courtesy of their negative charge.
@@ -86,7 +164,24 @@ to communicate between a CPU and main memory.
 	than the instantaneous velocity of the individual cars.
 	Summarizing the analogy between electricity and traffic flow:
 
+	\fi
+
 	\begin{enumerate}
+	\item	(무척 느린) 전자의 표류 속도는 통근자의 장기적 속도에 유사해서,
+		둘 다 거의 0에 가깝습니다.
+	\item	(여전히 느린) 전자의 순간 속도는 도로위의 자동차의 속도와
+		유사합니다.
+		둘 다 표류 속도에 비해선 무척 빠르지만, 변화가 전파되는 속도에
+		비하면 상당히 느립니다.
+	\item	(훨씬 빠른) 전자기파의 전파 속도는 기본적으로 포톤이 전자기력을
+		전자들 사이에 전달하기 때문입니다.
+		비슷하게, 교통 상황은 운전자간의 소통 때문에 상당히 빨리 변화될
+		수 있습니다.
+		이게 이미 교통체증에 빠진 운전자에겐 특정 커패시터 (capacitor)
+		에 빠진 전자에게만큼이나 도움이 되진 못하겠지만요.
+
+	\iffalse
+
 	\item	The (very low) drift velocity of an electron is similar
 		to the long-term velocity of a commuter, both being
 		very nearly zero.
@@ -104,11 +199,36 @@ to communicate between a CPU and main memory.
 		Not that this is necessarily of much help to the
 		drivers already stuck in traffic, any more than it
 		is to the electrons already pooled in a given capacitor.
+
+	\fi
+
 	\end{enumerate}
+
+	물론, 이 주제를 완전히 이해하려면, 전기역학을 읽어보셔야 합니다.
+
+	\iffalse
 
 	Of course, to fully understand this topic, you should read
 	up on electrodynamics.
+
+	\fi
+
 }\QuickQuizEnd
+
+하지만 이것들을 개선시킬 기술이 (하드웨어적으로도 소프트웨어적으로도) 몇가지
+있습니다.
+
+\begin{enumerate}
+\item	3D 병합,
+\item	첨단의 물질과 프로세스,
+\item	빛으로 전자기를 대체하기,
+\item	특수 목적 가속기, 그리고
+\item	현존하는 병렬 소프트웨어.
+\end{enumerate}
+
+이것들 각각을 다음 섹션들에서 다룹니다.
+
+\iffalse
 
 There are nevertheless some technologies (both hardware and software)
 that might help improve matters:
@@ -122,6 +242,8 @@ that might help improve matters:
 \end{enumerate}
 
 Each of these is described in one of the following sections.
+
+\fi
 
 \subsection{3D Integration}
 \label{sec:cpu:3D Integration}
