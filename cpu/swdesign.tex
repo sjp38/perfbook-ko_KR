@@ -11,6 +11,26 @@
 	  That bids them where to go.}
 	 {\emph{Ella Wheeler Wilcox}}
 
+Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
+의 비율값들은 상당히 중요한데, 그것들이 주어진 병렬 어플리케이션의 효율성을
+제한하기 때문입니다.
+이를 이해하기 위해, 이 병렬 어플리케이션이 쓰레드간 통신을 위해 CAS
+오퍼레이션을 사용한다고 생각해 봅시다.
+이 CAS 오퍼레이션은 일반적으로 캐쉬 미스를 낼텐데, 쓰레드들이 스스로 모든걸
+하기보다는 서로간에 통신을 한다는 가정 하에 그렇습니다.
+나아가서 각 CAS 통신 오퍼레이션에 연관된 단위 작업이 300\,ns, 즉 여러
+부동소수점 연산을 수행할 수 있는 시간을 소비한다고 생각해 봅시다.
+그럼 수행 시간의 절반 가량이 이 CAS 소통 오퍼레이션으로 소모될 겁니다!
+이는 결국 그런 병렬 프로그램을 수행하는, 두개의 CPU 가 달린 시스템은 순차적으로
+구현된 이 프로그램을 한개의 CPU 로 수행하는 것보다 빠르지 않을 겁니다.
+
+하나의 통신 오퍼레이션의 응답시간이 수천 또는 심지어 수백만 부동소수점
+연산만큼이나 긴 시간을 소모하는 분산시스템의 경우는 이 상황이 더 나빠집니다.
+이는 통신 오퍼레이션이 극단적으로 드물게 수행되어서 대부분의 시간은 진짜 일을
+하는데 수행되어야 하는게 얼마나 중요한지를 잘 보입니다.
+
+\iffalse
+
 The values of the ratios in
 Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
 are critically important, as they limit the
@@ -35,13 +55,44 @@ thousands or even millions of floating-point operations.
 This illustrates how important it is for communications operations to
 be extremely infrequent and to enable very large quantities of processing.
 
+\fi
+
 \QuickQuiz{
+	분산시스템에서의 통신이 그렇게 무섭도록 비용이 높다면, 왜 누군가는 그런
+	시스템을 사용하려 하나요?
+
+	\iffalse
+
 	Given that distributed-systems communication is so horribly
 	expensive, why does anyone bother with such systems?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여러 이유가 있습니다:
+
+	\iffalse
+
 	There are a number of reasons:
 
+	\fi
+
 	\begin{enumerate}
+	\item	공유메모리 멀티프로세서 시스템은 엄격한 크기 제한이 있습니다.
+		수천개 이상의 CPU 가 필요하다면, 분산 시스템을 사용하는 것
+		외에는 선택의 여지가 없습니다.
+	\item	거대한 공유메모리 시스템은 작은 것들보다 단위 연산별 비용이
+		비싼 경향이 있습니다.
+	\item	거대한 공유메모리 시스템은 작은 것들보다 훨씬 긴 캐쉬 미스
+		지연시간을 갖는 경향이 있습니다.
+		이를 자세히 보기 위해,
+		page~\pageref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz} 의
+		\cref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz} 를
+		\cref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 12-CPU Intel Core i7-8750H CPU @ 2.20GHz}
+		와 비교해 보시기 바랍니다.
+
+	\iffalse
+
 	\item	Shared-memory multiprocessor systems have strict size limits.
 		If you need more than a few thousand CPUs, you have no
 		choice but to use a distributed system.
@@ -54,6 +105,21 @@ be extremely infrequent and to enable very large quantities of processing.
 		on page~\pageref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
 		with
 		\cref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 12-CPU Intel Core i7-8750H CPU @ 2.20GHz}.
+
+	\fi
+
+	\item	분산시스템에서의 통신 오퍼레이션은 많은 CPU 시간을 사용할
+		이유가 없으므로, 계산 작업은 메세지가 전송되는 동안 병렬로
+		진행될 수 있습니다.
+	\item	많은 중요한 문제들은 ``당황스럽도록 병렬적'' 이어서 매우 적은
+		수의 메세지들로 무척 거대한 양의 일처리가 가능해 집니다.
+		SETI@HOME~\cite{SETIatHOME2008}
+		은 그런 어플리케이션의 한가지 예일 뿐입니다.
+		이런 종류의 어플리케이션은 극단적으로 긴 통신 지연시간에도
+		불구하고 컴퓨터 네트워크을 잘 사용할 수 있습니다.
+
+	\iffalse
+
 	\item	The distributed-systems communications operations do
 		not necessarily use much CPU, so that computation can
 		proceed in parallel with message transfer.
@@ -65,7 +131,22 @@ be extremely infrequent and to enable very large quantities of processing.
 		These sorts of applications can make good use of networks
 		of computers despite extremely long communications
 		latencies.
+
+	\fi
+
 	\end{enumerate}
+
+	따라서, 거대한 공유메모리 시스템은 분산컴퓨팅에서 제공되는 것보다 빠른
+	지연시간을 가질 때 이득을 보는, 그리고 거대한 공유 메모리에서 이득을
+	보는 어플리케이션들을 위해 사용되는 경향을 가집니다.
+
+	병렬 어플리케이션에 대한 노력이 계속됨에 따라 긴 통신 지연시간을 갖는
+	기계 또는 클러스터에서 잘 돌아가는 당황스럽도록 병렬적인 어플리케이션의
+	수는 늘어날 가능성이 큰데, 비용 절감이 이를 이끄는 역할을 할겁니다.
+	그렇다고는 하나, 크게 줄어든 하드웨어 지연시간은 크게 환영 받는 발전이
+	될텐데, 단일 시스템에도 분산 컴퓨팅에도 그렇습니다.
+
+	\iffalse
 
 	Thus, large shared-memory systems tend to be used for applications
 	that benefit from faster latencies than can be provided by
@@ -79,7 +160,31 @@ be extremely infrequent and to enable very large quantities of processing.
 	That said, greatly reduced hardware latencies would be an
 	extremely welcome development, both for single-system and
 	for distributed computing.
+
+	\fi
+
 }\QuickQuizEnd
+
+교훈은 분명합니다:
+병렬 알고리즘은 이런 하드웨어 특성을 분명히 명심한 채로 설계되어야 합니다.
+그러기 위한 한가지 방법은 거의 종속성 없는 쓰레드들을 수행시키는 것입니다.
+이 쓰레드들이 어토믹 오퍼레이션을 사용해서든 락이나 명시적 메세지를 사용해서든
+덜 통신할수록 이 어플리케이션의 성능과 확장성은 나아질 겁니다.
+이 방법은
+Chapter~\ref{chp:Counting} 에서 이야기 되고,
+Chapter~\ref{cha:Partitioning and Synchronization Design} 에서 둘러본 후,
+Chapter~\ref{chp:Data Ownership} 에서 그 논리적 극단을 취해 봅니다.
+
+또다른 방법은 모든 공유되는 것들에는 읽기가 대부분이게 하는 것으로, 이는 CPU 의
+캐쉬가 읽기가 대부분인 데이터를 복사해 두어서 모든 CPU 가 빠른 액세스를 할 수
+있게 합니다.
+이 방법은
+Section~\ref{sec:count:Eventually Consistent Implementation}
+에서 다루어 졌으며,
+Chapter~\ref{chp:Deferred Processing}
+에서 더 자세히 알아봅니다.
+
+\iffalse
 
 The lesson should be quite clear:
 parallel algorithms must be explicitly designed with these hardware
@@ -103,22 +208,52 @@ Section~\ref{sec:count:Eventually Consistent Implementation},
 and explored more deeply in
 Chapter~\ref{chp:Deferred Processing}.
 
+\fi
+
+요약하자면, 훌륭한 병렬 성능과 확장성을 이루어냄은 데이터 구조와 알고리즘의
+선택에 신경을 써서든 존재하는 병렬 어플리케이션과 환경을 사용해서든, 또는 해당
+문제를 당황스럽도록 병렬적인 형태로 변환시킴을 통해서든 당황스럽도록 병렬적인
+알고리즘과 구현을 위해 노력함을 의미합니다.
+
+\iffalse
+
 In short, achieving excellent parallel performance and scalability means
 striving for embarrassingly parallel algorithms and implementations,
 whether by careful choice of data structures and algorithms, use of
 existing parallel applications and environments, or transforming the
 problem into an embarrassingly parallel form.
 
+\fi
+
 \QuickQuiz{
+	좋아요, 우리가 분산 프로그래밍 기술을 공유메모리 병렬 프로그램에
+	적용해야 할 거라면, 그냥 항상 분산 기술을 사용하고 공유 메모리는
+	생략하는게 어떤가요?
+
+	\iffalse
+
 	OK, if we are going to have to apply distributed-programming
 	techniques to shared-memory parallel programs, why not just
 	always use these distributed techniques and dispense with
 	shared memory?
+
+	\fi
+
 }\QuickQuizAnswer{
+	프로그램의 작은 부분만이 성능에 중요한 경우가 자주 있기 때문입니다.
+	공유 메모리 병렬성은 우리가 그 작은 부분에 대해서만 분산 프로그래밍
+	기술에 집중할 수 있도록 해서, 프로그램의 성능에 중요하지 않은 많은
+	부분에는 더 간단한 공유 메모리 기술을 사용할 수 있게 합니다.
+
+	\iffalse
+
 	Because it is often the case that only a small fraction of
 	the program is performance-critical.
 	Shared-memory parallelism allows us to focus distributed-programming
 	techniques on that small fraction, allowing simpler shared-memory
 	techniques to be used on the non-performance-critical bulk of
 	the program.
+
+	\fi
+
 }\QuickQuizEnd
