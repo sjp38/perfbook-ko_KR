@@ -355,6 +355,23 @@ occasionally updated.
 \subsection{POSIX Process Creation and Destruction}
 \label{sec:toolsoftrade:POSIX Process Creation and Destruction}
 
+프로세스는 \apipx{fork()} 기능을 통해 생성되고, \apipx{kill()} 기능을 통해
+소멸되며, \apipx{exit()} 기능을 통해 스스로를 소멸시킬 수도 있습니다.
+\co{fork()} 기능을 실행하는 프로세스는 새로 생성된 프로세스의 ``부모'' 라
+불립니다.
+부모는 \apipx{wait()} 기능을 통해 자식을 기다릴 수 있습니다.
+
+이 섹션의 예제는 상당히 간단한 것들임을 알아두시기 바랍니다.
+이 기능들을 사용하는 실제 세계의 어플리케이션들은 시그널, 파일 디스크립터, 공유
+메모리 세그먼트, 그리고 여러 많은 리소스를 다뤄야 할 수 있습니다.
+또한, 일부 어플리케이션은 특정 자식이 종료되었을 때 특별한 행동을 취해야 하며,
+또한 그 자식이 종료된 이유에 대해서 신경써야 할수도 있습니다.
+이 문제들은 또한 코드의 복잡도를 상당히 높일 수 있습니다.
+더 많은 정보를 위해선, 이 주제에 대한 여러 책을 보시기
+바랍니다~\cite{WRichardStevens1992,StewartWeiss2013UNIX}.
+
+\iffalse
+
 Processes are created using the \apipx{fork()} primitive, they may
 be destroyed using the \apipx{kill()} primitive, they may destroy
 themselves using the \apipx{exit()} primitive.
@@ -372,6 +389,8 @@ that the child terminated.
 These issues can of course add substantial complexity to the code.
 For more information, see any of a number of textbooks on the
 subject~\cite{WRichardStevens1992,StewartWeiss2013UNIX}.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:forkjoin:main]
@@ -393,6 +412,27 @@ if (pid == 0) {%lnlbl[if]
 \end{listing}
 
 \begin{fcvref}[ln:toolsoftrade:forkjoin:main]
+\co{fork()} 가 성공하면, 이 함수는 한번은 부모에게 또 한번은 자식에게 두번
+리턴합니다.
+\co{fork()} 로부터 반환되는 값은
+Listing~\ref{lst:toolsoftrade:Using the fork() Primitive}
+(\path{forkjoin.c}) 에 보인 것과 같이 호출자가 이 차이를 알 수 있게 합니다.
+라인~\lnref{fork} 는 \co{fork()} 기능을 실행하고, 그 반환값을 지역 변수인
+\co{pid} 에 저장합니다.
+라인~\lnref{if} 는 \co{pid} 가 0인지 체크하는데, 이는 이게 자식이라는 의미여서,
+이 때에는 라인~\lnref{child} 로 수행을 이어갑니다.
+앞서 언급되었듯, 이 자식은 \co{exit()} 기능을 통해 종료될 수도 있습니다.
+그렇지 않다면, 이것은 부모여서, 라인~\lnref{else} 에서 \co{fork()} 기능으로부터
+에러가 반환되었는지 체크하고, 그렇다면 \clnrefrange{errora}{errorb} 에서 에러를
+출력하고 종료합니다.
+그렇지 않다면, \co{fork()} 는 성공적으로 수행된 것이며, 따라서 이 부모는 변수
+\co{pid} 가 자식의 프로세스 ID 를 포함한 채로 라인~\lnref{parent} 를 수행하게
+됩니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:toolsoftrade:forkjoin:main]
 If \co{fork()} succeeds, it returns twice, once for the parent
 and again for the child.
 The value returned from \co{fork()} allows the caller to tell
@@ -411,6 +451,8 @@ Otherwise, the \co{fork()} has executed successfully, and the parent
 therefore executes line~\lnref{parent} with the variable \co{pid}
 containing the process ID of the child.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/api-pthreads/api-pthreads@waitall.fcv}
