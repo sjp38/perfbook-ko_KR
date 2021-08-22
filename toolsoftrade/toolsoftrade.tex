@@ -461,6 +461,31 @@ containing the process ID of the child.
 \end{listing}
 
 \begin{fcvref}[ln:api-pthreads:api-pthreads:waitall]
+이 부모 프로세스는 자식들이 끝나길 기다리기 위해 \apipx{wait()} 함수를 사용할
+수 있습니다.
+하지만, \co{wait()} 호출은 한번에 단 하나의 자식 프로세스만 기다리기 때문에 이
+함수의 사용은 셸 스크립트의 비슷한 것에 비해 약간 복잡합니다.
+따라서
+Listing~\ref{lst:toolsoftrade:Using the wait() Primitive}
+(\path{api-pthreads.h}) 에 보인 것처럼 셸 스크립트의 \co{wait} 커맨드와 비슷한
+의미를 갖는 \apipx{waitall()} 함수와 비슷한 함수로 \co{wait()} 를 감싸는 게
+관습적입니다.
+\clnrefrange{loopa}{loopb} 의 루프를 통과하는 각 패스가 자식 프로세스를
+기다립니다.
+라인~\lnref{wait} 는 하나의 자식 프로세스가 종료될 때까지 블록되어 기다리고
+해당 자식 프로세스의 프로세스 ID 를 리턴하는 \co{wait()} 함수를 실행합니다.
+리턴값이 프로세스 ID 가 아니라 $-1$ 라면, 이는 \co{wait()} 함수가 하나의 자식
+프로세스를 기다릴 수 없었음을 알립니다.
+만약 그렇다면, 라인~\lnref{ECHILD} 는 \co{ECHILD} 에러 케이스를 검사하는데, 이
+경우는 더이상 차일드 프로세스가 없음을 알리므로, 라인~\lnref{break} 에서 루프를
+종료합니다.
+그렇지 않다면, 라인~\lnref{perror} 와~\lnref{exit} 에서는 에러를 출력하고
+종료합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:api-pthreads:api-pthreads:waitall]
 The parent process may use the \apipx{wait()} primitive to wait for its children
 to complete.
 However, use of this primitive is a bit more complicated than its shell-script
@@ -484,10 +509,32 @@ line~\lnref{break} exits the loop.
 Otherwise, lines~\lnref{perror} and~\lnref{exit} print an error and exit.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	이 \co{wait()} 함수는 왜 그리 복잡하죠?
+	그냥 셸 스크립트의 \co{wait} 처럼 동작하게 만드는게 어떤가요?
+
+	\iffalse
+
 	Why does this \co{wait()} primitive need to be so complicated?
 	Why not just make it work like the shell-script \co{wait} does?
+
+	\fi
+
 }\QuickQuizAnswer{
+	일부 병렬 어플리케이션은 특정 자식 프로세스가 종료되었을 때 특수한
+	행동을 취해야 하며, 따라서 각 자식을 개별적으로 기다릴 수 있어야
+	합니다.
+	또한, 일부 병렬 어플리케이션은 해당 자식이 종료된 이유를 감지해야
+	합니다.
+	Listing~\ref{lst:toolsoftrade:Using the wait() Primitive} 에서 봤듯이,
+	\co{wait()} 함수를 가지고 \co{waitall()} 함수를 만드는 건 어렵지
+	않지만, 그 반대는 불가능할 겁니다.
+	특정 자식에 대한 정보가 일단 사라지면, 그건 사라지는 겁니다.
+
+	\iffalse
+
 	Some parallel applications need to take special action when
 	specific children exit, and therefore need to wait for each
 	child individually.
@@ -498,6 +545,8 @@ Otherwise, lines~\lnref{perror} and~\lnref{exit} print an error and exit.
 	the \co{wait()} function, but it would be impossible to
 	do the reverse.
 	Once the information about a specific child is lost, it is lost.
+
+	\fi
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -505,6 +554,21 @@ Otherwise, lines~\lnref{perror} and~\lnref{exit} print an error and exit.
 \caption{Processes Created Via \tco{fork()} Do Not Share Memory}
 \label{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
 \end{listing}
+
+\begin{fcvref}[ln:toolsoftrade:forkjoinvar:main]
+부모와 자식은 메모리를 공유하지 \emph{않는다는} 것을 알아두는게 무척
+중요합니다.
+Listing~\ref{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
+(\path{forkjoinvar.c})
+에 보여진 프로그램이 이를 나타내는데, 여기선 자식이 전역 변수 \co{x} 를
+라인~\lnref{setx} 에서 1로 설정하고, 라인~\lnref{print:c} 에서 메세지를 프린트
+한 후, 라인~\lnref{exit:s} 에서 종료됩니다.
+부모는 line~\lnref{waitall} 을 이어 수행하는데, 여기서 자식을 기다리고,
+라인~\lnref{print:p} 에서 자신의 변수 \co{x} 의 복사본이 여전히 0임을
+확인합니다.  따라서 출력은 다음과 같을 겁니다:
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:toolsoftrade:forkjoinvar:main]
 It is critically important to note that the parent and child do \emph{not}
@@ -519,15 +583,44 @@ and on line~\lnref{print:p} finds that its copy of the variable \co{x} is
 still zero. The output is thus as follows:
 \end{fcvref}
 
+\fi
+
 \begin{VerbatimU}
 Child process set x=1
 Parent process sees x=0
 \end{VerbatimU}
 
 \QuickQuiz{
+	\co{fork()} 와 \co{wait()} 에 대해서 이야기할 게 더 많지 않나요?
+
+	\iffalse
+
 	Isn't there a lot more to \co{fork()} and \co{wait()}
 	than discussed here?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그렇습니다, 그리고 이 섹션은 메세징 기능 (UNIX 파이프, TCP/IP,
+	공유 파일 I/O 등) 과 메모리 매핑 기능 (\co{mmap()} 과 \co{shmget()} 등)
+	등을 추가한 버전으로 미래에 확장될 수도 있습니다.
+	그전까지는 이 기능들을 상당히 자세하게 다루는 책이 많이 있으며, 정말
+	동기가 부여된 사람은 manpage, 이 기능들을 사용하는 현존하는 병렬
+	어플리케이션들, 뿐만 아니라 이것들을 구현하는 리눅스 커널의 소스 코드를
+	읽을 수 있을 겁니다.
+
+	Listing~\ref{lst:toolsoftrade:Processes Created Via fork() Do Not Share Memory}
+	의 부모 프로세스는 자식 프로세스가 \co{printf()} 를 실행한 후에 종료될
+	때까지 기다림을 알아두시는 게 중요합니다.
+	\co{printf()} 의 버퍼 I/O 동시성을 여러 프로세스에서 같은 파일에
+	사용하는 것은 간단하지 않으며, 그렇게 하지 않는 게 제일 좋습니다.
+	여러분이 정말로 동시적 버퍼 I/O 를 해야만 한다면, 여러분의 OS 의 문서를
+	참고하십시오\@.
+	UNIX/Linux 시스템에서는 Stewart Weiss 의 강의 노트가 다양한 내용의
+	예제와 함께 좋은 개요를 제공합니다~\cite{StewartWeiss2013UNIX}.
+
+	\iffalse
+
 	Indeed there is, and
 	it is quite possible that this section will be expanded in
 	future versions to include messaging features (such as UNIX
@@ -549,13 +642,25 @@ Parent process sees x=0
 	For UNIX/Linux systems, Stewart Weiss's lecture notes provide
 	a good introduction with informative
 	examples~\cite{StewartWeiss2013UNIX}.
+
+	\fi
+
 }\QuickQuizEnd
+
+세밀한 수준의 병렬성은 공유 메모리를 필요로 하며, 이는
+Section~\ref{sec:toolsoftrade:POSIX Thread Creation and Destruction}
+에서 다루어집니다.
+그러나, 공유 메모리 병렬성은 fork-join 병렬성보다 훨씬 더 복잡할 수 있습니다.
+
+\iffalse
 
 The finest-grained parallelism requires shared memory, and
 this is covered in
 Section~\ref{sec:toolsoftrade:POSIX Thread Creation and Destruction}.
 That said, shared-memory parallelism can be significantly more complex
 than fork-join parallelism.
+
+\fi
 
 \subsection{POSIX Thread Creation and Destruction}
 \label{sec:toolsoftrade:POSIX Thread Creation and Destruction}
