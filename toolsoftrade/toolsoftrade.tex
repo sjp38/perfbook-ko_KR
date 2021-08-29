@@ -666,6 +666,21 @@ than fork-join parallelism.
 \label{sec:toolsoftrade:POSIX Thread Creation and Destruction}
 
 \begin{fcvref}[ln:toolsoftrade:pcreate:mythread]
+존재하는 프로세스 내에서 쓰레드를 만들기 위해선, 예를 들면
+Listing~\ref{lst:toolsoftrade:Threads Created Via pthread-create() Share Memory}
+(\path{pcreate.c})
+의 라인~\lnref{create:a} 와~\lnref{create:b} 처럼 \apipx{pthread_create()}
+기능을 실행시켜야 합니다.
+첫번째 인자는 새로 생성되는 쓰레드의 ID 를 저장하게 되는 \co{pthread_t} 로의
+포인터이고, 두번째 \co{NULL} 인자는 선택적으로 넣을 수 있는 \co{pthread_attr_t}
+로의 포인터이며, 세번째 인자는 이 새로운 쓰레드에 의해 수행될 함수 (이 경우,
+\co{mythread()}) 이고, 마지막 \co{NULL} 인자는 \co{mythread()} 에게 전달될
+인자입니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:toolsoftrade:pcreate:mythread]
 To create a thread within an existing process, invoke the
 \apipx{pthread_create()} primitive, for example, as shown on
 lines~\lnref{create:a} and~\lnref{create:b} of
@@ -679,27 +694,75 @@ that is to be invoked by the new thread, and the last \co{NULL} argument
 is the argument that will be passed to \co{mythread()}.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/toolsoftrade/pcreate@mythread.fcv}
 \caption{Threads Created Via \tco{pthread_create()} Share Memory}
 \label{lst:toolsoftrade:Threads Created Via pthread-create() Share Memory}
 \end{listing}
 
+이 예에서 \co{mythread()} 는 단순히 리턴하지만, 그대신 \apipx{pthread_exit()}
+을 호출할 수도 있습니다.
+
+\iffalse
+
 In this example, \co{mythread()} simply returns, but it could instead
 call \apipx{pthread_exit()}.
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:toolsoftrade:Threads Created Via pthread-create() Share Memory}
+	의 \co{mythread()} 함수가 그냥 리턴해도 된다면, 왜 \co{pthread_exit()}
+	을 신경쓰나요?
+
+	\iffalse
+
 	If the \co{mythread()} function in
 	Listing~\ref{lst:toolsoftrade:Threads Created Via pthread-create() Share Memory}
 	can simply return, why bother with \co{pthread_exit()}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 간단한 예제에서는 그럴 이유가 없습니다.
+	하지만, \co{mythread()} 가 별도로 컴파일 된 다른 함수들을 호출하는 좀
+	더 복잡한 예를 생각해 봅시다.
+	그런 경우, \co{pthread_exit()} 은 이 다른 함수들이 \co{mythread()} 에게
+	에러 같은 것들을 리턴하지 않고도 이 쓰레드의 수행을 중지시키게 할 수
+	있습니다. 
+
+	\iffalse
+
 	In this simple example, there is no reason whatsoever.
 	However, imagine a more complex example, where \co{mythread()}
 	invokes other functions, possibly separately compiled.
 	In such a case, \co{pthread_exit()} allows these other functions
 	to end the thread's execution without having to pass some sort
 	of error return all the way back up to \co{mythread()}.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:toolsoftrade:pcreate:mythread]
+라인~\lnref{join} 에 보인 \apipx{pthread_join()} 기능은 fork-join 의
+\apipx{wait()} 기능과 유사합니다.
+이 함수는 \co{tid} 변수로 특정된 쓰레드가 \apipx{pthread_exit()} 을 수행해서
+또는 해당 쓰레드의 꼭대기 단계 함수가 리턴해서 수행을 완료할 때까지 기다립니다.
+이 쓰레드의 종료 값은 \co{pthread_join()} 의 두번째 인자로 넘어간 포인터에
+저장될 겁니다.
+이 쓰레드의 종료 값은 해당 쓰레드가 어떻게 종료되느냐에 따라
+\co{pthread_exit()} 에 전달된 값이거나 이 쓰레드의 꼭대기 단계 함수에서 리턴된
+값이 됩니다.
+\end{fcvref}
+
+Listing~\ref{lst:toolsoftrade:Threads Created Via pthread-create() Share Memory}
+에 보인 프로그램은 다음과 같은 실행 결과를 통해 메모리가 이 두 쓰레드에 의해
+실제로 공유되고 있음을 보입니다.
+
+\iffalse
 
 \begin{fcvref}[ln:toolsoftrade:pcreate:mythread]
 The \apipx{pthread_join()} primitive, shown on line~\lnref{join},
@@ -720,10 +783,31 @@ Listing~\ref{lst:toolsoftrade:Threads Created Via pthread-create() Share Memory}
 produces output as follows, demonstrating that memory is in fact
 shared between the two threads:
 
+\fi
+
 \begin{VerbatimU}
 Child process set x=1
 Parent process sees x=1
 \end{VerbatimU}
+
+이 프로그램은 한번에 쓰레드들 중 하나만이 변수 \co{x} 에 값을 저장하는 것을
+주의 깊게 보장하고 있음을 알아두시기 바랍니다.
+한 쓰레드가 특정 변수에 값을 저장하고 있는 동안 어떤 다른 쓰레드가 똑같은
+변수의 값을 읽거나 쓰려 하는 모든 상황은 \emph{데이터 레이스 (data race)} 라고
+호칭됩니다.
+C 언어는 데이터 레이스의 결과에 대해 어떤 합리적 보장도 하지 않기 때문에, 우린
+다음 섹션에서 이야기 될 락킹 기능 등을 사용해서 동시에 안전하게 데이터를
+접근하고 수정하는 방법이 필요합니다.
+
+하지만 여러분의 데이터 레이스는 별거 아니다, 그렇게 말할 건가요?
+글쎄요, 그럴지도 모르죠.
+하지만, 부디 모두에게 (여러분 자신도 포함해서) 큰 자비를 베푸시고
+\cref{sec:toolsoftrade:Shared-Variable Shenanigans}
+를 매우 주의 깊게 읽기 바랍니다.
+컴파일러가 더욱 더 적극적으로 최적화를 할수록, 정말로 별거 아닌 데이터 레이스는
+더욱 줄어듭니다.
+
+\iffalse
 
 Note that this program carefully makes sure that only one of the threads
 stores a value to variable \co{x} at a time.
@@ -743,12 +827,39 @@ very carefully.
 As compilers optimize more and more aggressively, there are fewer and
 fewer truly benign data races.
 
+\fi
+
 \QuickQuiz{
+	데이터 레이스의 존재 하에 C 언어는 어떤 보장도 하지 않는다면, 리눅스
+	커널은 왜 그렇게 많은 데이터 레이스를 갖는 거죠?
+	리눅스 커널은 완전히 망가져 있다는 말을 하고 싶은 건가요???
+
+	\iffalse
+
 	If the C language makes no guarantees in presence of a data
 	race, then why does the Linux kernel have so many data races?
 	Are you trying to tell me that the Linux kernel is completely
 	broken???
+
+	\fi
+
 }\QuickQuizAnswer{
+	아, 하지만 리눅스 커널은 데이터 레이스의 존재 하에서도 안전한 수행을
+	가능하게 하는 \co{asm} 같은 특수한 GNU 확장 기능을 포함하는, 주의 깊게
+	선택된 C 언어의 상위 집합을 사용합니다.
+	거기에 더해서, 리눅스 커널은 데이터 레이스가 특히 문제시 될 수 있는
+	다수의 플랫폼 위에서는 동작하지 않습니다.
+	예를 하나 들자면, 32비트 포인터와 16비트 버스를 갖는 임베디드 시스템을
+	생각해 보세요.
+	그런 시스템에서는 어떤 포인터로의 저장과 읽기에 연관된 데이터 레이스는
+	해당 포인터의 기존 값의 아래쪽 16비트와 새 값의 위쪽 16비트가 결합된
+	값을 리턴하는 읽기가 생기게 할수도 있을 겁니다.
+
+	그러나, 리눅스 커널에서조차, 데이터 레이스는 상당히 위험할 수 있고
+	가능한 곳에서는 막아져야만 합니다~\cite{JonCorbet2012ACCESS:ONCE}.
+
+	\iffalse
+
 	Ah, but the Linux kernel is written in a carefully selected
 	superset of the C language that includes special GNU
 	extensions, such as \co{asm}s, that permit safe execution even
@@ -765,6 +876,9 @@ fewer truly benign data races.
 	Nevertheless, even in the Linux kernel, data races can be
 	quite dangerous and should be avoided where
 	feasible~\cite{JonCorbet2012ACCESS:ONCE}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{POSIX Locking}
