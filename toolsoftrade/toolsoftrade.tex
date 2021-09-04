@@ -884,6 +884,28 @@ fewer truly benign data races.
 \subsection{POSIX Locking}
 \label{sec:toolsoftrade:POSIX Locking}
 
+POSIX 표준은 프로그래머가 ``POSIX 락킹'' 을 사용해 데이터 레이스를 방지할 수
+있게 합니다.
+POSIX 락킹은 여러 기능을 제공하는데, 가장 기본적인 건
+\apipx{pthread_mutex_lock()} 과 \apipx{pthread_mutex_unlock()} 입니다.
+이 기능들은 \apipx{pthread_mutex_t} 타입인 락들을 통해 동작합니다.
+이 락들은 \apipx{PTHREAD_MUTEX_INITIALIZER} 를 통해 정적으로 선언되고 초기화
+되거나, \apipx{pthrea_mutex_init()} 기능을 통해 동적으로 할당되고 초기화 될 수
+있습니다.
+이 섹션의 예제 코드는 앞의 것을 사용할 겁니다.
+
+\co{pthread_mutex_lock()} 기능은 특정 락을 ``획득'' 하며,
+\co{pthread_mutex_unlock()} 은 특정 락을 ``해제'' 합니다.
+이것들은 ``배타적'' 락킹 기능들이므로, 한번에 한 쓰레드만이 특정 시간에 특정
+락을 ``쥐고 있을'' 수 있습니다.
+예를 들어, 한 쌍의 쓰레드가 동시에 같은 락을 획득하려 시도하면, 이 한쌍 중
+하나만이 그 락을 먼저 획득하는게 ``허용'' 될 것이고, 다른 쓰레드는 이 첫번째
+쓰레드가 해당 락을 해제할 때까지 기다려야 합니다.
+간단하고 합리적이며 유용한 프로그래밍 모델은 특정 데이터 하이템으로의 접근을
+연관된 락을 쥐고 있을 때에만 허용하는 것입니다~\cite{Hoare74}.
+
+\iffalse
+
 The POSIX standard allows the programmer to avoid data races via
 ``POSIX locking''.
 POSIX locking features a number of primitives, the most fundamental
@@ -905,10 +927,32 @@ A simple and reasonably useful programming model permits a given data item
 to be accessed only while holding the corresponding
 lock~\cite{Hoare74}.
 
+\fi
+
 \QuickQuiz{
+	동시에 여러 쓰레드가 같은 락을 쥘 수 있게 하고 싶으면 어떡하죠?
+
+	\iffalse
+
 	What if I want several threads to hold the same lock at the
 	same time?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여러분이 해야 할 첫번째 일은 왜 여러분이 그런 일을 하고 싶은지
+	스스로에게 묻는 것입니다.
+	만약 그 대답이 ``많은 쓰레드에 의해 읽히지만 가끔씩만 업데이트 되는
+	데이터가 많기 때문'' 이라면, POSIX reader-writer 락이 여러분이 찾는
+	것일 수 있습니다.
+
+	여러 쓰레드가 동일한 락을 잡고 있는 효과를 내는 또다른 방법은 한
+	쓰레드가 그 락을 획득하게 하고, \co{pthread_create()} 를 사용해 다른
+	쓰레드를 생성하는 것입니다.
+	이게 왜 좋은 생각인지에 대한 답은 독자 여러분의 몫으로 남겨둡니다.
+
+	\iffalse
+
 	The first thing you should do is to ask yourself why you would
 	want to do such a thing.
 	If the answer is ``because I have a lot of data that is read
@@ -922,6 +966,9 @@ lock~\cite{Hoare74}.
 	then use \co{pthread_create()} to create the other threads.
 	The question of why this would ever be a good idea is left
 	to the reader.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -929,6 +976,27 @@ lock~\cite{Hoare74}.
 \caption{Demonstration of Exclusive Locks}
 \label{lst:toolsoftrade:Demonstration of Exclusive Locks}
 \end{listing}
+
+\begin{fcvref}[ln:toolsoftrade:lock:reader_writer]
+이 배타적 락킹 속성이 
+Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+(\path{lock.c})
+의 코드에 보여져 있습니다.
+라인~\lnref{lock_a} 는 \co{lock_a} 라는 이름의 POSIX 락을 정의하고 초기화 하며,
+라인~\lnref{lock_b} 는 비슷하게 \co{lock_b} 라는 이름의 락을 정의하고 초기화
+합니다.
+라인~\lnref{x} 는 공유된 변수~\co{x} 를 정의합니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:toolsoftrade:lock:reader_writer:reader]
+\Clnrefrange{b}{e} 는 \co{arg} 로 명시된 락을 쥔 채로 공유 변수 \co{x} 를
+반복적으로 읽는 \co{lock_reader()} 함수를 정의합니다.
+라인~\lnref{cast} 는 \co{arg} 를 \co{pthread_mutex_lock()} 과
+\co{pthread_mutex_unlock()} 기능들에 요구되는 대로 \co{pthread_mutex_t}
+포인터로 캐스팅합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:toolsoftrade:lock:reader_writer]
 This exclusive-locking property is demonstrated using the code shown in
@@ -948,28 +1016,86 @@ required by the \co{pthread_mutex_lock()} and \co{pthread_mutex_unlock()}
 primitives.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	왜 
+	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+	의line~\ref{ln:toolsoftrade:lock:reader_writer:reader:b}
+	에 있는 \co{lock_reader()} 의 인자를 \co{pthread_mutex_t} 포인터로
+	만들지 않는 거죠?
+
+	\iffalse
+
 	Why not simply make the argument to \co{lock_reader()}
 	on line~\ref{ln:toolsoftrade:lock:reader_writer:reader:b} of
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
 	be a pointer to a \co{pthread_mutex_t}?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\co{pthread_create()} 로 \co{lock_reader()} 를 전달해야 하기
+	때문입니다.
+	\co{pthread_create()} 로 넘길 때 이 함수를 캐스팅 할수도 있겠지만, 함수
+	캐스팅은 상당히 보기에도 안좋고 간단한 포인터 캐스팅보다 올바르게
+	하기가 어렵습니다.
+
+	\iffalse
+
 	Because we will need to pass \co{lock_reader()} to
 	\co{pthread_create()}.
 	Although we could cast the function when passing it to
 	\co{pthread_create()}, function casts are quite a bit
 	uglier and harder to get right than are simple pointer casts.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\begin{fcvref}[ln:toolsoftrade:lock:reader_writer]
+	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+	의 라인~\lnref{reader:read_x} 와~\lnref{writer:inc} 의
+	\apik{READ_ONCE()} 와 라인~\lnref{writer:inc} 의 \apik{WRITE_ONCE()} 는
+	왜 있는 거죠?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:toolsoftrade:lock:reader_writer]
 	What is the \apik{READ_ONCE()} on
         lines~\lnref{reader:read_x} and~\lnref{writer:inc} and the
 	\apik{WRITE_ONCE()} on line~\lnref{writer:inc} of
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerE{
+	이 매크로들은 컴파일러가 동시적으로 접근되는 공유 변수에 문제를 일으킬
+	수 있는 종류의 최적화를 행하는 것을 방지합니다.
+	이것들은 특정 단일 변수로의 접근 순서를 바꾸는 것을 막는 것을
+	제외하고는 CPU 에 대해서는 어떤 제약도 가하지 않습니다.
+	이 단일 변수 제약은
+	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+	의 코드에도 적용되는데, \co{x} 변수만이 접근되기 때문입니다.
+
+	\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 에 대한 더 많은 정보를 위해선,
+	Section~\ref{sec:toolsoftrade:Atomic Operations (gcc Classic)}
+	을 읽어 주시기 바랍니다.
+	여러 쓰레드에 의한 여러 변수로의 접근 순서를 잡기 위한 더 많은 내용을
+	위해선,
+	Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+	를 읽어 주시기 바랍니다.
+	그 사이, \co{READ_ONCE(x)} 는 \GCC\ intrinsic \co{__atomic_load_n(&x,
+	__ATOMIC_RELAXED)} 와, \co{WRITE_ONCE(x, v)} 는 \GCC\ intrinsic
+	\co{__atomic_store_n(&x, v, __ATOMIC_RELAXED)} 와 유사한 부분이
+	많다는 정도만 알아 두셔도 좋겠습니다.
+
+	\iffalse
+
 	These macros constrain the compiler so as to prevent it from
 	carrying out optimizations that would be problematic for concurrently
 	accessed shared variables.
@@ -990,8 +1116,26 @@ primitives.
 	the \GCC\  intrinsic \co{__atomic_load_n(&x, __ATOMIC_RELAXED)}
 	and \co{WRITE_ONCE(x, v)} has much in common with the \GCC\
 	intrinsic \co{__atomic_store_n(&x, v, __ATOMIC_RELAXED)}.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\begin{fcvref}[ln:toolsoftrade:lock:reader_writer:reader]
+\Clnrefrange{acq:b}{acq:e} 는 명시된 \co{pthread_mutex_t} 를 획득하고, 에러를
+체크하고 에러가 있다면 프로그램을 종료합니다.
+\Clnrefrange{loop:b}{loop:e} 는 \co{x} 의 값을 반복적으로 체크하고 그게
+바뀌었을 때마다 새 값을 프린트 합니다.
+라인~\lnref{sleep} 은 1 밀리세컨드 동안 잠을 자는데, 이는 단일 프로세서
+기계에서 이 코드가 잘 동작하게끔 합니다.
+\Clnrefrange{rel:b}{rel:e} 는 \co{pthread_mutex_t} 를 해제하고, 다시 에러를
+체크하고 에러가 있으면 프로그램을 종료합니다.
+마지막으로, 라인~\lnref{return} 은 \co{NULL} 을 리턴함으로써
+\co{pthread_create()} 에 의해 요구된 함수 타입을 맞춥니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:toolsoftrade:lock:reader_writer:reader]
 \Clnrefrange{acq:b}{acq:e} acquire the specified
@@ -1009,18 +1153,56 @@ Finally, line~\lnref{return} returns \co{NULL}, again to match the function type
 required by \co{pthread_create()}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\co{pthread_mutex_t} 를 획득하고 해제할 때마다 네 줄의 코드를 써야 하는
+	건 분명 고통스러울 것 같군요!
+	더 나은 방법은 없을까요?
+
+	\iffalse
+
 	Writing four lines of code for each acquisition and release
 	of a \co{pthread_mutex_t} sure seems painful!
 	Isn't there a better way?
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞습니다!
+	그리고 그런 이유로, \co{pthread_mutex_lock()} 과
+	\co{pthread_mutex_unlock()} 기능은 이 에러 체크를 하는 함수로 보통
+	싸여져서 사용됩니다.
+	나중에는, 우린 이것들을 리눅스 커널의 \co{spin_lock()} 과
+	\co{spin_unlock()} API 와 함께 감쌀 겁니다.
+
+	\iffalse
+
 	Indeed!
 	And for that reason, the \co{pthread_mutex_lock()} and
 	\co{pthread_mutex_unlock()} primitives are normally wrapped
 	in functions that do this error checking.
 	Later on, we will wrap them with the Linux kernel
 	\co{spin_lock()} and \co{spin_unlock()} APIs.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:toolsoftrade:lock:reader_writer:writer]
+Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+의 \Clnrefrange{b}{e} 는 주기적으로 공유 변수 \co{x} 를 특정
+\co{pthread_mutex_t} 를 쥔 채로 업데이트 하는 \co{lock_writer()} 함수를
+보입니다.
+\co{lock_reader()} 에서처럼, 라인~\lnref{cast} 는 \co{arg} 를
+\co{pthread_mutex_t} 포인터로 캐스팅 하고, \clnrefrange{acq:b}{acq:e} 는 해당
+락을 획득하며, \clnrefrange{rel:b}{rel:e} 는 이를 해제합니다.
+이 락을 잡고 있는 동안, \clnrefrange{loop:b}{loop:e} 는 이 공유 변수 \co{x} 의
+값을 증가시키고, 각 증가 사이에 5 밀리세컨드를 잡니다.
+마지막으로, \clnrefrange{rel:b}{rel:e} 는 이 락을 해제합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:toolsoftrade:lock:reader_writer:writer]
 \Clnrefrange{b}{e} of
@@ -1037,6 +1219,8 @@ increment the shared variable \co{x},
 sleeping for five milliseconds between each increment.
 Finally, \clnrefrange{rel:b}{rel:e} release the lock.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/toolsoftrade/lock@same_lock.fcv}
