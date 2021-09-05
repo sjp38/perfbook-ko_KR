@@ -1230,6 +1230,19 @@ Finally, \clnrefrange{rel:b}{rel:e} release the lock.
 
 \begin{fcvref}[ln:toolsoftrade:lock:same_lock]
 Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
+은 \co{lock_reader()} 와 \co{lock_writer()} 를 \co{lock_a} 라는 같은 락을
+사용하는 쓰레드로 수행하는 코드 조각을 보입니다.
+\Clnrefrange{cr:reader:b}{cr:reader:e} 는 \co{lock_reader()} 를 수행하는
+쓰레드를 만들고, 이어서 \clnrefrange{cr:writer:b}{cr:writer:e} 는
+\co{lock_writer()} 를 수행하는 쓰레드를 만듭니다.
+\Clnrefrange{wait:b}{wait:e} 는 두 쓰레드가 모두 완료될 때까지 기다립니다.
+이 코드 조각의 결과물은 다음과 같습니다:
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:toolsoftrade:lock:same_lock]
+Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
 shows a code fragment that runs \co{lock_reader()} and
 \co{lock_writer()} as threads using the same lock, namely, \co{lock_a}.
 \Clnrefrange{cr:reader:b}{cr:reader:e} create a thread
@@ -1240,22 +1253,55 @@ running \co{lock_writer()}.
 The output of this code fragment is as follows:
 \end{fcvref}
 
+\fi
+
 \begin{VerbatimU}
 Creating two threads using same lock:
 lock_reader(): x = 0
 \end{VerbatimU}
 
+두 쓰레드가 같은 락을 사용하기 때문에, \co{lock_reader()} 쓰레드는
+\co{lock_writer()} 가 락을 잡은 채로 만들어내는 \co{x} 의 중간 값들은 보지
+못합니다.
+
+\iffalse
+
 Because both threads are using the same lock, the \co{lock_reader()}
 thread cannot see any of the intermediate values of \co{x} produced
 by \co{lock_writer()} while holding the lock.
 
+\fi
+
 \QuickQuiz{
+	``x = 0'' 는
+	listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
+	의 코드 조각이 낼 수 있는 유일한 결과일까요?
+	그렇다면, 왜죠?
+	아니라면, 어떤 다른 결과가 나올 수 있고, 그건 왜일까요?
+
+	\iffalse
+
 	Is ``x = 0'' the only possible output from the code fragment
 	shown in
 	Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}?
 	If so, why?
 	If not, what other output could appear, and why?
+
+	\fi
+
 }\QuickQuizAnswer{
+	아닙니다.
+	``x = 0'' 가 출력된 이유는 \co{lock_reader()} 가 락을 먼저 잡았기
+	때문입니다.
+	\co{lock_wrietr()} 가 해당 락을 먼저 획득했다면, 결과는 \mbox{``x =
+	3''} 이었을 겁니다.
+	하지만, 이 코드 조각이 \co{lock_reader()} 를 먼저 시작했기 때문에,
+	그리고 멀티프로세서에서 수행되었기 때문에, 보통은 \co{lock_reader()} 가
+	락을 먼저 획득할 거라 생각할 겁니다.
+	하지만, 그런 보장은 존재하지 않습니다, 특히 바쁜 시스템에서는요.
+
+	\iffalse
+
 	No.
 	The reason that ``x = 0'' was output was that \co{lock_reader()}
 	acquired the lock first.
@@ -1266,6 +1312,9 @@ by \co{lock_writer()} while holding the lock.
 	one would normally expect \co{lock_reader()} to acquire the
 	lock first.
 	Nevertheless, there are no guarantees, especially on a busy system.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -1275,10 +1324,19 @@ by \co{lock_writer()} while holding the lock.
 \end{listing}
 
 Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
+이 비슷한 코드 조각을 보이는데, 이번에는 다른 락들을 사용합니다:
+\co{lock_reader()} 는 \co{lock_a} 를, \co{lock_writer()} 는 \co{lock_b} 를.
+이 코드 조각의 수행 결과는 다음과 같습니다:
+
+\iffalse
+
+Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
 shows a similar code fragment, but this time using different locks:
 \co{lock_a} for \co{lock_reader()} and \co{lock_b} for
 \co{lock_writer()}.
 The output of this code fragment is as follows:
+
+\fi
 
 \begin{VerbatimU}
 Creating two threads w/different locks:
@@ -1288,18 +1346,48 @@ lock_reader(): x = 2
 lock_reader(): x = 3
 \end{VerbatimU}
 
+이 두 쓰레드가 다른 락들을 사용하므로, 서로를 배타하지 않고, 동시에 수행될 수
+있습니다.
+따라서 \co{lock_reader()} 함수는 \co{lock_writer()} 가 저장한 \co{x} 의 중간
+값들을 볼 수 있습니다.
+
+\iffalse
+
 Because the two threads are using different locks, they do not exclude
 each other, and can run concurrently.
 The \co{lock_reader()} function can therefore see the intermediate
 values of \co{x} stored by \co{lock_writer()}.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	다른 락을 사용하는 건 서로의 중간 상태를 어떤 락을 가지고 바라보는지에
+	대해 상당한 혼란을 야기할 수 있습니다.
+	그러니 이런 종류의 혼란을 막기 위해 잘 쓰여진 병렬 프로그램은 같은 락을
+	사용하도록 강제되어야 할까요?
+
+	\iffalse
+
 	Using different locks could cause quite a bit of confusion,
 	what with threads seeing each others' intermediate states.
 	So should well-written parallel programs restrict themselves
 	to using a single lock in order to avoid this kind of confusion?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	동작하고 잘 확장되는 프로그램을 단일 전역 락을 사용해 작성하는게 가끔은
+	가능하지만, 그런 프로그램들은 규칙에서의 예외입니다.
+	좋은 성능과 확장성을 위해선 일반적으로는 여러 락을 사용해야 할 겁니다.
+
+	이 규칙에서의 한가지 가능한 예외는 ``트랜잭셔널 메모리''로, 이것은
+	현재 하나의 연구 주제입니다.
+	트랙잭셔널\-/메모리 기능은 롤백이 추가된 상태에서 최적화가 허용된 단일
+	전역 락으로 대략적으로 생각될 수 있습니다~\cite{HansJBoehm2009HOTPAR}.
+
+	\iffalse
+
 	Although it is sometimes possible to write a program using a
 	single global lock that both performs and scales well, such
 	programs are exceptions to the rule.
@@ -1311,29 +1399,76 @@ values of \co{x} stored by \co{lock_writer()}.
 	Transactional\-/memory semantics can be loosely thought of as those
 	of a single global lock with optimizations permitted and
 	with the addition of rollback~\cite{HansJBoehm2009HOTPAR}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
+	에 보여진 코드에서,
+	\co{lock_reader()} 는 \co{lock_writer()} 가 만들어내는 값들을 모두 볼
+	것이 보장될까요?
+	그렇다면 왜일까요, 아니라면 또 왜일까요?
+
+	\iffalse
+
 	In the code shown in
 	Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks},
 	is \co{lock_reader()} guaranteed to see all the values produced
 	by \co{lock_writer()}?
 	Why or why not?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	아닙니다.
+	바쁜 시스템에서는, \co{lock_reader()} 는 \co{lock_writer()} 의 수행
+	동안 프리엠션 (preemption) 당할 수도 있고, 이 경우에는
+	\co{lock_writer()} 가 만들어내는 \co{x} 의 중간값을 \emph{어떤 것도}
+	보지 못할 겁니다.
+
+	\iffalse
+
 	No.
 	On a busy system, \co{lock_reader()} might be preempted
 	for the entire duration of \co{lock_writer()}'s execution,
 	in which case it would not see \emph{any} of \co{lock_writer()}'s
 	intermediate states for \co{x}.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	기다려봐요!!!
+	Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
+	은 공유 변수~\co{x} 를 초기화 하지 않았는데,
+	왜
+	Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
+	에서는 초기화 되어야 했죠?
+
+	\iffalse
+
 	Wait a minute here!!!
 	Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
 	didn't initialize shared variable~\co{x},
 	so why does it need to be initialized in
 	Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+	의 라인~\ref{ln:toolsoftrade:lock:reader_writer:x} 을 보시기 바랍니다.
+	Listing~\ref{lst:toolsoftrade:Demonstration of Same Exclusive Lock}
+	의 코드가 먼저 수행되므로, 이는 \co{x} 의 컴파일 타임 초기화에 의존할
+	수 있습니다.
+	Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
+	의 코드는 그다음에 수행되므로, \co{x} 의 재초기화가 필요합니다.
+
+	\iffalse
+
 	See line~\ref{ln:toolsoftrade:lock:reader_writer:x} of
 	Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}.
 	Because the code in
@@ -1342,13 +1477,24 @@ values of \co{x} stored by \co{lock_writer()}.
 	The code in
 	Listing~\ref{lst:toolsoftrade:Demonstration of Different Exclusive Locks}
 	ran next, so it had to re-initialize~\co{x}.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+POSIX 배타적 락킹에 대해서는 다룰 게 더 많이 있지만, 이 기능들로도 시작해볼 수
+있으며 상당히 많은 상황에서 실제로 충분합니다.
+다음 섹션은 POSIX reader-writer 락킹에 대해 간단히 살펴 봅니다.
+
+\iffalse
 
 Although there is quite a bit more to POSIX exclusive locking, these
 primitives provide a good start and are in fact sufficient in a great
 many situations.
 The next section takes a brief look at POSIX reader-writer locking.
+
+\fi
 
 \subsection{POSIX Reader-Writer Locking}
 \label{sec:toolsoftrade:POSIX Reader-Writer Locking}
