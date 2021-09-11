@@ -1499,6 +1499,29 @@ The next section takes a brief look at POSIX reader-writer locking.
 \subsection{POSIX Reader-Writer Locking}
 \label{sec:toolsoftrade:POSIX Reader-Writer Locking}
 
+POSIX API 는 \apipx{pthread_rwlock_t} 로 표현되는 reader-writer 락을 하나
+제공합니다.
+\apipx{pthread_mutex_t} 에서처럼, \co{pthread_rwlock_t} 는
+\apipx{PTHREAD_RWLOCK_INITIALIZER} 를 통해 정적으로 초기화될 수도 있고
+\apipx{pthread_rwlock_init()} 기능을 통해 동적으로 초기화 될 수도 있습니다.
+\apipx{pthread_rwlock_rdlock()} 기능은 특정 \apipx{pthread_rwlock_t} 를
+읽기-획득하고, \apipx{pthread_rwlock_wrlock()} 기능은 쓰기-획득하며,
+\apipx{pthread_rwlock_unlock()} 기능은 해당 락을 해제합니다.
+한번에 단 하나의 쓰레드만이 특정 \apipx{pthread_rwlock_t} 를 쓰기-획득하고 있을
+수 있지만, 해당 락을 쓰기-획득해서 가지고 있는 쓰레드가 현재 존재하지 않는다면
+여러 쓰레드가 읽기-획득해서 가지고 있을 수 있습니다.
+
+예상했을 수도 있겠지만, reader-writer 락은 읽기가 대부분인 상황을 위해
+설계되었습니다.
+배타적 락은 그 정의에 따라 한번에 하나의 쓰레드만이 락을 쥘 수 있지만
+reader-writer 락은 임의의 큰 수의 읽기 쓰레드들이 락을 동시에 쥐고 있을 수 있게
+하므로, 이런 상황에서 reader-writer 락은 배타적 락보다 훨씬 높은 확장성을
+제공합니다.
+하지만, 실전에서는 reader-writer 락에 의헤 제공되는 추가적 확장성이 얼마나
+되는지 알 필요가 있습니다.
+
+\iffalse
+
 The POSIX API provides a reader-writer lock, which is represented by
 a \apipx{pthread_rwlock_t}.
 As with \apipx{pthread_mutex_t}, \co{pthread_rwlock_t} may be statically
@@ -1523,11 +1546,34 @@ an arbitrarily large number of readers to concurrently hold the lock.
 However, in practice, we need to know how much additional scalability is
 provided by reader-writer locks.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/toolsoftrade/rwlockscale@reader.fcv}
 \caption{Measuring Reader-Writer Lock Scalability}
 \label{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
 \end{listing}
+
+\begin{fcvref}[ln:toolsoftrade:rwlockscale:reader]
+Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+(\path{rwlockscale.c})
+은 reader-writer 락의 확장성을 측정하는 한가지 방법을 보입니다.
+라인~\lnref{rwlock} 은 reader-writer 락의 정의와 초기화를 보이며,
+라인~\lnref{holdtm} 은 각 쓰레드가 reader-writer 락을 쥐는 시간을 제어하는
+\co{holdtime} 인자를 보이며, 라인~\lnref{thinktm} 은 reader-writer 락의 해제와
+다음 획득 사이의 시간을 제어하는 \co{thinktime} 인자를 보이고,
+라인~\lnref{rdcnts} 는 각 읽기 쓰레드가 락을 획득한 횟수를 기록하는
+\co{readcounts} 배열을 정의하며, 라인~\lnref{nrdrun} 은 언제 모든 읽기 쓰레드가
+수행을 시작하는지 결정하는 \co{nreadersrunning} 변수를 정의합니다.
+
+\Clnrefrange{goflag:b}{goflag:e} 는 이 테스트의 시작과 끝을 동기화 하는
+\co{goflag} 를 정의합니다.
+이 변수는 초기에 \co{GPFLAG_INIT} 로 설정되고, 이후 모든 읽기 쓰레드가 시작된
+후에는 \co{GOFLAG_RUN} 이 되며, 이 테스트 수행이 종료된 후에는 \co{GOFLAG_STOP}
+이 됩니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:toolsoftrade:rwlockscale:reader]
 Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
@@ -1551,6 +1597,20 @@ This variable is initially set to \co{GOFLAG_INIT}, then set to
 set to \co{GOFLAG_STOP} to terminate the test run.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:toolsoftrade:rwlockscale:reader:reader]
+\Clnrefrange{b}{e} 는 읽기 쓰레드인 \co{reader()} 를 정의합니다.
+라인~\lnref{atmc_inc} 는 이 쓰레드가 이제 수행 중임을 표시하기 위해
+\co{nreadersrunning} 변수를 어토믹하게 증가시키며, \clnrefrange{wait:b}{wait:e}
+는 이 테스트가 시작하기를 기다립니다.
+\apik{READ_ONCE()} 기능은 이 컴파일러가 이 루프의 각 패스에서 \co{goflag} 를
+읽어오도록 강제합니다---그렇게 강제하지 않으면 컴파일러는 \co{goflag} 의 값이
+절대 바뀌지 않을 거라고 생각할 수 있습니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:toolsoftrade:rwlockscale:reader:reader]
 \Clnrefrange{b}{e} define \co{reader()}, which is the reader thread.
 Line~\lnref{atmc_inc} atomically increments the \co{nreadersrunning} variable
@@ -1561,13 +1621,38 @@ on each pass through the loop---the compiler would otherwise be within its
 rights to assume that the value of \co{goflag} would never change.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	모든 곳에서 \apik{READ_ONCE()} 를 사용하는 대신에 간단히
+	Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+	의 
+        라인~\ref{ln:toolsoftrade:rwlockscale:reader:goflag:e}
+	에서 \co{goflag} 를 \co{volatile} 로 선언하는 것은 어떤가요?
+
+	\iffalse
+
 	Instead of using \apik{READ_ONCE()} everywhere, why not just
 	declare \co{goflag} as \co{volatile} on
         line~\ref{ln:toolsoftrade:rwlockscale:reader:goflag:e} of
 	Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}?
+
+	\fi
 }\QuickQuizAnswerB{
+	이 특정한 경우에 있어서는 \co{volatile} 선언이 실제로 합리적인
+	대안입니다.
+	하지만, \apik{READ_ONCE()} 의 사용은 \co{goflag} 가 동시적인 읽기와
+	업데이트의 대상임을 선명하게 나타내는 장점을 갖습니다.
+	\apik{READ_ONCE()} 는 대부분의 액세스가 락으로 보호되지만 (그리고
+	따라서 변화되지 \emph{않을 때}) 몇몇 액세스는 락 바깥에서 이루어질 때
+	특히 유용함을 알아두시기 바랍니다.
+	여기서 \co{volatile} 선언은 락 바깥에서의 특수한 액세스를 코드를 읽는
+	사람이 알기 어렵게 만들 것이며, 락 내에서 컴파일러가 좋은 코드를 만들기
+	어렵게 하기도 할 겁니다.
+
+	\iffalse
+
 	A \co{volatile} declaration is in fact a reasonable alternative in
 	this particular case.
 	However, use of \apik{READ_ONCE()} has the benefit of clearly
@@ -1581,15 +1666,48 @@ rights to assume that the value of \co{goflag} would never change.
 	for the reader to note the special accesses outside of the lock,
 	and would also make it harder for the compiler to generate good
 	code under the lock.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	\apik{READ_ONCE()} 는 컴파일러에만 영향을 끼치고 CPU 는 건들지
+	않습니다.
+	Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+	의 \co{goflag} 의 값의 변화가 빠르게 각 CPU 로 전파됨을 보장하기 위해
+	메모리 배리어를 사용해야 하지 않나요?
+
+	\iffalse
+
 	\apik{READ_ONCE()} only affects the compiler, not the CPU\@.
 	Don't we also need memory barriers to make sure
 	that the change in \co{goflag}'s value propagates to the
 	CPU in a timely fashion in
 	Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	아니오, 메모리 배리어는 필요하지 않을 뿐더러 여기서 도움을 주지도
+	않습니다.
+	메모리 배리어는 여러 메모리 참조들 사이의 순서를 강제할 뿐입니다:
+	그것들은 시스템의 한 부분에서 다른 부분으로의 데이터 전파를
+	촉진시킨다는 보장은 전혀 갖지 않습니다.\footnote{
+		메모리 배리어가 데이터 전파를 촉진시킨다는 하드웨어 루머가
+		지속적으로 있어왔습니다만 확인된 바는 없습니다.}
+	이는 빠른 경험적 법칙을 이끕니다:  여러 쓰레드 사이에 여러 변수를
+	사용해 통신하고 있는게 아니라면 여러분은 메모리 배리어가 필요 없습니다.
+
+	하지만 \co{nreadersrunning} 은 어떨까요?
+	그건 통신을 위해 사용되는 두번째 변수가 아닌가요?
+	실제로 그렇습니다, 그리고 해당 쓰레드가 자신이 시작해야 하는지 알기
+	위한 체크 전에 자신의 존재를 나타냄을 확실히 할 수 있게끔
+	\apig{__sync_fetch_and_add()} 안에 내포된 메모리 배리어 명령이 실제로
+	필요합니다.
+
+	\iffalse
+
 	No, memory barriers are not needed and won't help here.
 	Memory barriers only enforce ordering among multiple memory
 	references:  They absolutely do not guarantee to expedite the
@@ -1607,13 +1725,43 @@ rights to assume that the value of \co{goflag} would never change.
 	instructions buried in \apig{__sync_fetch_and_add()},
 	which make sure that the thread proclaims its presence
 	before checking to see if it should start.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	예를 들어 \GCC 의 \apig{__thread} 저장소 클래스를 사용해 선언되는 것
+	같은 쓰레드별 변수를 접근할 때에도 \apik{READ_ONCE()} 를 사용할 필요가
+	있을까요?
+
+	\iffalse
+
 	Would it ever be necessary to use \apik{READ_ONCE()} when accessing
 	a per-thread variable, for example, a variable declared using
 	\GCC's \apig{__thread} storage class?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	상황에 따라서요.
+	해당 쓰레드별 변수가 그 쓰레드에 의해서만 접근된다면, 그리고 시그널
+	핸들러에서 접근되지 않는다면, 필요 없습니다.
+	그렇지 않다면 \apik{READ_ONCE()} 가 필요할 가능성이 높습니다.
+	이 두 상황에 대한 예를
+	Section~\ref{sec:count:Signal-Theft Limit Counter Implementation}
+	에서 보이겠습니다.
+
+	이는 어떻게 한 쓰레드가 다른 쓰레드의 \apig{__thread} 변수에 접근할 수
+	있느냐는 질문을 이끄는데, 그에 대한 답은 이 두번째 쓰레드가 자신의
+	\apig{__thread} 변수로의 포인터를 첫번째 쓰레드가 접근할 수 있는
+	어딘가에 저장해 두어야만 한다는 것입니다.
+	흔한 방법 중 하나는 쓰레드당 하나의 원소를 갖는 링크드 리스트를
+	유지하며 각 쓰레드의 \apig{__thread} 변수의 주소를 연관된 원소에
+	저장하는 것입니다.
+
+	\iffalse
+
 	It depends.
 	If the per-thread variable was accessed only from its thread,
 	and never from a signal handler, then no.
@@ -1628,6 +1776,9 @@ rights to assume that the value of \co{goflag} would never change.
 	One common approach is to maintain a linked list with one
 	element per thread, and to store the address of each thread's
 	\apig{__thread} variable in the corresponding element.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
