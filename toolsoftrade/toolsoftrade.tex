@@ -1783,6 +1783,20 @@ rights to assume that the value of \co{goflag} would never change.
 }
 
 \begin{fcvref}[ln:toolsoftrade:rwlockscale:reader:reader]
+\Clnrefrange{loop:b}{loop:e} 의 루프는 성능 테스트를 진행합니다.
+\Clnrefrange{acq:b}{acq:e} 는 락을 획득하고, \clnrefrange{hold:b}{hold:e} 는 수
+마이크로세컨드 동안 락을 쥐고 있으며, \clnrefrange{rel:b}{rel:e} 는 락을 놓고,
+\clnrefrange{think:b}{think:e} 는 락을 다시 잡기 전에 수 마이크로세컨드 동안
+기다립니다.
+라인~\lnref{count} 는 이 락 획득 횟수를 셉니다.
+
+라인~\lnref{mov_cnt} 는 이 락 획득 횟수를 \co{readcounts[]} 배열의 이 쓰레드를
+위한 원소로 옮기고, 라인~\lnref{return} 은 리턴해서 이 쓰레드를 종료시킵니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:toolsoftrade:rwlockscale:reader:reader]
 The loop spanning \clnrefrange{loop:b}{loop:e} carries out the performance test.
 \Clnrefrange{acq:b}{acq:e} acquire the lock,
 \clnrefrange{hold:b}{hold:e} hold the lock for the specified
@@ -1796,12 +1810,31 @@ Line~\lnref{mov_cnt} moves the lock-acquisition count to this thread's element o
 \co{readcounts[]} array, and line~\lnref{return} returns, terminating this thread.
 \end{fcvref}
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{CodeSamples/toolsoftrade/rwlockscale}}
 \caption{Reader-Writer Lock Scalability vs. Microseconds in Critical Section on 8-Socket System With Intel Xeon Platinum 8176 CPUs @ 2.10GHz}
 \label{fig:toolsoftrade:Reader-Writer Lock Scalability vs. Microseconds in Critical Section}
 \end{figure}
+
+Figure~\ref{fig:toolsoftrade:Reader-Writer Lock Scalability vs. Microseconds in Critical Section}
+는 이 테스트를 224코어 Xeon 시스템에서 코어당 두개의 하드웨어 쓰레드를 사용해
+총 448개의 소프트웨어에게 보이는 CPU 를 가지는 환경에서 수행되었을 때의 결과를
+보입니다.
+\co{thinktime} 패러미터는 모든 테스트 동안 0 이었으며, \co{holdtime} 패러미터는
+1 마이크로세컨드부터 (그래프 상의 ``1us'') 10,000\,마이크로세컨드 (그래프 상의
+``10000us'') 까지 적용되었습니다.
+그려진 실제 값은 다음과 같습니다:
+\begin{equation}
+	\frac{L_N}{N L_1}
+\end{equation}
+여기서 $N$ 는 쓰레드의 수이며, $L_N$ 는 $N$ 개 쓰레드에 의한 락 획득 횟수이며
+$L_1$ 는 단일 쓰레드에 의한 락 획득 횟수입니다.
+이상적인 하드웨어와 소프트웨어 확장성 하에서는 이 값은 항상 1.0 이어야 합니다.
+
+\iffalse
 
 Figure~\ref{fig:toolsoftrade:Reader-Writer Lock Scalability vs. Microseconds in Critical Section}
 shows the results of running this test on a 224-core Xeon system
@@ -1820,6 +1853,24 @@ $L_1$ is the number of lock acquisitions by a single thread.
 Given ideal hardware and software scalability, this value will always
 be 1.0.
 
+\fi
+
+그림 상에서 볼 수 있듯이, reader-writer 락킹의 확장성은 분명 이상적이지 않은데,
+특히 작은 크기의 크리티컬 섹션에서 그렇습니다.
+왜 읽기 락 획득이 그렇게 느린지 알아보기 위해선, 락을 획득하려는 모든 쓰레드가
+\co{pthread_rwlock_t} 데이터 구조를 업데이트 한다는 걸 생각해 봅시다.
+따라서, 만약 모든 448개의 쓰레드가 이 reader-writer 락을 동시에 읽기 모드로
+획득하려 한다면, 이들은 \co{pthread_rwlock_t} 를 한번에 하나씩 업데이트 해야만
+합니다.
+운이 좋은 쓰레드는 거의 곧바로 그렇게 할 수 있겠지만, 가장 운이 나쁜 쓰레드는
+다른 447개의 쓰레드가 업데이트를 끝낼 때까지 기다려야만 합니다.
+이 상황은 CPU 를 추가할 수록 나빠지기만 할 겁니다.
+그리고 y 축이 로그스케일이라는 점도 알아 두시기 바랍니다.
+10,000\,마이크로세컨드의 기록이 상당히 이상적인 것으로 보이지만, 실제로는
+이상적인 경우에 비해 10\,\% 뒤쳐집니다.
+
+\iffalse
+
 As can be seen in the figure, reader-writer locking scalability is
 decidedly non-ideal, especially for smaller sizes of critical
 sections.
@@ -1836,22 +1887,69 @@ Note also the logscale y-axis.
 Even though the 10,000\,microsecond trace appears quite ideal, it has
 in fact degraded by about 10\,\% from ideal.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	단일 CPU 의 처리량과 비교하는 건 좀 너무한 거 아닌가요?
+
+	\iffalse
+
 	Isn't comparing against single-CPU throughput a bit harsh?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	전혀요.
+	실제로, 이 비교는 무척 관대한 겁니다.
+	좀 더 균형잡힌 비교는 락킹 기능이 제거된 상태에서의 단일 CPU 처리량에
+	대한 것일 겁니다.
+
+	\iffalse
+
 	Not at all.
 	In fact, this comparison was, if anything, overly lenient.
 	A more balanced comparison would be against single-CPU
 	throughput with the locking primitives commented out.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	하지만 1마이크로세컨드는 크리티컬 섹션의 크기로 특별히 작은 건
+	아닙니다.
+	예를 들어 몇개의 명령만이 들어있는 것 같은, 훨씬 더 작은 크리티컬
+	섹션이 필요할 땐 어떡해야 하죠?
+
+	\iffalse
+
 	But one microsecond is not a particularly small size for
 	a critical section.
 	What do I do if I need a much smaller critical section, for
 	example, one containing only a few instructions?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	읽혀진 데이터가 \emph{절대} 바뀌지 않는다면, 그걸 접근하는 동안 어떤
+	락도 잡고 있을 필요가 없습니다.
+	해당 데이터가 충분히 가끔씩만 바뀐다면, 수행을 체크포인트하고, 모든
+	쓰레드를 종료하고, 데이터를 변경한 후, 해당 체크포인트부터 재시작할 수
+	있습니다.
+
+	또다른 접근법은 쓰레드당 하나의 배타적 락을 두어서, 자신의 락을
+	획득하는 것으로 거대한 reader-writer 락을 읽기 모드로 획득하게 하고,
+	모든 쓰레드당 락을 획득하는 것으로 쓰기 모드 획득을 하도록 구현하는
+	겁니다~\cite{WilsonCHsieh92a}.
+	이는 읽기 쓰레드에게는 상당히 잘 동작하지만, 쓰기 쓰레드에게는 쓰레드의
+	수가 늘어날수록 더 큰 오버헤드를 야기시킬 겁니다.
+
+	매우 작은 크리티컬 섹션을 처리하는 다른 효율적 방법들이
+	Chapter~\ref{chp:Deferred Processing} 에 설명되어 있습니다.
+
+	\iffalse
+
 	If the data being read \emph{never} changes, then you do not
 	need to hold any locks while accessing it.
 	If the data changes sufficiently infrequently, you might be
@@ -1868,13 +1966,34 @@ in fact degraded by about 10\,\% from ideal.
 
 	Some other ways of efficiently handling very small critical
 	sections are described in Chapter~\ref{chp:Deferred Processing}.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizM{
+	여기 사용된 시스템은 몇년 이상 되었고, 새로운 하드웨어는 더 빠를
+	겁니다.
+	그러니 누가 reader-writer 락이 느려짐에 대해 걱정하겠습니까?
+
+	\iffalse
+
 	The system used is a few years old, and new hardware should
 	be faster.
 	So why should anyone worry about reader-writer locks being slow?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	일반적으로 새로운 하드웨어는 개선됩니다.
+	하지만, reader-writer 락이 448 CPU 에서 이상적 성능을 내게끔 하기
+	위해선 수천수만배의 개선을 필요로 할 겁니다.
+	더 나쁜 것이, CPU 의 갯수가 늘어날수록 필요한 성능 향상이 더 커집니다.
+	따라서 reader-writer 락킹의 성능 문제는 상당한 시간 동안 우리 곁에 있을
+	겁니다.
+
+	\iffalse
+
 	In general, newer hardware is improving.
 	However, it will need to improve several orders of magnitude
 	to permit reader-writer lock to achieve ideal performance on
@@ -1883,8 +2002,17 @@ in fact degraded by about 10\,\% from ideal.
 	required performance improvement.
 	The performance problems of reader-writer locking are therefore
 	very likely to be with us for quite some time to come.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이런 제한에도 불구하고, reader-writer 락킹은 많은 경우에 유용한데, 예를 들어
+읽기 쓰레드들이 응답시간이 긴 파일이나 네트워크 I/O 를 처리해야 하는
+경우입니다.
+일부 대안도 존재하는데,
+Chapter~\ref{chp:Counting} 와~\ref{chp:Deferred Processing} 에서 보입니다.
 
 Despite these limitations, reader-writer locking is quite useful in many
 cases, for example when the readers must do high-latency file or network I/O\@.
