@@ -2027,6 +2027,23 @@ Chapters~\ref{chp:Counting} and \ref{chp:Deferred Processing}.
 \label{sec:toolsoftrade:Atomic Operations (gcc Classic)}
 
 Figure~\ref{fig:toolsoftrade:Reader-Writer Lock Scalability vs. Microseconds in Critical Section}
+는 reader-writer 락킹의 오버헤드는 가장 작은 크리티컬 섹션에서 가장 심각함을
+보이며, 따라서 작은 크리티컬 섹션들을 보호하는 어떤 다른 방법이 있다면 좋을
+겁니다.
+그런 한가지 방법은 어토믹 오퍼레이션입니다.
+\begin{fcvref}[ln:toolsoftrade:rwlockscale:reader:reader]
+우린 이미 하나의 어토믹 오퍼레이션을 봤는데,
+Listing~\ref{lst:toolsoftrade:Measuring Reader-Writer Lock Scalability}
+의 \clnref{atmc_inc} 의 \apig{__sync_fetch_and_add()} 기능입니다.
+이 기능은 두번째 인자의 값을 첫번째 인자로 참조되는 값에 원자적으로 더하고 기존
+값을 리턴합니다 (이 경우엔 무시되었습니다).
+한쌍의 쓰레드가 동시에 같은 변수에 대해 \co{__sync_fetch_and_add()} 를 실행하면
+이 변수의 결과값은 두 더하기의 결과를 포함하게 됩니다.
+\end{fcvref}
+
+\iffalse
+
+Figure~\ref{fig:toolsoftrade:Reader-Writer Lock Scalability vs. Microseconds in Critical Section}
 shows that the overhead of reader-writer locking is most severe for the
 smallest critical sections, so it would be nice to have some other way
 of protecting tiny critical sections.
@@ -2043,6 +2060,27 @@ the same variable, the resulting value of the variable will include
 the result of both additions.
 \end{fcvref}
 
+\fi
+
+\GNUC\ 컴파일러는
+ \apig{__sync_fetch_and_sub()},
+\apig{__sync_fetch_and_or()},
+\apig{__sync_fetch_and_and()},
+\apig{__sync_fetch_and_xor()}, 그리고
+\apig{__sync_fetch_and_nand()}
+를 포함한 수많은 추가적 어토믹 오퍼레이션을 제공하는데, 이것들은 모두 기존 값을
+리턴합니다.
+그대신 새 값이 필요하다면,
+\apig{__sync_add_and_fetch()},
+\apig{__sync_sub_and_fetch()},
+\apig{__sync_or_and_fetch()},
+\apig{__sync_and_and_fetch()},
+\apig{__sync_xor_and_fetch()}, 그리고
+\apig{__sync_nand_and_fetch()}
+기능을 사용할 수 있습니다.
+
+\iffalse
+
 The \GNUC\ compiler offers a number of additional atomic operations,
 including \apig{__sync_fetch_and_sub()},
 \apig{__sync_fetch_and_or()},
@@ -2057,14 +2095,33 @@ If you instead need the new value, you can instead use the
 \apig{__sync_xor_and_fetch()}, and
 \apig{__sync_nand_and_fetch()} primitives.
 
+\fi
+
 \QuickQuiz{
+	그런 두 종류의 기능이 정말로 필요한가요?
+
+	\iffalse
+
 	Is it really necessary to have both sets of primitives?
+
+	\fi
+
 }\QuickQuizAnswer{
+	엄밀히 말하면, 필요 없습니다.
+	두번째 집합의 어느 것이든 그에 연관된 첫번째 집합 내의 것을 사용해
+	구현될 수 있습니다.
+	예를 들어, \apig{__sync_nand_and_fetch()} 를 다음과 같이
+	\apig{__sync_fetch_and_nand()} 로 구현할 수 있습니다.
+
+	\iffalse
+
 	Strictly speaking, no.
 	One could implement any member of the second set using the
 	corresponding member of the first set.
 	For example, one could implement \apig{__sync_nand_and_fetch()}
 	in terms of \apig{__sync_fetch_and_nand()} as follows:
+
+	\fi
 
 \begin{VerbatimU}
 tmp = v;
@@ -2072,13 +2129,42 @@ ret = __sync_fetch_and_nand(p, tmp);
 ret = ~ret & tmp;
 \end{VerbatimU}
 
+	비슷하게 \apig{__sync_fetch_and_add()},
+	\apig{__sync_fetch_and_sub()}, 그리고 \apig{__sync_fetch_and_xor()}
+	를 나중값을 리턴하는 것들을 이용해 구현할 수도 있습니다.
+
+	하지만, 그 대안인 앞의 형태가 프로그래머에게도 컴파일러/라이브러리
+	구현자에게도 상당히 편리할 수 있습니다.
+
+	\iffalse
+
 	It is similarly possible to implement \apig{__sync_fetch_and_add()},
 	\apig{__sync_fetch_and_sub()}, and \apig{__sync_fetch_and_xor()}
 	in terms of their post-value counterparts.
 
 	However, the alternative forms can be quite convenient, both
 	for the programmer and for the compiler/library implementor.
+
+	\fi
+
 }\QuickQuizEnd
+
+고전적인 compare-and-swap 오퍼레이션은 \apig{__sync_bool_compare_and_swap()} 와
+\apig{__sync_val_compare_and_swap()}, 한쌍의 기능들로 제공됩니다.
+이 기능들 둘 모두 새로운 값을 원자적으로 업데이트 합니다만 그 기존 값이 명시된
+이전 값과 동일할 때만 그렇습니다.
+앞의 첫번째 변종은 이 오퍼레이션이 성공하면 1 을, 실패하면 0 을 리턴하는데,
+예를 들어 그 기존 값이 명시된 이전 값과 갖지 않은 경우 실패합니다.
+두번째 변종은 해당 위치의 기존값을 리턴하는데, 즉, 이 값이 명시된 이전 값과
+동일하다면 이 오퍼레이션은 성공했음을 의미합니다.
+모든 단일 위치로의 어토믹 오퍼레이션은 앞의 오퍼레이션들이 종종 더
+효율적이지만, compare-and-swap 을 이용해 구현될 수 있다는 점에서
+compare-and-swap 오퍼레이션은 ``보편적'' 입니다.
+이 compare-and-swap 오퍼레이션은 더 다양한 어토믹 오퍼레이션 집합의 기본으로
+사용될 수도 있습니다만, 이것들을 더 다듬는 것은 종종 복잡도, 확장성, 성능
+문제로 고통받습니다~\cite{MauriceHerlihy90a}.
+
+\iffalse
 
 The classic compare-and-swap operation is provided by a pair of
 primitives, \apig{__sync_bool_compare_and_swap()} and
@@ -2099,15 +2185,62 @@ for a wider set of atomic operations, though the more elaborate of
 these often suffer from complexity, scalability, and performance
 problems~\cite{MauriceHerlihy90a}.
 
+\fi
+
 \QuickQuiz{
+	이 어토믹 오퍼레이션들은 밑바닥의 인스트럭션 셋을 이용해 직접적으로
+	지원되는 단일 어토믹 인스트럭션을 생성하는 경우가 많을 텐데, 그것이
+	일을 하는데 가장 빠른 방법일까요?
+
+	\iffalse
+
 	Given that these atomic operations will often be able to
 	generate single atomic instructions that are directly
 	supported by the underlying instruction set, shouldn't
 	they be the fastest possible way to get things done?
+
+	\fi
+
 }\QuickQuizAnswer{
+	불행히도, 그렇지 않습니다.
+	극명한 반대 예제를 위해선 Chapter~\ref{chp:Counting} 를 읽어보시기
+	바랍니다.
+
+	\iffalse
+
 	Unfortunately, no.
 	See Chapter~\ref{chp:Counting} for some stark counterexamples.
+
+	\fi
+
 }\QuickQuizEnd
+
+\apig{__sync_synchronize()} 기능은 컴파일러와 CPU 모두 오퍼레이션을 재배치하지
+못하게 하는 ``메모리 배리어'' 를 수행하는데,
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+에서 이야기 합니다.
+어떤 경우에는 컴파일러의 오퍼레이션 재배치 기능은 제한하지만 CPU 는 내버려 둬도
+충분한데, 그런 때에는 \apik{barrier()} 기능이 사용될 수 있습니다.
+\begin{fcvref}[ln:toolsoftrade:lock:reader_writer:reader]
+어떤 경우에는 컴파일러가 특정 메모리 읽기를 최적화를 위해 없애버리는 것을 막을
+필요가 있는데, 그럴 때에는
+Listing~\ref{lst:toolsoftrade:Demonstration of Exclusive Locks}
+의 \clnref{read_x} 에서와 같이 \apik{READ_ONCE()} 기능이 사용될 수 있습니다.
+\end{fcvref}
+비슷하게, \apik{WRITE_ONCE()} 기능은 컴파일러가 특정 메모리 쓰기를 최적화해
+없애버리는 걸 막는데 사용될 수 있습니다.
+이 마지막 세개의 기능들은 \GCC 에서 직접 제공되진 않습니다만
+Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
+에 보인 것처럼 간단히 구현될 수 있으며, 이 세가지가
+Section~\ref{sec:toolsoftrade:Accessing Shared Variables}
+에서 길게 설명됩니다.
+대안적으로, \apialtk{READ_ONCE(x)}{READ_ONCE()} 가 \GCC\ 내재 기능인 
+\apialtg{__atomic_load_n(&x, __ATOMIC_RELAXED)}{__atomic_load_n()}
+와 공통되는 부분이 많으며, \apik{WRITE_ONCE()} 는 \GCC\ 내재 기능인
+\apialtg{__atomic_store_n(&x, v, __ATOMIC_RELAXED)}{__atomic_store_n()} 와
+공통되는 부분이 많습니다.
+
+\iffalse
 
 The \apig{__sync_synchronize()} primitive issues a ``memory barrier'',
 which constrains both the compiler's and the CPU's ability to reorder
@@ -2135,6 +2268,8 @@ the \GCC\  intrinsic
 and \apik{WRITE_ONCE()} has much in common with the \GCC\ 
 intrinsic \apialtg{__atomic_store_n(&x, v, __ATOMIC_RELAXED)}{__atomic_store_n()}.
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/api-pthreads/api-pthreads@compiler_barrier.fcv}
 \caption{Compiler Barrier Primitive (for \GCC)}
@@ -2142,8 +2277,32 @@ intrinsic \apialtg{__atomic_store_n(&x, v, __ATOMIC_RELAXED)}{__atomic_store_n()
 \end{listing}
 
 \QuickQuiz{
+	\apikh{ACCESS_ONCE()} 에는 무슨 일이 벌어진 건가요?
+
+	\iffalse
+
 	What happened to \apikh{ACCESS_ONCE()}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	2018년 v4.15 릴리즈에서, 리눅스 커널의 \apikh{ACCESS_ONCE()} 는 읽기와
+	쓰기를 위해 각각 \apik{READ_ONCE()} 와 \apik{WRITE_ONCE()} 로
+	교체되었습니다~\cite{JonCorbet2012ACCESS:ONCE,
+	JonathanCorbet2014ACCESS:ONCEcompilerBugs,
+	MarkRutland2017ACCESS:ONCE:remove}.
+	\apikh{ACCESS_ONCE()} 는 RCU 코드에 사용되기 위해 만들어졌습니다만, 곧
+	코어 API 가 되었습니다~\cite{
+	PaulEMcKenney2007ACCESS:ONCE:rcu,
+	LinusTorvalds2008ACCESS:ONCE:move}.
+	리눅스 커널의 \apik{READ_ONCE()} 와 \apik{WRITE_ONCE()} 는 원래의
+	\apikh{ACCESS_ONCE()} 구현과는 상당히 다른 복잡한 형태로 진화했는데 큰
+	구조체에도 access-once 기능을 지원하지만 해당 구조체가 하나의 기계
+	명령어로 로드되고 스토어 될 수 없을 때 로드/스토어가 찢겨지는 가능성을
+	막기 위해서였습니다.
+
+	\iffalse
+
 	In the 2018 v4.15 release, the Linux kernel's \apikh{ACCESS_ONCE()} was
 	replaced by \apik{READ_ONCE()} and \apik{WRITE_ONCE()} for reads and
 	writes, respectively~\cite{JonCorbet2012ACCESS:ONCE,
@@ -2159,6 +2318,9 @@ intrinsic \apialtg{__atomic_store_n(&x, v, __ATOMIC_RELAXED)}{__atomic_store_n()
 	need to support access-once semantics for large structures,
 	but with the possibility of load/store tearing if the structure
 	cannot be loaded and stored with a single machine instruction.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Atomic Operations (C11)}
