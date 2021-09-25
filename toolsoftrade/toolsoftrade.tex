@@ -2573,6 +2573,30 @@ initialization code.
 \subsection{Thread Creation, Destruction, and Control}
 \label{sec:toolsoftrade:Thread Creation, Destruction, and Control}
 
+리눅스 커널은 kthread를 추적하기 위해 \apik{struct task_struct} 포인터를,
+그것들을 생성하기 위해 \apik{kthread_create()} 를, 명시적으로 멈출 것을
+제안하기 위해 (POSIX 에는 비슷한 게 없습니다) \apik{kthread_should_stop()}
+을,\footnote{
+	POSIX 환경에서는 \apik{kthread_should_stop()} 의 부재를 해결하기 위해
+	\co{pthread_join()} 과 함께 제대로 동기화 되는 boolean 플래그를 사용할
+	수 있습니다.}
+그것들이 멈추기를 기다리기 위해 \apik{kthread_stop()} 을, 그리고 시간제한을 둔
+기다림을 위해 \apik{schedule_timeout_interruptible()} 을 사용합니다.
+몇가지 추가적인 kthread 관리 API 가 존재합니다만, 이것들만으로도 좋은 시작 내지
+검색어가 될 수 있습니다.
+
+CodeSamples API 는 제어의 장소인 ``threads'' 에 집중합니다.\footnote{
+	비슷한 소프트웨어의 것들을 위한 많은 다른 이름들이 있는데 ``프로세스'',
+	``태스크'', ``파이버'', ``이벤트'', ``수행 에이전트'' 등이 있습니다.
+	비슷한 설계 원칙이 이것들 모두에 적용됩니다.}
+그런 쓰레드 각각은 \apipf{thread_id_t} 타입의 식별자를 가지며 동시에 수행 되는
+두개의 쓰레드가 같은 지시어를 갖지는 못합니다.
+쓰레드는 쓰레드별 지역 상태를 제외한 모든 것을 공유하는데\footnote{
+	순환적 정의에서는 이게 어떻게 될까요?}
+프로그램 카운터와 스택이 포함됩니다.
+
+\iffalse
+
 The Linux kernel uses
 \apik{struct task_struct} pointers to track kthreads,
 \apik{kthread_create()} to create them,
@@ -2599,9 +2623,18 @@ Threads share everything except for per-thread local state,\footnote{
 	How is that for a circular definition?}
 which includes program counter and stack.
 
+\fi
+
+Listing~\ref{lst:toolsoftrade:Thread API} 에 쓰레드 API 가 보여져 있으며, 그
+멤버들이 다음 섹션에서 설명됩니다.
+
+\iffalse
+
 The thread API is shown in
 Listing~\ref{lst:toolsoftrade:Thread API}, and members are described in the
 following sections.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{VerbatimL}[numbers=none,xleftmargin=2pt]
