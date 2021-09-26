@@ -2778,6 +2778,17 @@ a run, so such synchronization is normally not needed.
 \subsubsection{Example Usage}
 
 Listing~\ref{lst:toolsoftrade:Example Child Thread} (\path{threadcreate.c})
+은 헬로월드 같은 자식 쓰레드 예제를 보입니다.
+앞서 이야기 되었듯, 각 쓰레드는 스스로의 스택을 할당받으며, 따라서 각 쓰레드는
+각자의 사적인 \co{arg} 인자와 \co{myarg} 변수를 갖습니다.
+각 자식은 종료 전에 간단히 자신의 인자와 \apipf{smp_thread_id()} 를 출력합니다.
+라인~\ref{ln:intro:threadcreate:thread_test:return} 의 \co{return} 문은 이
+쓰레드를 종료시키고, 이 쓰레드를 위한 \apipf{wait_thread()} 를 호출한
+누군가에게 \co{NULL} 을 리턴합니다.
+
+\iffalse
+
+Listing~\ref{lst:toolsoftrade:Example Child Thread} (\path{threadcreate.c})
 shows an example hello-world-like child thread.
 As noted earlier, each thread is allocated its own stack, so
 each thread has its own private \co{arg} argument and \co{myarg} variable.
@@ -2788,11 +2799,29 @@ line~\ref{ln:intro:threadcreate:thread_test:return} terminates the thread,
 returning a \co{NULL} to whoever invokes \apipf{wait_thread()} on this
 thread.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/intro/threadcreate@thread_test.fcv}
 \caption{Example Child Thread}
 \label{lst:toolsoftrade:Example Child Thread}
 \end{listing}
+
+\begin{fcvref}[ln:intro:threadcreate:main]
+이 부모 프로그램이
+Listing~\ref{lst:toolsoftrade:Example Parent Thread}
+에 보여져 있습니다.
+이 프로그램은 라인~\lnref{smp_init} 에서 이 쓰레드 시스템을 초기화 시키기 위해
+\co{smp_init()} 를 호출하고, \clnrefrange{parse:b}{parse:e} 에서 인자들을
+분석한 후, 자신의 존재를 라인~\lnref{announce} 에서 알립니다.
+명시된 수의 자식 쓰레드를
+\clnrefrange{create:b}{create:e} 에서 만들고, 그것들이 종료되기를
+라인~\lnref{wait} 에서 기다립니다.
+\apipf{wait_all_threads()} 는 이 쓰레드들의 리턴 값들이 이 경우에는 모두 별
+흥미 없는 \co{NULL} 일 것이므로, 무시합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:intro:threadcreate:main]
 The parent program is shown in
@@ -2808,6 +2837,8 @@ Note that \apipf{wait_all_threads()} discards the threads return values,
 as in this case they are all \co{NULL}, which is not very interesting.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/intro/threadcreate@main.fcv}
 \caption{Example Parent Thread}
@@ -2815,13 +2846,31 @@ as in this case they are all \co{NULL}, which is not very interesting.
 \end{listing}
 
 \QuickQuiz{
+	리눅스 커널의 \apipx{fork()} 와 \apipx{wait()} 비슷한 것들엔 무슨 일이
+	일어났나요?
+
+	\iffalse
+
 	What happened to the Linux-kernel equivalents to \apipx{fork()}
 	and \apipx{wait()}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그것들은 정말로 존재하지는 않습니다.
+	리눅스 커널 내에서 수행되는 모든 태스크를 메모리를 공유하는데, 최소한
+	여러분이 상당한 양의 메모리 매핑 작업을 일일이 하고 싶지 않다면
+	그렇습니다.
+
+	\iffalse
+
 	They don't really exist.
 	All tasks executing within the Linux kernel share memory,
 	at least unless you want to do a huge amount of memory-mapping
 	work by hand.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Locking}
