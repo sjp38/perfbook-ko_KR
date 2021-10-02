@@ -2903,11 +2903,27 @@ void spin_unlock(spinlock_t *sp);
 
 \subsubsection{\tco{spin_lock_init()}}
 
+\apik{spin_lock_init()} 기능은 명시된 \apik{spinlock_t} 변수를 초기화 하며, 이
+변수가 다른 스핀락 기능들에 넘겨지기 전에 호출되어야만 합니다.
+
+\iffalse
+
 The \apik{spin_lock_init()} primitive initializes the specified
 \apik{spinlock_t} variable, and must be invoked before
 this variable is passed to any other spinlock primitive.
 
+\fi
+
 \subsubsection{\tco{spin_lock()}}
+
+\apik{spin_lock()} 기능은 명시된 스핀락을 획득하는데, 필요하다면 이 스핀락이
+획득 가능해질 때까지 기다립니다.
+Pthread 같은 일부 환경에서는 이 기다림이 블록킹을 일으킬 수도 있는데, 리눅스
+커널과 같은 다른 환경에서는 CPU-bound spin loop 을 일으킬 수도 있습니다.
+
+핵심은 한번에 단 하나의 쓰레드만이 스핀락을 잡을 수 있다는 것입니다.
+
+\iffalse
 
 The \apik{spin_lock()} primitive acquires the specified spinlock,
 if necessary, waiting until the spinlock becomes available.
@@ -2918,24 +2934,49 @@ a CPU-bound spin loop.
 The key point is that only one thread may hold a spinlock at any
 given time.
 
+\fi
+
 \subsubsection{\tco{spin_trylock()}}
+
+\apik{spin_trylock()} 기능은 명시된 스핀락을 획득합니다만, 곧바로 획득이 가능할
+때만 그렇습니다.
+해당 스핀락을 획득할 수 있었다면 \co{true} 를 리턴하고 그렇지 않다면 \co{false}
+를 리턴합니다.
+
+\iffalse
 
 The \apik{spin_trylock()} primitive acquires the specified spinlock,
 but only if it is immediately available.
 It returns \co{true} if it was able to acquire the spinlock and
 \co{false} otherwise.
 
+\fi
+
 \subsubsection{\tco{spin_unlock()}}
+
+\apik{spin_unlock()} 기능은 명시된 스핀락을 해제해서 다른 쓰레드가 해당 락을
+획득할 수 있게 해줍니다.
+
+\iffalse
 
 The \apik{spin_unlock()} primitive releases the specified spinlock,
 allowing other threads to acquire it.
+
+\fi
 
 % \emph{@@@ likely need to add reader-writer locking.}
 
 \subsubsection{Example Usage}
 
+\co{mutx} 라 이름지어진 스핀락이 \co{counter} 변수를 보호하기 위해 아래와 같이
+사용될 수 있습니다:
+
+\iffalse
+
 A spinlock named \co{mutex} may be used to protect a variable
 \co{counter} as follows:
+
+\fi
 
 \begin{VerbatimU}
 spin_lock(&mutex);
@@ -2944,11 +2985,26 @@ spin_unlock(&mutex);
 \end{VerbatimU}
 
 \QuickQuiz{
-	What problems could occur if the variable {\tt counter} were
-	incremented without the protection of {\tt mutex}?
+	변수 \co{counter} 가 \co{mutex} 의 보호 없이 증가되면 어떤 문제가
+	벌어지나요?
+
+	\iffalse
+
+	What problems could occur if the variable \co{counter} were
+	incremented without the protection of \co{mutex}?
+
+	\fi
+
 }\QuickQuizAnswer{
-	On CPUs with load-store architectures, incrementing {\tt counter}
+	Load-store 구조를 갖는 CPU 에서라면 \co{counter} 증가는 아래와 같은
+	형태로 컴파일 될 겁니다:
+
+	\iffalse
+
+	On CPUs with load-store architectures, incrementing \co{counter}
 	might compile into something like the following:
+
+	\fi
 
 \begin{VerbatimU}
 LOAD counter,r0
@@ -2956,16 +3012,33 @@ INC r0
 STORE r0,counter
 \end{VerbatimU}
 
+	그런 기계에서라면, 두 쓰레드가 동시에 \co{counter} 의 값을 로드하고,
+	각자 증가시킨 후, 그 결과를 저장할 겁니다.
+	그러면 \co{counter} 의 새 값은 두 쓰레드가 증가시켰음에도 불구하고 이전
+	값보다 1만큼만 클 겁니다.
+
+	\iffalse
+
 	On such machines, two threads might simultaneously load the
-	value of {\tt counter}, each increment it, and each store the
+	value of \co{counter}, each increment it, and each store the
 	result.
-	The new value of {\tt counter} will then only be one greater
+	The new value of \co{counter} will then only be one greater
 	than before, despite two threads each incrementing it.
+
+	\fi
+
 }\QuickQuizEnd
+
+하지만, \apik{spin_lock()} 과 \apik{spin_unlock()} 기능은 성능에 영향을
+끼치는데, Chapter~\ref{chp:Data Structures} 에서 이에 대해 알아보겠습니다.
+
+\iffalse
 
 However, the \apik{spin_lock()} and \apik{spin_unlock()} primitives
 do have performance consequences, as will be seen in
 Chapter~\ref{chp:Data Structures}.
+
+\fi
 
 \subsection{Accessing Shared Variables}
 \label{sec:toolsoftrade:Accessing Shared Variables}
