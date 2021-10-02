@@ -3043,6 +3043,16 @@ Chapter~\ref{chp:Data Structures}.
 \subsection{Accessing Shared Variables}
 \label{sec:toolsoftrade:Accessing Shared Variables}
 
+2011년 전까지 C 표준은 공유된 변수에 동시적으로 read/write 액세스를 하는 것에
+대한 의미를 정의하지 않았습니다.
+하지만, 동시성 C 코드는 최소 4반세기 전부터 쓰여지기
+시작했습니다~\cite{Beck85,Inman85}.
+이는 오늘날의 수염이 하얗게 센 분들은 C11 이전의 먼 과거에는 어떻게 살았는지
+궁금증을 일으킵니다.
+이 질문에 대한 짧은 답은 ``그들은 위험하게 살았다'' 입니다.
+
+\iffalse
+
 It was not until 2011 that the C standard defined semantics for concurrent
 read/write access to shared variables.
 However, concurrent C code was being written at least a quarter century
@@ -3050,6 +3060,8 @@ earlier~\cite{Beck85,Inman85}.
 This raises the question as to what today's greybeards did back
 in long-past pre-C11 days.
 A short answer to this question is ``they lived dangerously''.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Living Dangerously Early 1990s Style]
@@ -3075,6 +3087,23 @@ if (global_ptr != NULL &&\lnlbl{if:a}
 \label{lst:toolsoftrade:C Compilers Can Invent Loads}
 \end{listing}
 
+그들은 최소한 2021년도 컴파일러를 사용했더라도 위험하게 살았을 겁니다.
+(대충) 1990년대 초, 컴파일러는 지금보다 적은 최적화를 했는데, 이는 부분적으로는
+더 적은 컴파일러 작성자가 존재했으며 다른 부분적으로는 당시에 메모리가
+상대적으로 더 작았기 때문입니다.
+하지만
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+에 보여진 것처럼 문제는 일어났는데, 컴파일러는 이 코드를
+Listing~\ref{lst:toolsoftrade:C Compilers Can Invent Loads}
+의 것으로 바꿀 권리를 가지고 있습니다.
+볼 수 있듯이,
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style} 의
+라인~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp}
+에서의 임시적 부분이 최적화로 사라져버리고, 따라서 \co{global_ptr} 는 세번
+로드될 겁니다.
+
+\iffalse
+
 At least they would have been living dangerously had they been using
 2021 compilers.
 In (say) the early 1990s, compilers did fewer optimizations, in part
@@ -3090,11 +3119,43 @@ Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
 has been optimized away, so that \co{global_ptr} will be loaded
 up to three times.
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style} 의
+	\co{global_ptr} 를 세번 로드하는데 문제가 뭐죠?
+
+	\iffalse
+
 	What is wrong with loading
 	Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}'s
 	\co{global_ptr} up to three times?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\co{global_ptr} 가 최초에는 \co{NULL} 이 아니었지만 어떤 다른 쓰레드가
+	\co{global_ptr} 을 \co{NULL} 로 만들었다고 해봅시다.
+	\begin{fcvref}[ln:toolsoftrade:C Compilers Can Invent Loads]
+	더 나아가서 변경된 코드
+	(Listing~\ref{lst:toolsoftrade:C Compilers Can Invent Loads})
+	의 라인~\lnref{if:a} 이 \co{global_ptr} 이 \co{NULL} 이 되기 전, 그리고
+	라인~\lnref{if:b} 직전에 수행되었다고 생각해 봅시다.
+	그러면 라인~\lnref{if:a} 는 \co{global_ptr} 이 \co{NULL} 이 아니라고
+	결론을 내어서, 라인~\lnref{if:b} 는 이것이 \co{high_address} 보다 낮을
+	것이라고 결론 내리고, 따라서 라인~\lnref{do_low} 가 \co{do_low()} 에
+	\co{NULL} 포인터를 넘길 텐데, \co{do_low()} 는 NULL 을 처리할 준비가
+	안되어 있을 수도 있습니다.
+	\end{fcvref}
+
+	이 책의 편집자는 1990년대 초에 DYNIX/ptx 커널의 메모리 할당자에서
+	정확히 이와 같은 실수를 했습니다.
+	이 버그를 추적하는데에는 이 책의 편집자만이 아니라 그의 여러 동료들의
+	휴일 주말을 써야만 했습니다.
+	짧게 말해서, 이건 새로운 문제도 아니고 스스로 사라질 것도 아닙니다.
+
+	\iffalse
+
 	Suppose that \co{global_ptr} is initially non-\co{NULL},
 	but that some other thread sets \co{global_ptr} to \co{NULL}.
 	\begin{fcvref}[ln:toolsoftrade:C Compilers Can Invent Loads]
@@ -3116,7 +3177,24 @@ up to three times.
 	for your editor, but also for several of his colleagues.
 	In short, this is not a new problem, nor is it likely to
 	go away on its own.
+
+	\fi
+
 }\QuickQuizEnd
+
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+은 평범한 액세스가 일으키는 추가적인 문제들을 설명하고,
+Section~\ref{sec:toolsoftrade:A Volatile Solution}
+와~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}
+는 C11 이전 컴파일러에서의 해결책 일부를 설명합니다.
+물론, 그게 실용적이라면
+Section~\ref{sec:toolsoftrade:Atomic Operations (gcc Classic)}
+또는 (특히나)
+Section~\ref{sec:toolsoftrade:Atomic Operations (C11)}
+에서 설명된 기능들이 데이터 레이스를 막기 위해, 즉, 특정 변수에 동시적인 여러
+액세스가 있다면 그 액세스는 모두 로드라는 것을 보장하기 위해 사용되어야 합니다.
+
+\iffalse
 
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
 describes additional problems caused by plain accesses,
@@ -3130,6 +3208,8 @@ Section~\ref{sec:toolsoftrade:Atomic Operations (C11)}
 should instead be used to avoid data races, that is, to ensure
 that if there are multiple concurrent accesses to a given
 variable, all of those accesses are loads.
+
+\fi
 
 \subsubsection{Shared-Variable Shenanigans}
 \label{sec:toolsoftrade:Shared-Variable Shenanigans}
