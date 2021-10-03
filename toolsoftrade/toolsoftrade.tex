@@ -3215,6 +3215,20 @@ variable, all of those accesses are loads.
 \label{sec:toolsoftrade:Shared-Variable Shenanigans}
 \OriginallyPublished{Section}{sec:toolsoftrade:Shared-Variable Shenanigans}{Shared-Variable Shenanigans}{Linux Weekly News}{JadeAlglave2019WhoAfraidCompiler}
 %
+평범한 로드와 스토어를 하는\footnote{
+	즉, C11 어토믹, 인라인 어셈블리, 또는 volatile 액세스가 아닌 일반적인
+	로드와 스토어.}
+코드가 주어지면, 컴파일러는  그로 인해 영향을 받는 변수들은 다른 쓰레드에 의해
+액세스 되거나 수정되지 않는다고 가정할 권리를 갖습니다.
+이 가정은 컴파일러가 많은 변경을 가할 수 있게 하는데, load tearing, store
+tearing, load fusing, store fusing, 코드 재배치, invented load, invented store,
+store-to-load 변경, dead-code 제거, 싱글 쓰레드 코드에서라면 문제 없을 만한
+모든 것을 포함합니다.
+하지만 동시성 코드는 이런 변화들, 달리 말하면 공유 변수 사기질로 인해 망가질 수
+있는데, 아래에서 이를 설명합니다.
+
+\iffalse
+
 Given code that does plain loads and stores,\footnote{
 	That is, normal loads and stores instead of C11 atomics, inline
 	assembly, or volatile accesses.}
@@ -3228,6 +3242,28 @@ invented stores, store-to-load transformations, and dead-code elimination,
 all of which work just fine in single-threaded code.
 But concurrent code can be broken by each of these transformations,
 or shared-variable shenanigans, as described below.
+
+\fi
+
+{\bf Load tearing} 은 컴파일러가 하나의 액세스를 위해 여러 로드 인스트럭션을
+사용할 때 발생합니다.
+예를 들어, 컴파일러는 이론상 \co{global_ptr} (
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}) 의
+라인~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} 을
+참고하세요) 로부터의 로드를 1바이트 로드 여러개로 번역해낼 수 있습니다.
+만약 어떤 다른 쓰레드가 동시에 \co{global_ptr} 을 \co{NULL} 로 만든다면, 그
+결과는 해당 포인터의 한 바이트를 제외한 나머지는 0이 될 것이어서, ``야생의
+포인터'' 를 형성할 것입니다.
+그런 야생의 포인터를 사용한 스토어는 메모리의 임의의 지역을 오염시켜서, 드물고
+디버깅 하기 어려운 크래쉬를 야기할 것입니다.
+
+더 나쁜 것이, (말하자면) 16-비트 포인터를 갖는 8-비트 시스템에서, 컴파일러는
+주어진 포인터를 접근하기 위해 8-비트 인스트럭션 한쌍을 사용하는 것밖에 선택이
+없을 수도 있습니다.
+C 표준은 모든 시스템을 지원해야 하므로, 이 표준은 일반적인 경우에서의 load
+tearing 을 제거할 수 없습니다.
+
+\iffalse
 
 {\bf Load tearing} occurs when the compiler uses multiple load
 instructions for a single access.
@@ -3247,6 +3283,32 @@ might have no choice but to use a pair of 8-bit instructions to access
 a given pointer.
 Because the C standard must support all manner of systems, the standard
 cannot rule out load tearing in the general case.
+
+\fi
+
+{\bf Store tearing} 은 컴파일러가 단일 액세스를 위해 여러 스토어 인스트럭션을
+사용할 때 발생합니다.
+예를 들어, 한 쓰레드는 4-바이트 정수형 변수에 \co{0x12345678} 을 저장하고 있는
+와중에 다른 쓰레드는 \co{0xabcdef00} 을 저장하고 있을 수 있습니다.
+컴파일러가 각 액세스를 위해 16-비트 스토어를 사용한다면, 그 결과는
+\co{0x1234ef00} 이 될 수도 있는데, 이 정수를 로드하는 코드 입장에선 무척 놀라운
+결과가 될 겁니다.
+이건 엄밀한 이론적 이슈일 뿐인 것이 아닙니다.
+예를 들어, 작은 즉석 인스트럭션 필드를 갖는 CPU 들이 있으며, 그런 CPU 에서
+컴파일러는 64-비트 CPU 에서라 할지라도 레지스터에 64-비트 상수를 명시적으로
+두는 오버헤드를 줄이기 위해 64-비트 스토어를 두개의 32-비트 스토어로 쪼갤 수
+있습니다.
+이게 현장에서 실제로 발생한 역사적 보고서들이 존재하며 (예를
+들어~\cite{KonstantinKhlebnikov2013gccstoretearing}), 최근의 보고도
+있습니다~\cite{WillDeacon2019StoreTearingReport}.\footnote{
+	이 쪼개짐은 제대로 정렬된 머신 워드 크기 액세스에서조차 발생할 수
+	있으며, 이 특수한 경우 volatile 스토어들에 대해서까지 그렇습니다.
+	어떤 사람들은 이 동작인 컴파일러 내의 버그를 의미한다고 주장할 수도
+	있겠지만, 어떻게 표현하건 컴파일러 작성자의 시점에서의 store tearing 의
+	인식된 가치를 나타내고 있습니다.
+}
+
+\iffalse
 
 {\bf Store tearing} occurs when the compiler uses multiple store
 instructions for a single access.
@@ -3272,11 +3334,23 @@ report~\cite{WillDeacon2019StoreTearingReport}.\footnote{
 	store tearing from a compiler-writer viewpoint.
 }
 
+\fi
+
+물론, 32-비트 시스템에서 64-비트 정수형을 사용하는 코드가 있을 수 있다는 점을
+놓고 보면 컴파일러는 일반적인 경우에 그냥 일부 스토어를 쪼개는 것밖에 다른
+선택지가 없습니다.
+하지만 제대로 정렬된 머신 워드 크기 스토어에 대해서는 \apik{WRITE_ONCE()} 가
+store tearing 을 방지할 겁니다.
+
+\iffalse
+
 Of course, the compiler simply has no choice but to tear some stores
 in the general case, given
 the possibility of code using 64-bit integers running on a 32-bit system.
 But for properly aligned machine-sized stores, \apik{WRITE_ONCE()} will
 prevent store tearing.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Preventing Load Fusing]
