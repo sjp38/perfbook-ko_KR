@@ -3391,6 +3391,34 @@ if (!need_to_stop)
 \label{lst:toolsoftrade:C Compilers Can Fuse Loads}
 \end{listing}
 
+{\bf Load fusing} 은 컴파일러가 특정 변수에 대한 이전 로드로부터의 결과를 한번
+더 로드하는 대신 사용할 때 발생합니다.
+이는 싱글쓰레드 코드에서는 잘 동작하는 최적화일 뿐만 아니라 멀티쓰레드
+코드에서도 종종 별다른 문제를 야기하지 않습니다.
+불행히도, ``종종'' 이란 단어는 실제로 짜증나는 예외를 숨깁니다.
+
+예를 들어, 어떤 리얼타임 시스템이 \co{do_something_quickly()} 라는 이름의
+함수를 \co{need_to_stop} 이라는 변수가 세팅될 때까지 반복적으로 호출되어야
+하며, 컴파일러는 \co{do_something_quickly()} 가 \co{need_to_stop} 에 뭔가를
+저장하지 않음을 볼 수 있다고 해 봅시다.
+이를 코딩하는 (안전하지 못한) 방법 하나가
+Listing~\ref{lst:toolsoftrade:Inviting Load Fusing} 에 보여져 있습니다.
+컴파일러는 루프 종료 시점의 반대방향 브랜칭을 줄이기 위해 합리적으로 이 루프를
+16번 정도 언롤링 (unroll) 할 수도 있습니다.
+더 나쁜 것은, 컴파일러는 \co{do_something_quickly()} 가 \co{need_to_stop} 에
+무언가를 저장하지 않음을 알고 있으므로, 컴파일러는 이 변수를 단 한번만
+검사하자는 합리적 결정을 내릴 수도 있어서,
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads} 의 코드를 내게 될
+수도 있습니다.
+\begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Loads]
+일단 들어가면,
+\clnrefrange{loop:b}{loop:e} 의 루프는 다른 쓰레드가 몇번이나 \co{need_to_stop}
+에 0이 아닌 값을 썼는가에 관계 없이 결코 끝나지 않습니다.
+\end{fcvref}
+그 결과는 최선의 경우 놀람일 것이고, 심각한 물리적 손상을 포함할 수도 있습니다.
+
+\iffalse
+
 {\bf Load fusing} occurs when the compiler uses the result of a
 prior load from a given variable instead of repeating the load.
 Not only is this sort of optimization just fine in single-threaded
@@ -3417,6 +3445,8 @@ many times some other thread stores a non-zero value to \co{need_to_stop}.
 \end{fcvref}
 The result will at best be consternation, and might well also
 include severe physical damage.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads]
@@ -3445,6 +3475,32 @@ void t1(void)
 \end{listing}
 
 \begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads]
+컴파일러는 놀랍도록 많은 범위의 코드의 로드를 합칠 수 있습니다.
+예를 들어,
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads},
+의 \co{t0()} 와 \co{t1()} 은 동시에 수행되며, \co{do_something()} 과
+\co{do_something_else()} 는 인라인 함수입니다.
+라인~\lnref{gp} 는 \co{gp} 포인터를 선언하는데, C 는 이를 \co{NULL} 로 초기화
+합니다.
+어떤 시점에선가, \co{t0()} 의 라인~\lnref{wgp} 는 \co{gp} 에 \co{NULL} 이 아닌
+값을 저장합니다.
+그사이, \co{t1()} 는 라인~\lnref{p1}, \lnref{p2}, 그리고~\lnref{p3} 에서 세번
+\co{gp} 로부터의 로드를 합니다.
+라인~\lnref{if} 는 \co{gp} 가 \co{NULL} 아 아님을 발견했으므로, 어떤 사람은
+line~\lnref{p3} 에서의 역참조가 실패할 수가 없을 거라고 바랄 수도 있겠습니다.
+불행히도, 컴파일러는 라인~\lnref{p1} 과~\lnref{p3} 에서의 읽기를 하나로 합칠
+수가 있는데, 이는 라인~\lnref{p1} 이 \co{NULL}, 라인~\lnref{p2} 는 \co{&myvar}
+를 로드했다면, line~\lnref{p3} 는 \co{NULL} 을 로드하게 되어 실패가 일어날 수
+있음을 의미합니다.\footnote{
+	\ppl{Will}{Deacon} 은 이게 리눅스 커널에서도 일어났음을 보고했습니다.}
+사이에 \apik{READ_ONCE()} 를 끼워넣는 것은 세개의 로드가 모두 같은 변수를 향한
+것임에도 불구하고 다른 두개의 로드가 합쳐지는 것을 방지하지 않음을 알아두시기
+바랍니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads]
 The compiler can fuse loads across surprisingly large spans of code.
 For example, in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads},
@@ -3469,12 +3525,33 @@ two loads from being fused, despite the fact that all three are loading
 from the same variable.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads}
+	내의 \co{do_something()} 과 \co{do_something_else()} 가 인라인 함수라는
+	것이 왜 중요한가요?
+
+	\iffalse
+
 	Why does it matter whether \co{do_something()} and
 	\co{do_something_else()} in
 	Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads}
 	are inline functions?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads]
+	\co{gp} 는 정적 (static) 변수가 아니므로, \co{do_something()} 또는
+	\co{do_something_else()} 가 각각 컴파일 된다면, 컴파일러는 이 두 함수가
+	\co{gp} 의 값을 바꿀 수도 있다고 가정해야 합니다.
+	이 가능성은 컴파일러가 라인~\lnref{p3} 에서 \co{gp} 를 다시 로드하게
+	만들어서서, \co{NULL} 포인터 역참조를 방지합니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Non-Adjacent Loads]
 	Because \co{gp} is not a static variable, if either
 	\co{do_something()} or \co{do_something_else()} were separately
@@ -3483,6 +3560,9 @@ from the same variable.
 	This possibility would force the compiler to reload \co{gp}
 	on line~\lnref{p3}, thus avoiding the \co{NULL}-pointer dereference.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
 
 {\bf Store fusing} can occur when the compiler notices a pair of successive
