@@ -3565,6 +3565,16 @@ from the same variable.
 
 }\QuickQuizEnd
 
+{\bf Store fusing} 은 특정 변수로의 두개의 연달은 스토어가 중간에 해당 변수로의
+로드 없이 이루어짐을 컴파일러가 눈치채면 발생할 수 있습니다.
+이 경우, 컴파일러는 첫번째 스토어를 없애버릴 권리를 갖습니다.
+이는 싱글쓰레드 코드에서는 결코 문제가 되지 않습니다, 그리고 실제로 제대로
+쓰여진 동시성 코드에서 이는 일반적으로 문제가 아닙니다.
+어쨌건, 이 두개의 스토어가 빠른 속도로 수행되었다면, 다른 쓰레드가 첫번째
+스토어로 인한 값을 읽을 기회는 아주 희박할 겁니다.
+
+\iffalse
+
 {\bf Store fusing} can occur when the compiler notices a pair of successive
 stores to a given variable with no intervening loads from that variable.
 In this case, the compiler is within its rights to omit the first store.
@@ -3573,6 +3583,8 @@ usually not a problem in correctly written concurrent code.
 After all, if the two stores are executed in quick succession, there is
 very little chance that some other thread could load the value from the
 first store.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:C Compilers Can Fuse Stores]
@@ -3600,6 +3612,28 @@ void work_until_shut_down(void)
 \label{lst:toolsoftrade:C Compilers Can Fuse Stores}
 \end{listing}
 
+하지만 예외가 있는데, 그런 예가
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
+에 보여져 있습니다.
+\begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
+\co{shut_it_down()} 함수는 라인~\lnref{store:a} 와~\lnref{store:b} 에서
+공유변수 \co{status} 에 스토어를 하고, 따라서 \co{start_shutdown()} 도
+\co{finish_shutdown()} 도 \co{status} 에 액세스 하지 않는다 생각하는데,
+컴파일러는 라인~\lnref{store:a} 에서의 \co{status} 로의 스토어를 제거할 수
+있습니다.
+불행히도, 이는 \co{work_until_shut_down()} 이 라인~\lnref{until:loop:b}
+와~\lnref{until:loop:e} 의 루프를 결코 끝내지 않을 것을 의미하며, 따라서
+\co{other_task_ready} 에 0이 아닌 값을 저장하지 않을 것이어서, 결국
+\co{shut_it_down()} 은 라인~\lnref{loop:b} 와~\lnref{loop:e} 의 루프를 결코
+끝내지 않을 것입니다, 컴파일러가 라인~\lnref{loop:b} 에서의
+\co{other_task_ready} 로부터의 이어지는 로드를 합쳐버리지 않는다 해도요.
+
+그리고
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
+에는 코드 재배치를 포함한 더 많은 문제가 있습니다.
+
+\iffalse
+
 However, there are exceptions, for example as shown in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}.
 \begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
@@ -3622,6 +3656,25 @@ And there are more problems with the code in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores},
 including code reordering.
 
+\fi
+
+{\bf Code reordering} 은 흔한 세부 표현들을 하나로 합치기 위한 일반적인 컴파일
+기술이며, 현대 슈퍼스칼라 마이크로프로세서에서 사용 가능한 많은 기능 유닛의
+사용률을 개선시킵니다.
+이는 또한
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
+의 코드에 왜 버그가 있는지에 대한 이유이기도 합니다.
+예를 들어, 라인~\lnref{until:loop:e} 의 \co{do_more_work()} 함수가
+\co{other_task_ready} 에 액세스 하지 않는다고 생각해 봅시다.
+그럼 컴파일러는 라인~\lnref{other:store} 에서의 \co{other_task_ready} 로의 값
+할당을 라인~\lnref{until:loop:b} 를 앞서도록 재배치 할 수 있는데, 이는
+라인~\lnref{until:loop:e} 에서의 \co{do_more_work()} 호출이 라인~\lnref{finish}
+에서의 \co{finish_shutdown()} 호출 이전에 일어났기를 바라는 사람에게는 큰
+실망이 될 겁니다.
+\end{fcvref}
+
+\iffalse
+
 {\bf Code reordering} is a common compilation technique used to
 combine common subexpressions, reduce register pressure, and
 improve utilization of the many functional units available on
@@ -3640,6 +3693,24 @@ be a great disappointment for anyone hoping that the last call to
 \co{finish_shutdown()} on line~\lnref{finish}.
 \end{fcvref}
 
+\fi
+
+아랫단의 하드웨어가 액세스 순서를 재배치 할 수 있는데 컴파일러가 액세스 순서를
+재배치 하는 걸 방지하는 건 헛된 일처럼 보일수도 있습니다.
+하지만, 현대의 기계들은 \emph{exact exception} 과 \emph{exact interrupt} 를
+가지고 있는데, 이는 어떤 인터럽트나 익셉션도 인스트럭션 흐름 내의 특정 장소에서
+일어난 것으로 보일 것임을 의미합니다.
+이는 해당 이벤트들의 핸들러는 모든 앞선 인스트럭션의 효과를 보게 될 것을,
+그러나 어떤 뒤따르는 인스트럭션의 효과도 보자 않을 것을 의미합니다.
+따라서 \apik{READ_ONCE()} 와 \apik{WRITE_ONCE()} 는 인터럽트된 코드와 인터럽트
+핸들러 사이의 통신을 아랫단 하드웨어가 제공하는 순서와 무관하게 제어할 수
+있습니다.\footnote{
+	그렇다고는 하나, 다양한 표준 위원회는 여러분이 \apik{READ_ONCE()} 와
+	\apik{WRITE_ONCE()} 대신 \apic{sig_atomic_t} 타입의 어토믹 변수를
+	사용할 것을 선호합니다.}
+
+\iffalse
+
 It might seem futile to prevent the compiler from changing the order of
 accesses in cases where the underlying hardware is free to reorder them.
 However, modern machines have \emph{exact exceptions} and
@@ -3654,6 +3725,8 @@ independent of the ordering provided by the underlying hardware.\footnote{
 	That said, the various standards committees would prefer that
 	you use atomics or variables of type \apic{sig_atomic_t}, instead
 	of \apik{READ_ONCE()} and \apik{WRITE_ONCE()}.}
+
+\fi
 
 {\bf Invented loads} were illustrated by the code in
 Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
