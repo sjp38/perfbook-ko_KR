@@ -3728,6 +3728,20 @@ independent of the ordering provided by the underlying hardware.\footnote{
 
 \fi
 
+{\bf Invented loads} 는
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
+와~\ref{lst:toolsoftrade:C Compilers Can Invent Loads} 의 코드에서 설명되는데,
+컴파일러가 임시 변수를 최적화로 없애버리고, 따라서 의도된 것보다 여러번 공유
+변수로부터의 로드를 하는 것입니다.
+
+만들어진 로드는 성능에 장애가 될 수 있습니다.
+이 장애는 ``뜨거운'' 캐쉬라인의 변수로부터의 로드가 \co{if} 문 바깥에서 일어날
+때 발생할 수 있습니다.
+이런 최적화는 드문 일이 아니며, 상당한 캐쉬 미스 증가를 일으킬 수 있으므로,
+성능과 확장성에 상당한 하락을 야기할 수 있습니다.
+
+\iffalse
+
 {\bf Invented loads} were illustrated by the code in
 Listings~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
 and~\ref{lst:toolsoftrade:C Compilers Can Invent Loads},
@@ -3740,6 +3754,29 @@ cacheline is hoisted out of an \co{if} statement.
 These hoisting optimizations are not uncommon, and can cause significant
 increases in cache misses, and thus significant degradation of
 both performance and scalability.
+
+\fi
+
+\begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
+{\bf Invented stores} 는 다양한 상황에서 발생할 수 있습니다.
+예를 들어,
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
+에서 \co{work_until_shut_down()} 의 코드를 생성하는 컴파일러는
+\co{other_task_ready} 가 \co{do_more_work()} 에 의해 액세스 되지 않으며
+라인~\lnref{other:store} 에서 스토어 된다는 것을 알아챌 수도 있습니다.
+만약 \co{do_more_work()} 이 복잡한 인라인 함수였다면, 레지스터 비우기를 해야
+할수도 있으며, 이 경우 \co{other_task_ready} 는 임시 저장소로 사용하기 매력적인
+장소입니다.
+어쨌건, 거기 액세스가 없는데, 뭐가 문제겠습니까?
+
+물론, 잘못된 시간에 이 변수로 0이 아닌 값을 저장하는 것은 라인~\lnref{loop:b}
+의 \co{while} 로프가 예상보다 빨리 종료되게 하여, \co{finish_shutdown()} 이
+\co{do_more_work()} 과 동시에 수행되는 것을 허용합니다.
+이 \co{while} 의 요점은 그런 동시 수행을 막기 위한 것임을 생각하면, 이는 좋은
+일이 아닙니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:toolsoftrade:C Compilers Can Fuse Stores]
 {\bf Invented stores} can occur in a number of situations.
@@ -3760,6 +3797,8 @@ concurrently with \co{do_more_work()}.
 Given that the entire point of this \co{while} appears to be to
 prevent such concurrency, this is not a good thing.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Inviting an Invented Store]
@@ -3788,6 +3827,28 @@ if (!condition) {
 \label{lst:toolsoftrade:Compiler Invents an Invited Store}
 \end{listing}
 
+스토어의 대상이 되는 변수를 임시 저장소로 사용하는건 이상하게 보일 수도
+있겠지만 이는 표준에 의해 허용된 행위입니다.
+그러다, 독자 여러분은 덜 이상한 예를 원할 수도 있을 텐데, 그런 분들을 위해
+Listing~\ref{lst:toolsoftrade:Inviting an Invented Store}
+와~\ref{lst:toolsoftrade:Compiler Invents an Invited Store}
+가 있습니다.
+
+Listing~\ref{lst:toolsoftrade:Inviting an Invented Store}
+의 코드를 만들어내는 컴파일러는 \co{a} 의 값이 초기에는 0임을 알수도 있는데,
+이는 이 코드를
+Listing~\ref{lst:toolsoftrade:Compiler Invents an Invited Store}
+의 코드로 변형시킴으로써 브랜치 하나를 최적화해 없애버리고자 하는 강한 욕망을
+느끼게 될 겁니다.
+\begin{fcvref}[ln:toolsoftrade:Compiler Invents an Invited Store]
+여기서, 라인~\lnref{store:uncond} 는 \co{1} 을 \co{a} 에 무조건적으로 저장하고,
+이어서 라인\lnref{store:cond} 에서 \co{condition} 의 값이 0이라면 \co{a} 의
+값을 0으로 되돌립니다.  이는 이 if-then-else 를 if-then 으로 변형시켜서 하나의
+브랜치를 아낍니다.
+\end{fcvref}
+
+\iffalse
+
 Using a stored-to variable as a temporary might seem outlandish,
 but it is permitted by the standard.
 Nevertheless, readers might be justified in wanting a less
@@ -3808,11 +3869,45 @@ line~\lnref{store:cond} if \co{condition} was not set.
 This transforms the if-then-else into an if-then, saving one branch.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	이런!
+	그러니까 컴파일러는 언제든 원하면 평범한 변수로의 스토어를 만들어낼 수
+	없나요?
+
+	\iffalse
+
 	Ouch!
 	So can't the compiler invent a store to a normal variable pretty
 	much any time it likes?
+
+	\fi
+
 }\QuickQuizAnswer{
+	감사하게도, 그에 대한 답은 아니오 입니다.
+	이는 컴파일러가 데이터 레이스로부터 숨겨져 있기 때문입니다.
+	일반적 스토어 직전에 스토어를 만ㄷ르어내는 것은 상당히 특수한
+	경우입니다:  이는 일부 다른 경우들, CPU, 쓰레드, 시그널 핸들러, 또는
+	인터럽트 핸들러 같은 것들이 만들어진 스토어를 볼 수 있게 되는 것은 해당
+	코드에 이미 만들어진 스토어 없이도 데이터 레이스가 존재하지 않는다면
+	불가능합니다.
+	그리고 해당 코드에 데이터 레이스가 이미 존재한다면, 이는 개발자의
+	소망과는 관계 없이 컴파일러가 뭐가 됐든 원하는 코드를 만들어낼 수 있게
+	되는 정의되지 않은 행위의 악령을 이미 호출했을 것입니다.
+
+	하지만 원래의 스토어가 volatile 이라면, \apik{WRITE_ONCE()} 에서처럼,
+	모든 컴파일러가 여기에는 어떤 다른 쓰레드에게 신호를 주거나 하는 이
+	스토어에 연관된 부수 작용이 있을 수도 있음을 알게 되어서 해당 변수로의
+	데이터 레이스로부터 자유로운 액세스를 허용합니다.
+	스토어를 만들어내는 것을 통해, 컴파일러는 그러지 말아야 하는데 데이터
+	레이스를 만들어낼 수도 있습니다.
+
+	\co{volatile} 과 어토믹 변수의 경우에, 컴파일러는 쓰기를 만들어내는
+	것을 명시적으로 금지당합니다.
+
+	\iffalse
+
 	Thankfully, the answer is no.
 	This is because the compiler is forbidden from introducing data races.
 	The case of inventing a store just before a normal store is
@@ -3834,13 +3929,26 @@ This transforms the if-then-else into an if-then, saving one branch.
 
 	In the case of \co{volatile} and atomic variables, the compiler
 	is specifically forbidden from inventing writes.
+
+	\fi
+
 }\QuickQuizEnd
+
+마지막으로, C11 이전의 컴파일러는 쓰여진 변수들에 인접한 관계 없는 변수들에
+쓰기를 만들어낼 수도
+있었습니다~\cite[Section 4.2]{Boehm:2005:TCI:1064978.1065042}.
+이 만들어진 스토어의 변종은 데이터 레이스를 만들어내는 컴파일러 최적화에 대한
+추방으로 인해 사라졌습니다.
+
+\iffalse
 
 Finally, pre-C11 compilers could invent writes to unrelated
 variables that happened to be adjacent to written-to
 variables~\cite[Section 4.2]{Boehm:2005:TCI:1064978.1065042}.
 This variant of invented stores has been outlawed by the prohibition
 against compiler optimizations that invent data races.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Inviting a Store-to-Load Conversion]
