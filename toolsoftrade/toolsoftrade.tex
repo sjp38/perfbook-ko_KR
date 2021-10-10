@@ -3964,6 +3964,26 @@ p = NULL;\lnlbl[null]
 \label{lst:toolsoftrade:Inviting a Store-to-Load Conversion}
 \end{listing}
 
+{\bf Store-to-load transformation} 은 컴파일러가 평범한 스토어가 메모리 상의
+값을 실제로는 바꾸지 않을 것임을 알 때 일어날 수 있습니다.
+\begin{fcvref}[ln:toolsoftrade:Inviting a Store-to-Load Conversion]
+예를 들어,
+Listing~\ref{lst:toolsoftrade:Inviting a Store-to-Load Conversion}
+을 생각해 봅시다.
+라인~\lnref{load:p} 는 \co{p} 를 읽어오지만, 라인~\lnref{if} 의 \qco{if} 문은
+또한 컴파일러에게 개발자는 \co{p} 가 일반적으로 0일 것이라 생각한다고 이야기
+합니다.\footnote{
+	\apik{unlikely()} 함수는 이 힌트를 컴파일러에게 전달하며, 다른
+	컴파일러는 \co{unlockely()} 를 구현하는 다른 방법을 제공합니다.}
+라인~\lnref{barrier} 의 \apik{barrier()} 문은 컴파일러가 \co{p} 의 값을 잊게
+만듭니다만, 원한다면 컴파일러가 이 힌트를 기억하게 할수도---또는 피드백 방향
+최적화를 통해 추가적인 힌트를 줄수도 있습니다.
+그렇게 하는 것은 컴파일러에게 라인~\lnref{null} 이 종종 비싸기만 한 no-op 일
+뿐임을 알게 해줍니다.
+\end{fcvref}
+
+\iffalse
+
 {\bf Store-to-load transformations} can occur when the compiler notices
 that a plain store might not actually change the value in memory.
 \begin{fcvref}[ln:toolsoftrade:Inviting a Store-to-Load Conversion]
@@ -3983,6 +4003,8 @@ Doing so would cause the compiler to realize that line~\lnref{null}
 is often an expensive no-op.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Compiler Converts a Store to a Load]
 \begin{VerbatimL}[commandchars=\\\[\]]
@@ -3999,6 +4021,21 @@ if (p != NULL)\lnlbl[if1]
 \end{listing}
 
 \begin{fcvref}[ln:toolsoftrade:Compiler Converts a Store to a Load]
+따라서 그런 컴파일러는
+Listing~\ref{lst:toolsoftrade:Compiler Converts a Store to a Load}
+의 라인~\lnref{if1} 과~\lnref{null} 에서 보인 것처럼 \co{NULL} 저장을 추가적
+검사를 통해 보호할 수도 있습니다.
+이 변형은 종종 바람직하지만, 순서를 위해 실제 스토어가 필요했다면 문제가 될
+수도 있습니다.
+예를 들어, 쓰기 메모리 배리어 (리눅스 커널의 \apik{smp_wmb()}) 가 스토어를
+순서잡아줄 수는 있으나, 로드에 대해서는 그렇지 않습니다.
+이 상황은 \apik{smp_wmb()} 를 넘어서 \apik{smp_store_release()} 를 사용할 것을
+제안할 수도 있습니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:toolsoftrade:Compiler Converts a Store to a Load]
 Such a compiler might therefore guard the store of \co{NULL}
 with a check, as shown on lines~\lnref{if1} and~\lnref{null} of
 Listing~\ref{lst:toolsoftrade:Compiler Converts a Store to a Load}.
@@ -4009,6 +4046,28 @@ order the store, but not the load.
 This situation might suggest use of \apik{smp_store_release()} over
 \apik{smp_wmb()}.
 \end{fcvref}
+
+\fi
+
+{\bf Dead-code elimination} 은 어떤 로드를 통해 얻어진 값이 절대 사용되지
+않음을, 또는 어떤 값이 어딘가에 저장되지만 결코 로드 되지는 않음을 컴파일러가
+알아챘을 때 발생할 수 있습니다.
+이는 물론 공유 변수로의 액세스를 제거할 수 있어서, 결국 메모리 순서 기능을
+방해해서, 여러분의 동시성 코드가 놀라운 방식으로 동작하게끔 만들어 버릴 수도
+있습니다.
+지금까지의 경험은 그런 놀라움들 중 상대적으로 적은 수의 것들만이 즐거운 것임을
+이야기 합니다.
+저장될 뿐인 변수의 제거는 외부 코드가 심볼 테이블을 통해 해당 변수를 찾아내는
+경우에는 특히나 위험합니다: 컴파일러는 그런 외부 코드 액세스를 무시해야 하며,
+따라서 이 외부 코드가 의존하고 있는 변수를 없애버릴 수도 있습니다.
+
+안정적인 동시성 코드는 컴파일러가 숫자, 순서, 그리고 공유 메모리로의 중요한
+액세스의 타입을 보존하기 위한 방법이 분명 필요한데, 이 주제는 다음으로 이어지는
+Section~\ref{sec:toolsoftrade:A Volatile Solution}
+와~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}
+에서 다룹니다.
+
+\iffalse
 
 {\bf Dead-code elimination} can occur when the compiler notices that
 the value from a load is never used, or when a variable is stored to,
@@ -4029,6 +4088,8 @@ memory, a topic taken up by
 Sections~\ref{sec:toolsoftrade:A Volatile Solution}
 and~\ref{sec:toolsoftrade:Assembling the Rest of a Solution},
 which are up next.
+
+\fi
 
 \subsubsection{A Volatile Solution}
 \label{sec:toolsoftrade:A Volatile Solution}
