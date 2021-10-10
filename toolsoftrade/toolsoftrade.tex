@@ -4094,6 +4094,21 @@ which are up next.
 \subsubsection{A Volatile Solution}
 \label{sec:toolsoftrade:A Volatile Solution}
 
+지금은 비난을 받지만, C11 과 C++11~\cite{PeteBecker2011N3242} 의 발전 전에는
+\apic{volatile} 키워드는 병렬 프로그래머의 도구상자에서 필수적인 도구였습니다.
+이는 \co{volatile} 이 정확히 뭘 의미하는지에 대한 질문을 떠올리게 하는데, 이
+질문은 이 표준~\cite{RichardSmith2019N4800}의 더 최신 버전에서조차 충분히
+꼼꼼하게 답변되지 않았습니다.\footnote{
+	JF Bastien 은 C++ 에서 \co{volatile} 키워드의 역사와 사용 예에 대해
+	자세하게 문서화 했습니다~\cite{JFBastien2018DeprecatingVolatile}.}
+이 버전은 ``\co{volatile} \co{glvalues} 를 통한 액세스는 abstract machine 의
+규칙에 근거해 엄격하게 평가된다'' 는 것을, \co{volatile} 액세스는 부수작용을
+동반함을, 이것은 네개의 forward-progress 를 알리는 것임을, 그리고 이것들의
+정확한 의미는 구현에 의해 정의됨을 보장합니다.
+가장 깔끔한 가이드는 아마도 이 표준은 아닌 노트를 통해 제공될 수 있을 겁니다:
+
+\iffalse
+
 Although it is now much maligned, before the advent of C11 and
 C++11~\cite{PeteBecker2011N3242}, the \apic{volatile} keyword was an
 indispensible tool in the parallel programmer's toolbox.
@@ -4110,6 +4125,29 @@ that \co{volatile} accesses are side effects,
 that they are one of the four forward-progress indicators,
 and that their exact semantics are implementation-defined.
 Perhaps the clearest guidance is provided by this non-normative note:
+
+\fi
+
+\begin{quote}
+	\apic{volatile} 은 어떤 객체의 값이 구현에 의해서는 탐지될 수 없는
+	방법에 의해 변경될 수도 있기 때문에 해당 객체에 영향을 끼치는 적극적인
+	최적화를 방지하기 위해 구현에게 주는 힌트입니다.
+	더 나아가, 일부 구현을 위해서는 \apic{volatile} 은 해당 객체에 액세스
+	하기 위해 특수한 하드웨어 인스트럭션이 필요함을 알릴 수도 있습니다.
+	구체적 의미를 위해서 6.8.1 을 참고하십시오.
+	일반적으로, \apic{volatile} 의 의미는 그것이 C 에서 그러한 것처럼 C++
+	에서도 그러할 것으로 의도됩니다.
+\end{quote}
+
+이 문장들은 저수준 코드를 작성하는 사람들을 안심시킬텐데 컴파일러 작성자들은
+표준이 아닌 노트를 완전히 무시해도 된다는 사실을 제외하면 그렇습니다.
+병렬 프로그래머들은 대신 컴파일러 작성자들이 디바이스 드라이버를 망가뜨리는
+것을 방지하고자 할 것을 통해 (비록 이는 디바이스 드라이버 개발자와의 ``솔직하고
+개방된'' 토론을 좀 한 후에야 가능하겠지만요), 그리고 디바이스 드라이버는 최소한
+다음의 제약을 가지고 있음을~\cite{PaulEMcKenney2016P0124R6-LKMM} 통해 스스로를
+대신 안심시킬 수도 있습니다:
+
+\iffalse
 
 \begin{quote}
 	\apic{volatile} is a hint to the implementation to avoid
@@ -4132,6 +4170,35 @@ writers would like to avoid breaking device drivers (though perhaps
 only after a few ``frank and open'' discussions with device-driver
 developers), and device drivers impose at least the following
 constraints~\cite{PaulEMcKenney2016P0124R6-LKMM}:
+
+\fi
+
+\begin{enumerate}
+\item	구현은 정렬된 volatile 액세스를 해당 액세스의 사이즈와 타입을 위한 기계
+	인스트럭션이 존재할 때 분할시켜선 안된다.\footnote{
+		이는 128-bit CAS 는 있지만 128-bit 로드와 스토어는 존재하지
+		않는 CPU 에서 128-bit 로드와 스토어에 대해 어떻게 해야 하는지는
+		명시하지 않고 있음을 알아 두시기 바랍니다.}
+	동시성 코드는 불필요한 로드와 스토어 분할시키기를 방지하기 위해 이
+	제약에 의존한다.
+\item	구현은 volatile 액세스의 의미에 대해 어떤 것도 가정해선 안되며, 값을
+	리턴하는 어떤 volatile access 에 대해서는 리턴될 수도 있는 값의 가능한
+	집합에 대해서도 그러하다.\footnote{
+		이는 앞에서 이야기된 구현에 의해 정의되는 의미에 의해 함축되어
+		있습니다.}
+	동시성 코드는 다른 프로세서가 동시에 같은 위치에 액세스 하고 있을 수
+	있을 때 적용되어선 않아야 할 최적화를 방지하기 위해 이 제약에 의존한다.
+\item	정렬된 기계 워드 크기의 섞이지 않은 크기의 volatile access 는 그 앞과
+	뒤의 volatile 어셈블리 코드 순서와 자연적으로 상호작용한다.
+	일부 기기는 volatile MMIO 액세스와 특수 목적 어셈블리어 인스트럭션의
+	조합을 통해서 액세스 될 것을 필요로 하기에 이 제약이 필요하다.
+	동시성 코드는 volatile 액세스와
+	Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}
+	에서 이야기 된 다른 방법들의 조합에서의 순서 속성을 이루기 위해 이
+	제약에 의존한다.
+\end{enumerate}
+
+\iffalse
 
 \begin{enumerate}
 \item	Implementations are forbidden from tearing an aligned volatile
@@ -4162,6 +4229,19 @@ constraints~\cite{PaulEMcKenney2016P0124R6-LKMM}:
 	Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}.
 \end{enumerate}
 
+\fi
+
+동시성 코드는 또한 모든 액세스가 정렬되었고 기계 워드 크기라는 가정 하에 특정
+객체로의 액세스 중 어느 하나가 어토믹이 아니거나 volatile 이 아닌 경우 데이터
+레이스에 의해 야기될 수 있는 정의되지 않은 동작을 막기 위해 앞의 두 제약에
+의존할 수 있습니다.
+같은 위치로의 섞인 크기의 액세스의 의미는 더 복잡한데, 일단 나중을 위해
+설명하지 않겠습니다.
+
+그래서 \apic{volatile} 은 앞의 예제들과 어떻게 엮일 수 있을까요?
+
+\iffalse
+
 Concurrent code also relies on the first two constraints to avoid
 undefined behavior that could result due to data races if any of the
 accesses to a given object was either non-atomic or non-volatile,
@@ -4170,6 +4250,8 @@ The semantics of mixed-size accesses to the same locations are more
 complex, and are left aside for the time being.
 
 So how does \apic{volatile} stack up against the earlier examples?
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Avoiding Danger, 2018 Style]
@@ -4183,12 +4265,22 @@ if (ptr != NULL && ptr < high_address)
 \label{lst:toolsoftrade:Avoiding Danger, 2018 Style}
 \end{listing}
 
+Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style} 의
+line~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp}
+에서 \apik{READ_ONCE()} 를 사용하는 것은 만들어진 로드를 방지하여,
+Listing~\ref{lst:toolsoftrade:Avoiding Danger, 2018 Style}
+에 보인 코드가 나오게 합니다.
+
+\iffalse
+
 Using \apik{READ_ONCE()} on
 line~\ref{ln:toolsoftrade:Living Dangerously Early 1990s Style:temp} of
 Listing~\ref{lst:toolsoftrade:Living Dangerously Early 1990s Style}
 avoids invented loads,
 resulting in the code shown in
 Listing~\ref{lst:toolsoftrade:Avoiding Danger, 2018 Style}.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Preventing Load Fusing]
@@ -4201,10 +4293,19 @@ while (!READ_ONCE(need_to_stop))
 \label{lst:toolsoftrade:Preventing Load Fusing}
 \end{listing}
 
+Listing~\ref{lst:toolsoftrade:Preventing Load Fusing} 에서 보인 것처럼,
+\apik{READ_ONCE()} 는
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads} 의 루프 풀기도 방지할
+수 있습니다.
+
+\iffalse
+
 As shown in
 Listing~\ref{lst:toolsoftrade:Preventing Load Fusing},
 \apik{READ_ONCE()} can also prevent the loop unrolling in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads}.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Preventing Store Fusing and Invented Stores]
@@ -4232,6 +4333,17 @@ void work_until_shut_down(void)
 \label{lst:toolsoftrade:Preventing Store Fusing and Invented Stores}
 \end{listing}
 
+\apik{READ_ONCE()} 와 \apik{WRITE_ONCE()} 는
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores} 에 보인 store fusing
+과 invented sotres 도 방지할 수 있어서,
+Listing~\ref{lst:toolsoftrade:Preventing Store Fusing and Invented Stores} 가
+되게 합니다.
+하지만, 이는 코드 재배치를 방지하기 위한 일은 하지 않으므로,
+Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution} 에서 배우게 될
+추가적인 트릭이 좀 필요합니다.
+
+\iffalse
+
 \apik{READ_ONCE()} and \apik{WRITE_ONCE()} can also be used to prevent the
 store fusing and invented stores that were shown in
 Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores},
@@ -4240,6 +4352,8 @@ Listing~\ref{lst:toolsoftrade:Preventing Store Fusing and Invented Stores}.
 However, this does nothing to prevent code reordering, which requires
 some additional tricks taught in
 Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution}.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Disinviting an Invented Store]
@@ -4253,6 +4367,25 @@ else
 \caption{Disinviting an Invented Store}
 \label{lst:toolsoftrade:Disinviting an Invented Store}
 \end{listing}
+
+마지막으로, \apik{WRITE_ONCE()} 는
+Listing~\ref{lst:toolsoftrade:Inviting an Invented Store} 에 보인 store
+invention 을 방지하는데에 사용될 수 있어서,
+Listing~\ref{lst:toolsoftrade:Disinviting an Invented Store} 에 보이는 코드가
+되게 합니다.
+
+요약하자면, \apic{volatile} 키워드는 로드와 스토어가 기계 워드 크기이고 적절히
+정렬되었을 때 load tearing 과 store tearing 을 방지합니다.
+이것은 또한 load fusing, store fusing, invented loads, 그리고 invented stores
+를 방지합니다.
+하지만, 이게 컴파일러가 \apic{volatile} 액세스를 서로간에 재배치 하는 것을
+막기는 하나, CPU 가 이 액세스들을 재배치 하는 것을 막는 일은 전혀 하지
+못합니다.
+더 나아가서, 컴파일러나 CPU 가 \co{volatile} 이 아닌 액세스를 그것들 간에 또는
+\co{volatile} 액세스와 재배치 하는 것을 막는 일은 전혀 하지 않습니다.
+이런 종류의 재배치를 막기 위해서는 다음 섹션에서 이야기 되는 기술이 필요합니다.
+
+\iffalse
 
 Finally, \apik{WRITE_ONCE()} can be used to prevent the store invention
 shown in
@@ -4273,6 +4406,8 @@ reordering non-\co{volatile} accesses with each other or with
 \co{volatile} accesses.
 Preventing these types of reordering requires the techniques described
 in the next section.
+
+\fi
 
 \subsubsection{Assembling the Rest of a Solution}
 \label{sec:toolsoftrade:Assembling the Rest of a Solution}
