@@ -4412,11 +4412,21 @@ in the next section.
 \subsubsection{Assembling the Rest of a Solution}
 \label{sec:toolsoftrade:Assembling the Rest of a Solution}
 
+추가적인 순서 규칙은 전통적으로 어셈블리어를 통해 제공되어왔는데, 예를 들면
+\GCC\ asm 지시어가 있습니다.
+이상하게 들리겠지만, 이 지시어들은
+Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
+의 \apik{barrier()} 매크로에 의해 예시 되듯이 어셈블리어를 포함하지는 않습니다.
+
+\iffalse
+
 Additional ordering has traditionally been provided by recourse to
 assembly language, for example, \GCC\ asm directives.
 Oddly enough, these directives need not actually contain assembly language,
 as exemplified by the \apik{barrier()} macro shown in
 Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Preventing C Compilers From Fusing Loads]
@@ -4431,6 +4441,27 @@ while (!need_to_stop) {
 \caption{Preventing C Compilers From Fusing Loads}
 \label{lst:toolsoftrade:Preventing C Compilers From Fusing Loads}
 \end{listing}
+
+\apik{barrier()} 매크로 내부에서 \co{__asm__} 이 asm 지시어를 가져오며,
+\co{__volatile__} 이 이 컴파일러가 asm 을 최적화 해서 없애버리는 걸 방지하고,
+빈 문자열은 어떤 실제 명령도 생성될 필요가 없음을 명시하고, 마지막으로
+\co{"memory"} 는 컴파일러에게 이 아무것도 하지 말라는 asm 은 메모리를 임의로
+바꿀수도 있음을 알립니다.
+이에 대한 응답으로, 컴파일러는 이 \apik{barrier()} 매크로 앞뒤로 메모리
+참조들을 옮기는 것을 막을 겁니다.
+이는
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Loads}
+에 보인 루프 풀어버리기가
+Listing~\ref{lst:toolsoftrade:Preventing C Compilers From Fusing Loads}
+의
+라인~\ref{ln:toolsoftrade:Preventing C Compilers From Fusing Loads:b1}
+와~\ref{ln:toolsoftrade:Preventing C Compilers From Fusing Loads:b2}
+에 의해 방지될 수 있음을 의미합니다.
+이 두 줄의 코드는 컴파일러가 \co{need_to_stop} 으로부터의 로드를
+\co{do_something_quickly()} 내로 또는 그 뒤로 어떤 방향으로든 변경하는 것을
+방지합니다.
+
+\iffalse
 
 In the \apik{barrier()} macro, the \co{__asm__} introduces the asm
 directive, the \co{__volatile__} prevents the compiler from optimizing
@@ -4449,6 +4480,8 @@ Listing~\ref{lst:toolsoftrade:Preventing C Compilers From Fusing Loads}.
 These two lines of code prevent the compiler from pushing the load from
 \co{need_to_stop} into or past \co{do_something_quickly()} from either
 direction.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:toolsoftrade:Preventing Reordering]
@@ -4482,6 +4515,30 @@ void work_until_shut_down(void)
 \label{lst:toolsoftrade:Preventing Reordering}
 \end{listing}
 
+하지만, 이는 CPU 가 메모리 참조를 재배치 하는 것을 방지하기 위한 어떤 대책도
+내놓지 않습니다.
+많은 경우에 이는 문제가 아닌데 하드웨어는 일정한 정도의 재배치만 할 수 있기
+때문입니다.
+하지만 하드웨어가 제약되어야만 하는
+Listing~\ref{lst:toolsoftrade:C Compilers Can Fuse Stores}
+같은 경우들도 있습니다.
+Listing~\ref{lst:toolsoftrade:Preventing Store Fusing and Invented Stores}
+은 store fusing 과 invention 을 방지했으며,
+Listing~\ref{lst:toolsoftrade:Preventing Reordering}
+은 더 나아가 \apik{smp_mb()} 를
+\begin{fcvref}[ln:toolsoftrade:Preventing Reordering]
+라인~\lnref{mb1}, \lnref{mb2}, \lnref{mb3}, \lnref{mb4},
+그리고~\lnref{mb5}
+\end{fcvref}
+에 추가함으로써 남아있는 재배치를 방지했습니다.
+\apik{smp_mb()} 매크로는
+Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
+에 보인 \apik{barrier()} 와 비슷하지만 빈 문자열이 예를 들어 x86 이라면
+\co{"mfence"}, PowerPC 라면 \co{"sync"} 와 같은 실제 명령을 담은 문자열로
+대체되어 있습니다.
+
+\iffalse
+
 However, this does nothing to prevent the CPU from reordering the
 references.
 In many cases, this is not a problem because the hardware can only do
@@ -4504,11 +4561,32 @@ but with the empty string replaced by a string containing the
 instruction for a full memory barrier, for example, \co{"mfence"}
 on x86 or \co{"sync"} on PowerPC.
 
+\fi
+
 \QuickQuiz{
+	하지만 완전한 메모리 배리어는 무척 무겁지 않나요?
+	Listing~\ref{lst:toolsoftrade:Preventing Reordering}
+	에 필요한 순서만을 강제하는 더 가벼운 방법이 있지 않나요?
+
+	\iffalse
+
 	But aren't full memory barriers very heavyweight?
 	Isn't there a cheaper way to enforce the ordering needed in
 	Listing~\ref{lst:toolsoftrade:Preventing Reordering}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	많은 경우 그렇듯, 답은 ``상황에 따라 다르다'' 입니다.
+	하지만, 두개의 쓰레드만이 \co{status} 와 \co{other_task_ready} 변수에
+	접근한다면,
+	Section~\ref{sec:toolsoftrade:Atomic Operations}
+	에서 이야기되는
+	\apik{smp_store_release()} 와 \apik{smp_load_acquire()}
+	함수만으로도 충분할 겁니다.
+
+	\iffalse
+
 	As is often the case, the answer is ``it depends''.
 	However, if only two threads are accessing the \co{status}
 	and \co{other_task_ready} variables, then the
@@ -4516,7 +4594,22 @@ on x86 or \co{"sync"} on PowerPC.
 	functions discussed in
 	Section~\ref{sec:toolsoftrade:Atomic Operations}
 	will suffice.
+
+	\fi
+
 }\QuickQuizEnd
+
+순서 규칙 강제는 일부 read-modify-write 어토믹 오퍼레이션들에 의해서도
+제공되는데, 그 중 일부는
+Section~\ref{sec:toolsoftrade:Atomic Operations}
+에서 보였습니다.
+일반적인 경우에 메모리 순서 규칙 강제는
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+에서 이야기 되었듯 상당히 미묘할 수 있습니다.
+다음 섹션은 메모리 순서 규칙 강제의 대안, 즉 데이터 레이스를 제한하거나 아예
+방지하는 방법을 알아보겠습니다.
+
+\iffalse
 
 Ordering is also provided by some read-modify-write atomic
 operations, some of which are presented in
@@ -4526,6 +4619,8 @@ discussed in
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}.
 The next section covers an alternative to memory ordering, namely
 limiting or even entirely avoiding data races.
+
+\fi
 
 \subsubsection{Avoiding Data Races}
 \label{sec:toolsoftrade:Avoiding Data Races}
