@@ -4632,6 +4632,26 @@ shared variables!''
 ``Then stop concurrently accessing shared variables!!!''
 \end{quote}
 
+이 의사의 조언은 도움이 되지 않는 듯 보일수도 있겠습니다만, 공유된 변수들을
+동시에 액세스 하는 걸 막는 하나의 시간으로 검증된 방법은 그 변수들을 일반적인
+락을 쥐고 있을 때에만 액세스 하는 것으로,
+Chapter~\ref{chp:Locking} 에서 더 이야기 될 겁니다.
+또다른 방법은 특정 CPU 나 쓰레드에서만 특정 ``공유된'' 변수를 액세스
+하는것으로,
+Chapter~\ref{chp:Data Ownership} 에서 더 이야기 하겠습니다.
+이 두개의 방법을 융햡하는 것도 가능한데, 예를 들면 특정 변수는 특정 CPU 나
+쓰레드에 의해서 어떤 락을 잡고 있을 때에만 변경될 수 있으며, 같은 CPU 나
+쓰레드에 의해서는 그냥 읽힐 수 있고 다른 CPU 나 쓰레드에서는 그 락을 잡고 있을
+때에만 읽을 수 있는 식입니다.
+이 모든 상황에서, 해당 공유 변수로의 모든 액세스는 평범한 C-언어 액세스일
+겁니다.
+
+특정 변수로의 액세스가 평범한 로드와 스토어만으로도 가능한 상황들의 리스트가
+여기 있는데, 해당 변수로의 다른 액세스들은 마킹이 (\apik{READ_ONCE()} 와
+\apik{WRITE_ONCE()} 같은) 필요합니다:
+
+\iffalse
+
 The doctor's advice might seem unhelpful, but
 one time-tested way to avoid concurrently accessing shared variables
 is access those variables only when holding a particular lock, as will
@@ -4652,7 +4672,31 @@ allowing plain loads and stores for some accesses to a given variable,
 while requiring markings (such as \apik{READ_ONCE()} and \apik{WRITE_ONCE()})
 for other accesses to that same variable:
 
+\fi
+
 \begin{enumerate}
+\item	어떤 공유 변수가 특정 소유권을 가진 CPU 나 쓰레드에 의해서 변경되지만,
+	다른 CPU 나 쓰레드에 의해 읽혀질 때.
+	모든 스토어는 \apik{WRITE_ONCE()} 를 사용해야 합니다.
+	그외의 모든 다른 것은 로드를 위해 \apik{READ_ONCE()} 를 사용해야만
+	합니다.
+\item	어떤 공유 변수가 특정 락을 잡고서만 변경되지만, 해당 락을 쥐지 않은
+	다른 코드가 읽을 때.
+	모든 스토어는 \apik{WRITE_ONCE()} 를 사용해야 합니다.
+	해당 락을 쥐고 있는 CPU 나 쓰레드는 평범한 로드를 사용할 수 있습니다.
+	그외의 모든 다른 것은 로드를 위해 \apik{READ_ONCE()} 를 사용해야만
+	합니다.
+\item	어떤 공유 변수가 특정 락을 쥐고 있을 때에 소유권을 가진 CPU 나 쓰레드에
+	의해서만 액세스 되지만, 해당 락을 쥐지 않은 다른 CPU 나 쓰레드나 코드에
+	의해서 읽혀질 때.
+	모든 스토어는 \apik{WRITE_ONCE()} 를 사용해야 합니다.
+	소유권을 가진 CPU 나 쓰레드는 평범한 로드를 사용할 수 있으며, 다른 CPU
+	나 쓰레드도 락을 쥐고 있다면 그렇습니다.
+	그외의 모든 다른 것은 로드를 위해 \apik{READ_ONCE()} 를 사용해야만
+	합니다.
+
+\iffalse
+
 \item	A shared variable is only modified by a given owning CPU or
 	thread, but is read by other CPUs or threads.
 	All stores must use \apik{WRITE_ONCE()}.
@@ -4670,6 +4714,27 @@ for other accesses to that same variable:
 	The owning CPU or thread may use plain loads, as may any
 	CPU or thread holding the lock.
 	Everything else must use \apik{READ_ONCE()} for loads.
+
+\fi
+
+\item	어떤 공유 변수가 특정 CPU 나 쓰레드, 그리고 해당 CPU 나 쓰레드의
+	컨텍스트에서 동작하는 시그널이나 인터럽트 핸들러에 의해서만 접근될 때.
+	이 핸들러는 평범한 로드와 스토어를 사용할 수 있는데, 해당 핸들러가
+	호출되는 것을 방지한 모든 다른 코드, 즉 시그널과 인터럽트를 막은 코드도
+	그렇습니다.
+	모든 다른 코드는 \apik{READ_ONCE()} 와 \apik{WRITE_ONCE()} 를
+	사용해야만 합니다.
+\item	어떤 공유 변수가 특정 CPU 나 쓰레드, 해당 CPU 나 쓰레드의 컨텍스트에서
+	수행되는 시그널이나 인터럽트 핸들러에 의해서만 접근되며, 이 핸들러는
+	항상 자신이 값을 쓴 변수의 값을 기존의 것으로 리턴하기 전에 항상
+	복원시킬 때.
+	이 핸들러는 평범한 로드와 스토어를 사용할 수 있으며, 이 핸들러가
+	호출되는 것을 막은, 즉 시그널과 인터럽트를 막은 코드도 그렇습니다.
+	모든 다른 코드는 \apik{READ_ONCE()} 와 \apik{WRITE_ONCE()} 를
+	사용해야만 합니다.
+
+\iffalse
+
 \item	A shared variable is only accessed by a given CPU or thread
 	and by a signal or interrupt handler running in that CPU's
 	or thread's context.
@@ -4686,12 +4751,32 @@ for other accesses to that same variable:
 	code that has blocked signals and/or interrupts.
 	All other code can use plain loads, but must use \apik{WRITE_ONCE()}
 	to prevent store tearing, store fusing, and invented stores.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	인터럽트나 시그널 핸들러가 그 스스로도 인터럽트 당할 수 있다면 뭘 해야
+	하나요?
+
+	\iffalse
+
 	What needs to happen if an interrupt or signal handler
 	might itself be interrupted?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그렇다면 해당 인터럽트 핸들러는 다른 인터럽트된 코드가 따르는 규칙을
+	그대로 따라야만 합니다.
+	스스로 인터럽트 될 수 없거나 인터럽트하는 핸들러와 어떤 변수도 공유하지
+	않는 핸들러만이 안전하게 평범한 액세스를 사용할 수 있을 것이며, 그렇다
+	해도 해당 변수들은 다른 CPU 나 쓰레드에 의해 동시에 액세스될 수는
+	없습니다.
+
+	\iffalse
+
 	Then that interrupt handler must follow the same rules that
 	are followed by other interrupted code.
 	Only those handlers that cannot be themselves interrupted
@@ -4699,7 +4784,24 @@ for other accesses to that same variable:
 	may safely use plain accesses, and even then only if those
 	variables cannot be concurrently accessed by some other CPU or
 	thread.
+
+	\fi
+
 }\QuickQuizEnd
+
+대부분의 다른 경우에는 어떤 공유 변수로의 로드와 스토어는 \apik{READ_ONCE()} 와
+\apik{WRITE_ONCE()} 또는 그보다 강력한 것을 각각 사용해야만 합니다.
+하지만 \apik{READ_ONCE()} 도 \apik{WRITE_ONCE()} 도 컴파일러 외의 것에 대해서는
+어떠한 순서 보장도 제공하지 않음을 명심해 두시기 바랍니다.
+그런 보장들에 대한 정보를 위해선
+Section~\ref{sec:toolsoftrade:Assembling the Rest of a Solution} 또는
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}
+를 읽어보시기 바랍니다.
+
+데이터 레이스 방지 패턴의 많은 예가
+Chapter~\ref{chp:Counting} 에 보여집니다.
+
+\iffalse
 
 In most other cases, loads from and stores to a shared variable must
 use \apik{READ_ONCE()} and \apik{WRITE_ONCE()} or stronger, respectively.
@@ -4712,6 +4814,8 @@ for information on such guarantees.
 
 Examples of many of these data-race-avoidance patterns are presented in
 Chapter~\ref{chp:Counting}.
+
+\fi
 
 \subsection{Atomic Operations}
 \label{sec:toolsoftrade:Atomic Operations}
