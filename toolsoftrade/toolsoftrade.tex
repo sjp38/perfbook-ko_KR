@@ -5132,6 +5132,28 @@ Section~\ref{sec:count:Statistical Counters}.
 \epigraph{If you get stuck, change your tools; it may free your thinking.}
 	 {\emph{Paul Arden, abbreviated}}
 
+간단한 경험에 의한 규칙으로써, 지금 해야 하는 일을 해주는 가장 간단한 도구를
+사용하십시오.
+할 수 있다면, 순차적 프로그램을 하십시오.
+그게 부족하다면, 병렬성을 조절하기 위해 셸 스크립트를 사용해 보세요.
+그로 인한 셸 스크립트의 \co{fork()}/\co{exec()} 오버헤드가 (Intel Core Duo
+랩톱에서의 가장 작은 C 프로그램이라면 약 480 마이크로세컨드가 소요됩니다)
+너무 크다면, C-언어의 \apipx{fork()} 와 \apipx{wait()} 기능을 시도해 보세요.
+그 오버헤드가 (최소한의 차일드 프로세스에 대해 대략 80 마이크로세컨드) 여전히
+너무 크다면, 적절한 락킹과 어토믹 오퍼레이션 기능과 함께 POSIX 쓰레드 기능을
+사용해야 할수도 있습니다.
+POSIX 쓰레딩 기능의 오버헤드가 (일반적으로 1 마이크로세컨드 미만) 여전히
+크다면, Chapter~\ref{chp:Deferred Processing} 에서 소개되는 기능들이 필요할
+수도 있습니다.
+물론, 실제 오버헤드는 여러분의 하드웨어만이 아니라 여러분이 그 기능들을
+사용하는 방식에 의존될 겁니다.
+더 나아가서, 프로세스간 커뮤니케이션과 메세지 패싱은 공유 메모리 멀티 쓰레딩
+수행의 좋은 대안이 될 수 있으며, 특히 여러분의 코드가
+Chapter~\ref{cha:Partitioning and Synchronization Design}
+에서 이야기 되는 설계 원칙을 잘 따른다면 그러함을 항상 기억하세요.
+
+\iffalse
+
 As a rough rule of thumb, use the simplest tool that will get the job done.
 If you can, simply program sequentially.
 If that is insufficient, try using a shell script to mediate parallelism.
@@ -5154,16 +5176,57 @@ execution, especially when your code makes good use of the design
 principles called out in
 Chapter~\ref{cha:Partitioning and Synchronization Design}.
 
+\fi
+
 \QuickQuiz{
+	셸은 \apipx{fork()} 대신 \apipx{vfork()} 를 사용하지 않을까요?
+
+	\iffalse
+
 	Wouldn't the shell normally use \apipx{vfork()} rather than
 	\apipx{fork()}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그럴수도 있습니다만, 그걸 확인하는 건 독자 여러분의 할일로 남겨져
+	있습니다.
+	하지만 그동안, 전 우리가 \apipx{vfork()} 는 \apipx{fork()} 의 변종이며,
+	따라서 우린 이 둘을 모두 의미하는 범용적 용어로 \apipx{fork()} 를
+	사용할 수 있음에 동의했으면 합니다.
+
+	\iffalse
+
 	It might well do that, however, checking is left as an exercise
 	for the reader.
 	But in the meantime, I hope that we can agree that \apipx{vfork()}
 	is a variant of \apipx{fork()}, so that we can use \apipx{fork()}
 	as a generic term covering both.
+
+	\fi
+
 }\QuickQuizEnd
+
+동시성은 C 언어가 처음으로 동시성 시스템을 만드는데 사용된지 수십년이 지나서 C
+표준에 추가되었기 때문에, 공유 변수를 동시에 접근하는 여러 방법이 존재합니다.
+다른게 같다면,
+Section~\ref{sec:toolsoftrade:Atomic Operations (C11)}
+에서 이야기 되는 C11 표준 오퍼레이션이 첫번째 선택지가 되어야 합니다.
+특정 공유 변수를 평범한 액세스로도 어토믹하게도 접근할 수 있어야 한다면,
+Section~\ref{sec:toolsoftrade:Atomic Operations (Modern gcc)}
+에서 이야기 된 현대의 \GCC\ 어토믹이 여러분을 위해 잘 동작할 수도 있습니다.
+고전의 \GCC\ \co{__sync} API 를 사용하는 오래된 코드베이스 위에서 일하고
+있다면,
+Section~\ref{sec:toolsoftrade:Atomic Operations (gcc Classic)}
+와 연관된 \GCC\ 문서들을 읽어야 합니다.
+리눅스 커널이나 
+\apic{volatile} 키워드를 인라인 어셈블리와 결합해 사용하는 비슷한 코드베이스
+에서 작업 중이라면, 또는 순서를 제공하기 위한 의존성이 필요하다면,
+Section~\ref{sec:toolsoftrade:Accessing Shared Variables} 과
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 에서 나온 것들을
+보시기 바랍니다.
+
+\iffalse
 
 Because concurrency was added to the C standard several decades after
 the C language was first used to build concurrent systems, there are
@@ -5186,6 +5249,18 @@ presented in Section~\ref{sec:toolsoftrade:Accessing Shared Variables}
 as well as that in
 Chapter~\ref{chp:Advanced Synchronization: Memory Ordering}.
 
+\fi
+
+여러분이 어떤 방법을 택하든, 멀티 쓰레드 코드를 무작위로 해킹하는 것은 무척이나
+나쁜 생각인데, 특히 공유 메모리 병렬 시스템은 여러분의 인지 능력을 여러분에게
+사용함을 놓고 보면 그렇습니다: 여러분이 더 똑똑할 수록, 여러분은 여러분이
+문제에 직면해 있다는 것을 알기 전까지 더 깊은 구멍을 스스로에게 파고 있을
+겁니다~\cite{DeadlockEmpire2016}.
+따라서, 뒤따르는 챕터들에서 이야기 하겠지만 개별 기능에 대한 옳은 선택은 물론
+올바른 설계 선택을 하는게 필요합니다.
+
+\iffalse
+
 Whatever approach you take, please keep in mind that randomly hacking
 multi-threaded code is a spectacularly bad idea, especially given that
 shared-memory parallel systems use your own intelligence against you:
@@ -5194,5 +5269,7 @@ you realize that you are in trouble~\cite{DeadlockEmpire2016}.
 Therefore, it is necessary to make the right design choices as well as
 the correct choice of individual primitives,
 as will be discussed at length in subsequent chapters.
+
+\fi
 
 \QuickQuizAnswersChp{qqztoolsoftrade}
