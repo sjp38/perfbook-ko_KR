@@ -4983,28 +4983,64 @@ init_per_thread(name, v)
 
 \subsubsection{\tco{DEFINE_PER_THREAD()}}
 
+\apipf{DEFINE_PER_THREAD()} 기능은 per-thread 변수 하나를 정의합니다.
+불행히도, 리눅스 커널의 \apik{DEFINE_PER_THREAD()} 기능에서는 가능한 것처럼
+초기화를 제공하는 것은 불가능합니다만, 쉬운 런타임 초기화를 가능하게 해주는
+\apipf{init_per_thread()} 기능이 있습니다.
+
+\iffalse
+
 The \apipf{DEFINE_PER_THREAD()} primitive defines a per-thread variable.
 Unfortunately, it is not possible to provide an initializer in the way
 permitted by the Linux kernel's \apik{DEFINE_PER_CPU()} primitive,
 but there is an \apipf{init_per_thread()} primitive that permits easy
 runtime initialization.
 
+\fi
+
 \subsubsection{\tco{DECLARE_PER_THREAD()}}
+
+\apipf{DECLARE_PER_THREAD()} 기능은 C 센스의 정의가 아닌 선언입니다.
+따라서, \apipf{DECLARE_PER_THREAD()} 기능은 어떤 다른 파일에서 정의된
+per-thread 변수를 접근하기 위해 사용될 수 있습니다.
+
+\iffalse
 
 The \apipf{DECLARE_PER_THREAD()} primitive is a declaration in the C sense,
 as opposed to a definition.
 Thus, a \apipf{DECLARE_PER_THREAD()} primitive may be used to access
 a per-thread variable defined in some other file.
 
+\fi
+
 \subsubsection{\tco{per_thread()}}
+
+\apipf{per_thread()} 기능은 특정 쓰레드의 변수에 액세스 합니다.
+
+\iffalse
 
 The \apipf{per_thread()} primitive accesses the specified thread's variable.
 
+\fi
+
 \subsubsection{\tco{__get_thread_var()}}
+
+\apipf{__get_thread_var()} 기능은 현재 쓰레드의 변수를 액세스 합니다.
+
+\iffalse
 
 The \apipf{__get_thread_var()} primitive accesses the current thread's variable.
 
+\fi
+
 \subsubsection{\tco{init_per_thread()}}
+
+\apipf{init_per_thread()} 기능은 특정 변수의 모든 쓰레드의 인스턴스를 특정
+값으로 설정합니다.
+리눅스 커널은 이를 링커 스크립트의 현명한 사용과 CPU-online 과정에서의 코드
+수행을 통해 평범한 C 초기화로 해냅니다.
+
+\iffalse
 
 The \apipf{init_per_thread()} primitive sets all threads' instances of
 the specified variable to the specified value.
@@ -5012,7 +5048,16 @@ The Linux kernel accomplishes this via normal C initialization,
 relying in clever use of linker scripts and code executed during
 the CPU-online process.
 
+\fi
+
 \subsubsection{Usage Example}
+
+매우 자주 읽히지만 가끔만 증가되는 카운터가 하나 있다고 생각해 봅시다.
+Section~\ref{sec:count:Statistical Counters} 에서 명확해 지겠지만, 그런
+카운터는 per-thread 변수를 사용해 만드는게 도움됩니다.
+그런 변수는 다음과 같이 정의될 수 있습니다:
+
+\iffalse
 
 Suppose that we have a counter that is incremented very frequently
 but read out quite rarely.
@@ -5021,36 +5066,65 @@ Section~\ref{sec:count:Statistical Counters},
 it is helpful to implement such a counter using a per-thread variable.
 Such a variable can be defined as follows:
 
+\fi
+
 \begin{VerbatimU}
 DEFINE_PER_THREAD(int, counter);
 \end{VerbatimU}
 
+이 카운터는 아래와 같이 초기화 되어야 합니다:
+
+\iffalse
+
 The counter must be initialized as follows:
+
+\fi
 
 \begin{VerbatimU}
 init_per_thread(counter, 0);
 \end{VerbatimU}
 
+어떤 쓰레드는 이 카운터의 자신의 인스턴스를 다음과 같이 증가시킬 수 있습니다:
+
+\iffalse
+
 A thread can increment its instance of this counter as follows:
+
+\fi
 
 \begin{VerbatimU}
 p_counter = &__get_thread_var(counter);
 WRITE_ONCE(*p_counter, *p_counter + 1);
 \end{VerbatimU}
 
+이 카운터의 값이 이것의 인스턴스들의 값의 합입니다.
+따라서 이 카운터의 값의 한 스냅샷은 다음과 같이 모아질 수 있습니다:
+
+\iffalse
+
 The value of the counter is then the sum of its instances.
 A snapshot of the value of the counter can thus be collected
 as follows:
+
+\fi
 
 \begin{VerbatimU}
 for_each_thread(t)
   sum += READ_ONCE(per_thread(counter, t));
 \end{VerbatimU}
 
+다시 말하지만, 다른 메커니즘을 통해 비슷한 효과를 얻을 수 있습니다, 하지만
+per-thread 변수는 편의성과 고성능을 함께 제공하는데,
+Section~\ref{sec:count:Statistical Counters} 에서 더 자세히 알아보겠습니다.
+
+\iffalse
+
 Again, it is possible to gain a similar effect using other mechanisms,
 but per-thread variables combine convenience and high performance,
 as will be shown in more detail in
 Section~\ref{sec:count:Statistical Counters}.
+
+\fi
 
 \section{The Right Tool for the Job: How to Choose?}
 \label{sec:toolsoftrade:The Right Tool for the Job: How to Choose?}
