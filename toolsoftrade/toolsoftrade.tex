@@ -4891,6 +4891,22 @@ This book's CodeSamples API closely follows that of the Linux kernel.
 \subsection{Per-CPU Variables}
 \label{sec:toolsoftrade:Per-CPU Variables}
 
+리눅스 커널은 per-CPU 변수를 정의하기 위해 \apik{DEFINE_PER_CPU()} 를, 해당
+per-CPU 변수의 이 CPU 의 인스턴스로의 참조를 형성하기 위해 \apik{this_cpu_ptr()}
+를, 해당 per-CPU 변수의 특정 CPU 의 인스턴스로의 액세스를 위해 \apik{per_cpu()}
+를 사용하며, 다른 특수 목적 per-CPU 오퍼레이션들도 제공합니다.
+
+Listing~\ref{lst:toolsoftrade:Per-Thread-Variable API} 은
+리눅스 커널의 per-CPU-변수 API 의 패턴을 따라한 이 책의 per-thread-variable API
+를 보입니다.
+이 API 는 전역 변수의 per-thread 버전을 제공합니다.
+이 API 는 엄밀하게 말하면 필요치 않지만\footnote{
+	여러분은 이것 대신 \apig{__thread} 나 \apic{_Thread_local} 을 사용할 수
+	있습니다.},
+리눅스 커널 코드의 유저스페이스로의 비슷한 좋은 것을 제공할 수 있습니다.
+
+\iffalse
+
 The Linux kernel uses \apik{DEFINE_PER_CPU()} to define a per-CPU variable,
 \apik{this_cpu_ptr()} to form a reference to this CPU's instance of a
 given per-CPU variable, \apik{per_cpu()} to access a specified CPU's
@@ -4905,6 +4921,8 @@ Although this API is, strictly speaking, not necessary\footnote{
 	You could instead use \apig{__thread} or \apic{_Thread_local}.},
 it can provide a good userspace analogy to Linux kernel code.
 
+\fi
+
 \begin{listing}[tbp]
 \begin{VerbatimL}[numbers=none]
 DEFINE_PER_THREAD(type, name)
@@ -4918,9 +4936,32 @@ init_per_thread(name, v)
 \end{listing}
 
 \QuickQuiz{
+	Per-thread-변수 API 가 존재하지 않는 시스템에선 이걸 어떻게 할 수
+	있을까요?
+
+	\iffalse
+
 	How could you work around the lack of a per-thread-variable
 	API on systems that do not provide it?
+
+	\fi
+
 }\QuickQuizAnswer{
+	한가지 방법은 \apipf{smp_thread_id()} 로 인덱스 되는 배열을 만드는
+	것이고, 또다른 방법은 \apipf{smp_thread_id()} 를 배열 인덱스로 매핑하는
+	해쉬 테이블을 만드는 것이겠습니다---사실 이 API 집합이 pthread 환경에서
+	사용하는 방법입니다.
+
+	또다른 방법은 부모가 각 per-thread 변수를 위한 필드를 갖는 구조체를
+	할당하고, 이를 자식 쓰레드에게 쓰레드 생성 시에 넘기는 것입니다.
+	하지만, 이 방법은 큰 시스템에선 거대한 소프트웨어 엔지니어링 비용을
+	부과할 수 있습니다.
+	이를 이해하기 위해, 어떤 커다란 시스템의 모든 전역 변수가 그것들이 C
+	static 변수인가 아닌가에 관계 없이 하나의 파일에 모두 선언되어야 한다고
+	생각해 보세요!
+
+	\iffalse
+
 	One approach would be to create an array indexed by
 	\apipf{smp_thread_id()}, and another would be to use a hash
 	table to map from \apipf{smp_thread_id()} to an array
@@ -4935,6 +4976,9 @@ init_per_thread(name, v)
 	To see this, imagine if all global variables in a large system
 	had to be declared in a single file, regardless of whether or
 	not they were C static variables!
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{\tco{DEFINE_PER_THREAD()}}
