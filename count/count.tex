@@ -6,6 +6,20 @@
 %
 \Epigraph{As easy as 1, 2, 3!}{\emph{Unknown}}
 
+카운팅은 아마도 컴퓨터가 할 수 있는 가장 간단하고도 자연스러운 일일 겁니다.
+하지만, 거대한 공유 메모리 멀티프로세서에서 효율적이고도 확장성 있게 카운팅을
+하는 것은 상당히 어렵습니다.
+더 나아가서, 카운팅에 내재하는 개념의 간단함은 우리가 잘 발달된 데이터 구조나
+복잡한 동기화 도구들의 방해 없이 동시성의 근본적 문제들을 탐험할 수 있게
+해줍니다.
+따라서 카운팅은 병렬 프로그래밍으로의 훌륭한 소개를 제공합니다.
+
+이 챕터는 간단하고, 빠르고, 확장성 있는 카운팅 알고리즘들이 존재하는 여러개의
+특수한 경우들을 다뤄봅니다.
+하지만 먼저, 여러분이 동시적 카운팅에 대해 얼마나 알고 있는지 먼저 알아봅시다.
+
+\iffalse
+
 Counting is perhaps the simplest and most natural thing a computer can do.
 However, counting efficiently and scalably on a large
 shared-memory multiprocessor can be quite challenging.
@@ -21,18 +35,49 @@ fast, and scalable counting algorithms.
 But first, let us find out how much you already know about concurrent
 counting.
 
+\fi
+
 \EQuickQuiz{
+	효율적이고도 확장성 있는 카운팅이 왜 어려워야 하죠???
+	무엇보다도, 컴퓨터는 카운팅이라는 하나의 목적을 위한 특수 하드웨어를
+	가지고 있잖아요!!!
+
+	\iffalse
+
 	Why should efficient and scalable counting be hard???
 	After all, computers have special hardware for the sole purpose
 	of doing counting!!!
+
+	\fi
+
 }\EQuickQuizAnswer{
+	Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?} 에서
+	다루겠지만, 예를 들어 공유된 카운터에 대한 어토믹오퍼레이션과 같은
+	간단한 카운팅 알고리즘은 느리고 확장성이 나쁘거나, 부정확합니다.
+
+	\iffalse
+
 	Because the straightforward counting algorithms, for example,
 	atomic operations on a shared counter, either are slow and scale
 	badly, or are inaccurate, as will be seen in
 	Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?}.
+
+	\fi
+
 }\EQuickQuizEnd
 
 \EQuickQuiz{
+	{ \bfseries 네트워크 패킷 카운팅 문제. }
+	여러분이 송수신된 네트워크 패킷의 갯수에 대한 통계를 수집해야 한다고
+	해봅시다.
+	패킷은 시스템 상의 어떤 CPU 를 통해서든 송수신 될 수도 있습니다.
+	더 나아가서 여러분의 시스템이 CPU 마다 초당 수백만개 이상의 패킷을
+	처리할 수 있다고, 그리고 그 수를 5초마다 세는 시스템 모니터링 패키지가
+	있다고 해봅시다.
+	여러분은 이 카운터를 어떻게 구현하겠습니까?
+
+	\iffalse
+
 	{ \bfseries Network-packet counting problem. }
 	Suppose that you need to collect statistics on the number
 	of networking packets transmitted and received.
@@ -41,7 +86,24 @@ counting.
 	handling millions of packets per second per CPU, and that
 	a systems-monitoring package reads the count every five seconds.
 	How would you implement this counter?
+
+	\fi
+
 }\EQuickQuizAnswer{
+	힌트: 이 카운터를 업데이트 하는 행위는 무척 빨라야 합니다만, 이
+	카운터는 오백만번의 업데이트에 한번 정도만 읽혀지므로, 이 카운터를 읽는
+	행위는 상당히 느려도 괜찮습니다.
+	추가로, 읽혀진 값은 보통 완전히 정확할 필요는 없습니다---어쨌건, 이
+	카운터는 밀리세컨드당 천번 가량 업데이트 되므로, ``실제 값'' 으로부터
+	수천 정도는 차이를 갖는 값을 가지고 작업할 수 있어야 합니다, ``실제
+	값'' 이 이 맥락에서 무엇을 의미하는가에 관계없이요.
+	하지만, 읽혀지는 값은 일정한 오류만을 가져야 합니다.
+	예를 들어, 이 수가 수백만 이상의 값이라면 1\,\% 에러는 문제 없을
+	겁니다만, 이 카운트가 조 이상이 된다면 허용되지 못할 수도 있을 겁니다.
+	Section~\ref{sec:count:Statistical Counters} 을 읽어 보시기 바랍니다.
+
+	\iffalse
+
 	Hint: The act of updating the counter must be blazingly
 	fast, but because the counter is read out only about once
 	in five million updates, the act of reading out the counter can be
@@ -57,11 +119,23 @@ counting.
 	is on the order of a million or so, but might be absolutely
 	unacceptable once the count reaches a trillion.
 	See Section~\ref{sec:count:Statistical Counters}.
+
+	\fi
+
 }\EQuickQuizEnd
 
 \QuickQuizLabel{\QcountQstatcnt}
 
 \EQuickQuiz{
+	{ \bfseries 대략적 구조체 할당 한계 문제.}
+	어떤 구조체의 할당이 그 구조체의 수가 어떤 한계 (예를 들어 10,000) 를
+	넘어셨을 때 실패하도록 하거나 하기 위해 할당된 구조체의 갯수를 유지해야
+	한다고 생각해 봅시다.
+	더 나아가서 이 구조체는 수명이 짧아서, 이 한계는 아주 가끔만 넘어서게
+	되며, ``약간 허술한'' 대략적 한계가 허용된다고 생각해 봅시다.
+
+	\iffalse
+
 	{ \bfseries Approximate structure-allocation limit problem. }
 	Suppose that you need to maintain a count of the number of
 	structures allocated in order to fail any allocations
@@ -70,7 +144,19 @@ counting.
 	Suppose further that the structures are short-lived, the
 	limit is rarely exceeded, and a ``sloppy'' approximate limit
 	is acceptable.
+
+	\fi
+
 }\EQuickQuizAnswer{
+	힌트: 이 카운터를 업데이트 하는 행위는 이번에도 무척 빨라야 하지만, 이
+	카운터는 값이 증가될 때마다 읽혀집니다.
+	하지만, 읽혀지는 값은 대략적인 정도를 넘어서는 차이는 구분할 수 있어야
+	한다는 점을 \emph{제외하고는} 아주 정확하지 않아도 됩니다.
+	Section~\ref{sec:count:Approximate Limit Counters} 을 읽어보시기
+	바랍니다.
+
+	\iffalse
+
 	Hint: The act of updating the counter must again be blazingly
 	fast, but the counter is read out each time that the
 	counter is increased.
@@ -79,11 +165,26 @@ counting.
 	between values below the limit and values greater than or
 	equal to the limit.
 	See Section~\ref{sec:count:Approximate Limit Counters}.
+
+	\fi
+
 }\EQuickQuizEnd
 
 \QuickQuizLabel{\QcountQapproxcnt}
 
 \EQuickQuiz{
+	{ \bfseries 정확한 구조체 할당 한계 문제. }
+	어떤 구조체의 할당이 그 구조체의 수가 정확한 한계 (예를 들어 10,000) 를
+	넘어셨을 때 반드시 실패하도록 하게 하기 위해 할당된 구조체의 갯수를
+	유지해야 한다고 생각해 봅시다.
+	더 나아가서 이 구조체는 수명이 짧고, 이 한계는 아주 가끔만 초과되어서,
+	거의 항상 하나의 구조체만이 실제로 사용되고 있고, 더 나아가서 이
+	카운터가 정확히 언제 0이 되는지, 예를 들어 그 구조체가 단 하나도
+	사용되고 있지 않다면 어떤 메모리를 해제하거나 하기 위해 이 카운터가
+	정확히 언제 0이 되는지 알아야 한다고 해봅시다.
+
+	\iffalse
+
 	{ \bfseries Exact structure-allocation limit problem. }
 	Suppose that you need to maintain a count of the number of
 	structures allocated in order to fail any allocations
@@ -96,7 +197,19 @@ counting.
 	zero, for example, in order to free up some memory
 	that is not required unless there is at least one structure
 	in use.
+
+	\fi
+
 }\EQuickQuizAnswer{
+	힌트: 이 카운터의 업데이트는 이번에도 무척 빨라야 하지만 이 카운터가
+	증가될 때마다 읽혀집니다.
+	하지만, 읽혀지는 값은 이 값이 이 한계와 0 사이인지, 0 이하인지, 또는
+	한계 이상인지 를 완벽하게 구분해야 한다는 점을 \emph{제외하고는}
+	정확하지 않아도 됩니다.
+	Section~\ref{sec:count:Exact Limit Counters} 을 읽어 보시기 바랍니다.
+
+	\iffalse
+
 	Hint: The act of updating the counter must once again be blazingly
 	fast, but the counter is read out each time that the
 	counter is increased.
@@ -106,18 +219,50 @@ counting.
 	and values that either are less than or equal to zero or
 	are greater than or equal to the limit on the other hand.
 	See Section~\ref{sec:count:Exact Limit Counters}.
+
+	\fi
+
 }\EQuickQuizEnd
 
 \QuickQuizLabel{\QcountQexactcnt}
 
 \EQuickQuiz{
+	{ \bfseries 제거 가능한 I/O 기기 액세스 카운트 문제. }
+	많이 사용되는 제거 가능한 대용량 저장 장치의 레퍼런스 카운트를 유지해야
+	한다고 해봅시다, 여러분이 사용자에게 이 기기를 제거하는게 언제 안전한지
+	말하기 위해서요.
+	평범한 경우처럼, 이 사용자는 이 기기를 제거하고자 하는 의도를 알릴
+	것이고, 시스템은 이 사용자에게 그게 언제 안전한지 알려줘야 합니다.
+
+	\iffalse
+
 	{ \bfseries Removable I/O device access-count problem. }
 	Suppose that you need to maintain a reference count on a
 	heavily used removable mass-storage device, so that you
 	can tell the user when it is safe to remove the device.
 	As usual, the user indicates a desire to remove the device, and
 	the system tells the user when it is safe to do so.
+
+	\fi
+
 }\EQuickQuizAnswer{
+	힌트: 또다시, 이 카운터의 업데이트는 I/O 오퍼레이션의 속도를 낮추지
+	않기 위해 무척 빠르고 확장성 있어야 합니다만, 이 카운터는 사용자가 이
+	기기를 제거하고자 할때만 읽혀지므로, 이 카운터의 읽기는 무척 느려도
+	괜찮습니다.
+	더 나아가서, 이 사용자가 이미 이 기기를 제고하고자 한다고 알리기
+	전까지는 이 카운터를 읽을 필요 자체가 없습니다.
+	또한, 읽혀지는 값은 0과 0이 아닌 값을 완전히 구분할 수 있어야 한다는
+	점, 그리고 이 기기가 제거되는 중일 때를 \emph{제외하고는} 정확하지
+	않아도 괜찮습니다.
+	하지만, 일단 0이라는 값이 읽혀진다면, 뒤따르는 쓰레드가 이 제거중인
+	기기의 액세스를 얻게 되는 일을 막기 위한 행동이 이뤄지기 전까지는 그
+	값을 0으로 유지해야 합니다.
+	Section~\ref{sec:count:Applying Exact Limit Counters} 을 읽어 보시기
+	바랍니다.
+
+	\iffalse
+
 	Hint: Yet again, the act of updating the counter must be blazingly
 	fast and scalable in order to avoid slowing down I/O operations,
 	but because the counter is read out only when the
@@ -135,9 +280,27 @@ counting.
 	to prevent subsequent threads from gaining access to the
 	device being removed.
 	See Section~\ref{sec:count:Applying Exact Limit Counters}.
+
+	\fi
+
 }\EQuickQuizEnd
 
 \QuickQuizLabel{\QcountQIOcnt}
+
+\Cref{sec:count:Why Isn't Concurrent Counting Trivial?}
+는 왜 카운팅이 사소하지 않은지 보입니다.
+\Cref{sec:count:Statistical Counters,sec:count:Approximate Limit Counters}
+는 각각 네트워크 패킷 카운팅과 대략적 구조체 할당 한계를 분석합니다.
+\Cref{sec:count:Exact Limit Counters}
+는 정확한 구조체 할당 한계를 다룹니다.
+마지막으로, \cref{sec:count:Parallel Counting Discussion}
+는 성능 측정과 기타 토론을 제공합니다.
+
+\Cref{sec:count:Why Isn't Concurrent Counting Trivial?,%
+sec:count:Statistical Counters}
+는 초반 소개를 담고 있으며, 뒤따르는 섹션들은 좀 더 고급 주제를 다룹니다.
+
+\iffalse
 
 \Cref{sec:count:Why Isn't Concurrent Counting Trivial?}
 shows why counting is non-trivial.
@@ -153,6 +316,8 @@ presents performance measurements and discussion.
 sec:count:Statistical Counters}
 contain introductory material, while the remaining sections
 are more advanced.
+
+\fi
 
 \section{Why Isn't Concurrent Counting Trivial?}
 \label{sec:count:Why Isn't Concurrent Counting Trivial?}
