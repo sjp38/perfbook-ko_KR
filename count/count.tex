@@ -324,6 +324,17 @@ are more advanced.
 %
 \epigraph{Seek simplicity, and distrust it.}{\emph{Alfred North Whitehead}}
 
+일단 뭔가 간단한, 예를 들어
+Listing~\ref{lst:count:Just Count!} (\path{count_nonatomic.c})
+에 보여진 간단한 수식으로 시작해 봅시다.
+\begin{fcvref}[ln:count:count_nonatomic:inc-read]
+여기서, 우린 라인~\lnref{counter} 에 카운터를 가지고 있고 라인~\lnref{inc} 에서
+이를 증가 시키며, 라인~\lnref{read} 에서 그 값을 읽습니다.
+뭐가 더 간단할 수 있을까요?
+\end{fcvref}
+
+\iffalse
+
 Let's start with something simple, for example, the straightforward
 use of arithmetic shown in
 Listing~\ref{lst:count:Just Count!} (\path{count_nonatomic.c}).
@@ -333,16 +344,38 @@ line~\lnref{inc}, and we read out its value on line~\lnref{read}.
 What could be simpler?
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	한가지 더 간단할 수 있는 것은 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 를
+	함께 사용하는 대신 더 간단한 \co{++} 를 사용하는 것일 수 있습니다.
+	무엇 때문에 그렇게 추가적인 타이핑을 하죠???
+
+	\iffalse
+
 	One thing that could be simpler is \co{++} instead of that
 	concatenation of \co{READ_ONCE()} and \co{WRITE_ONCE()}.
 	Why all that extra typing???
+
+	\fi
+
 }\QuickQuizAnswer{
+	컴파일러가 어떻게 문제를 일으킬 수 있는지, 그리고 \co{READ_ONCE()} 와
+	\co{WRITE_ONCE()} 가 이 문제를 어떻게 막을 수 있는지에 대한 내용을 위해
+	페이지 ~\pageref{sec:toolsoftrade:Shared-Variable Shenanigans}
+	의 \cref{sec:toolsoftrade:Shared-Variable Shenanigans}
+	를 보시기 바랍니다.
+
+	\iffalse
+
 	See \cref{sec:toolsoftrade:Shared-Variable Shenanigans}
 	on page~\pageref{sec:toolsoftrade:Shared-Variable Shenanigans}
 	for more information on how the compiler can cause trouble,
 	as well as how \co{READ_ONCE()} and \co{WRITE_ONCE()} can avoid
 	this trouble.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -350,6 +383,17 @@ What could be simpler?
 \caption{Just Count!}
 \label{lst:count:Just Count!}
 \end{listing}
+
+이 방법은 여러분이 읽기를 많이 하고 값 증가는 거의 하지 않는다면 무척 빠를
+것이고, 작은 시스템에서라면 성능이 훌륭할 겁니다.
+
+여기 하나의 큰 문제가 있습니다: 이 방법은 카운트를 잃을 수 있습니다.
+제 여섯개 코어가 있는 x86 랩탑에서, \co{inc_count()} 를 285,824,000 번
+수행시켰습니다만, 이 카운터의 최종값은 35,385,525 뿐이었습니다.
+대략적인 정확성이 컴퓨팅에서 큰 위치를 차지하긴 하지만, 87\,\% 의 카운트 손실은
+약간 지나칩니다.
+
+\iffalse
 
 This approach has the additional advantage of being blazingly fast if
 you are doing lots of reading and almost no incrementing, and on small
@@ -363,8 +407,19 @@ On my six-core x86 laptop, a short run invoked \co{inc_count()}
 Although approximation does have a large place in computing, loss of
 87\,\% of the counts is a bit excessive.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	하지만 영리한 컴파일러는
+	Listing~\ref{lst:count:Just Count!} 의
+	라인~\ref{ln:count:count_nonatomic:inc-read:inc}
+	이 \co{++} 연산자와 동일함을 알아차리고 x86 add-to-memory 인스트럭션을
+	생성하지 않을까요?
+	그리고 CPU 캐쉬는 이를 어토믹하게 만들지 않을까요?
+
+	\iffalse
+
 	But can't a smart compiler prove that
 	line~\ref{ln:count:count_nonatomic:inc-read:inc}
 	of
@@ -372,7 +427,24 @@ Although approximation does have a large place in computing, loss of
 	is equivalent to the \co{++} operator and produce an x86
 	add-to-memory instruction?
 	And won't the CPU cache cause this to be atomic?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\co{++} 연산자는 어토믹할 수도 \emph{있지만}, 그게 C11 \co{_Atomic}
+	변수에 행해지는게 아니라면 그래야 한다는 요구사항은 없습니다.
+	그리고 실제로, \co{_Atomic} 이 없다면, \GCC\ 는 종종 이 값을 레지스터에
+	로드하고, 이 레지스터의 값을 증가시킨 후, 그 값을 메모리에 저장해서,
+	분명히 어토믹하지 않게 합니다.
+
+	더 나아가, 컴파일러에게 이 위치는 MMIO 디바이스 레지스터일 수도 있다고
+	이야기하는 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 내에서의 volatile
+	캐스팅을 알아 두시기 바랍니다.
+	MMIO 레지스터는 캐쉬되지 않으므로, 컴파일러에게 있어 이 값 증가 연산이
+	어토믹하다는 가정은 현명하지 못한 것일 겁니다.
+
+	\iffalse
+
 	Although the \co{++} operator \emph{could} be atomic, there
 	is no requirement that it be so unless it is applied to a
 	C11 \co{_Atomic} variable.
@@ -387,14 +459,39 @@ Although approximation does have a large place in computing, loss of
 	device register.
 	Because MMIO registers are not cached, it would be unwise for
 	the compiler to assume that the increment operation is atomic.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	실패 횟수의 8-figure accuracy 는 당신이 이걸 진짜로 테스트 했음을
+	알립니다.
+	특히나 버그가 검사하는 것만으로 쉽게 보일 수 있는 이런 경우에 이런
+	사소한 프로그램을 테스트할 필요가 있을까요?
+
+	\iffalse
+
 	The 8-figure accuracy on the number of failures indicates
 	that you really did test this.
 	Why would it be necessary to test such a trivial program,
 	especially when the bug is easily seen by inspection?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	간단한 병렬 프로그램은 적으며, 대부분의 날에 저는 간단한 순차적
+	프로그램도 많지 않을 수 있다고 생각합니다.
+
+	그 프로그램이 얼마나 작고 간단한지에 관계 없이, 여러분이 그걸 테스트
+	하지 않았다면, 그것은 동작하지 않는 겁니다.
+	그리고 여러분이 그걸 테스트 했더라도, 머피의 법칙은 여전히 몇개의
+	버그는 숨어 있을 거라 말합니다.
+
+	더 나아가, 정확성의 증명은 그 가치가 있지만, 그것이
+	여기서 사용된 \path{counttorture.h} 테스트 셋업을 포함해 테스팅을
+	대체하지는 않을 겁니다.
+
 	Not only are there very few
 	trivial parallel programs, and most days I am
 	not so sure that there are many trivial sequential programs, either.
@@ -426,6 +523,26 @@ Although approximation does have a large place in computing, loss of
 \label{fig:count:Atomic Increment Scalability on x86}
 \end{figure}
 
+정확한 카운팅을 하는 간단한 방법은
+Listing~\ref{lst:count:Just Count Atomically!} (\path{count_atomic.c})
+에 보여진 것처럼 어토믹 오퍼레이션을 사용하는 것입니다.
+\begin{fcvref}[ln:count:count_atomic:inc-read]
+라인~\lnref{counter} 는 어토믹 변수를 정의하고, 라인~\lnref{inc} 는 이를
+어토믹하게 증가시키며, 라인~\lnref{read} 는 이를 읽습니다.
+\end{fcvref}
+이것은 어토믹 하므로, 완전한 카운트를 유지합니다.
+하지만, 더 느립니다: 제 6개 코어 x86 랩톱에서, 어토믹하지 않은 값 증가 버전에
+비해, 단일 쓰레드만 사용될 때 조차도 20배가 넘게 느립니다.\footnote{
+	흥미롭게도, 어토믹하지 않게 카운터를 증가시키는 것은 어토믹하게 이
+	카운터를 증가시키는 것보다도 빠른 속도로 그 값을 증가시킵니다.
+	물론, 여러분의 목표가 오직 이 카운터를 빨리 증가시키려는 거라면, 더
+	쉬운 방법은 그냥 큰 값을 이 카운터에 할당하는 것일 겁니다.
+	하지만, 더 큰 성능과 확장성을 위해 완화된 정확성의 개념을 주의 깊게
+	사용하는 알고리즘의 역할도 있을 수 있을
+	겁니다~\cite{Andrews91textbook,Arcangeli03,10.5555/3241639.3241645,DavidUngar2011unsync}.}
+
+\iffalse
+
 The straightforward way to count accurately is to use atomic operations,
 as shown in
 Listing~\ref{lst:count:Just Count Atomically!} (\path{count_atomic.c}).
@@ -449,6 +566,22 @@ when only a single thread is incrementing.\footnote{
 	greater performance and
 	scalability~\cite{Andrews91textbook,Arcangeli03,10.5555/3241639.3241645,DavidUngar2011unsync}.}
 
+\fi
+
+이 처참한 성능은
+Chapter~\ref{chp:Hardware and its Habits}
+에서의 토의를 생각해 보면 놀랍지 않은 것이고, 어토믹 값 증가의 성능이 CPU 와
+쓰레드의 수가 증가함에 따라
+Figure~\ref{fig:count:Atomic Increment Scalability on x86}
+에 보여진 것처럼 더 느려지는 것도 놀라운 일이 아닙니다.
+이 그림에서, x~축의 가로로 그려진 점선은 완전하게 확장되는 알고리즘이 얻을 수
+있을 이상적 성능입니다: 그런 알고리즘이 있다면, 하나의 값 증가는 싱글쓰레드
+프로그램에서의 것과 동일한 오버헤드만을 일으킬 겁니다.
+단일 전역 변수의 어토믹 값 증가는 분명 이상적이지 않고, 추가되는 CPU 에서
+수천수만배의 오버헤드를 일으킵니다.
+
+\iffalse
+
 This poor performance should not be a surprise, given the discussion in
 Chapter~\ref{chp:Hardware and its Habits},
 nor should it be a surprise that the performance of atomic increment
@@ -462,6 +595,8 @@ program.
 Atomic increment of a single global variable is clearly
 decidedly non-ideal, and gets multiple orders of magnitude worse with
 additional CPUs.
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
