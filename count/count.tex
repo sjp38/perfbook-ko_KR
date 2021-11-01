@@ -600,9 +600,28 @@ additional CPUs.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	x~축 상의 가로의 점선은 왜 $x=1$ 에서 대각선에 붙지 않나요?
+
+	\iffalse
+
 	Why doesn't the horizontal dashed line on the x~axis meet the
 	diagonal line at $x=1$?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	어토믹 오퍼레이션의 오버헤드 때문입니다.
+	x~축 상의 점선은 단일 \emph{non-atomic} 값 증가의 오버헤드를
+	나타냅니다.
+	어쨌건, \emph{이상적인} 알고리즘은 선형으로 확장하기만 하는게 아니라,
+	싱글쓰레드 코드에 비교해서도 성능 페널티를 일으키지 않을 겁니다.
+
+	이 수준의 이상성은 지나치게 느껴질 수도 있겠으나, 이게
+	\ppl{Linus}{Torvalds} 에게 충분히 좋다면, 여러분에게도 충분히 좋을
+	겁니다.
+
+	\iffalse
+
 	Because of the overhead of the atomic operation.
 	The dashed line on the x~axis represents the overhead of
 	a single \emph{non-atomic} increment.
@@ -612,16 +631,43 @@ additional CPUs.
 
 	This level of idealism may seem severe, but if it is good
 	enough for \ppl{Linus}{Torvalds}, it is good enough for you.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	하지만 어토믹 값 증가는 여전히 무척 빠릅니다.
+	그리고 짧은 반복문 내에서 하나의 변수를 값 증가시키는 것은 제게 굉장히
+	비현실적으로 들리는데, 어쨌건, 대부분의 프로그램의 실행은 진짜 일을
+	하는데 사용되어야지, 자신이 한 일을 세는데 쓰이면 안됩니다!
+	왜 제가 이걸 빠르게 하는데 신경을 써야 하죠?
+
+	\iffalse
+
 	But atomic increment is still pretty fast.
 	And incrementing a single variable in a tight loop sounds
 	pretty unrealistic to me, after all, most of the program's
 	execution should be devoted to actually doing work, not accounting
 	for the work it has done!
 	Why should I care about making this go faster?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	많은 경우에, 어토믹 값 증가는 실제로 여러분에게 충분히 빠를 겁니다.
+	그런 경우에, 여러분은 어토믹 값 증가를 사용해야 합니다.
+	그러나, 더 나은 카운팅 알고리즘이 필요한 실제 세계의 상황들이 많이
+	있습니다.
+	그런 상황의 예 중 하나는 상당히 최적화 된 네트워킹 스택에서 패킷과
+	바이트를 세는 것으로, 특히 거대한 멀티프로세서에서라면 이런 종류의
+	카운팅 작업에 상당히 많은 수행 시간이 사용되기 쉽습니다.
+
+	또한, 이 챕터의 시작에서 이야기 했듯이, 카운팅은 공유 메모리 병렬
+	프로그램에서 마주칠 수 있는 문제들을 잘 보여줍니다.
+
+	\iffalse
+
 	In many cases, atomic increment will in fact be fast enough
 	for you.
 	In those cases, you should by all means use atomic increment.
@@ -636,6 +682,9 @@ additional CPUs.
 	In addition, as noted at the beginning of this chapter,
 	counting provides an excellent view of the
 	issues encountered in shared-memory parallel programs.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
@@ -653,6 +702,21 @@ additional CPUs.
 \ContributedBy{Figure}{fig:count:Waiting to Count}{Melissa Broussard}
 \end{figure}
 
+전역 어토믹 값 증가에 대한 다른 관점을 위해,
+Figure~\ref{fig:count:Data Flow For Global Atomic Increment}
+를 보시기 바랍니다.
+각 CPU 가 주어진 전역 변수의 값을 증가할 기회를 얻기 위해, 해당 변수를 담고
+있는 캐쉬 라인은 빨간 화살표로 보여진 것처럼 모든 CPU 사이를 순환해야만 합니다.
+그런 순환은 상당한 시간을 취할 것이어서,
+Figure~\ref{fig:count:Atomic Increment Scalability on x86}
+에 보여진 처참한 성능에 이를 것으로,
+Figure~\ref{fig:count:Waiting to Count}
+처럼 생각될 수 있겠습니다.
+다음 섹션들에서는 이런 순환에서 피할 수 없는 지연을 회피하기 위한 고성능
+카운팅에 대해 이야기 해봅니다.
+
+\iffalse
+
 For another perspective on global atomic increment, consider
 Figure~\ref{fig:count:Data Flow For Global Atomic Increment}.
 In order for each CPU to get a chance to increment a given
@@ -666,11 +730,42 @@ Figure~\ref{fig:count:Waiting to Count}.
 The following sections discuss high-performance counting, which
 avoids the delays inherent in such circulation.
 
+\fi
+
 \QuickQuiz{
+	하지만 왜 CPU 설계자들은 값이 증가되어야 하는 전역 변수를 담고 있는
+	캐쉬 라인이 순환될 필요를 없애는 추가적인 기능을 제공하지 않는 거죠?
+
+	\iffalse
+
 	But why can't CPU designers simply ship the addition operation to the
 	data, avoiding the need to circulate the cache line containing
 	the global variable being incremented?
+
+	\fi
+
 }\QuickQuizAnswer{
+	어떤 경우들에는 그렇게 하는게 가능할 수도 있습니다.
+	하지만, 좀 복잡한 부분이 있습니다:
+	\begin{enumerate}
+	\item	이 변수의 값이 필요하다면, 이 쓰레드는 이 오퍼레이션이 이
+		데이터에 도달할 때까지, 그리고 나서는 그 결과가 돌아올 때까지
+		기다려야 합니다.
+	\item	이 어토믹 값 증가가 앞 또는 뒤의 오퍼레이션들에 대해
+		순서지어져야 한다면, 이 쓰레드는 이 오퍼레이션이 이 데이터에
+		도달할 때까지, 그리고 이 오퍼레이션이 완료되었다는 통지가
+		돌아올 때까지 기다려야 합니다.
+	\item	CPU 들 사이에서 오퍼레이션을 전달하는 것은 시스템 인터커넥트
+		상에 더 많은 선로를 필요로 할텐데, 이는 더 많은 다이 영역과
+		전력을 소모할 겁니다.
+	\end{enumerate}
+	하지만 첫번째 두 조건들이 없다면 어떨까요?
+	그렇다면 여러분은 평범한 하드웨어에서 이상에 가까운 성능을 달성하는,
+	Section~\ref{sec:count:Statistical Counters}
+	에서 이야기 하는 알고리즘을 주의 깊게 생각해 봐야 합니다.
+
+	\iffalse
+
 	It might well be possible to do this in some cases.
 	However, there are a few complications:
 	\begin{enumerate}
@@ -692,12 +787,36 @@ avoids the delays inherent in such circulation.
 	in Section~\ref{sec:count:Statistical Counters}, which achieve
 	near-ideal performance on commodity hardware.
 
+	\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{count/GlobalTreeInc}}
 \caption{Data Flow For Global Combining-Tree Atomic Increment}
 \label{fig:count:Data Flow For Global Combining-Tree Atomic Increment}
 \end{figure}
+
+	앞의 두 조건 중 하나라도 성립된다면, 개선된 하드웨어를 위한 \emph{어떤}
+	희망이 있습니다.
+	하드웨어가 콤바이닝 트리를 구현해서 여러 CPU 로부터의 값 증가 요청이
+	하드웨어에 의해 하나의 값 추가로 결합되는 걸 상상해 볼 수 있겠습니다.
+	이 하드웨어는 또한 이 요청들에 순서를 적용시켜서, 각 CPU 에게 각자의
+	어토믹 값 증가에 해당하는 값을 리턴시켜줄 수도 있을 겁니다.
+	이는 이 명령의 응답시간을 $\O{\log N}$ 으로 만들텐데, $N$ 은
+	Figure~\ref{fig:count:Data Flow For Global Combining-Tree Atomic Increment}
+	에 보인 것과 같이 CPU 갯수입니다.
+	그리고 이런 종류의 하드웨어 최적화를 가진 CPU 들이 2011년부터 등장하기
+	시작했습니다.
+
+	이는
+	Figure~\ref{fig:count:Data Flow For Global Atomic Increment}
+	에 보인 현재 하드웨어의 $\O{N}$ 성능에 비해 엄청난 개선이며, 3차원 구조
+	같은 혁신이 실용적인 것으로 증명된다면 추가적인 하드웨어 응답시간
+	감소도 가능합니다.
+	그러나, 어떤 중요한 특수한 경우에 있어서는 소프트웨어가 \emph{훨씬} 잘
+	할 수 있음을 볼 겁니다.
+
+	\iffalse
 
 	If either or both of the first two conditions hold, there is
 	\emph{some} hope for improved hardware.
@@ -722,6 +841,9 @@ avoids the delays inherent in such circulation.
 	practical.
 	Nevertheless, we will see that in some important special cases,
 	software can do \emph{much} better.
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Statistical Counters}
