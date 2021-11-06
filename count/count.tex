@@ -950,20 +950,47 @@ on page~\pageref{sec:SMPdesign:Data Ownership}.
 \subsection{Array-Based Implementation}
 \label{sec:count:Array-Based Implementation}
 
+쓰레드당 변수를 제공하는 한가지 방법은 (거짓 공유를 방지하기 위해 캐쉬라인에
+맞춰 정렬되고 패딩 되어 있다는 가정 하에) 쓰레드당 하나의 원소를 갖는 배열을
+할당하는 것입니다.
+
+\iffalse
+
 One way to provide per-thread variables is to allocate an array with
 one element per
 thread (presumably cache aligned and padded to avoid false sharing).
 
+\fi
+
 \QuickQuiz{
+	배열이요???
+	하지만 그럼 쓰레드의 수가 제한되지 않나요?
+
+	\iffalse
+
 	An array???
 	But doesn't that limit the number of threads?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그럴 수 있습니다, 그리고 이 장난감 구현에서는, 그렇습니다.
+	하지만 임의의 수의 쓰레드를 허용하는 대안적 구현은 그렇게 어렵지
+	않은데, 예를 들면
+	Section~\ref{sec:count:Per-Thread-Variable-Based Implementation}
+	에 보여진 \GCC 의 \co{__thread} 기능을 사용하는 겁니다.
+
+	\iffalse
+
 	It can, and in this toy implementation, it does.
 	But it is not that hard to come up with an alternative
 	implementation that permits an arbitrary number of threads,
 	for example, using \GCC's \co{__thread} facility,
 	as shown in
 	Section~\ref{sec:count:Per-Thread-Variable-Based Implementation}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -971,6 +998,29 @@ thread (presumably cache aligned and padded to avoid false sharing).
 \caption{Array-Based Per-Thread Statistical Counters}
 \label{lst:count:Array-Based Per-Thread Statistical Counters}
 \end{listing}
+
+그런 배열은
+Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
+(\path{count_stat.c})
+에 보여진 per-thread 기능으로 감싸질 수 있습니다.
+\begin{fcvref}[ln:count:count_stat:inc-read]
+라인~\lnref{define} 은 창의적이게도 \co{counter} 라고 이름지어진, \co{unsigned
+long} 타입의 쓰레드당 카운터의 집합을 담는 배열을 정의합니다.
+
+\Clnrefrange{inc:b}{inc:e} 는 \co{__get_thread_var()} 기능을 현재 수행중인
+쓰레드의 \co{counter} 배열 내 원소 위치를 알아내기 위해 사용해서 카운터를
+증가시키는 함수를 보입니다.
+이 원소는 이 연관된 쓰레드에 의해서만 증가되므로, 어토믹하지 않은 값 증가로도
+충분합니다.
+하지만, 이 코드는 위험한 컴파일러 최적화를 방지하기 위해 \co{WRITE_ONCE()} 를
+사용합니다.
+한가지 예만 들자면, 이 컴파일러는 저장되어질 위치를 임시의 저장소로 사용할
+권리를 갖고 있으므로, 이 위치에 어떤 의도와 목적으로든 쓰레기를 이 요청된
+스토어 이전에 이 위치에 저장할 수 있습니다.
+이는 당연하게도 이 카운트를 읽으려는 모든 시도를 혼란하게 만들 수 있습니다.
+\co{WRITE_ONCE()} 의 사용은 이 최적화와 다른 것들을 방지해 줍니다.
+
+\iffalse
 
 Such an array can be wrapped into per-thread primitives, as shown in
 Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
@@ -995,9 +1045,27 @@ This could of course be rather confusing to anything attempting to
 read out the count.
 The use of \co{WRITE_ONCE()} prevents this optimization and others besides.
 
+\fi
+
 \QuickQuiz{
+	\GCC\ 는 이것 외에 어떤 못된 최적화를 할 수 있나요?
+
+	\iffalse
+
 	What other nasty optimizations could \GCC\ apply?
+
+	\fi
 }\QuickQuizAnswer{
+	더 많은 정보를 위해
+	\cref{sec:toolsoftrade:Shared-Variable Shenanigans,%
+	sec:memorder:Compile-Time Consternation}
+	를 참고하시기 바랍니다.
+	한가지 못된 최적화는 뒤따르는 \co{read_count()} 함수에 흔한 부가적 표현
+	제거를 적용하는 것으로, 이는 이 값의 변화가 이 함수로의 이어지는
+	호출로부터 리턴될 거라고 믿는 코드를 놀라게 할 수도 있을 겁니다.
+
+	\iffalse
+
 	See \cref{sec:toolsoftrade:Shared-Variable Shenanigans,%
 	sec:memorder:Compile-Time Consternation}
 	for more information.
@@ -1005,7 +1073,27 @@ The use of \co{WRITE_ONCE()} prevents this optimization and others besides.
 	elimination to successive calls to the \co{read_count()} function,
 	which might come as a surprise to code expecting changes in the
 	values returned from successive calls to that function.
+
+	\fi
+
 }\QuickQuizEnd
+
+\Clnrefrange{read:b}{read:e}
+는 이 카운터의 합쳐진 값을 읽어들이는데, 현재 수행중인 쓰레드의 리스트를
+순회하는데에 \co{for_each_thread()} 기능을 사용하고, 특정 쓰레드의 카운터를
+읽어들이기 위해 \co{per_thread()} 기능을 사용합니다.
+이 코드는 또한 컴파일러가 이 로드를 무시하는 최적화를 하지 못하게
+\co{READ_ONCE()} 를 사용합니다.
+한가지만 예를 들자면, \co{read_count()} 로의 이어지는 두개의 호출은 인라인될
+수도 있고, 대담한 최적화는 같은 위치가 더하기 되었으며 따라서 이것들을 한번만
+더하기 하고 그 결과 값을 두번 사용하는게 더 간단하고 나을 수 있을 거라는 잘못된
+결론을 내릴 수 있습니다.
+이런 종류의 최적화는 나중의 \co{read_count()} 호출이 다른 쓰레드의 활동을
+계산할 거라 예상하는 사람들을 좌절하게 만들 수도 있습니다.
+\co{READ_ONCE()} 의 사용은 이 최적화와 비슷한 것들을 방지합니다.
+\end{fcvref}
+
+\iffalse
 
 \Clnrefrange{read:b}{read:e}
 show a function that reads out the aggregate value of the counter,
@@ -1023,6 +1111,8 @@ later \co{read_count()} calls to account for the activities of other
 threads.
 The use of \co{READ_ONCE()} prevents this optimization and others besides.
 \end{fcvref}
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
