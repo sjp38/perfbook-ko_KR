@@ -869,6 +869,20 @@ posed in \QuickQuizRef{\QcountQstatcnt}.
 
 \subsection{Design}
 
+통계적 카운팅은 일반적으로 쓰레드당 (또는 커널에서 돌아가는 경우라면 CPU 당)
+카운터를 제공해서
+page~\pageref{sec:toolsoftrade:Per-CPU Variables} 의
+Section~\ref{sec:toolsoftrade:Per-CPU Variables}
+에서 앞서 보여진 것처럼 각 쓰레드가 자신의 카운터를 증가시키도록 합니다.
+카운터들의 합쳐진 값은 간단히 이 쓰레드들의 카운터를 모두 합해서 구해지는데,
+더하기의 상호성과 결합성에 의존합니다.
+이는
+page~\pageref{sec:SMPdesign:Data Ownership} 의
+Section~\ref{sec:SMPdesign:Data Ownership}
+에서 소개된 데이터 소유권 패턴의 한 예입니다.
+
+\iffalse
+
 Statistical counting is typically handled by providing a counter per
 thread (or CPU, when running in the kernel), so that each thread
 updates its own counter, as was foreshadowed in
@@ -881,10 +895,37 @@ This is an example of the Data Ownership pattern that will be introduced in
 Section~\ref{sec:SMPdesign:Data Ownership}
 on page~\pageref{sec:SMPdesign:Data Ownership}.
 
+\fi
+
 \QuickQuiz{
+	하지만 C 의 ``정수형'' 이 크기 제한이 있다는 사실이 이를 복잡하게
+	만들지는 않나요?
+
+	\iffalse
+
 	But doesn't the fact that C's ``integers'' are limited in size
 	complicate things?
+
+	\fi
+
 }\QuickQuizAnswer{
+	아닙니다, 왜냐하면 더하기는 여전히 상호적이고 결합적입니까요.
+	최소한 unsigned integer 를 사용하는 동안은요.
+	C 표준에서, signed integer 의 오버플로우는 undefined behavior 를
+	초래함을 기억하시고, 오버플로우 시에 래핑 외의 어떤 일을 하는 기계는
+	요즘 굉장히 드물다는 사실은 신경쓰지 마세요.
+	불행히도, 컴파일러는 signed integer 가 절대 오버플로우 되지 않을 거라는
+	가정 하에 최적화를 종종 행하여서, 여러분의 코드가 signed integer 를
+	오버플로우 나게 한다면, 현대의 twos-complement 하드웨어에서라도 문제를
+	일으킬 수 있습니다.
+
+	그렇다고는 하나, (예를 들어) 32비트 쓰레드당 카운터의 합을 64비트로
+	만들려 할 때 추가적인 복잡도의 요인이 존재합니다.
+	이런 추가적 복잡성을 처리하는 것은 독자 여러분의 몫으로 남겨두겠는데,
+	이 챕터의 뒷부분에서 소개되는 일부 기법들이 상당히 도움이 될 겁니다.
+
+	\iffalse
+
 	No, because modulo addition is still commutative and associative.
 	At least as long as you use unsigned integers.
 	Recall that in the C standard, overflow of signed integers results
@@ -901,6 +942,9 @@ on page~\pageref{sec:SMPdesign:Data Ownership}.
 	Dealing with this added complexity is left as
 	an exercise for the reader, for whom some of the techniques
 	introduced later in this chapter could be quite helpful.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Array-Based Implementation}
