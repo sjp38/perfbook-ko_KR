@@ -1116,10 +1116,26 @@ The use of \co{READ_ONCE()} prevents this optimization and others besides.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
+	의 \co{counter} per-thread 변수는 어떻게 초기화 되나요?
+
+	\iffalse
+
 	How does the per-thread \co{counter} variable in
 	Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
 	get initialized?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	C 표준은 전역 변수의 초기값은 명시적으로 초기화 되지 않는다면 0이라고
+	명시하고 있으므로, \co{counter} 의 모든 인스턴스는 묵시적으로 0으로
+	초기화 됩니다.
+	이와는 별개로, 사용자가 통계적 카운터들로부터의 연속된 읽기 사이의
+	차이에 대해서만 관심이 있다면 이 초기값은 의미 없을 겁니다.
+
+	\iffalse
+
 	The C standard specifies that the initial value of
 	global variables is zero, unless they are explicitly initialized,
 	thus implicitly initializing all the instances of \co{counter}
@@ -1127,16 +1143,36 @@ The use of \co{READ_ONCE()} prevents this optimization and others besides.
 	Besides, in the common case where the user is interested only in
 	differences between consecutive reads from statistical counters,
 	the initial value is irrelevant.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
+	의 코드는 복수의 카운터를 어떻게 허용할까요?
+
+	\iffalse
+
 	How is the code in
 	Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
 	supposed to permit more than one counter?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	실제로, 이 장난감 예제는 복수의 카운터를 허용하지 않습니다.
+	복수의 카운터를 제공할 수 있도록 이걸 수정하는 것은 독자 여러분의
+	과제로 남겨둡니다.
+
+	\iffalse
+
 	Indeed, this toy example does not support more than one counter.
 	Modifying it so that it can provide multiple counters is left
 	as an exercise to the reader.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
@@ -1147,6 +1183,17 @@ The use of \co{READ_ONCE()} prevents this optimization and others besides.
 \label{fig:count:Data Flow For Per-Thread Increment}
 \end{figure}
 
+이 방법은 \co{inc_count()} 를 수행하는 업데이트 쓰레드의 수의 증가와 함께
+선형적으로 확장됩니다.
+Figure~\ref{fig:count:Data Flow For Per-Thread Increment}
+의 각 CPU 에 초록 화살표로 보여진 것처럼, 이에 대한 이유는 각 CPU 가 비싼
+시스템간 통신 없이 자신의 쓰레드의 변수를 값 증가시키는데 빠른 진행을 만든다는
+것입니다.
+그것으로서, 이 섹션은 이 챕터의 시작에서 이야기 된 네트워크 패킷 카운팅 문제를
+해결합니다.
+
+\iffalse
+
 This approach scales linearly with increasing number of updater threads
 invoking \co{inc_count()}.
 As is shown by the green arrows on each CPU in
@@ -1156,7 +1203,22 @@ its thread's variable, without any expensive cross-system communication.
 As such, this section solves the network-packet counting problem presented
 at the beginning of this chapter.
 
+\fi
+
 \QuickQuiz{
+	이 읽기 오퍼레이션은 쓰레드당 값을 합하는데 시간을 요하며, 이 시간 동안
+	이 카운터의 값은 변화될 수 있습니다.
+	이는
+	Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
+	의 \co{read_count()} 를 통해 리턴되는 값은 정확하지 않을 것을
+	의미합니다.
+	이 카운터는 단위 시간당 $r$ 카운트의 속도로 증가된다고, 그리고
+	\co{read_count()} 의 수행은 $\Delta$ 단위 시간을 소모한다고 가정해
+	봅시다.
+	리턴되는 값에 예상되는 에러는 얼마정도일까요?
+
+	\iffalse
+
 	The read operation takes time to sum up the per-thread values,
 	and during that time, the counter could well be changing.
 	This means that the value returned by
@@ -1167,7 +1229,32 @@ at the beginning of this chapter.
 	$r$ counts per unit time, and that \co{read_count()}'s
 	execution consumes $\Delta$ units of time.
 	What is the expected error in the return value?
+
+	\fi
+
 }\QuickQuizAnswer{
+	최악의 경우에 대한 분석을 먼저 하고, 이어서 덜 보수적인 분석을
+	해봅시다.
+
+	최악의 경우, 읽기 오퍼레이션은 순식간에 완료되지만, 리턴하기 전에
+	$\Delta$ 시간의 지연을 가져서, 최악의 경우의 에러는 단순히 $r \Delta$
+	가 됩니다.
+
+	이 최악의 경우 행동은 가능성이 적으므로, $N$ 개의 카운터 각각으로부터의
+	읽기가 $\Delta$ 시간 동안 동일한 시간을 사용한다고 생각해 봅시다.
+	$N$ 개의 읽기 사이에는 $\frac{\Delta}{N+1}$ 시간의 $N+1$ 개 시간 간격이
+	존재할 겁니다.
+	마지막 쓰레드의 카운터로부터의 읽기 이후의 이 지연으로 인한 에러는 
+	$\frac{r \Delta}{N \left( N + 1 \right)}$ 이 될 것이며, 뒤에서 두번째
+	쓰레드의 카운터로부터의 에러는
+	$\frac{2 r \Delta}{N \left( N + 1 \right)}$,
+	뒤에서 세번째 쓰레드는
+	$\frac{3 r \Delta}{N \left( N + 1 \right)}$,
+	이런 식으로 될 겁니다.
+	총 에러는 각 쓰레드의 카운터로부터의 읽기로 인한 에러들의 합이 되므로:
+
+	\iffalse
+
 	Let's do worst-case analysis first, followed by a less
 	conservative analysis.
 
@@ -1190,24 +1277,48 @@ at the beginning of this chapter.
 	The total error is given by the sum of the errors due to the
 	reads from each thread's counter, which is:
 
+	\fi
+
 	\begin{equation}
 		\frac{r \Delta}{N \left( N + 1 \right)}
 			\sum_{i = 1}^N i
 	\end{equation}
 
+	이 합을 닫힌 형태로 정리해 보면:
+
+	\iffalse
+
 	Expressing the summation in closed form yields:
+
+	\fi
 
 	\begin{equation}
 		\frac{r \Delta}{N \left( N + 1 \right)}
 			\frac{N \left( N + 1 \right)}{2}
 	\end{equation}
 
+	중복을 제거하면 다음과 같이 직관적으로 예상된 결과가 나옵니다:
+
+	\iffalse
+
 	Canceling yields the intuitively expected result:
+
+	\fi
 
 	\begin{equation}
 		\frac{r \Delta}{2}
 	\label{eq:count:CounterErrorAverage}
 	\end{equation}
+
+	호출자가 이 읽기 오퍼레이션을 통해 리턴된 카운트를 사용하는 코드를
+	수행하는 동안에도 이 에러는 증가함을 기억해 두는 것이 중요합니다.
+	예를 들어, 리턴된 카운트의 값에 기반한 어떤 계산을 수행하는 데에 $t$
+	시간을 소모했다면, 최악의 경우의 에러는 $r \left(\Delta + t\right)$ 로
+	증가할 겁니다.
+
+	예상되는 에러 역시 비슷하게 다음과 같이 증가합니다:
+
+	\iffalse
 
 	It is important to remember that error continues accumulating
 	as the caller executes code making use of the count returned
@@ -1218,9 +1329,27 @@ at the beginning of this chapter.
 
 	The expected error will have similarly increased to:
 
+	\fi
+
 	\begin{equation}
 		r \left( \frac{\Delta}{2} + t \right)
 	\end{equation}
+
+	물론, 어떤 경우에는 읽기 오퍼레이션 동안 카운터의 값이 계속 증가하는게
+	받아들여질 수 없을 때도 있습니다.
+	Section~\ref{sec:count:Applying Exact Limit Counters}
+	은 이 상황을 처리하는 방법을 이야기 합니다.
+
+	지금까지, 우리는 값이 증가하기만 하지 감소하지는 않는 카운터를 생각해
+	봤습니다.
+	만약 이 카운터 값이 단위 시간당 $r$ 카운트 만큼만 바뀌지만, 어떤
+	방향에서든 그렇다면, 우린 이 에러가 줄어들 것이라고 예상해야 합니다.
+	하지만, 최악의 경우는 카운터가 양방향으로 움직일 수 \emph{있다고} 해도
+	이 최악의 경우는 읽기 오퍼레이션이 순식간에 완료되지만 $\Delta$ 시간
+	단위 동안 지연되고, 그동안 이 카운터의 값이 같은 방향으로 변화해
+	절대적인 에러는 $r \Delta$ 가 되므로 변하지 않습니다.
+
+	\iffalse
 
 	Of course, it is sometimes unacceptable for the counter to
 	continue incrementing during the read operation.
@@ -1239,6 +1368,24 @@ at the beginning of this chapter.
 	time all the changes in the counter's value move it in
 	the same direction, again giving us an absolute error
 	of $r \Delta$.
+
+	\fi
+
+	증가와 감소의 패턴에 대한 가정에 기반해 평균 에러를 계산하기 위한 여러
+	방법이 있습니다.
+	단순하게 하기 위해, 오퍼레이션들 중 $f$ 정도가 감소 오퍼레이션의
+	비율이고, 관심 있는 에러는 카운터의 장시간 경향선으로부터의 초이라고
+	생각해 봅시다.  이 가정 하에서라면, $f$ 가 0.5 이하일 때, 각 값 감소는
+	증가에 의해 취소되어서, $2f$ 의 오퍼레이션이 서로를 취소시킬 것이어서,
+	$1-2f$ 의 오퍼레이션이 취소되지 않는 값 증가로 남게 됩니다.
+	반면에, $f$ 가 0.5 보다 크다면, $1-f$ 의 카운터 이동이 최소되어서
+	$-1+2\left(1-f\right)$ 만큼 음의 방향으로 카운터가 이동하는데, 이는
+	$1-2f$ 로 간략화 되므로, 어떤 경우든 이 카운터는 오퍼레이션 당 평균
+	$1-2f$ 만큼 움직이게 됩니다.
+	따라서, 카운터의 장시간 움직임은 $\left( 1-2f \right) r$ 이 됩니다.
+	이를 수식~\ref{eq:count:CounterErrorAverage} 에 대입해 보면:
+
+	\iffalse
 
 	There are a number of ways to compute the average error,
 	based on a variety of assumptions about the patterns of
@@ -1260,9 +1407,19 @@ at the beginning of this chapter.
 	Plugging this into
 	Equation~\ref{eq:count:CounterErrorAverage} yields:
 
+	\fi
+
 	\begin{equation}
 		\frac{\left( 1 - 2 f \right) r \Delta}{2}
 	\end{equation}
+
+	이 모든 것을 뒤로 하고, 대부분의 통계적 카운터 사용의 경우,
+	\co{read_count()} 에 의해 리턴되는 값의 에러는 상관없습니다.
+	이 관계 없음은 \co{read_count()} 이 수행되는 데에 필요한 시간은
+	일반적으로 연속되는 \co{read_count()} 호출 사이의 시간 간격에 비해 무척
+	짧기 때문입니다.
+
+	\iffalse
 
 	All that aside, in most uses of statistical counters, the
 	error in the value returned by \co{read_count()} is
@@ -1271,13 +1428,24 @@ at the beginning of this chapter.
 	for \co{read_count()} to execute is normally extremely
 	small compared to the time interval between successive
 	calls to \co{read_count()}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \QuickQuizLabel{\StatisticalCounterAccuracy}
 
+하지만, 많은 구현이 임의적 배열 크기 제한으로부터 자유로우며 훨씬 가격이 싼
+쓰레드당 데이터 메커니즘을 제공합니다.
+이게 다음 섹션의 주제입니다.
+
+\iffalse
+
 However, many implementations provide cheaper mechanisms for
 per-thread data that are free from arbitrary array-size limits.
 This is the topic of the next section.
+
+\fi
 
 \subsection{Per-Thread-Variable-Based Implementation}
 \label{sec:count:Per-Thread-Variable-Based Implementation}
