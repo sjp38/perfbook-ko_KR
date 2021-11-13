@@ -1450,6 +1450,15 @@ This is the topic of the next section.
 \subsection{Per-Thread-Variable-Based Implementation}
 \label{sec:count:Per-Thread-Variable-Based Implementation}
 
+\GCC\ 는 쓰레드별 저장소를 제공하는 \co{__thread} 저장소 클래스를 제공합니다.
+이는 잘 확장되고 임의의 쓰레드 수 제한을 회피할 뿐만 아니라 간단한 어토믹하지
+않은 값 증가에 비해 적거나 아예 없는 성능 페널티를 갖는 통계적 카운터를
+구현하는데에
+Listing~\ref{lst:count:Per-Thread Statistical Counters} (\path{count_end.c})
+에 보여진 것처럼 사용될 수 있습니다.
+
+\iffalse
+
 \GCC\ provides an \co{__thread} storage class that provides
 per-thread storage.
 This can be used as shown in
@@ -1459,11 +1468,23 @@ a statistical counter that not only scales well and avoids arbitrary
 thread-number limits, but that also incurs little or no performance
 penalty to incrementers compared to simple non-atomic increment.
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/count/count_end@whole.fcv}
 \caption{Per-Thread Statistical Counters}
 \label{lst:count:Per-Thread Statistical Counters}
 \end{listing}
+
+\begin{fcvref}[ln:count:count_end:whole]
+\Clnrefrange{var:b}{var:e} 는 필요한 변수들을 정의합니다:
+\co{counter} 는 쓰레드별 카운터 변수이고, \co{counterp[]} 배열은 쓰레드들이
+서로의 카운터를 접근할 수 있게 하며, \co{finalcount} 는 각 쓰레드가 종료될
+때마다 전체 카운터를 담게 되며, \co{final_mutex} 는 카운터의 전체 값을 계산하는
+쓰레드와 종료되는 쓰레드의 순서를 조정하는 데에 사용됩니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_end:whole]
 \Clnrefrange{var:b}{var:e} define needed variables:
@@ -1474,14 +1495,53 @@ and \co{final_mutex} coordinates between threads accumulating the total
 value of the counter and exiting threads.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\Cref{lst:count:Per-Thread Statistical Counters}
+	의 명시적인 \co{counterp} 배열은 쓰레드 수에 대한 임의의 제한을 다시
+	암시하지 않나요?
+	왜 \GCC\ 는 쓰레드들이 서로의 쓰레드별 변수를 쉽게 접근할 수 있게끔
+	리눅스 커널의 \co{per_cpu()} 기능과 비슷한 \co{per_thread()}
+	인터페이스를 제공하지 않나요?
+
+	\iffalse
+
 	Doesn't that explicit \co{counterp} array in
 	\cref{lst:count:Per-Thread Statistical Counters}
 	reimpose an arbitrary limit on the number of threads?
 	Why doesn't \GCC\ provide a \co{per_thread()} interface, similar
 	to the Linux kernel's \co{per_cpu()} primitive, to allow
 	threads to more easily access each others' per-thread variables?
+
+	\fi
+
 }\QuickQuizAnswer{
+	정말로, 왜그럴까요?
+
+	공정하게 말하자면, \GCC\ 는 리눅스 커널이 무시할 수 있는 일부 어려움을
+	겪게 됩니다.
+	사용자 수준 쓰레드가 종료될 때, 그것의 쓰레드별 변수는 모두 사라져서,
+	쓰레드별 변수 접근 문제를 복잡하게 만드는데, 특히 사용자 수준 RCU 의
+	발전 전에 그랬습니다 (Section~\ref{sec:defer:Read-Copy Update (RCU)}
+	을 참고하세요).
+	대조적으로, 리눅스 커널에서는 CPU 가 오프라인이 될 때 해당 CPU 의 CPU
+	별 변수는 매핑된 채로 유지되고 액세스 될 수 있습니다.
+
+	비슷하게, 새로운 사용자 레벨 쓰레드가 생성될 때, 그것의 쓰레드별 변수는
+	갑자기 존재하게 됩니다.
+	대조적으로 리눅스 커널에서는 모든 CPU 별 변수가 부팅 시점에 매핑되고
+	초기화 됩니다, 연관된 CPU 가 아직 존재하지 않는지에 관계 없이, 또는
+	연관된 CPU 가 존재하긴 할지에 관계 없이요.
+
+	리눅스 커널이 암시하는 핵심적 한계점은 컴파일 시점에 정해지는 CPU
+	갯수의 최대 한계, 즉 \co{CONFIG_NR_CPUS} 와 일반적으로 보다 타이트한
+	부팅 시점의 한계인 \co{nr_cpu_ids} 입니다.
+	대조적으로, 유저 스페이스에는 쓰레드의 수에 대한 하드코딩 된 상한선이
+	존재할 이유가 없습니다.
+
+	\iffalse
+
 	Why indeed?
 
 	To be fair, \GCC\ faces some challenges that the Linux kernel
@@ -1506,6 +1566,29 @@ value of the counter and exiting threads.
 	In contrast, in user space, there is not necessarily a hard-coded
 	upper limit on the number of threads.
 
+	\fi
+
+	물론, 두 환경 모두 동적으로 로드된 코드를 다뤄야 하는데 (유저
+	스페이스의 경우 동적 라이브러리, 리눅스 커널의 경우 커널 모듈), 이는
+	쓰레드별 변수의 복잡도를 증가시킵니다.
+
+	이런 복잡성이 유저 스페이스 환경이 다른 쓰레드의 쓰레드별 변수를 접근할
+	수 있게 하는 것을 상당히 어렵게 만듭니다.
+	그러나, 그런 액세스는 상당히 유용하며, 언젠가는 지원되길 희망되고
+	있습니다.
+
+	그전까지는, 이것과 같은 교재의 예제는 그 한계가 사용자에 의해 쉽게
+	조정될 수 있는 배열을 사용할 수 있습니다.
+	대안적으로, 그런 배열은 실행 시점에 필요한 대로 동적으로 할당되고
+	확장될 수 있습니다.
+	마지막으로, 링크드 리스트와 같은 변동되는 길이의 자료구조도
+	유저스페이스 RCU
+	라이브러리~\cite{MathieuDesnoyers2009URCU,MathieuDesnoyers2012URCU}
+	에서 그렇듯 사용될 수 있습니다.
+	이 마지막 방법은 어떤 경우에는 거짓 공유를 줄일 수 있습니다.
+
+	\iffalse
+
 	Of course, both environments must handle dynamically loaded
 	code (dynamic libraries in user space, kernel modules in the
 	Linux kernel), which increases the complexity of per-thread
@@ -1525,7 +1608,27 @@ value of the counter and exiting threads.
 	lists can be used, as is done in the userspace RCU
 	library~\cite{MathieuDesnoyers2009URCU,MathieuDesnoyers2012URCU}.
 	This last approach can also reduce false sharing in some cases.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_end:whole:inc]
+업데이트 쓰레드에 의해 사용되는 \co{inc_count()} 함수는 \clnrefrange{b}{e} 에서
+볼 수 있듯이 상당히 간단합니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:count:count_end:whole:read]
+읽기 쓰레드에 의해 사용되는 \co{read_count()} 함수는 약간 복잡합니다.
+라인~\lnref{acquire} 는 종료되는 쓰레드를 제외시키기 위해 락을 잡고,
+라인~\lnref{release} 에서 해제합니다.
+라인~\lnref{sum:init} 은 이미 종료된 쓰레드에 의해 계산된 카운트의 합을 초기화
+시키고, \clnrefrange{loop:b}{loop:e} 는 현재 수행 중인 쓰레드에 의해 계산되는
+카운트를 합합니다.
+마지막으로, 라인~\lnref{return} 은 이 합을 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_end:whole:inc]
 The \co{inc_count()} function used by updaters is quite simple, as can
@@ -1542,6 +1645,8 @@ have already exited, and
 by threads currently running.
 Finally, line~\lnref{return} returns the sum.
 \end{fcvref}
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
