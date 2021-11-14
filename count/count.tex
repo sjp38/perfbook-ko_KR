@@ -1651,6 +1651,16 @@ Finally, line~\lnref{return} returns the sum.
 \QuickQuizSeries{%
 \QuickQuizB{
 	\begin{fcvref}[ln:count:count_end:whole:read]
+	Listing~\ref{lst:count:Per-Thread Statistical Counters}
+	의 라인~\lnref{check} 에서의 \co{NULL} 체크는 추가적인 브랜치 예측
+	실패를 일으키지 않나요?
+	영구히 0 값을 갖는 변수 집합을 갖고 사용되지 않은 카운터 포인터를
+	\co{NULL} 로 만드는 대신 그 변수를 가리키게 하는건 어떤가요?
+	\end{fcvref}
+
+	\iffalse
+
+	\begin{fcvref}[ln:count:count_end:whole:read]
 	Doesn't the check for \co{NULL} on line~\lnref{check} of
 	Listing~\ref{lst:count:Per-Thread Statistical Counters}
 	add extra branch mispredictions?
@@ -1658,19 +1668,60 @@ Finally, line~\lnref{return} returns the sum.
 	unused counter-pointers to that variable rather than setting
 	them to \co{NULL}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이건 합리적인 전략입니다.
+	성능이 어떻게 달라지는지 확인하는 건 독자 여러분에게 남겨두겠습니다.
+	하지만, 성능을 위한 빠른 경로는 \co{read_count()} 가 아니라
+	\co{inc_count()} 임을 명심해 두시기 바랍니다.
+
+	\iffalse
+
 	This is a reasonable strategy.
 	Checking for the performance difference is left as an exercise
 	for the reader.
 	However, please keep in mind that the fastpath is not
 	\co{read_count()}, but rather \co{inc_count()}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	Listing~\ref{lst:count:Per-Thread Statistical Counters}
+	의 \co{read_count()} 에서의 합산을 보호하는 \emph{lock} 같이 무거운 게
+	도대체 왜 필요한거죠?
+
+	\iffalse
+
 	Why on earth do we need something as heavyweight as a \emph{lock}
 	guarding the summation in the function \co{read_count()} in
 	Listing~\ref{lst:count:Per-Thread Statistical Counters}?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	기억하세요, 한 쓰레드가 종료될 때, 그것의 쓰레드별 변수는 사라집니다.
+	따라서, 특정 쓰레드의 쓰레드별 변수를 그 쓰레드가 종료된 후에 접근하려
+	하면, segmentation fault 가 날 겁니다.
+	이 락은 합산과 쓰레드 종료 간의 순서를 조정해서 이 시나리오를
+	방지합니다.
+
+	물론, 이 대신 reader-writer 락을 read-acquire 할 수도 있습니다만,
+	Chapter~\ref{chp:Deferred Processing} 는 여기서 필요한 조정을 구현하기
+	위한, 이보다도 가벼운 메커니즘을 소개할 겁니다.
+
+	또다른 방법은 쓰레드별 변수 대신 배열을 사용하는 것으로, Alexey Roytman
+	이 노트한 바에 따르면 \co{NULL} 테스트를 제거할 겁니다.
+	하지만, 배열로의 액세스는 쓰레드별 변수로의 액세스보다 많은 경우 느리며
+	배열의 사용은 쓰레드의 수에 대한 고정된 상한 한계를 암시합니다.
+	또한, \co{inc_count()} 라는 빠른 경로 상에는 테스트도 락도 필요치
+	않음을 알아 두시기 바랍니다.
+
+	\iffalse
+
 	Remember, when a thread exits, its per-thread variables disappear.
 	Therefore, if we attempt to access a given thread's per-thread
 	variables after that thread exits, we will get a segmentation
@@ -1690,8 +1741,20 @@ Finally, line~\lnref{return} returns the sum.
 	fixed upper bound on the number of threads.
 	Also, note that neither tests nor locks are needed on the
 	\co{inc_count()} fastpath.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\begin{fcvref}[ln:count:count_end:whole:reg]
+\Clnrefrange{b}{e} 는 각 쓰레드에 의해 이 카운터를 처음 사용하기 전에 반드시
+호출되어야 하는 \co{count_register_thread()} 함수를 보입니다.
+이 함수는 단순히 \co{counterp[]} 배열 내 이 쓰레드의 원소가 자신의 쓰레드별
+\co{counter} 변수를 가리키도록 합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_end:whole:reg]
 \Clnrefrange{b}{e} show the \co{count_register_thread()}
@@ -1701,21 +1764,62 @@ This function simply sets up this thread's element of the \co{counterp[]}
 array to point to its per-thread \co{counter} variable.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:count:Per-Thread Statistical Counters}
+	의 \co{count_register_thread()} 에서 대체 왜 락을 잡아야만 하죠?
+	이것은 어떤 다른 쓰레드도 수정하지 않는 위치에 적절히 정렬되어 저장된
+	하나의 기계 단어이니, 어쨌건 어토믹할 거예요, 그렇죠?
+
+	\iffalse
+
 	Why on earth do we need to acquire the lock in
 	\co{count_register_thread()} in
 	Listing~\ref{lst:count:Per-Thread Statistical Counters}?
 	It is a single properly aligned machine-word store to a location
 	that no other thread is modifying, so it should be atomic anyway,
 	right?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 락은 실제로 없어질 수 있습니다, 그렇지만 이 함수가 쓰레드의 시작
+	때에만 수행된다는 것, 그리고 따라서 어떤 성능에 중요한 지점도 아니라는
+	것을 생각하면 나중에 사과하기보단 안전을 중시하는게 낫습니다.
+	이제, 우리가 이걸 수천개의 CPU 를 갖는 기계 위에서 테스트 한다면, 우린
+	이 락을 없애야 할수도 있습니다, 그러나 ``겨우'' 수백개의 CPU 를 갖는
+	기계 위에서라면, 그렇게까지 할 필요는 없습니다.
+
+	\iffalse
+
 	This lock could in fact be omitted, but better safe than
 	sorry, especially given that this function is executed only at
 	thread startup, and is therefore not on any critical path.
 	Now, if we were testing on machines with thousands of CPUs,
 	we might need to omit the lock, but on machines with ``only''
 	a hundred or so CPUs, there is no need to get fancy.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_end:whole:unreg]
+\Clnrefrange{b}{e} 는 앞서 \co{count_register_thread()} 를 호출한 쓰레드들은
+종료되기 전에 반드시 호출해야 하는 \co{count_unregister_thread()} 함수를
+보입니다.
+라인~\lnref{acquire} 는 락을 잡고, 라인~\lnref{release} 에서는 해제해서,
+\co{read_count()} 로의 호출은 물론 \co{count_unregister_thread()} 로의 다른
+호출들도 배제시킵니다.
+라인~\lnref{add} 는 이 쓰레드의 \co{counter} 를 전역 변수인 \co{finalcount} 에
+더하며, 이어서 라인~\lnref{NULL} 은 자신의 \co{counterp[]} 배열 내 원소를
+\co{NULL} 로 만듭니다.
+이어지는 \co{read_count()} 호출은 이 종료되는 쓰레드의 카운트를 전역 변수
+\co{finalcount} 에서 보게 될 것이며, \co{counterp[]} 배열을 들여다 볼 때, 이
+종료되는 쓰레드의 것은 건너 뛰어서 올바른 전체 값을 얻게 될 겁니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_end:whole:unreg]
 \Clnrefrange{b}{e} show the \co{count_unregister_thread()}
@@ -1735,6 +1839,19 @@ when sequencing through the \co{counterp[]} array, thus obtaining
 the correct total.
 \end{fcvref}
 
+\fi
+
+이 방법은 업데이트 쓰레드에게 어토믹이 아닌 더하기와 거의 똑같은, 또한
+선형적으로 확장하는 성능을 제공합니다.
+다른 한편, 동시의 읽기들은 하나의 전역 락을 위해 경쟁하며, 따라서 처참한 성능과
+지옥 같은 확장성을 가질 겁니다.
+하지만, 이는 값 증가는 자주 일어나지만 읽기는 거의 일어나지 않는 통계적
+카운터에서는 문제가 아닐 겁니다.
+물론, 이 방법은 배열 기반의 방법에 비해 상당히 복잡한데, 특정 쓰레드의 쓰레드별
+변수는 해당 쓰레드가 종료될 때 사라진다는 사실 때문입니다.
+
+\iffalse
+
 This approach gives updaters almost exactly the same performance as
 a non-atomic add, and also scales linearly.
 On the other hand, concurrent reads contend for a single global lock,
@@ -1745,20 +1862,53 @@ Of course, this approach is considerably more complex than the
 array-based scheme, due to the fact that a given thread's per-thread
 variables vanish when that thread exits.
 
+\fi
+
 \QuickQuiz{
+	좋아요, 하지만 리눅스 커널은 CPU 별 카운터의 값의 합을 읽을 때 락을
+	잡을 필요가 없죠.
+	그런데 왜 유저 스페이스 코드는 이걸 해야만 하죠???
+
+	\iffalse
+
 	Fine, but the Linux kernel doesn't have to acquire a lock
 	when reading out the aggregate value of per-CPU counters.
 	So why should user-space code need to do this???
+
+	\fi
+
 }\QuickQuizAnswer{
+	기억하세요, 리눅스 커널의 CPU 별 변수는 항상 접근할 수 있습니다, 연관된
+	CPU 가 오프라인일 때 조차도요---이 연관된 CPU 가 결코 존재하지 않았고
+	결코 존재하지 않을것이라 할지라도요.
+
+	\iffalse
+
 	Remember, the Linux kernel's per-CPU variables are always
 	accessible, even if the corresponding CPU is offline---even
 	if the corresponding CPU never existed and never will exist.
+
+	\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/count/count_tstat@whole.fcv}
 \caption{Per-Thread Statistical Counters With Lockless Summation}
 \label{lst:count:Per-Thread Statistical Counters With Lockless Summation}
 \end{listing}
+
+	한가지 해결책은
+	Listing~\ref{lst:count:Per-Thread Statistical Counters With Lockless Summation}
+	(\path{count_tstat.c})
+	에 보인 것처럼 각 쓰레드가 모든 쓰레드가 종료될 때까지 존재할 것을
+	보장하는 것입니다.
+	이 코드의 해석은 독자 여러분의 몫으로 남겨둡니다만, 이는
+	\path{countertorture.h} 카운터 평가 프로그램에 약간의 수정을 요함을
+	알아 두시기 바랍니다.
+	(힌트: \co{#ifndef KEEP_GCC_THREAD_LOCAL} 을 참고하세요.)
+	Chapter~\ref{chp:Deferred Processing} 는 이 상황을 훨씬 우아한 방식으로
+	처리하는 동기화 메커니즘을 소개합니다.
+
+	\iffalse
 
 	One workaround is to ensure that each thread continues to exist
 	until all threads are finished, as shown in
@@ -1771,7 +1921,18 @@ variables vanish when that thread exits.
 	Chapter~\ref{chp:Deferred Processing} will introduce
 	synchronization mechanisms that handle this situation in a much
 	more graceful manner.
+
+	\fi
+
 }\QuickQuizEnd
+
+배열 기반의 방법도 \co{__thread} 기반의 방법도 훌륭한 업데이트 쪽 성능과
+확장성을 제공합니다.
+하지만, 이 이익은 큰 수의 쓰레드들 하에서는 읽기 쪽의 비용을 초래합니다.
+다음 섹션은 여전히 업데이트 쪽의 확장성을 유지하면서 읽기 쪽의 비용을 줄이는
+한가지 방법을 알아봅니다.
+
+\iffalse
 
 Both the array-based and \co{__thread}-based approaches offer excellent
 update-side performance and scalability.
@@ -1779,6 +1940,8 @@ However, these benefits result in large read-side expense for large
 numbers of threads.
 The next section shows one way to reduce read-side expense while
 still retaining the update-side scalability.
+
+\fi
 
 \subsection{Eventually Consistent Implementation}
 \label{sec:count:Eventually Consistent Implementation}
