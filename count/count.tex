@@ -1946,6 +1946,26 @@ still retaining the update-side scalability.
 \subsection{Eventually Consistent Implementation}
 \label{sec:count:Eventually Consistent Implementation}
 
+업데이트 쪽 확장성을 유지하면서 읽기 쪽 성능을 크게 개선하는 한가지 방법은
+일관성 요구사항을 약화시키는 것입니다.
+이전 섹션에서의 카운팅 알고리즘은 \co{read_count()} 의 수행 시작 시점과 종료
+시점에서 이상적 카운터가 가질 값들의 중간 어딘가의 값을 낼 것이 보장되어
+있습니다.
+\emph{Eventual consistency}~\cite{WernerVogels:2009:EventuallyConsistent}
+(결과적 일관성) 은 더 약한 보장을 제공합니다: \co{inc_count()} 호출이 없다면,
+\co{read_count()} 의 호출은 언젠가는 정확한 카운트를 반환합니다.
+
+우리는 전역 카운터를 가짐으로써 결과적 일관성을 제공합니다.
+하지만, 업데이트 쓰레드는 각자의 쓰레드별 카운터만을 업데이트 합니다.
+이 쓰레드별 카운터의 값을 전역 카운터로 옮기는 별도의 쓰레드 하나가 제공됩니다.
+읽기 쓰레드는 단순히 이 전역 카운터의 값에만 액세스 합니다.
+만약 업데이트 쓰레드들이 활동 중이라면, 이 읽기 쓰레드에 의해 사용되는 값은
+낡아버린 버전일 겁니다만, 일단 업데이트가 모두 끝나면, 이 전역 카운터는 언젠가
+결과적으로는 실제 값에 이를 것입니다---따라서 이 방법은 결과적 일관성이라 할 수
+있습니다.
+
+\iffalse
+
 One way to retain update-side scalability while greatly improving
 read-side performance is to weaken consistency requirements.
 The counting algorithm in the previous section is guaranteed to
@@ -1967,11 +1987,37 @@ date, however, once updates cease, the global counter will eventually
 converge on the true value---hence this approach qualifies as
 eventually consistent.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_stat_eventual@whole.fcv}
 \caption{Array-Based Per-Thread Eventually Consistent Counters}
 \label{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 \end{listing}
+
+\begin{fcvref}[ln:count:count_stat_eventual:whole]
+이 구현이
+Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+(\path{count_stat_eventual.c})
+에 보여져 있습니다.
+\Clnrefrange{per_thr_cnt}{glb_cnt} 는 앞서 이야기한, 카운터의 값을 따라가는
+쓰레드별 변수와 전역 변수를 보이며, 라인~\lnref{stopflag} 는 (정확한 카운터
+값과 함께 프로그램을 종료하고자 하는 경우를 위해) 종료를 조정하는 \co{stopflag}
+를 보입니다.
+\Clnrefrange{inc:b}{inc:e} 에 보인 \co{inc_count()} 함수는
+Listing~\ref{lst:count:Array-Based Per-Thread Statistical Counters}
+에 있는 것과 비슷합니다.
+\Clnrefrange{read:b}{read:e} 에 보인 \co{read_count()} 함수는 단순히
+\co{global_count} 변수의 값을 반환합니다.
+
+하지만, \clnrefrange{init:b}{init:e} 에 보인 \co{count_init()} 함수는
+\clnrefrange{eventual:b}{eventual:e} 에 보인, 모든 쓰레드를 순회하며 쓰레드별
+지역 \co{counter} 의 값을 합해서 \co{global_count} 변수에 저장하는
+\co{eventual()} 쓰레드를 만듭니다.
+이 \co{eventual()} 쓰레드는 임의로 선택된 1 밀리세컨드를 매 패스마다
+기다립니다.
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_stat_eventual:whole]
 The implementation is shown in
@@ -2000,6 +2046,22 @@ sum to the \co{global_count} variable.
 The \co{eventual()} thread waits an arbitrarily chosen one millisecond
 between passes.
 
+\fi
+
+\Clnrefrange{cleanup:b}{cleanup:e} 에 보인 \co{count_cleanup()} 함수는 종료를
+조정합니다.
+여기서와 \co{eventual()} 에서의 \co{smp_mb()} 호출은 \co{global_count} 로의
+모든 업데이트가 \co{count_cleanup()} 호출을 뒤따르는 코드에게 보일 것을
+보장합니다.
+
+이 방법은 극단적으로 빠른 카운터 읽기를 선형적 카운터 업데이트 확장성을
+지원하면서도 가능하게 합니다.
+하지만, 이 훌륭한 읽기 쪽 성능과 업데이트 쪽 확장성은 \co{eventual()} 을
+수행하는 추가된 쓰레드의 비용도 부과합니다.
+\end{fcvref}
+
+\iffalse
+
 The \co{count_cleanup()} function on
 \clnrefrange{cleanup:b}{cleanup:e} coordinates termination.
 The calls to \co{smp_mb()} here and in \co{eventual()} ensure
@@ -2011,6 +2073,8 @@ supporting linear counter-update scalability.
 However, this excellent read-side performance and update-side scalability
 comes at the cost of the additional thread running \co{eventual()}.
 \end{fcvref}
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
