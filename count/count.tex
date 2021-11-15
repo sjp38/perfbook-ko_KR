@@ -2078,12 +2078,32 @@ comes at the cost of the additional thread running \co{eventual()}.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 \co{inc_count()} 는 왜 어토믹 인스트럭션을 사용해야 하나요?
+	어쨌건, 우린 쓰레드별 카운터를 접근하는 여러 쓰레드가 있는 거잖아요!
+
+	\iffalse
+
 	Why doesn't \co{inc_count()} in
 	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 	need to use atomic instructions?
 	After all, we now have multiple threads accessing the per-thread
 	counters!
+
+	\fi
+
 }\QuickQuizAnswerB{
+	두 쓰레드 중 하나는 읽기만을 하고 있고, 이 변수는 정렬되었고 기계 단어
+	크기이므로, 어토믹하지 않은 인스트럭션으로도 충분합니다.
+	그러나,  카운터 업데이트가 \co{eventual()} 에게 보이는 것을 막을 수도
+	있는 컴파일러 최적화를 방지하기 위해 \co{READ_ONCE()} 매크로가
+	사용됩니다.\footnote{
+		\co{READ_ONCE()} 의 간단한 정의가
+		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}
+		에 보여져 있습니다.}
+
+	\iffalse
+
 	Because one of the two threads only reads, and because the
 	variable is aligned and machine-sized, non-atomic instructions
 	suffice.
@@ -2093,6 +2113,28 @@ comes at the cost of the additional thread running \co{eventual()}.
 	\co{eventual()}.\footnote{
 		A simple definition of \co{READ_ONCE()} is shown in
 		Listing~\ref{lst:toolsoftrade:Compiler Barrier Primitive (for GCC)}.}
+
+	\fi
+
+	이 알고리즘의 이전 버전은 실제로 어토믹 인스트럭션을 사용했습니다,
+	그것들이 실제로는 불필요했음을 지적해준 Ersoy Bayramoglu 에게 감사를
+	드립니다.
+	하지만, 32비트 시스템에서 이 쓰레드별 \co{counter} 변수는 그것들을
+	올바르게 합산하기 위해 32비트로 제한되어야 할수도 있습니다만, 64비트
+	\co{global_count} 변수가 있어야 오버플로우를 방지할 수 있을 겁니다.
+	이 경우, 오버플로우를 방지하기 위해 쓰레드별 \co{counter} 변수를
+	주기적으로 0으로 초기화 시켜줄 필요가 있는데, 이것은 어토믹
+	인스트럭션을 필요로 합니다.
+	이 초기화는 너무 오래 지연되면 작은 쓰레드별 변수에서의 오버플로우가
+	초래될 것임을 알아두는게 정말 중요합니다.
+	따라서 이 방법은 시스템에 리얼타임 요구사항이 존재해야 함을 암시하며,
+	따라서 각별한 주의가 필요합니다.
+
+	반면에, 만약 모든 변수가 같은 크기라면, 어떤 변수의 오버플로우도
+	위험하지 않은데 결과적인 합은 이 워드 크기로 모듈로 연산될 것이기
+	때문입니다.
+
+	\iffalse
 
 	An older version of this algorithm did in fact use atomic
 	instructions, kudos to Ersoy Bayramoglu for pointing out that
@@ -2113,34 +2155,84 @@ comes at the cost of the additional thread running \co{eventual()}.
 	In contrast, if all variables are the same size, overflow
 	of any variable is harmless because the eventual sum
 	will be modulo the word size.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 \co{eventual()} 함수에서의 단일 글로벌 쓰레드는 전역 락 만큼이나
+	심각한 병목 아닐까요?
+
+	\iffalse
+
 	Won't the single global thread in the function \co{eventual()} of
 	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 	be just as severe a bottleneck as a global lock would be?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	이 경우에는, 아니오.
+	여기서 일어날 일은 쓰레드의 수가 늘어난다면 \co{read_count()} 가
+	반환하는 값이 더욱 부정확해 진다는 것 뿐입니다.
+
+	\iffalse
+
 	In this case, no.
 	What will happen instead is that as the number of threads increases,
 	the estimate of the counter
 	value returned by \co{read_count()} will become more inaccurate.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizM{
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 \co{read_count()} 가 반환하는 예상값은 쓰레드의 수가 늘어날수록
+	더더욱 부정확해지지 않나요?
+
+	\iffalse
+
 	Won't the estimate returned by \co{read_count()} in
 	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 	become increasingly
 	inaccurate as the number of threads rises?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	그렇습니다.
+	이게 문제가 된다면, 한가지 수정방법은 여러 \co{eventual()} 쓰레드를
+	제공해서, 각자가 자신의 할당량만 처리하는 것입니다.
+	더 극단적인 경우에는 \co{eventual()} 쓰레드들의 트리 같은 계층 구조
+	사용이 필요할 수도 있습니다.
+
+	\iffalse
+
 	Yes.
 	If this proves problematic, one fix is to provide multiple
 	\co{eventual()} threads, each covering its own subset of
 	the other threads.
 	In more extreme cases, a tree-like hierarchy of
 	\co{eventual()} threads might be required.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizM{
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	에 보인 결과적으로 일관되는 알고리즘에서는 읽기도 업데이트도 극단적으로
+	낮은 오버헤드를 가지고 극단적인 확장성을 갖는데, 왜 어떤 사람들은 읽기
+	성능이 나쁜,
+	Section~\ref{sec:count:Array-Based Implementation}
+	에 보인 구현을 신경쓸까요?
+
+	\iffalse
+
 	Given that in the eventually\-/consistent algorithm shown in
 	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
 	both reads and updates have extremely low overhead
@@ -2148,7 +2240,34 @@ comes at the cost of the additional thread running \co{eventual()}.
 	implementation described in
 	Section~\ref{sec:count:Array-Based Implementation},
 	given its costly read-side code?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	\co{eventual()} 을 수행하는 쓰레드는 CPU 시간을 소비합니다.
+	이 결과적으로 일관되는 카운터가 계속해서 추가되면 그로 인한
+	\co{eventual()} 쓰레드들은 결과적으로 모든 사용 가능한 CPU 를 소비할
+	수도 있습니다.
+	따라서 이 구현은 또다른 종류의, 쓰레드나 CPU 의 수가 아니라 결과적으로
+	일관적인 카운터의 수의 의미에서 확장성 제한을 갖습니다.
+
+	물론, 다른 트레이드오프를 만드는 것도 가능합니다.
+	예를 들어, 모든 결과적으로 일관적인 카운터들을 처리하는 단 하나의
+	쓰레드를 만들어, 이 오버헤드를 단일 CPU 로 제한할 수도 있겠으나,
+	카운터의 수가 늘어날수록 업데이트에서 읽기까지의 지연시간이 늘어나는
+	결과를 초래할 겁니다.
+	대안적으로, 이 단일 쓰레드는 이 카운터의 업데이트 비율을 추적해서 자주
+	업데이트 되는 카운터를 더 자주 접근하는 것도 가능하겠습니다.
+	또한, 이 카운터를 처리하는 쓰레드의 수는 전체 CPU 수의 일정 부분만큼만
+	되도록 하고, 이를 수행 시간에 조정할 수도 있겠습니다.
+	마지막으로, 각 카운터는 자신의 지연시간을 명시할 수도 있고, 데드라인
+	스케쥴링 기법이 각 카운터에게 필요한 지연시간을 제공하도록 사용될 수도
+	있겠습니다.
+
+	다른 많은 트레이드오프도 만들어질 수 있음이 분명합니다.
+
+	\iffalse
+
 	The thread executing \co{eventual()} consumes CPU time.
 	As more of these eventually\-/consistent counters are added,
 	the resulting \co{eventual()} threads will eventually
@@ -2174,18 +2293,41 @@ comes at the cost of the additional thread running \co{eventual()}.
 	the required latencies to each counter.
 
 	There are no doubt many other tradeoffs that could be made.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 \co{read_count()} 에 의해 반환되는 추정값의 정확도는 어떻게 되나요?
+
+	\iffalse
+
 	What is the accuracy of the estimate returned by \co{read_count()} in
 	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	이 추정값의 정확도를 평가하는 한가지 간단한 방법은
+	\QuickQuizARef{\StatisticalCounterAccuracy} 에 설명된 분석 기법을
+	사용하되 $\Delta$ 를 \co{eventual()} 쓰레드의 다음 수행의 시작까지의
+	기간으로 설정하는 것입니다.
+	특정 카운터가 여러 \co{eventual()} 쓰레드를 갖는 경우도 다루는 것은
+	독자 여러분의 연습문제로 남겨두겠습니다.
+
+	\iffalse
+
 	A straightforward way to evaluate this estimate is to use the
 	analysis derived in \QuickQuizARef{\StatisticalCounterAccuracy},
 	but set $\Delta$ to the interval between the beginnings of
 	successive runs of the \co{eventual()} thread.
 	Handling the case where a given counter has multiple \co{eventual()}
 	threads is left as an exercise for the reader.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
