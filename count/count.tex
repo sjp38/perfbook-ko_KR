@@ -2333,16 +2333,55 @@ comes at the cost of the additional thread running \co{eventual()}.
 
 \subsection{Discussion}
 
+이 세개의 구현은 통계적 카운터를 위한 단일 프로세서에서에 가까운 성능을 뽑아낼
+수 있음을 보입니다, 병렬 기계에서 돌아가고 있긴 하지만요.
+
+\iffalse
+
 These three implementations show that it is possible to obtain
 near-uniprocessor performance for statistical counters, despite running
 on a parallel machine.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	패킷의 크기는 다양하다는 점을 놓고 생각할 때, 패킷의 수를 세는 것과
+	패킷들의 전체 바이트 수를 세는 것 사이에는 어떤 근본적 차이가 있을까요?
+
+	\iffalse
+
 	What fundamental difference is there between counting packets
 	and counting the total number of bytes in the packets, given
 	that the packets vary in size?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	패킷의 수를 셀 때, 이 카운터는 값 1만큼씩만 증가될 겁니다.
+	반면, 바이트 수를 셀 때, 이 카운터는 큰 수만큼 증가될 수도 있을 겁니다.
+
+	이게 왜 문제가 될까요?
+	값 1만큼만 증가하는 경우에는, 반환되는 값은 그 카운터가 언젠가는 가졌을
+	정확한 값일 겁니다, 정확히 그게 언제인지는 말할 수 없지만요.
+	반면, 바이트를 셀 때에는 두개의 다른 쓰레드가 어떤 전역적
+	오퍼레이션들의 순서로 일관되지 않은 값을 반환할 수도 있습니다.
+
+	이걸 자세히 보기 위해, 쓰레드~0 이 값 3 을 자신의 카운터에 더하고,
+	쓰레드~1 은 값 5를 자신의 카운터에 더하며, 쓰레드~2 와~3 이 이 카운터를
+	더한다고 해봅시다.
+	이 시스템이 ``완화된 순서 규칙'' 을 가지고 있거나 컴파일러가 강력한
+	최적화를 사용한다면, 쓰레드~2 는 이 합이 2라고 보고 쓰레드~3 은 이 합이
+	5라고 볼 수 있습니다.
+	이 카운터의 값의 순서의 가능할 법한 전역적 순서는 0,3,8 과 0,5,8 이고
+	이 중 어떤 것도 이 얻어진 결과와 일관되지 못합니다.
+
+	여러분이 이걸 놓치셨다면, 여러분은 혼자가 아닙니다.
+	Michael Scott 은 Paul E.~McKenney 의 박사학위 시험 때 이 질문으로 Paul
+	에게 한방을 먹였습니다.
+
+	\iffalse
+
 	When counting packets, the counter is only incremented by the
 	value one.
 	On the other hand, when counting bytes, the counter might
@@ -2370,9 +2409,21 @@ on a parallel machine.
 	If you missed this one, you are not alone.
 	Michael Scott used this question to stump Paul E.~McKenney
 	during Paul's Ph.D. defense.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	읽기 쓰레드는 모든 쓰레드의 카운터를 합해야 한다는 점을 놓고 보면, 이
+	카운터 읽기 오퍼레이션은 큰 수의 쓰레드를 가졌을 때 긴 시간을 요할 수
+	있습니다.
+	값 증가 오퍼레이션이 빠르고 확장성 있게 유지하면서 읽기 쓰레드들 역시
+	합리적인 성능과 확장성만이 아니라 좋은 정확도를 취할 수 있는 방법은
+	없을까요?
+
+	\iffalse
+
 	Given that the reader must sum all the threads' counters, this
 	counter-read operation could take a long time given large numbers
 	of threads.
@@ -2380,7 +2431,31 @@ on a parallel machine.
 	fast and scalable while allowing readers to also enjoy
 	not only reasonable performance and scalability, but also
 	good accuracy?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	한가지 방법은
+	\cref{sec:count:Eventually Consistent Implementation}
+	에서 설명된 방법과 비슷하게 전역적 추정치를 유지하는 것입니다.
+	업데이트 쓰레드는 각자의 쓰레드별 변수 값을 증가시키지만, 그게 어떤
+	미리 정의된 한계에 다다르면, 어토믹하게 그걸 전역 변수에 더하고 자신의
+	쓰레드별 변수를 0으로 초기화 합니다.
+	이는 평균적 값 증가 오버헤드와 읽혀지는 값의 정확성 사이의
+	트레이드오프를 가능하게 할 겁니다.
+	특히, 이는 읽기 쪽 비정확성의 바운더리를 명확하게 해 줄 겁니다.
+
+	또다른 방법은 읽기 쓰레드가 종종 값의 특정 변화에 대해서만 신경을 쓰지,
+	구체적 값에는 별로 신경 쓰지 않는다는 사실을 사용하는 것입니다.
+	이 방법은
+	\cref{sec:count:Approximate Limit Counters}
+	에서 알아봅니다.
+
+	독자 여러분은 다른 방법들을 생각하고 시도해 볼 것이 장려되는데, 예를
+	들면 컴바이닝 트리를 사용하는 것입니다.
+
+	\iffalse
+
 	One approach would be to maintain a global approximation
 	to the value, similar to the approach described in
 	\cref{sec:count:Eventually Consistent Implementation}.
@@ -2399,12 +2474,22 @@ on a parallel machine.
 
 	The reader is encouraged to think up and try out other approaches,
 	for example, using a combining tree.
+
+	\fi
 }\QuickQuizEndE
 }
+
+이 섹션에서 무엇이 이야기 되었는지를 생각하면, 여러분은 이제 이 챕터의 시작
+부분에서 이야기 된 네트워킹을 위한 통계적 카운터에 대한 Quick Quiz 에 대답할 수
+있어야 합니다.
+
+\iffalse
 
 Given what has been presented in this section, you should now be able
 to answer the Quick Quiz about statistical counters for networking
 near the beginning of this chapter.
+
+\fi
 
 \section{Approximate Limit Counters}
 \label{sec:count:Approximate Limit Counters}
