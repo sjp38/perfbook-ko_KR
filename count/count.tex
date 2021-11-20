@@ -2525,6 +2525,24 @@ if you instead need the limit to be exact).
 
 \subsection{Design}
 
+리미트 카운터를 위한 가능한 한가지 설계는 10,000 이라는 한계를 쓰레드의 수로
+나누고, 각 쓰레드에게 고정된 크기의 구조체 풀을 주는 것입니다.
+예를 들어, 100 개의 쓰레드가 있다면, 각 쓰레드는 100개 구조체를 담는 각자의
+풀을 관리하는 겁니다.
+이 방법은 간단하고, 일부 경우에는 잘 동작합니다만, 해당 구조체가 한 쓰레드에
+의해 할당되고 다른 쓰레드에 의해 해제되는 흔한 경우를 처리하지
+못합니다~\cite{McKenney93}.
+한 측면에서 보자면, 특정 쓰레드가 자신이 해제하는 모든 구조체에 대한 크레딧을
+가져간다면, 대부분의 해제를 하는 쓰레드는 사용할 수도 없는 여유분의 구조체를
+가지는 반면 대부분의 할당을 하는 쓰레드는 구조체가 동나버릴 겁니다.
+다른 측면에서 보자면, 해제된 구조체에 대한 크레딧을 그것을 할당한 CPU 가
+가져간다면, CPU 들은 각자의 카운터를 조정할 필요가 생겨서, 이는 높은 비용의
+어토믹 인스트럭션이나 다른 쓰레드간 통신 수단을 필요로 할 겁니다.\footnote{
+	그러나, 각 구조체가 항상 그것을 할당한 것과 같은 CPU (또는 쓰레드) 에
+	의해 해제된다면, 이 간단한 분할 방법은 무척 잘 동작할 겁니다.}
+
+\iffalse
+
 One possible design for limit counters is to divide the limit of 10,000
 by the number of threads, and give each thread a fixed pool of structures.
 For example, given 100 threads, each thread would manage its own pool
@@ -2544,6 +2562,26 @@ or other means of communicating between threads.\footnote{
 	by the same CPU (or thread) that allocated it, then
 	this simple partitioning approach works extremely well.}
 
+\fi
+
+요약하자면, 많은 중요한 워크로드에서, 우린 이 카운터를 완전히 분할할 수는
+없습니다.
+카운터를 분할하는 것은
+Section~\ref{sec:count:Statistical Counters} 에서 이야기한 세개의 방법에서의
+훌륭한 업데이트 쪽 성능을 가져온 것이었으니, 이는 어떤 회의론을 불러일으킬 수도
+있습니다.
+하지만,
+Section~\ref{sec:count:Eventually Consistent Implementation}
+에서 소개한 결과적으로 일관적인 알고리즘은 하나의 흥미로운 힌트를 제공합니다.
+이 알고리즘이 책들의 두 집합을, 즉 업데이트 쓰레드를 위한 쓰레드별 \co{counter}
+변수와 읽기 쓰레드를 위한 \co{global_count} 를 가졌으며, 이 쓰레드별
+\co{counter} 와 결과적으로 일관적이게 하기 위해 주기적으로 \co{global_count} 를
+업데이트 하는 \co{eventual()} 쓰레드를 가짐을 기억하십시오.
+이 쓰레드별 \co{counter} 는 \co{global_count} 가 완전한 값을 유지하는 동안 이
+카운터 값을 완전히 분할합니다.
+
+\iffalse
+
 In short, for many important workloads, we cannot fully partition the counter.
 Given that partitioning the counters was what brought the excellent
 update-side performance for the three schemes discussed in
@@ -2559,6 +2597,30 @@ updated \co{global_count} to be eventually consistent with the values
 of the per-thread \co{counter}.
 The per-thread \co{counter} perfectly partitioned the counter value, while
 \co{global_count} kept the full value.
+
+\fi
+
+리미트 카운터를 위해, 우린 이 카운터를 \emph{부분적으로 분할하는} 이 테마의 한
+변종을 사용할 수 있습니다.
+예를 들어, 네개의 쓰레드가 있고 이것들이 쓰레드별 \co{counter} 만이 아니라
+쓰레드별 최대값 (\co{countermax} 라고 해봅시다) 을 갖는다고 해봅시다.
+
+그런데 각 쓰레드가 자신의 \co{counter} 를 증가시켜야 하는데 \co{counter} 가
+\co{countermax} 와 같다면 어떻게 될까요?
+여기서의 트릭은 이 쓰레드의 \co{counter} 값의 절반을 \co{globalcount} 로
+옮기고, 이어서 \co{counter} 를 증가시키는 겁니다.
+예를 들어, 특정 쓰레드의 \co{counter} 와 \co{countermax} 변수가 똑같이
+10이라면, 다음 일을 합니다:
+
+\begin{enumerate}
+\item	전역 락을 잡습니다.
+\item	\co{globalcount} 에 5 를 더합니다.
+\item	이 합을 균형맞추기 위해, 이 쓰레드의 \co{counter} 에서 5 를 뺍니다.
+\item	이 전역 락을 놓습니다.
+\item	이 쓰레드의 \co{counter} 를 증가시켜서, 그 값이 6이 되게 합니다.
+\end{enumerate}
+
+\iffalse
 
 For limit counters, we can use a variation on this theme where we
 \emph{partially partition} the counter.
@@ -2581,6 +2643,34 @@ variables were both equal to 10, we do the following:
 \item	Release the global lock.
 \item	Increment this thread's \co{counter}, resulting in a value of six.
 \end{enumerate}
+
+\fi
+
+이 과정이 여전히 전역 락을 필요로 하긴 하지만, 이 락은 다섯번의 값 증가
+오퍼레이션에 한번만 잡으면 되므로, 이 락의 경쟁 수준을 크게 떨어뜨립니다.
+우린 이 경쟁을 \co{countermax} 값을 증가시킴으로써 우리가 원하는 대로 떨어뜨릴
+수 있습니다.
+하지만, \co{countermax} 의 값을 증가시킴으로써 발생하는 페널티는
+\co{globalcount} 의 정확도의 하락입니다.
+이를 자세히 보자면, 네개의 CPU 를 가진 시스템에서, \co{countermax} 가 10 이면,
+\co{globalcount} 는 최대 40 카운트의 에러를 가질 수 있습니다.
+반면에, \co{countermax} 가 100 으로 증가된다면, \co{globalcount} 는 400
+카운트의 에러까지도 가질 수 있습니다.
+
+이는 이 카운터의 합계값으로부터 \co{globalcount} 의 차이를 얼마나 신경쓰는가
+하는 질문을 일으킵니다, 참고로 이 합계값은 \co{globalcount} 과 각 쓰레드의
+\co{counter} 변수의 합입니다.
+이 질문에 대한 답은 이 합계값이 이 카운터의 한계 (\co{globalcountmax} 라고
+부릅시다) 로부터 얼마나 떨어져 있느냐에 달려 있습니다.
+이 두 값의 차이가 크면 클수록, 더 큰 \co{countermax} 가 \co{globalcountmax}
+리미트를 초월하는 리스크를 갖지 않을 수 있습니다.
+이는 특정 쓰레드의 \co{countermax} 변수의 값은 이 차이에 기반해 설정될 수
+있음을 의미합니다.
+이 한계로부터 멀 때에는 쓰레드별 \co{countermax} 변수는 성능과 확장성에 최적화
+하기 위해 더 큰 값을 갖고, 이 한계에 가까워지면 이 변수는 \co{globalcountmax}
+한계와의 체크에서의 에러를 최소화 하기 위해 더 작은 값을 갖는 겁니다.
+
+\iffalse
 
 Although this procedure still requires a global lock, that lock need only be
 acquired once for every five increment operations, greatly reducing
@@ -2610,6 +2700,17 @@ set to large values to optimize for performance and scalability, while
 when close to the limit, these same variables are set to small values
 to minimize the error in the checks against the \co{globalcountmax} limit.
 
+\fi
+
+이 설계는 \emph{병렬 fastpath} 의 한 예로, 흔한 경우는 비싼 인스트럭션과
+쓰레드간 상호 작용 없이 수행되지만, 때때로는 더 보수적으로 설계된 (그리고 높은
+오버헤드의) 전역 알고리즘을 사용하게 되는 흔한 설계 패턴입니다.
+이 설계 패턴은
+Section~\ref{sec:SMPdesign:Parallel Fastpath}
+에서 더 자세히 다뤄집니다.
+
+\iffalse
+
 This design is an example of \emph{parallel fastpath}, which is an important
 design pattern in which the common case executes with no expensive
 instructions and no interactions between threads, but where occasional
@@ -2617,6 +2718,8 @@ use is also made of a more conservatively designed
 (and higher overhead) global algorithm.
 This design pattern is covered in more detail in
 Section~\ref{sec:SMPdesign:Parallel Fastpath}.
+
+\fi
 
 \subsection{Simple Limit Counter Implementation}
 \label{sec:count:Simple Limit Counter Implementation}
