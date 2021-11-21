@@ -2726,6 +2726,33 @@ Section~\ref{sec:SMPdesign:Parallel Fastpath}.
 
 \begin{fcvref}[ln:count:count_lim:variable]
 Listing~\ref{lst:count:Simple Limit Counter Variables}
+이 이 구현에 의해 사용되는 쓰레드별 변수와 전역 변수를 보이고 있습니다.
+쓰레드별 \co{counter} 와 \co{countermax} 변수는 각각 연관된 쓰레드의 로컬
+카운터와 해당 카운터의 상한선입니다.
+라인~\lnref{globalcountmax} 의 \co{globalcountmax} 는 합해진 카운터의 상한선을
+담고 있으며, 라인~\lnref{globalcount} 의 \co{globalcount} 변수는 전역
+카운터입니다.
+\co{globalcount} 의 합과 각 쓰레드의 \co{counter} 는 전체 카운터의 합산값을
+제공합니다.
+라인~\lnref{globalreserve} 의 \co{globalreserve} 변수는 최소한 모든 쓰레드별
+\co{countermax} 변수의 합산값입니다.
+\end{fcvref}
+이 변수들 사이의 관계가
+Figure~\ref{fig:count:Simple Limit Counter Variable Relationships} 에 그려져
+있습니다:
+\begin{enumerate}
+\item	\co{globalcount} 와 \co{globalreserve} 의 합은 \co{globalcountmax}
+	이하여야만 합니다.
+\item	모든 쓰레드의 \co{countermax} 값의 합은 \co{globalreserve} 이하여야만
+	합니다.
+\item	각 쓰레드의 \co{counter} 는 해당 쓰레드의 \co{countermax} 이하여야만
+	합니다.
+\end{enumerate}
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_lim:variable]
+Listing~\ref{lst:count:Simple Limit Counter Variables}
 shows both the per-thread and global variables used by this
 implementation.
 The per-thread \co{counter} and \co{countermax} variables are the
@@ -2752,6 +2779,8 @@ Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}:
 	that thread's \co{countermax}.
 \end{enumerate}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim@variable.fcv}
 \caption{Simple Limit Counter Variables}
@@ -2765,11 +2794,20 @@ Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}:
 \label{fig:count:Simple Limit Counter Variable Relationships}
 \end{figure}
 
+\co{counterp[]} 배열의 각 원소는 연관된 쓰레드의 \co{counter} 변수를 참조하며,
+마지막으로, \co{gblcnt_mutex} 스핀락은 모든 전역 변수를 보호하는데, 달리
+말하자면, 어떤 쓰레드도 \co{gblcnt_mutex} 를 얻지 않고서는 어떤 전역 변수도
+액세스하거나 수정할 수 없습니다.
+
+\iffalse
+
 Each element of the \co{counterp[]} array references the corresponding
 thread's \co{counter} variable, and, finally, the \co{gblcnt_mutex}
 spinlock guards all of the global variables, in other words, no thread
 is permitted to access or modify any of the global variables unless it
 has acquired \co{gblcnt_mutex}.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim@add_sub_read.fcv}
@@ -2778,21 +2816,61 @@ has acquired \co{gblcnt_mutex}.
 \end{listing}
 
 \Cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+는 \co{add_count()}, \co{sub_count()}, 그리고 \co{read_count()} 함수들을
+(\path{count_lim.c}) 보입니다.
+
+\iffalse
+
+\Cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
 shows the \co{add_count()}, \co{sub_count()}, and \co{read_count()}
 functions (\path{count_lim.c}).
 
+\fi
+
 \QuickQuiz{
+	\Cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+	는 왜
+	Section~\ref{sec:count:Statistical Counters} 에서 보인
+	\co{inc_count()} 와 \co{dec_count()} 인터페이스 대신 \co{add_count()}
+	와 \co{sub_count()} 를 제공하는 거죠?
+
+	\iffalse
+
 	Why does
 	\cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
 	provide \co{add_count()} and \co{sub_count()} instead of the
 	\co{inc_count()} and \co{dec_count()} interfaces show in
 	Section~\ref{sec:count:Statistical Counters}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	구조체는 각자 다른 크기를 가지기 때문입니다.
+	물론, 특정 크기의 구조체에만 연관된 한계선 카운터는 \co{inc_count()} 와
+	\co{dec_count()} 를 사용할 수도 있을 겁니다.
+
+	\iffalse
+
 	Because structures come in different sizes.
 	Of course, a limit counter corresponding to a specific size
 	of structure might still be able to use
 	\co{inc_count()} and \co{dec_count()}.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_lim:add_sub_read:add]
+\Clnrefrange{b}{e} 는 특정 값 \co{delta} 를 이 카운터에 더하는 \co{add_count()}
+를 보입니다.
+라인~\lnref{checklocal} 는 이 쓰레드의 \co{counter} 에 \co{delta} 를 더할
+공간이 있는지 검사하고, 그렇다면 라인~\lnref{add} 에서 그걸 더하고
+라인~\lnref{return:ls} 에서 성공했음을 리턴합니다.
+이게 \co{add_counter()} 의 fastpath 로, 여기선 어토믹 오퍼레이션을 사용하지
+않고, 쓰레드별 변수들만을 참조하며, 어떤 캐쉬 미스도 일으키지 않을 겁니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim:add_sub_read:add]
 \Clnrefrange{b}{e} show \co{add_count()},
@@ -2806,6 +2884,8 @@ This is the \co{add_counter()} fastpath, and it does no atomic operations,
 references only per-thread variables, and should not incur any cache misses.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \begin{VerbatimL}[firstnumber=3]
 	if (counter + delta <= countermax) {
@@ -2818,12 +2898,40 @@ references only per-thread variables, and should not incur any cache misses.
 \end{listing}
 
 \QuickQuiz{
+	\Cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+	의 라인~\ref{ln:count:count_lim:add_sub_read:add:checklocal} 에서의
+	이상한 형태의 조건은 뭐죠?
+	\Cref{lst:count:Intuitive Fastpath} 에서 보인 더 직관적인 형태의
+	fastpath 는 어떤가요?
+
+	\iffalse
+
 	What is with the strange form of the condition on
 	line~\ref{ln:count:count_lim:add_sub_read:add:checklocal} of
 	\cref{lst:count:Simple Limit Counter Add; Subtract; and Read}?
 	Why not the more intuitive form of the fastpath shown in
 	\cref{lst:count:Intuitive Fastpath}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	두 단어로 말할 수 있습니다.
+	``정수형 오버플로우.''
+
+	 \Cref{lst:count:Intuitive Fastpath} 의 공식에 \co{counter} 가 10이고
+	 \co{delta} 가 \co{ULONG_MAX} 라고 대입해 보세요.
+	 그리고 나서
+	 \Cref{lst:count:Simple Limit Counter Add; Subtract; and Read} 에 보인
+	 코드를 다시 실행해 보세요.
+
+	 이 예의 나머지 부분을 위해선 정수형 오버플로우에 대한 좋은 이해가
+	 필요할 것이며, 따라서 여러분이 정수형 오버플로우를 이전에 다뤄본
+	 경험이 없다면, 그걸 위해 여러 예제를 시도해 보시기 바랍니다.
+	 정수형 오버플로우는 가끔 병렬 알고리즘보다도 옳게 처리하기가
+	 어렵습니다!
+
+	 \iffalse
+
 	Two words.
 	``Integer overflow.''
 
@@ -2839,6 +2947,9 @@ references only per-thread variables, and should not incur any cache misses.
 	the hang of it.
 	Integer overflow can sometimes be more difficult to get right
 	than parallel algorithms!
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{fcvref}[ln:count:count_lim:add_sub_read:add]
