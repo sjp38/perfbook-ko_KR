@@ -2953,6 +2953,27 @@ references only per-thread variables, and should not incur any cache misses.
 }\QuickQuizEnd
 
 \begin{fcvref}[ln:count:count_lim:add_sub_read:add]
+라인~\lnref{checklocal} 에서의 테스트가 실패하면, 우린 전역 변수들에 액세스
+해야만 하며, 따라서 라인~\lnref{acquire} 에서 \co{gblcnt_mutex} 를 잡아야 하며,
+이 락은 실패의 경우 라인~\lnref{release:f} 에서, 성공의 경우
+라인~\lnref{release:s} 에서 해제합니다.
+라인~\lnref{globalize} 는
+Listing~\ref{lst:count:Simple Limit Counter Utility Functions}
+에 보인 \co{globalize_count()} 를 호출하는데, 여기선 쓰레드 지역 변수들을
+정리하고, 전역 변수들을 필요한대로 조정 하여서 전체 과정을 단순화 시킵니다.
+(하지만 \emph{제} 말만 듣고 그렇겠거니 하지 말고 스스로 코딩해 보세요!)
+라인~\lnref{checkglb:b} 와~\lnref{checkglb:e} 는 \co{delta} 의 합이 가능할지
+체크해 보는데, 여기선
+Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
+의 작음 부호를 앞서는 표현이 (가장 왼쪽의) 두개의 빨간 막대의 높이 차를
+의미합니다.
+\co{delta} 를 합하는 게 가능하지 않다면, 라인~\lnref{release:f} 는 (앞서
+언급되었듯) \co{gblcnt_mutex} 를 해제하고 라인~\lnref{return:gf} 는 실패를
+의미하는 값을 리턴합니다.
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_lim:add_sub_read:add]
 If the test on
 line~\lnref{checklocal} fails, we must access global variables, and thus
 must acquire \co{gblcnt_mutex} on
@@ -2973,6 +2994,22 @@ line~\lnref{release:f} (as noted earlier) releases \co{gblcnt_mutex} and
 line~\lnref{return:gf}
 returns indicating failure.
 
+\fi
+
+그렇지 않다면, 우린 slowpath 를 취합니다.
+라인~\lnref{addglb} 에서는 \co{globalcount} 에 \co{delta} 를 더하고, 이어서
+라인~\lnref{balance} 에서는 이 전역 변수와 쓰레드별 변수를 모두 업데이트 하기
+위해
+(Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에 보인)
+\co{balance_count()} 를 호출합니다.
+이 \co{balance_count()} 호출은 일반적으로 fastpath 를 다시 가능하게 하기 위해
+이 쓰레드의 \co{countermax} 값을 설정할 겁니다.
+라인~\lnref{release:s} 는 (다시, 앞서 이야기 되었듯) \co{gblcnt_mutex} 를
+해제하고, 마지막으로 라인~\lnref{return:gs} 는 성공을 의미하는 값을 리턴합니다.
+\end{fcvref}
+
+\iffalse
+
 Otherwise, we take the slowpath.
 Line~\lnref{addglb} adds \co{delta} to \co{globalcount}, and then
 line~\lnref{balance} invokes \co{balance_count()} (shown in
@@ -2985,18 +3022,66 @@ Line~\lnref{release:s} then releases
 line~\lnref{return:gs} returns indicating success.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\Cref{lst:count:Simple Limit Counter Add; Subtract; and Read} 에서
+	\co{globalize_count()} 는 왜 나중에 \co{balance_count()} 를 호출해
+	그것을 다시 채우기 위한 이유만으로 쓰레드별 변수를 0으로 초기화
+	시키나요?
+	왜 그 쓰레드별 변수를 그냥 0이 아닌 채로 두지 않는 거죠?
+
+	\iffalse
+
 	Why does \co{globalize_count()} zero the per-thread variables,
 	only to later call \co{balance_count()} to refill them in
 	\cref{lst:count:Simple Limit Counter Add; Subtract; and Read}?
 	Why not just leave the per-thread variables non-zero?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 이 코드의 이전 버전이 그렇게 했습니다.
+	하지만 더하기와 빼기는 무척 비용이 낮고, 도사리고 있는 모든 특수 경우를
+	처리하는 건 상당히 복잡합니다.
+	다시 말하지만, 스스로 해보세요, 하지만 정수형 오버플로우를 조심하세요!
+
+	\iffalse
+
 	That is in fact what an earlier version of this code did.
 	But addition and subtraction are extremely cheap, and handling
 	all of the special cases that arise is quite complex.
 	Again, feel free to try it yourself, but beware of integer
 	overflow!
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_lim:add_sub_read:sub]
+\Clnrefrange{b}{e} 는 이 카운터에서 \co{delta} 를 빼는 \co{sub_count()} 를
+보입니다.
+라인~\lnref{checklocal} 은 이 쓰레드별 카운터가 이 빼기를 할 수 있는지 보고,
+그렇다면 라인~\lnref{sub} 는 이 빼기를 행하고 라인~\lnref{return:ls} 에서
+성공을 의미하는 값을 반환합니다.
+이 라인들이 \co{sub_count()} 의 fastpath 를 형성하며, \co{add_count()} 에서와
+마찬가지로, 이 fastpath 는 어떤 비용이 높은 오퍼레이션도 수행하지 않습니다.
+
+이 fastpath 가 \co{delta} 빼기를 하지 못한다면, 수행은
+\clnrefrange{acquire}{return:gs} 의 slowpath 로 이어집니다.
+이 slowpath 는 전역 상태에 접근해야만 하므로, 라인~\lnref{acquire} 는
+\co{gblcnt_mutex} 를 획득하는데, 이는 라인~\lnref{release:f} 에서 (실패의 경우)
+또는 라인~\lnref{release:s} 에서 (성공의 경우) 해제됩니다.
+라인~\lnref{globalize} 는
+Listing~\ref{lst:count:Simple Limit Counter Utility Functions}
+에 보인 \co{globalize_count()} 를 호출하는데, 이는 다시 쓰레드 지역 변수들을
+정리하고 전역 변수들을 필요한대로 조정합니다.
+라인~\lnref{checkglb} 는 이 카운터가 \co{delta} 빼기를 할 수 있는지 체크하고,
+그렇지 않다면 라인~\lnref{release:f} 에서 \co{gblcnt_mutex} 를 (앞서 이야기
+했듯) 해제하고 라인~\lnref{return:gf} 에서 실패를 의미하는 값을 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim:add_sub_read:sub]
 \Clnrefrange{b}{e} show \co{sub_count()},
@@ -3023,12 +3108,35 @@ Line~\lnref{checkglb} checks to see if the counter can accommodate subtracting
 (as noted earlier) and line~\lnref{return:gf} returns failure.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\co{add_count()} 에서는 \co{globalreserve} 가 우리를 위해 세어졌는데,
+	\cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+	의 \co{sub_count()} 에서는 왜 그렇지 않나요?
+
+	\iffalse
+
 	Given that \co{globalreserve} counted against us in \co{add_count()},
 	why doesn't it count for us in \co{sub_count()} in
 	\cref{lst:count:Simple Limit Counter Add; Subtract; and Read}?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\co{globalreserve} 변수는 모든 쓰레드의 \co{countermax} 변수의 합을
+	따라갑니다.
+	이 쓰레드들의 \co{counter} 변수의 합은 0과 \co{globalreserve} 사이
+	어디엔가 있을 수 있습니다.
+	따라서 우리는 모든 쓰레드의 \co{counter} 변수가 \co{add_count()}
+	시점에서 꽉 차있다고 가정하고 \co{sub_count()} 시점에서 모두 비어
+	있다고 가정하는 보수적 전략을 취합니다.
+
+	하지만 우린 나중에 여기로 돌아올테니, 이 질문을 기억해 두세요.
+
+	\iffalse
+
 	The \co{globalreserve} variable tracks the sum of all threads'
 	\co{countermax} variables.
 	The sum of these threads' \co{counter} variables might be anywhere
@@ -3038,21 +3146,47 @@ Line~\lnref{checkglb} checks to see if the counter can accommodate subtracting
 	and that they are all empty in \co{sub_count()}.
 
 	But remember this question, as we will come back to it later.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\Cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+	에 보인 \co{add_count()} 를 한 쓰레드가 호출하고, 다른 쓰레드가
+	\co{sub_count()} 를 호출한다고 해봅시다.
+	카운터의 값은 0이 아님에도 불구하고 \co{sub_count()} 는 실패를 리턴하지
+	않을까요?
+
+	\iffalse
+
 	Suppose that one thread invokes \co{add_count()} shown in
 	\cref{lst:count:Simple Limit Counter Add; Subtract; and Read},
 	and then another thread invokes \co{sub_count()}.
 	Won't \co{sub_count()} return failure even though the value of
 	the counter is non-zero?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	실제로 그럴 겁니다!
+	많은 경우, 이는
+	Section~\ref{sec:count:Simple Limit Counter Discussion} 에서 이야기한
+	대로 문제가 될 것이며, 그런 경우엔
+	Section~\ref{sec:count:Exact Limit Counters}
+	에서 이야기한 알고리즘이 도움이 될 겁니다.
+
+	\iffalse
+
 	Indeed it will!
 	In many cases, this will be a problem, as discussed in
 	Section~\ref{sec:count:Simple Limit Counter Discussion}, and
 	in those cases the algorithms from
 	Section~\ref{sec:count:Exact Limit Counters}
 	will likely be preferable.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
