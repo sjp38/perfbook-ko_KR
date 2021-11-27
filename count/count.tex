@@ -3191,6 +3191,20 @@ Line~\lnref{checkglb} checks to see if the counter can accommodate subtracting
 }
 
 \begin{fcvref}[ln:count:count_lim:add_sub_read:sub]
+반면, 라인~\lnref{checkglb} 에서 이 카운터가 \co{delta} 빼기를 할 수
+\emph{있다고} 확인되면, 우린 이 slowpath 를 마무리 합니다.
+라인~\lnref{subglb} 는 이 빼기를 하고 이어서 라인~\lnref{balance} 에서는 전역
+변수와 쓰레드별 변수를 모두 업데이트 하기 위해 (fastpath 가 다시 가능해 지길
+바라며) \co{balance_count()} (
+Listing~\ref{lst:count:Simple Limit Counter Utility Functions} 에 보여져
+있습니다) 를 호출합니다.
+라인~\lnref{release:s} 는 \co{gblcnt_mutex} 를 해제하고, 라인~\lnref{return:gs}
+는 성공을 의미하는 값을 리턴합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_lim:add_sub_read:sub]
 If, on the other hand, line~\lnref{checkglb} finds that the counter \emph{can}
 accommodate subtracting \co{delta}, we complete the slowpath.
 Line~\lnref{subglb} does the subtraction and then
@@ -3202,11 +3216,34 @@ Then line~\lnref{release:s} releases \co{gblcnt_mutex}, and
 line~\lnref{return:gs} returns success.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\Cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+	에는 왜 \co{add_count()} 와 \co{sub_count()} 가 모두 있죠?
+	왜 단순히 \co{add_count()} 에 음수를 넘기지 않는 건가요?
+
+	\iffalse
+
 	Why have both \co{add_count()} and \co{sub_count()} in
 	\cref{lst:count:Simple Limit Counter Add; Subtract; and Read}?
 	Why not simply pass a negative number to \co{add_count()}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\co{add_count()} 가 그 인자로 \co{unsigned} \co{long} 을 받음을 생각해
+	보면, 음수를 넘기기는 좀 어려울 겁니다.
+	그리고 여러분이 반물질 메모리를 가지고 있는게 아니라면, 사용 중인
+	구조체의 수를 세는데 음수를 허용하는 건 큰 의미가 없을 수 있습니다.
+
+	이 장난은 뒤로 하고 이야기 하자면, \co{add_count()} 와 \co{sub_count()}
+	를 합치는 것도 가능할 겁니다만, 이 합쳐진 함수의 \co{if} 조건은 현재의
+	함수들 한쌍보다 더 복잡할 것이엇, 결국 이 fast path 의 더 느린 수행을
+	의미하게 될 겁니다.
+
+	\iffalse
+
 	Given that \co{add_count()} takes an \co{unsigned} \co{long}
 	as its argument, it is going to be a bit tough to pass it a
 	negative number.
@@ -3219,7 +3256,25 @@ line~\lnref{return:gs} returns success.
 	conditions on the combined function would be more complex
 	than in the current pair of functions, which would in turn
 	mean slower execution of these fast paths.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_lim:add_sub_read:read]
+\Clnrefrange{b}{e} 는 이 카운터의 합산값을 반환하는 \co{read_count()} 를
+보입니다.
+이 함수는 라인~\lnref{acquire} 에서 \co{gblcnt_mutex} 를 획득하고
+라인~\lnref{release} 에서 이를 해제하여, \co{add_count()} 와 \co{sub_count()}
+에서의 전역적 오퍼레이션들을 배제시키며, 우리가 곧 보겠지만, 쓰레드 생성과 종료
+역시 배제시킵니다.
+라인~\lnref{initsum} 은 지역 변수 \co{sum} 을 \co{globalcount} 의 값으로 초기화
+시키고, 이어서 \clnrefrange{loop:b}{loop:e} 의 루프는 쓰레드별 \co{counter}
+변수들의 값을 합합니다.
+이어서 라인~\lnref{return} 은 이 합을 반환합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim:add_sub_read:read]
 \Clnrefrange{b}{e} show \co{read_count()},
@@ -3236,11 +3291,35 @@ per-thread \co{counter} variables.
 Line~\lnref{return} then returns the sum.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim@utility.fcv}
 \caption{Simple Limit Counter Utility Functions}
 \label{lst:count:Simple Limit Counter Utility Functions}
 \end{listing}
+
+Listing~\ref{lst:count:Simple Limit Counter Utility Functions}
+은
+\cref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+에서 보인 \co{add_count()}, \co{sub_count()}, 그리고 \co{read_count()}
+기능들에서 사용된 유틸리티 합수들을 보입니다.
+
+\begin{fcvref}[ln:count:count_lim:utility:globalize]
+\Clnrefrange{b}{e} 는 \co{globalize_count()} 를 보이는데, 이 함수는 현재
+쓰레드의 쓰레드별 카운터를 9으로 만들고 전역 변수들을 적절히 조정합니다.
+이 함수가 이 카운터의 합산값을 바꾸지 않고, 그 대신 이 카운터의 현재 값이
+어떻게 표현되는지를 바꿈을 알아두는 게 중요합니다.
+라인~\lnref{add} 는 이 쓰레드의 \co{counter} 변수의 값을 \co{globalcount} 에
+더하고, 라인~\lnref{zero} 는 \co{counter} 의 값을 0으로 만듭니다.
+비슷하게, 라인~\lnref{sub} 는 쓰레드별 \co{countermax} 를 \co{globalreserve}
+에서 빼고, 라인~\lnref{zeromax} 는 \co{countermax} 를 0으로 만듭니다.
+이 함수와 \co{balance_count()} 를 읽을 때는
+Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
+를 참고하는게 도움이 될텐데, 이어서 이걸 보겠습니다.
+\end{fcvref}
+
+\iffalse
 
 Listing~\ref{lst:count:Simple Limit Counter Utility Functions}
 shows a number of utility functions used by the \co{add_count()},
@@ -3263,6 +3342,25 @@ Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
 when reading both this function and \co{balance_count()}, which is next.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:count:count_lim:utility:balance]
+\Clnrefrange{b}{e} 는 대략적으로 말해서 \co{globalize_count()} 의 반대 역할인
+\co{balance_count()} 를 보입니다.
+이 함수의 일은 현재 쓰레드의 \co{countermax} 변수를 이 카운터가
+\co{globalcountmax} 한계를 넘어버리는 위험을 방지하는 가장 큰 값으로 설정하는
+것입니다.
+현재 쓰레드의 \co{countermax} 변수를 바꾸는 것은 물론
+Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
+를 다시 참고하면 볼 수 있듯이 연관된 \co{counter}, \co{globalcount} 그리고
+\co{globalreserve} 를 조정할 것이 필요합니다.
+이걸 함으로써, \co{balance_count()} 는 \co{add_count()} 와 \co{sub_count()} 의
+오버헤드 낮은 fastpath 의 사용을 극대화 시킵니다.
+\co{globalize_count()} 에서와 마찬가지로, \co{balance_count()} 는 이 카운터의
+합산값을 바꾸는 것이 허용되지 않습니다.
+
+\iffalse
+
 \begin{fcvref}[ln:count:count_lim:utility:balance]
 \Clnrefrange{b}{e} show \co{balance_count()},
 which is roughly speaking
@@ -3278,6 +3376,23 @@ By doing this, \co{balance_count()} maximizes use of
 \co{add_count()}'s and \co{sub_count()}'s low-overhead fastpaths.
 As with \co{globalize_count()}, \co{balance_count()} is not permitted
 to change the aggregate value of the counter.
+
+\fi
+
+\Clnrefrange{share:b}{share:e} 는 \co{globalcount} 나 \co{globalreserve} 에
+의해서 커버되지 않는 \co{globalcountmax} 의 부분에 대한 이 쓰레드의 지분을
+계산하고, 이 값을 이 쓰레드의 \co{countermax} 에 할당합니다.
+라인~\lnref{adjreserve} 는 \co{globalreserve} 로의 이 연관된 조정을 행합니다.
+라인~\lnref{middle} 은 이 쓰레드의 \co{counter} 를 0 과 \co{countermax} 사이
+중간 값으로 설정합니다.
+라인~\lnref{check} 는 \co{globalcount} 가 실제로 \co{counter} 의 이 값을 수용할
+수 있을지 검사하고, 그렇지 않다면 라인~\lnref{adjcounter} 에서 \co{counter} 를
+적절히 감소시킵니다.
+마지막으로, 양쪽 경우 모두, 라인~\lnref{adjglobal} 에서 연관된 조정을
+\co{globalcount} 에 행합니다.
+\end{fcvref}
+
+\iffalse
 
 \Clnrefrange{share:b}{share:e} compute this thread's share of
 that portion of
@@ -3296,13 +3411,40 @@ line~\lnref{adjglobal} makes the corresponding adjustment to
 \co{globalcount}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:count:count_lim:utility:balance]
+	Listing~\ref{lst:count:Simple Limit Counter Utility Functions}
+	의 \clnref{middle} 에서 왜 \co{counter} 를 \co{countermax / 2} 로
+	설정하는 거죠?
+	그냥 \co{countermax} 카운트를 취하는 게 더 간단하지 않을까요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:count:count_lim:utility:balance]
 	Why set \co{counter} to \co{countermax / 2} in \clnref{middle} of
 	Listing~\ref{lst:count:Simple Limit Counter Utility Functions}?
 	Wouldn't it be simpler to just take \co{countermax} counts?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:count:count_lim:utility:balance]
+	첫째로, 그건 실제로는 \co{countermax} 카운트를 예약하는 것입니다만
+	(\clnref{adjreserve} 를 참고하세요), 이 부분은 이것들의 절반만이 실제로
+	이 순간에 이 쓰레드에 의해 사용되도록 조정합니다.
+	이는 이 쓰레드가 \co{globalcount} 를 다시 참조하기 전에 최소한
+	\co{countermax / 2} 만큼의 값 증가나 감소를 행할 수 있게 합니다.
+
+	\co{globalcount} 에서의 계산은 \clnref{adjglobal} 에서의 조정 덕분에
+	정확하게 유지됨을 알아 두시기 바랍니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:count:count_lim:utility:balance]
 	First, it really is reserving \co{countermax} counts
 	(see \clnref{adjreserve}), however,
@@ -3315,6 +3457,9 @@ line~\lnref{adjglobal} makes the corresponding adjustment to
 	Note that the accounting in \co{globalcount} remains accurate,
 	thanks to the adjustment in \clnref{adjglobal}.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{figure*}[tb]
