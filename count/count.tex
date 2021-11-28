@@ -3469,6 +3469,29 @@ line~\lnref{adjglobal} makes the corresponding adjustment to
 \label{fig:count:Schematic of Globalization and Balancing}
 \end{figure*}
 
+Figure~\ref{fig:count:Schematic of Globalization and Balancing}
+에 보인 것처럼 카운터들의 관계가 첫번째 \co{globalize_count()} 와 뒤이은
+\co{balance_count()} 의 수행에 의해 어떻게 바뀌는지 보는 게 도움이 될 겁니다.
+시간은 왼쪽에서 오른쪽으로 흐르며, 가장 왼쪽의 구성은 대략적으로
+Figure~\ref{fig:count:Simple Limit Counter Variable Relationships}
+의 그것입니다.
+가운데의 구성은 쓰레드~0 에 의해 \co{globalize_count()} 가 수행된 후의 이 같은
+카운터들의 관계를 보입니다.
+이 그림에서 볼 수 있듯이, 쓰레드~0 의 \co{counter} (그림 내의 ``c~0'')a 는
+\co{globalcount} 에 더해졌으며, 그 사이 \co{globalreserve} 의 값은 똑같은
+양만큼 줄었습니다.
+쓰레드~0 의 \co{counter} 도 그것의 \co{countermax} (그림 내의 ``cm~0'') 도 0이
+되었습니다.
+다른 세개의 쓰레드의 카운터들은 변하지 않았습니다.
+이 변화는 이 카운터의 전체 값에는 영향을 주지 않았는데, 가장 바닥쪽의, 가장
+왼쪽과 중간 구성을 잇는 점선을 통해 보여져 있음을 알아 두시기 바랍니다.
+달리 말하면, \co{globalcount} 와 네 쓰레드의 \co{counter} 변수들의 값의 합은 두
+구성 모두에서 같습니다.
+비슷하게, 이 변화는 \co{globalcount} 와 \co{globalreserve} 의 합에 영향을
+끼치지 않았는데, 위쪽 점선을 통해 보입니다.
+
+\iffalse
+
 It is helpful to look at a schematic depicting how the relationship
 of the counters changes with the execution of first
 \co{globalize_count()} and then \co{balance_count()}, as shown in
@@ -3492,6 +3515,25 @@ In other words, the sum of \co{globalcount} and the four threads'
 Similarly, this change did not affect the sum of \co{globalcount} and
 \co{globalreserve}, as indicated by the upper dotted line.
 
+\fi
+
+오른쪽 구성은 다시 쓰레드~0 에 의해 \co{balance_count()} 가 호출된 후의 이
+카운터들의 관계를 보입니다.
+각 세개의 구성으로부터 위쪽으로 확장되는 세로 선에 의해 보이는 남아 있는
+카운트의 4분의 1이 쓰레드~0 의 \co{countermax} 에 더해지고 그 절반이 쓰레드~0
+의 \co{counter} 에 더해졌습니다.
+쓰레드~0 의 \co{counter} 에 더해진 양만큼이 또한 이 카운터의 전체 값 (다시
+말하지만 이는 \co{globalcount} 와 세 쓰레드의 \co{counter} 변수의 값의
+합입니다) 을 바꾸는 걸 막기 위해 \co{globalcount} 에서 빼졌으며, 이 역시 다시
+말하지만 가장 아래쪽의, 가운데와 오른쪽 구성을 잇는 두개의 점선으로 표시되어
+있습니다.
+\co{globalreserve} 변수 역시 이 변수가 네 쓰레드의 \co{countermax} 변수의 값의
+합으로 남아있게끔 조정되었습니다.
+쓰레드~0 의 \co{counter} 는 그것의 \co{countermax} 보다 작으므로, 쓰레드~0 은
+한번 더 이 카운터를 지역적으로 증가시킬 수 있습니다.
+
+\iffalse
+
 The rightmost configuration shows the relationship of these counters
 after \co{balance_count()} is executed, again by thread~0.
 One-quarter of the remaining count, denoted by the vertical line extending
@@ -3508,14 +3550,43 @@ variables.
 Because thread~0's \co{counter} is less than its \co{countermax},
 thread~0 can once again increment the counter locally.
 
+\fi
+
 \QuickQuiz{
+	Figure~\ref{fig:count:Schematic of Globalization and Balancing} 에서,
+	비록 남아 있는 카운트의 최대 한계까지의 4분의 1이 쓰레드~0 에 할당되어
+	있다고는 해도, 가운데와 오른쪽 구성을 잇는 위쪽의 점선이 보이듯
+	남아있는 카운트의 8분의 1만이 소모됩니다.
+	왜 그런거죠?
+
+	\iffalse
+
 	In Figure~\ref{fig:count:Schematic of Globalization and Balancing},
 	even though a quarter of the remaining count up to the limit is
 	assigned to thread~0, only an eighth of the remaining count is
 	consumed, as indicated by the uppermost dotted line connecting
 	the center and the rightmost configurations.
 	Why is that?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이런 일이 일어나는 이유는 쓰레드~0 의 \co{counter} 가 그것의
+	\co{countermax} 의 절반으로 설정되었기 때문입니다.
+	따라서, 쓰레드~0 에 할당된 4분의 1 가운데, 절반은 (8분의 1)
+	\co{globalcount} 에서 오고, 나머지 절반 (다시 말하지만, 8분의 1) 은
+	남아있는 카운트로부터 옵니다.
+
+	이 방법을 취하는 두가지 목적이 있습니다:
+	(1)~쓰레드~0 이 증가는 물론 감소에서도 fastpath 를 이용할 수 있게 하는
+	것, 그리고
+	(2)~모든 쓰레드가 그 한계까지 단조롭게 값을 증가시키기만 할 때의
+	부정확도를 줄이는 것.
+	이 마지막 부분을 더 자세히 알아보려면, 이 알고리즘을 좀 더 자세히
+	들여다 보시기 바랍니다.
+
+	\iffalse
+
 	The reason this happened is that thread~0's \co{counter} was
 	set to half of its \co{countermax}.
 	Thus, of the quarter assigned to thread~0, half of that quarter
@@ -3529,7 +3600,29 @@ thread~0 can once again increment the counter locally.
 	incrementing up towards the limit.
 	To see this last point, step through the algorithm and watch
 	what it does.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_lim:utility:register]
+\Clnrefrange{b}{e} 는 \co{count_register_thread()} 를 보이는데, 이 함수는 새로
+생성된 쓰레드의 상태를 설정합니다.
+이 함수는 단순히 새로 생성된 쓰레드의 \co{counter} 변수로의 포인터를 연관된
+\co{counterp[]} 배열 내 원소에 \co{gblcnt_mutex} 의 보호 아래 넣습니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:count:count_lim:utility:unregister]
+마지막으로, \clnrefrange{b}{e} 는 \co{count_unregister_thread()} 를 보이는데,
+이 함수는 곧 종료될 쓰레드의 상태를 정리합니다.
+라인~\lnref{acquire} 는 \co{gblcnt_mutex} 를 획득하고 라인~\lnref{release} 에서
+이를 해제합니다.
+라인~\lnref{globalize} 에서는 이 쓰레드의 카운터 상태를 지우기 위해
+\co{globalize_count()} 를 호출하고, 라인~\lnref{clear} 는 이 쓰레드의
+\co{counterp[]} 배열 내 원소를 지웁니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim:utility:register]
 \Clnrefrange{b}{e} show \co{count_register_thread()},
@@ -3552,6 +3645,8 @@ to clear out this thread's
 counter state, and line~\lnref{clear} clears this thread's entry in the
 \co{counterp[]} array.
 \end{fcvref}
+
+\fi
 
 \subsection{Simple Limit Counter Discussion}
 \label{sec:count:Simple Limit Counter Discussion}
