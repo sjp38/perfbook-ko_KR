@@ -3915,6 +3915,26 @@ represent \co{counter} and the low-order 16 bits to represent
 \end{listing}
 
 \begin{fcvref}[ln:count:count_lim_atomic:var_access:var]
+간단한 어토믹 한계카운터를 위한 변수와 액세스 함수들이
+Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
+(\path{count_lim_atomic.c}) 에 보여져 있습니다.
+앞의 알고리즘에서의 \co{counter} 와 \co{countermax} 변수들은
+라인~\lnref{candmax} 에 보인 단일 변수 \co{counterandmax} 에 앞부분 절반은
+\co{counter} 로, 뒷부분 절반은 \co{countermax} 로 쓰이게끔 합쳐졌습니다.
+이 변수는 실제 표현은 \co{int} 인 \co{atomic_t} 타입입니다.
+
+\Clnrefrange{def:b}{def:e} 는 
+Listing~\ref{lst:count:Approximate Limit Counter Variables}
+의 것들과 비슷한 역할을 하는\co{globalcountmax}, \co{globalcount},
+\co{globalreserve}, \co{counterp}, 그리고 \co{gblcnt_mutex} 의 정의를 보입니다.
+라인~\lnref{CM_BITS} 는 \co{counterandmax} 의 각 절반의 비트 수를 제공하는
+\co{CM_BITS} 를 정의하며, 라인~\lnref{MAX_CMAX} 는 \co{counterandmax} 의 각
+절반에 들어갈 수 있는 최대값인 \co{MAX_COUNTERMAX} 를 정의합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_lim_atomic:var_access:var]
 The variables and access functions for a simple atomic limit counter
 are shown in
 Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
@@ -3936,12 +3956,32 @@ gives the maximum value that may be held in either half of
 \co{counterandmax}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
+	의 라인~\ref{ln:count:count_lim_atomic:var_access:var:CM_BITS} 는
+	어떻게 C 표준을 위반하나요?
+
+	\iffalse
+
 	In what way does
         line~\ref{ln:count:count_lim_atomic:var_access:var:CM_BITS} of
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
 	violate the C standard?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이것은 바이트당 여덟 비트가 사용된다고 가정합니다.
+	이 가정은 쉽게 공유 메모리 멀티프로세서로 조립될 수 있는 현재의 일반
+	상용 마이크로프로세서에 성립합니다만, C 코드를 수행해 본 적 있는 모든
+	컴퓨터 시스템에 대해 성립하지는 않습니다.
+	(C 표준에 맞추기 위해선 대신 어떤 일을 할 수 있을까요?  그 단점은
+	무엇일까요?)
+
+	\iffalse
+
 	It assumes eight bits per byte.
 	This assumption does hold for all current commodity microprocessors
 	that can be easily assembled into shared-memory multiprocessors,
@@ -3949,7 +3989,28 @@ gives the maximum value that may be held in either half of
 	ever run C code.
 	(What could you do instead in order to comply with the C
 	standard?  What drawbacks would it have?)
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_lim_atomic:var_access:split_int]
+\Clnrefrange{b}{e} 는 \co{atomic_t counterandmax} 변수 아래의 \co{int} 를
+받아서 \co{counter} (\co{c}) 와 \co{countermax} (\co{cm}) 부분으로 나눠주는
+\co{split_counterandmax_int()} 함수를 보입니다.
+라인~\lnref{msh} 는 이 \co{int} 의 앞쪽 절반을 떼어내서 인자 \co{c} 로 명시된
+대로 결과를 위치시키며, 라인~\lnref{lsh} 는 이 \co{int} 의 뒤쪽 절반을 떼어내서
+인자 \co{cm} 으로 명시된 대로 결과를 위치시킵니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:count:count_lim_atomic:var_access:split]
+\Clnrefrange{b}{e} 는 라인~\lnref{int} 에서 명시된 변수로부터 아래의 \co{int}
+를 가져와서 라인~\lnref{old} 의 \co{old} 인자로 명시된 대로 저장하고
+라인~\lnref{split_int} 에서 그것을 쪼개기 위해 \co{split_counterandmax_int()}
+를 호출하는 \co{split_counterandmax()} 함수를 보입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim_atomic:var_access:split_int]
 \Clnrefrange{b}{e} show the \co{split_counterandmax_int()}
@@ -3972,15 +4033,37 @@ line~\lnref{old}, and then invokes \co{split_counterandmax_int()} to split
 it on line~\lnref{split_int}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	단 하나의 \co{counterandmax} 변수만 있는데, 왜
+	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
+	의
+        line~\ref{ln:count:count_lim_atomic:var_access:split:func}
+	에서는 포인터를 넘기는 거죠?
+
+	\iffalse
+
 	Given that there is only one \co{counterandmax} variable,
 	why bother passing in a pointer to it on
         line~\ref{ln:count:count_lim_atomic:var_access:split:func} of
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\emph{쓰레드당} 단 하나의 \co{counterandmax} 변수가 있습니다.
+	나중에 우리는 다른 쓰레드의 \co{counterandmax} 변수를
+	\co{split_counterandmax()} 로 넘기는 코드를 보게 될 겁니다.
+
+	\iffalse
+
 	There is only one \co{counterandmax} variable \emph{per thread}.
 	Later, we will see code that needs to pass other threads'
 	\co{counterandmax} variables to \co{split_counterandmax()}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{fcvref}[ln:count:count_lim_atomic:var_access:merge]
