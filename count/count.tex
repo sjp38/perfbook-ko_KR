@@ -4067,6 +4067,15 @@ it on line~\lnref{split_int}.
 }\QuickQuizEnd
 
 \begin{fcvref}[ln:count:count_lim_atomic:var_access:merge]
+\Clnrefrange{b}{e} 는 \co{split_counterandmax()} 의 반대라고 생각될 수 있는
+\co{merge_counterandmax()} 함수를 보입니다.
+라인~\lnref{merge} 는 \co{c} 와 \co{cm} 으로 각각 전달된 \co{counter} 와
+\co{countermax}  값을 병합하고 그 결과를 리턴합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_lim_atomic:var_access:merge]
 \Clnrefrange{b}{e} show the \co{merge_counterandmax()} function, which
 can be thought of as the inverse of \co{split_counterandmax()}.
 Line~\lnref{merge} merges the \co{counter} and \co{countermax}
@@ -4074,14 +4083,33 @@ values passed in \co{c} and \co{cm}, respectively, and returns
 the result.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
+	의 \co{merge_counterandmax()} 는 직접 \co{atomic_t} 에 저장을 하는 대신
+	\co{int} 를 리턴하나요?
+
+	\iffalse
+
 	Why does \co{merge_counterandmax()} in
 	Listing~\ref{lst:count:Atomic Limit Counter Variables and Access Functions}
 	return an \co{int} rather than storing directly into an
 	\co{atomic_t}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	뒤에서 우린 \co{atomic_cmpxchg()} 기능에 넘기기 위한 \co{int} 를
+	반환받을 필요가 있음을 알게 될 겁니다.
+
+	\iffalse
+
 	Later, we will see that we need the \co{int} return to pass
 	to the \co{atomic_cmpxchg()} primitive.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -4089,6 +4117,32 @@ the result.
 \caption{Atomic Limit Counter Add and Subtract}
 \label{lst:count:Atomic Limit Counter Add and Subtract}
 \end{listing}
+
+Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
+은 \co{add_count()} 와 \co{sub_count()} 함수들을 보입니다.
+
+\begin{fcvref}[ln:count:count_lim_atomic:add_sub:add]
+\Clnrefrange{b}{e} 는 \clnrefrange{fast:b}{return:fs} 에 fastpath 가 있고
+나머지 부분은 이 함수의 slowpath 인 \co{add_count()} 를 보입니다.
+Fastpath 의 \Clnrefrange{fast:b}{loop:e} 은 \clnrefrange{atmcmpex}{loop:e} 에서
+실제 CAS 를 행하는 \co{atomic_cmpxchg()} 기능을 가지고 구현된 compare-and-swap
+(CAS) 루프를 형성합니다.
+라인~\lnref{split} 은 현재 쓰레드의 \co{counterandmax} 변수를 자신의
+\co{counter} (\co{c}) 와 \co{countermax} (\co{cm}) 컴포넌트로 쪼개고, 아래의
+\co{int} 는 \co{old} 에 위치시킵니다.
+라인~\lnref{check} 는 \co{delta} 의 양이 지역적으로 처리될 수 있는지 검사하고
+(정수형 오버플로우를 막기 위해 신경쓰면서), 그렇지 않다면 라인~\lnref{goto} 가
+slowpath 로 전환합니다.
+그렇지 않다면, 라인~\lnref{merge} 는 업데이트 된 \co{counter} 값을 원래의
+\co{countermax} 값과 함께 \co{new} 로 결합시킵니다.
+\Clnrefrange{atmcmpex}{loop:e} 의 \co{atomic_cmpxchg()} 기능은 어토믹하게 이
+쓰레드의 \co{counterandmax} 변수를 \co{old} 와 비교하고, 이 비교가 성공했다면
+자신의 값을 \co{new} 에 업데이트 합니다.
+이 비교가 성공했다면, 라인~\lnref{return:fs} 는 성공을 의미하는 값을 리턴하고,
+그렇지 않다면 수행은 라인~\lnref{fast:b} 의 루프로 이어집니다.
+\end{fcvref}
+
+\iffalse
 
 Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
 shows the \co{add_count()} and \co{sub_count()} functions.
@@ -4118,14 +4172,38 @@ If the comparison succeeds, line~\lnref{return:fs} returns success, otherwise,
 execution continues in the loop at line~\lnref{fast:b}.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	우욱!
+	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract} 의
+        라인~\ref{ln:count:count_lim_atomic:add_sub:add:goto}
+	의 추한 \co{goto} 는 왠말이죠?
+	\co{break} 문 모르세요???
+
+	\iffalse
+
 	Yecch!
 	Why the ugly \co{goto} on
         line~\ref{ln:count:count_lim_atomic:add_sub:add:goto} of
 	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}?
 	Haven't you heard of the \co{break} statement???
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 \co{goto} 를 \co{break} 로 교체하려면
+        라인~\ref{ln:count:count_lim_atomic:add_sub:add:return:fs}
+	이 리턴해야 하는지를 알기 위한 플래그를 유지할 것을 필요로 할텐데, 이건
+	fastpath 에서 하고 싶은 일이 아닐 겁니다.
+	여러분이 정말로 \co{goto} 를 그렇게나 싫어한다면, 여러분이 할 일은 이
+	fastpath 를 성공 또는 실패를 리턴해서 ``실패'' 는 slowpath 의 필요를
+	의미하는 별개의 함수로 만드는 것일 겁니다.
+	이건 goto 를 싫어하는 독자 여러분의 연습문제로 남겨두겠습니다.
+
+	\iffalse
+
 	Replacing the \co{goto} with a \co{break} would require keeping
 	a flag to determine whether or not
         line~\ref{ln:count:count_lim_atomic:add_sub:add:return:fs}
@@ -4136,6 +4214,9 @@ execution continues in the loop at line~\lnref{fast:b}.
 	success or failure, with ``failure'' indicating a need for the
 	slowpath.
 	This is left as an exercise for goto-hating readers.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
