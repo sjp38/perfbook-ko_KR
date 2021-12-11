@@ -4221,6 +4221,16 @@ execution continues in the loop at line~\lnref{fast:b}.
 %
 \QuickQuizE{
         \begin{fcvref}[ln:count:count_lim_atomic:add_sub:add]
+	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
+	의 \clnrefrange{atmcmpex}{loop:e} 의 \co{atomic_cmpxchg()} 기능은 왜
+	실패할 수 있죠?
+	어쨌건, 우린 기존 값을 라인~\lnref{split} 에서 가져온 후 바꾸지
+	않았잖아요!
+	\end{fcvref}
+
+	\iffalse
+
+        \begin{fcvref}[ln:count:count_lim_atomic:add_sub:add]
 	Why would the \co{atomic_cmpxchg()} primitive at
         \clnrefrange{atmcmpex}{loop:e} of
 	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
@@ -4228,7 +4238,22 @@ execution continues in the loop at line~\lnref{fast:b}.
 	After all, we picked up its old value on line~\lnref{split} and have not
 	changed it!
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerE{
+	\begin{fcvref}[ln:count:count_lim_atomic:add_sub:add]
+	나중에, 우린
+	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}
+	의 \co{flush_local_count()} 함수가 어떻게 이 쓰레드의
+	\co{counterandmax} 변수를
+	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
+	의 \clnrefrange{fast:b}{loop:e} 의 fastpath 수행과 동시에 업데이트
+	할수도 있는지 볼 겁니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:count:count_lim_atomic:add_sub:add]
 	Later, we will see how the \co{flush_local_count()} function in
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}
@@ -4237,8 +4262,36 @@ execution continues in the loop at line~\lnref{fast:b}.
         \clnrefrange{fast:b}{loop:e} of
 	Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\begin{fcvref}[ln:count:count_lim_atomic:add_sub:add]
+Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
+의 \clnrefrange{slow:b}{return:ss} 는 라인~\lnref{acquire} 에서 획득되고
+라인~\lnref{release:f} 와~\lnref{release:s} 에서 해제되는 \co{gblcnt_mutex} 로
+보호되는 \co{add_count()} 의 slowpath 를 보입니다.
+라인~\lnref{globalize} 는 이 쓰레드의 상태를 전역 카운터로 옮기는
+\co{globalize_count()} 를 호출합니다.
+\Clnrefrange{checkglb:b}{checkglb:e} 는 \co{delta} 값이 현재 전역 상태에 의해
+처리될 수 있는지 검사하고, 그렇지 않다면 라인~\lnref{flush} 에서 모든 쓰레드의
+지역 상태를 전역 카운터로 쓸어넘기는 \co{flush_local_count()} 를 호출하고,
+이어서 \clnrefrange{checkglb:nb}{checkglb:ne} 에서 \co{delta} 가 처리될 수
+있는지 다시 검사합니다.
+만약 이 모든 것 후에도 \co{delta} 더하기가 될 수 없다면, 라인~\lnref{release:f}
+는 \co{gblcnt_mutex} 를 (앞에서 이야기 된 것처럼) 해제하고
+라인~\lnref{return:sf} 에서 실패를 의미하는 값을 리턴합니다.
+
+그렇지 않다면, 라인~\lnref{addglb} 는 \co{delta} 를 전역 카운터에 더하고,
+라인~\lnref{balance} 는 카운트를 적절하다면 각 지역 상태로 흩뿌리며,
+라인~\lnref{release:s} 에서 (다시 말하지만, 앞에서도 이야기했듯)
+\co{gblcnt_mutex} 를 해제하고, 마지막으로 라인~\lnref{return:ss} 에서 성공을
+의미하는 값을 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim_atomic:add_sub:add]
 \Clnrefrange{slow:b}{return:ss} of
@@ -4268,6 +4321,18 @@ line~\lnref{return:ss}
 returns success.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:count:count_lim_atomic:add_sub:sub]
+Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
+의 \clnrefrange{b}{e} 는 \co{add_count()} 와 비슷한 구조를 가져서
+\clnrefrange{fast:b}{fast:e} 에 fast path 를, \clnrefrange{slow:b}{slow:e} 에
+slowpath 를 갖는 \co{sub_count()} 함수를 보입니다.
+이 함수의 라인별 분석은 독자 여러분의 연습을 위한 것으로 남겨두겠습니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:count:count_lim_atomic:add_sub:sub]
 \Clnrefrange{b}{e} of
 Listing~\ref{lst:count:Atomic Limit Counter Add and Subtract}
@@ -4278,6 +4343,8 @@ show \co{sub_count()}, which is structured similarly to
 A line-by-line analysis of this function is left as an exercise to
 the reader.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim_atomic@read.fcv}
