@@ -4353,6 +4353,20 @@ the reader.
 \end{listing}
 
 \begin{fcvref}[ln:count:count_lim_atomic:read]
+Listing~\ref{lst:count:Atomic Limit Counter Read} 은 \co{read_count()} 를
+보입니다.
+라인~\lnref{acquire} 는 \co{gblcnt_mutex} 를 획득하고 라인~\lnref{release} 는
+이를 해제합니다.
+라인~\lnref{initsum} 은 지역 변수 \co{sum} 을 \co{globalcount} 의 값으로 초기화
+하고, \clnrefrange{loop:b}{loop:e} 의 루프는 쓰레드별 카운터를 이 합에
+더하는데, 라인~\lnref{split} 에서는 \co{split_counterandmax} 를 사용해 각
+쓰레드별 카운터를 격리시킵니다.
+마지막으로, 라인~\lnref{return} 은 이 합을 반환합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_lim_atomic:read]
 Listing~\ref{lst:count:Atomic Limit Counter Read} shows \co{read_count()}.
 Line~\lnref{acquire} acquires \co{gblcnt_mutex} and
 line~\lnref{release} releases it.
@@ -4363,6 +4377,8 @@ per-thread counters to this sum, isolating each per-thread counter
 using \co{split_counterandmax} on line~\lnref{split}.
 Finally, line~\lnref{return} returns the sum.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim_atomic@utility1.fcv}
@@ -4375,6 +4391,24 @@ Finally, line~\lnref{return} returns the sum.
 \caption{Atomic Limit Counter Utility Functions 2}
 \label{lst:count:Atomic Limit Counter Utility Functions 2}
 \end{listing}
+
+\Cref{lst:count:Atomic Limit Counter Utility Functions 1,%
+lst:count:Atomic Limit Counter Utility Functions 2}
+는 유틸리티 함수들인
+\co{globalize_count()},
+\co{flush_local_count()},
+\co{balance_count()},
+\co{count_register_thread()}, 그리고
+\co{count_unregister_thread()} 를 보입니다.
+\begin{fcvref}[ln:count:count_lim_atomic:utility1:globalize]
+\co{globalize_count()} 를 위한 코드는
+\cref{lst:count:Atomic Limit Counter Utility Functions 1} 의 \clnrefrange{b}{e}
+에 보이고 있으며, 앞의 알고리즘과 비슷합니다만, 이제 \co{counter} 와
+\co{countermax} 를 \co{counterandmax} 로부터 쪼갤 필요가 있는
+라인~\lnref{split} 이 추가되었습니다.
+\end{fcvref}
+
+\iffalse
 
 \Cref{lst:count:Atomic Limit Counter Utility Functions 1,%
 lst:count:Atomic Limit Counter Utility Functions 2}
@@ -4392,6 +4426,29 @@ is similar to that of previous algorithms, with the addition of
 line~\lnref{split}, which is now required to split out \co{counter} and
 \co{countermax} from \co{counterandmax}.
 \end{fcvref}
+
+\fi
+
+\begin{fcvref}[ln:count:count_lim_atomic:utility1:flush]
+모든 쓰레드의 지역 카운터 상태를 전역 카운터로 옮기는 \co{flush_local_count()}
+의 코드가 \clnrefrange{b}{e} 에 보여져 있습니다.
+라인~\lnref{checkrsv} 는 \co{globalreserve} 의 값이 모든 쓰레드별 카운트를
+허용하는지 검사하고, 그렇지 않다면 라인~\lnref{return:n} 에서 리턴합니다.
+그렇지 않다면, 라인~\lnref{initzero} 는 지역 변수 \co{zero} 를 0 이 된
+\co{counter} 와 \co{countermax} 의 조합으로 초기화 시킵니다.
+\Clnrefrange{loop:b}{loop:e} 의 루프는 각 쓰레드를 돌아갑니다.
+라인~\lnref{checkp} 는 현재 쓰레드가 캉누터 상태를 가지고 있는지 검사하고,
+그렇다면 \clnrefrange{atmxchg}{glbrsv} 가 이 상태를 전역 카운터로 옮깁니다.
+라인~\lnref{atmxchg} 는 어토믹하게 현재 쓰레드의 상태를 가져오면서 그 값을
+0으로 만듭니다.
+라인~\lnref{split} 은 이 상태를 \co{counter} (지역변수 \co{c}) 와
+\co{countermax} (지역변수 \co{cm}) 부분으로 쪼갭니다.
+라인~\lnref{glbcnt} 는 이 쓰레드의 \co{counter} 와 \co{globalcount} 를 더하며,
+그동안 라인~\lnref{glbrsv} 는 이 쓰레드의 \co{countermax} 를 \co{globalreserve}
+로부터 뺍니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim_atomic:utility1:flush]
 The code for \co{flush_local_count()}, which moves all threads' local
@@ -4416,15 +4473,37 @@ Line~\lnref{glbcnt} adds this thread's \co{counter} to \co{globalcount}, while
 line~\lnref{glbrsv} subtracts this thread's \co{countermax} from \co{globalreserve}.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	쓰레드가 간단하게 \co{counterandmax} 변수를
+	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1} 의
+        라인~\ref{ln:count:count_lim_atomic:utility1:flush:b}
+	에서의 \co{flush_local_count()} 가 비운 후에 곧바로 다시 채우는 건 왜
+	안되나요?
+
+	\iffalse
+
 	What stops a thread from simply refilling its
 	\co{counterandmax} variable immediately after
 	\co{flush_local_count()} on
         line~\ref{ln:count:count_lim_atomic:utility1:flush:b} of
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}
 	empties it?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 다른 쓰레드는 \co{flush_local_count()} 호출자가 \co{gblcnt_mutex} 를
+	해제하기 전에는 자신의 \co{counterandmax} 를 도로 채울 수 없습니다.
+	그 때에는, \co{flush_local_count()} 의 호출자는 이 카운트의 사용을
+	끝냈을 것이며, 따라서 이 다른 쓰레드가 값을 도로 채우는데 문제는 없을
+	겁니다---\co{globalcount} 의 값이 재충전을 허용할 만큼 충분히 크다는
+	가정 하에서요.
+
+	\iffalse
+
 	This other thread cannot refill its \co{counterandmax}
 	until the caller of \co{flush_local_count()} releases the
 	\co{gblcnt_mutex}.
@@ -4432,16 +4511,53 @@ line~\lnref{glbrsv} subtracts this thread's \co{countermax} from \co{globalreser
 	finished making use of the counts, so there will be no problem
 	with this other thread refilling---assuming that the value
 	of \co{globalcount} is large enough to permit a refill.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1} 의
+        line~\ref{ln:count:count_lim_atomic:utility1:flush:atmxchg} 에서
+	\co{flush_local_count()} 가 \co{counterandmax} 변수를 액세스 하는 동안
+	\co{add_count()} 와 \co{sub_count()} 의 동시에 수행되는 fastpath 들이
+	해당 변수를 간섭하는 것은 무엇이 막고 있습니까?
+
+	\iffalse
+
 	What prevents concurrent execution of the fastpath of either
 	\co{add_count()} or \co{sub_count()} from interfering with
 	the \co{counterandmax} variable while
 	\co{flush_local_count()} is accessing it on
         line~\ref{ln:count:count_lim_atomic:utility1:flush:atmxchg} of
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 1}?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	그런 건 없습니다.
+	다음 세가지 경우를 고려해 보세요:
+	\begin{enumerate}
+	\item	만약 \co{flush_local_count()} 의 \co{atomic_xchg()} 각 이
+		fastpath 들의 \co{split_counterandmax()} 전에 수행되었다면, 이
+		fastpath 는 0 값의 \co{counter} 와 \co{countermax} 를 보게 될
+		것이며, 따라서 slowpath 로 이동할 겁니다 (물론 \co{delta} 가
+		0이 아니라면요).
+	\item	\co{flush_local_count()} 의 \co{atomic_xchg()} 가 각 fastpath
+		의 \co{split_counterandmax()} 후에, 그러나 이 fastpath 의
+		\co{atomic_cmpxchg()} 전에 수행되었다면, \co{atomic_cmpxchg()}
+		는 실패하여, fastpath 가 재시작하게 하고, 따라서 앞의 case~1 을
+		줄입니다.
+	\item	\co{flush_local_count()} 의 \co{atomic_xchg()} 가 각tpath 의
+		\co{atomic_cmpxchg()} 후에 수행된다면, 이 fastpath 는 (대부분의
+		경우) \co{flush_local_count()} 가 이 쓰레드의
+		\co{counterandmax} 변수를 0으로 만들기 전에 성공적으로 완료될
+		겁니다.
+	\end{enumerate}
+	어떤 경우든, 이 레이스는 올바르게 해결되었습니다.
+
+	\iffalse
+
 	Nothing.
 	Consider the following three cases:
 	\begin{enumerate}
@@ -4462,8 +4578,25 @@ line~\lnref{glbrsv} subtracts this thread's \co{countermax} from \co{globalreser
 		\co{counterandmax} variable.
 	\end{enumerate}
 	Either way, the race is resolved correctly.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\begin{fcvref}[ln:count:count_lim_atomic:utility2]
+Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 2}
+의 \clnrefrange{balance:b}{balance:e} 는 호출하는 쓰레드의 지역
+\co{counterandmax} 변수를 재충전하는 \co{balance_count()} 의 코드를
+보입니다.
+이 함수는 앞의 알고리즘과 상당히 유사한데 합쳐진 \co{counterandmax} 변수를
+처리하는 것이 요구된다는 변경을 갖습니다.
+라인~\lnref{register:b} 에서 시작하는 \co{count_register_thread()} 함수와
+라인~\lnref{unregister:b} 에서 시작하는 \co{count_unregister_thread()} 함수와
+함께 이 코드의 자세한 분석은 독자 여러분의 몫으로 남겨둡니다,
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim_atomic:utility2]
 \Clnrefrange{balance:b}{balance:e} on
@@ -4478,7 +4611,18 @@ line~\lnref{register:b} and the \co{count_unregister_thread()} function starting
 line~\lnref{unregister:b}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\co{atomic_set()} 기능은 명시된 \co{atomic_t} 에 간단한 값 할당을 할
+	뿐인데,
+	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 2}
+	의 \co{balance()} 의
+        라인~\ref{ln:count:count_lim_atomic:utility2:balance:atmcset}
+	은 어떻게 이 변수를 업데이트 할 수 있죠?
+
+	\iffalse
+
 	Given that the \co{atomic_set()} primitive does a simple
 	store to the specified \co{atomic_t}, how can
         line~\ref{ln:count:count_lim_atomic:utility2:balance:atmcset} of
@@ -4486,13 +4630,30 @@ line~\lnref{unregister:b}.
 	Listing~\ref{lst:count:Atomic Limit Counter Utility Functions 2}
 	work correctly in face of concurrent \co{flush_local_count()}
 	updates to this variable?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\co{balance_count()} 와 \co{flush_local_count()} 의 호출자 모두
+	\co{gblcnt_mutex} 를 쥐며, 따라서 한번에 하나만 수행될 수 있습니다.
+
+	\iffalse
+
 	The caller of both \co{balance_count()} and
 	\co{flush_local_count()} hold \co{gblcnt_mutex}, so
 	only one may be executing at a given time.
+
+	\fi
+
 }\QuickQuizEnd
 
+다음 섹션은 이 설계를 평가해 봅니다.
+
+\iffalse
+
 The next section qualitatively evaluates this design.
+
+\fi
 
 \subsection{Atomic Limit Counter Discussion}
 
