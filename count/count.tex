@@ -4657,6 +4657,18 @@ The next section qualitatively evaluates this design.
 
 \subsection{Atomic Limit Counter Discussion}
 
+이것은 이 카운터가 그 양쪽 한계까지 닿는 것을 실제로 허용하는 첫번째
+구현입니다만, fastpath 에 어토믹 오퍼레이션을 추가하는 비용 아래 그렇게 하며,
+이는 일부 시스템에서는 이 fastpath 를 상당히 느려지게 만듭니다.
+일부 워크로드는 이 속도 저하를 감당할 수 있겠으나, 더 나은 읽기 쪽 성능을 위한
+알고리즘을 찾아볼 가치가 있습니다.
+그런 알고리즘들 중 하나는 다른 쓰레드로부터 카운트를 가져오기 위해 시그널
+핸들러를 사용합니다.
+시그널 핸들러는 시그널을 받은 쓰레드의 컨텍스트에서 수행되므로, 어토믹
+오퍼레이션은 필요하지 않게 되는데, 다음 섹션에서 이를 보겠습니다.
+
+\iffalse
+
 This is the first implementation that actually allows the counter to
 be run all the way to either of its limits, but it does so at the
 expense of adding atomic operations to the fastpaths, which slow down
@@ -4668,17 +4680,38 @@ threads.
 Because signal handlers run in the context of the signaled thread,
 atomic operations are not necessary, as shown in the next section.
 
+\fi
+
 \QuickQuiz{
+	하지만 시그널 핸들러는 수행되는 동안 다른 CPU 로 옮겨질 수 있습니다.
+	이 가능성은 한 쓰레드와 이 쓰레드를 언터럽트 한 시그널 핸들러
+	사이에서의 안정적인 통신을 위해 어토믹 인스트럭션과 메모리 배리어를
+	필요로 하게 하지 않나요?
+
+	\iffalse
+
 	But signal handlers can be migrated to some other
 	CPU while running.
 	Doesn't this possibility require that atomic instructions
 	and memory barriers are required to reliably communicate
 	between a thread and a signal handler that interrupts that
 	thread?
+
+	\fi
+
 }\QuickQuizAnswer{
+	아뇨.
+	이 시그널 핸들러가 다른 CPU 로 옮겨진다면, 이 인터럽트 당한 쓰레드 역시
+	함께 이동합니다.
+
+	\iffalse
+
 	No.
 	If the signal handler is migrated to another CPU, then the
 	interrupted thread is also migrated along with it.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Signal-Theft Limit Counter Design}
