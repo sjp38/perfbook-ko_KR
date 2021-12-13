@@ -4717,11 +4717,21 @@ atomic operations are not necessary, as shown in the next section.
 \subsection{Signal-Theft Limit Counter Design}
 \label{sec:count:Signal-Theft Limit Counter Design}
 
+이제 쓰레드별 상태는 이 연관된 쓰레드에 의해서만 조정되지만, 이 시그널
+핸들러와의 동기화를 할 필요가 있을 겁니다.
+이 동기화는
+Figure~\ref{fig:count:Signal-Theft State Machine} 에 보인 상태 머신에 의해
+제공됩니다.
+
+\iffalse
+
 Even though per-thread state will now be manipulated only by the
 corresponding thread, there will still need to be synchronization
 with the signal handlers.
 This synchronization is provided by the state machine shown in
 Figure~\ref{fig:count:Signal-Theft State Machine}.
+
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -4729,6 +4739,25 @@ Figure~\ref{fig:count:Signal-Theft State Machine}.
 \caption{Signal-Theft State Machine}
 \label{fig:count:Signal-Theft State Machine}
 \end{figure}
+
+이 상태 머신은 IDLE 상태에서 시작되며, \co{add_count()} 나 \co{sub_count()} 가
+이 쓰레드의 지역 카운트와 전역 카운트의 조합이 현재 요청을 처리할 수 없다는
+것을 발견하면, 이 연관된 slowpath 는 각 쓰레드의 \co{theft} 상태를 REQ 로
+설정합니다 (이 쓰레드가 카운트가 없어서 곧바로 READY 로 가는 경우가
+아니라면요).
+\co{gblcnt_mutex} 락을 잡는 slowpath 만이 초록색으로 표시되었듯 IDLE 상태로부터
+다른 상태가 되는게 허용되어 있습니다.\footnote{
+	이 책의 흑백 버전을 위해서 말하자면, IDLE 과 READY 는 초록색, REQ 는
+	빨강, 그리고 ACK 는 파랑색으로 칠해져 있습니다.}
+그러면 이 slowpath 는 각 쓰레드로 시그널을 보내고, 연관된 시그널 핸들러가
+연관된 쓰레드의 \co{theft} 와 \co{counting} 변수를 체크합니다.
+이 \co{theft} 상태가 REQ 라면, 이 시근러 핸들러는 이 상태를 바꾸는 것이
+허용되지 않으며, 따라서 그냥 리턴합니다.
+그렇지 않고 \co{counting} 변수가 셋 되어 있어서 현재 쓰레드의 fastpath 가 진행
+중임을 알리고 있다면, 이 시그널 핸들러는 \co{theft} 상태를 ACK 로, 그렇지
+않다면 READY 로 바꿉니다.
+
+\iffalse
 
 The state machine starts out in the IDLE state, and when \co{add_count()}
 or \co{sub_count()} find that the combination of the local thread's count
@@ -4748,6 +4777,18 @@ Otherwise, if the \co{counting} variable is set, indicating that
 the current thread's fastpath is in progress, the signal handler
 sets the \co{theft} state to ACK, otherwise to READY\@.
 
+\fi
+
+만약 이 \co{theft} 상태가 ACK 이라면, 파란 색으로 표시되었듯 fastpath 만이 이
+\co{theft} 상태를 바꾸는 게 허용됩니다.
+이 fastpath 가 완료되었을 때, \co{theft} 상태를 READY 로 바꿉니다.
+
+일단 이 slowpath 가 이 쓰레드의 \co{theft} 상태가 READY 임을 보면, 이 slowpath
+는 이 쓰레드의 카운트를 가져갈 수 있습니다.
+그러면 이 slowpath 는 이 쓰레드의 \co{theft} 상태를 IDLE 로 설정합니다.
+
+\iffalse
+
 If the \co{theft} state is ACK,
 only the fastpath is permitted to change
 the \co{theft} state, as indicated by the blue color.
@@ -4757,25 +4798,92 @@ Once the slowpath sees a thread's \co{theft} state is READY, the
 slowpath is permitted to steal that thread's count.
 The slowpath then sets that thread's \co{theft} state to IDLE\@.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	Figure~\ref{fig:count:Signal-Theft State Machine} 에서, REQ \co{theft}
+	상태는 왜 빨간색으로 칠해졌나요?
+
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft State Machine}, why is
 	the REQ \co{theft} state colored red?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	Fastpath 만이 \co{theft} 상태를 바꿀 수 있음을, 그리고 이 쓰레드가 이
+	상태에 너무 오래 머무른다면 이 slowpath 를 수행하고 있는 쓰레드는 POSIX
+	시그널을 다시 보낼 것임을 알리기 위해서입니다.
+
+	\iffalse
+
 	To indicate that only the fastpath is permitted to change the
 	\co{theft} state, and that if the thread remains in this
 	state for too long, the thread running the slowpath will
 	resend the POSIX signal.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	Figure~\ref{fig:count:Signal-Theft State Machine} 에서, 분리된 REQ 와
+	ACK \co{theft} 상태를 갖는 것의 요지가 무엇인가요?
+	왜 이것들을 하나의 REQACK 상태로 만들어서 이 상태 머신을 더 간단하게
+	만들지 않죠?
+	그러면 시그널 핸들러든 fastpath 든 먼저 그 상태에 도달한 사람이 상태를
+	READY 로 만들면 될텐데요.
+
+	\iffalse
+
 	In Figure~\ref{fig:count:Signal-Theft State Machine}, what is
 	the point of having separate REQ and ACK \co{theft} states?
 	Why not simplify the state machine by collapsing
 	them into a single REQACK state?
 	Then whichever of the signal handler or the fastpath gets there
 	first could set the state to READY\@.
+
+	\fi
+
 }\QuickQuizAnswerE{
+	REQ 와 ACK 상태를 하나로 만드는 것이 나쁜 생각인 이유는 여러가지가
+	있는데 다음의 것들이 포함됩니다:
+	\begin{enumerate}
+	\item	이 slowpath 는 시그널이 어디서 다시 전송되어야 하는지
+		파악하는데 REQ 와 ACK 상태를 사용합니다.
+		만약 이 상태가 합쳐져 있다면, slowpath 는 시그널들을 무작정
+		계속해서 보내는 것밖에 선택의 여지가 없을텐데, 이는 불필요하게
+		fastpath 를 느리게 만드는 도움 안되는 효과만 낼 겁니다.
+	\item	다음의 레이스가 초래될 겁니다:
+		\begin{enumerate}
+		\item	이 slowpath 가 특정 쓰레드의 상태를 REQACK 으로
+			설정합니다.
+		\item	해당 쓰레드가 fastpath 를 끝내고 REQACK 상태를
+			발견합니다.
+		\item	이 쓰레드가 시그널을 받고, 이 역시 REQACK 상태를
+			발견하고, 현재 진행중인 fastpath 가 없으므로, 이 상태를
+			READY 로 만듭니다.
+		\item	이 slowpath 는 이 READY 상태를 발견하고, 카운트를
+			가져오고, 상태를 IDLE 로 만들고, 완료됩니다.
+		\item	이 fastpath 는 상태를 READY 로 만들어서, 이 쓰레드의
+			다음 fastpath 수행을 막습니다.
+		\end{enumerate}
+		여기서의 기본적인 문제는 합쳐진 REQACK 상태가 시그널 핸들러에
+		의해서도 fastpath 에 의해서도 보여질 수 있다는 겁니다.
+		네개의 상태에 의해 관리되는 깔끔한 분리가 제대로 순서지어진
+		상태 전환을 보장합니다.
+	\end{enumerate}
+	하지만, 여러분이 세개 상태의 셋업을 올바르게 만드는 것도 가능할 수도
+	있습니다.
+	만약 성공한다면, 그것을 네개 상태 셋업과 주의 깊게 비교해 보시기
+	바랍니다.
+	그 세개의 상태 해법은 정말로 선호될 만 한가요, 그리고 그렇다면 왜,
+	안그렇다면 왜 그런가요?
+
+	\iffalse
+
 	Reasons why collapsing the REQ and ACK states would be a very
 	bad idea include:
 	\begin{enumerate}
@@ -4808,6 +4916,9 @@ The slowpath then sets that thread's \co{theft} state to IDLE\@.
 	work correctly.
 	If you do succeed, compare carefully to the four-state setup.
 	Is the three-state solution really preferable, and why or why not?
+
+	\fi
+
 }\QuickQuizEndE
 }
 
