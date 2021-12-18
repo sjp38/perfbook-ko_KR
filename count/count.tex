@@ -4928,6 +4928,19 @@ The slowpath then sets that thread's \co{theft} state to IDLE\@.
 \begin{fcvref}[ln:count:count_lim_sig:data]
 Listing~\ref{lst:count:Signal-Theft Limit Counter Data}
 (\path{count_lim_sig.c})
+이 시그널 기반 카운터 구현에 사용되는 데이터 구조를 보입니다.
+\Clnrefrange{value:b}{value:e} 는 앞의 섹션에서 설명된 쓰레드별 상태 머신을
+위한 상태들과 값들을 정의합니다.
+\Clnrefrange{var:b}{var:e} 는 앞의 구현들과 비슷하지만, 쓰레드의
+\co{countermax} 와 \co{theft} 변수들에 원격 접속을 허용하기 위해
+라인~\lnref{maxp} 와~\lnref{theftp} 를 각각 추가했습니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_lim_sig:data]
+Listing~\ref{lst:count:Signal-Theft Limit Counter Data}
+(\path{count_lim_sig.c})
 shows the data structures used by the signal-theft based counter
 implementation.
 \Clnrefrange{value:b}{value:e} define the states and values
@@ -4940,11 +4953,33 @@ thread's \co{countermax}
 and \co{theft} variables, respectively.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim_sig@data.fcv}
 \caption{Signal-Theft Limit Counter Data}
 \label{lst:count:Signal-Theft Limit Counter Data}
 \end{listing}
+
+\begin{fcvref}[ln:count:count_lim_sig:migration:globalize]
+Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
+은 쓰레드별 변수들과 전역 변수들 사이에서 카운트를 올믹기 위해 필요한 함수들을
+보입니다.
+\Clnrefrange{b}{e} 는 앞의 구현과 동일한 \co{globalize_count()} 를 보입니다.
+\end{fcvref}
+\begin{fcvref}[ln:count:count_lim_sig:migration:flush_sig]
+\Clnrefrange{b}{e} 는 카운트 가져오기 프로세스에서 사용되는 시그널 핸들러인
+\co{flush_local_count_sig()} 를 보입니다.
+라인~\lnref{check:REQ} 와~\lnref{return:n} 은 \co{theft} 상태가 REQ 인지
+체크하고, 그렇지 않다면 변경 없이 리턴합니다.
+라인~\lnref{mb:1} 은 값 가져오기 위한 변수의 샘플링이 해당 변수로의 어떤
+변경보다도 이전에 이루어졌음을 보장하기 위한 메모리 배리어를 수행합니다.
+라인~\lnref{set:ACK} 은 \co{theft} 상태를 ACK 으로 설정하고,
+라인~\lnref{check:fast} 가 이 쓰레드의 fastpath 가 수행 중이지 않음을 보게
+된다면, 라인~\lnref{set:READY} 가 \co{theft} 상태를 READY 로 설정합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim_sig:migration:globalize]
 Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
@@ -4969,6 +5004,8 @@ this thread's fastpaths are not running, line~\lnref{set:READY} sets the \co{the
 state to READY\@.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/count/count_lim_sig@migration.fcv}
 \caption{Signal-Theft Limit Counter Value-Migration Functions}
@@ -4976,18 +5013,40 @@ state to READY\@.
 \end{listing}
 
 \QuickQuiz{
+	\cref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
+	의 \co{flush_local_count_sig()} 함수에서, 쓰레드별 변수인 \co{theft} 의
+	사용은 왜 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 로 싸여있나요?
+
+	\iffalse
+
 	In \cref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}'s
 	function \co{flush_local_count_sig()}, why are there
 	\co{READ_ONCE()} and \co{WRITE_ONCE()} wrappers around
 	the uses of the
 	\co{theft} per-thread variable?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:count:count_lim_sig:migration:flush_sig]
+	첫번째 것 (라인~\lnref{check:REQ}) 은 불필요하지 않은가 논쟁이 될 수
+	있습니다.
+	마지막의 두개 (라인~\lnref{set:ACK} 과~\lnref{set:READY}) 는
+	중요합니다.
+	이것들이 없어지면, 컴파일러는 \clnrefrange{set:ACK}{set:READY} 를
+	다음과 같이 바꿀 수 있습니다:
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:count:count_lim_sig:migration:flush_sig]
 	The first one (on line~\lnref{check:REQ}) can be argued to be unnecessary.
 	The last two (lines~\lnref{set:ACK} and~\lnref{set:READY}) are important.
 	If these are removed, the compiler would be within its rights
 	to rewrite \clnrefrange{set:ACK}{set:READY} as follows:
 	\end{fcvref}
+
+	\fi
 
 \begin{VerbatimN}[firstnumber=14]
 theft = THEFT_READY;
@@ -4996,10 +5055,34 @@ if (counting) {
 }
 \end{VerbatimN}
 
+	이는 치명적인 일이 될텐데, slowpath 는 \co{THEFT_READY} 의 변경 중인
+	값을 보게 될수도 있고, 따라서 연관된 쓰레드가 준비되기 전에 값
+	가져오기를 시작할 수 있기 때문입니다.
+
+	\iffalse
+
 	This would be fatal, as the slowpath might see the transient
 	value of \co{THEFT_READY}, and start stealing before the
 	corresponding thread was ready.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_lim_sig:migration:flush]
+\Clnrefrange{b}{e} 는 모든 쓰레드의 지역 카운트를 날리기 위해 slowpath 에서
+호출되는 \co{flush_local_count()} 를 보입니다.
+\Clnrefrange{loop:b}{loop:e} 의 루프는 지역 카운트를 가진 각 쓰레드의
+\co{theft} 상태를 진행시키며, 또한 해당 쓰레드에 시그널을 보냅니다.
+라인~\lnref{skip} 은 존재하지 않는 쓰레드들을 건너 뛰게 합니다.
+그렇지 않다면, 라인~\lnref{checkmax} 는 현재 쓰레드가 어떤 지역 카운트를 가지고
+있는지 보고, 그렇지 않다면 라인~\lnref{READY} 은 이 쓰레드의 \co{theft} 상태를
+READY 로 만들고 라인~\lnref{next} 에서 다음 쓰레드로 넘어갑니다.
+그렇지 않다면, 라인~\lnref{REQ} 는 이 쓰레드의 \co{theft} 상태를 REQ 로 만들고
+라인~\lnref{signal} 은 이 쓰레드에 시그널을 보냅니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim_sig:migration:flush]
 \Clnrefrange{b}{e} show \co{flush_local_count()}, which is called from the
@@ -5015,14 +5098,36 @@ Otherwise, line~\lnref{REQ} sets the thread's \co{theft} state to REQ and
 line~\lnref{signal} sends the thread a signal.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
+	에서, 왜
+        line~\ref{ln:count:count_lim_sig:migration:flush:checkmax}
+	이 다른 쓰레드의 \co{countermax} 변수에 직접 접근하는게 안전하죠?
+
+	\iffalse
+
 	In Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions},
 	why is it safe for
         line~\ref{ln:count:count_lim_sig:migration:flush:checkmax}
         to directly access the other thread's
 	\co{countermax} variable?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	그 다른 쓰레드는 \co{gblcnt_mutex} 락을 잡지 않고는 자신의
+	\co{countermax} 변수의 값을 바꾸는 게 허락되지 않았기 때문입니다.
+	하지만 그 호출자가 이 락을 쥐었고, 따라서 다른 쓰레드가 이 락을 잡는게
+	불가능하며, 그러니 그 다른 쓰레드는 \co{countermax} 변수를 바꿀 수
+	없습니다.
+	그러므로 우리는 안전하게 이걸 접근할 수 있습니다---하지만 바꿀 순
+	없습니다.
+
+	\iffalse
+
 	Because the other thread is not permitted to change the value
 	of its \co{countermax} variable unless it holds the
 	\co{gblcnt_mutex} lock.
@@ -5030,34 +5135,93 @@ line~\lnref{signal} sends the thread a signal.
 	for the other thread to hold it, and therefore the other thread
 	is not permitted to change its \co{countermax} variable.
 	We can therefore safely access it---but not change it.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
+	에서,
+        line~\ref{ln:count:count_lim_sig:migration:flush:signal}
+	은 왜 현재 쓰레드가 자신에게 시그널을 보내는지 체크하지 않는 거죠?
+
+	\iffalse
+
 	In Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions},
 	why doesn't
         line~\ref{ln:count:count_lim_sig:migration:flush:signal}
         check for the current thread sending itself
 	a signal?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	추가적인 검사가 필요치 않습니다.
+	\co{flush_local_count()} 는 이미 \co{globalize_count()} 를 호출했으며,
+	따라서
+	라인~\ref{ln:count:count_lim_sig:migration:flush:checkmax}
+	의 체크는 성공하고 뒤따르는 \co{pthread_kill()} 을 건너뛰었을 겁니다.
+
+	\iffalse
+
 	There is no need for an additional check.
 	The caller of \co{flush_local_count()} has already invoked
 	\co{globalize_count()}, so the check on
 	line~\ref{ln:count:count_lim_sig:migration:flush:checkmax}
 	will have succeeded, skipping the later \co{pthread_kill()}.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	\Cref{lst:count:Signal-Theft Limit Counter Data,%
+	lst:count:Signal-Theft Limit Counter Value-Migration Functions}
+	에 보인 코드는 \GCC\ 와 POSIX 에서 동작합니다.
+	이게 ISO C 표준도 따르게 하기 위해선 뭐가 필요할까요?
+
+	\iffalse
+
 	The code shown in
 	\cref{lst:count:Signal-Theft Limit Counter Data,%
 	lst:count:Signal-Theft Limit Counter Value-Migration Functions}
 	works with \GCC\ and POSIX\@.
 	What would be required to make it also conform to the ISO C standard?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	\co{theft} 변수는 시그널 핸들러와 그 시그널에 의해 인터럽트된 코드
+	사이에서 안전하게 공유됨을 보장하기 위해 \co{sig_atomic_t} 타입이어야만
+	합니다.
+
+	\iffalse
+
 	The \co{theft} variable must be of type \co{sig_atomic_t}
 	to guarantee that it can be safely shared between the signal
 	handler and the code interrupted by the signal.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\begin{fcvref}[ln:count:count_lim_sig:migration:flush]
+\Clnrefrange{loop2:b}{loop2:e} 의 루프는 각 쓰레드가 READY 상태에 도달하길
+기다렸다가 해당 쓰레드의 카운트를 가져옵니다.
+\Clnrefrange{skip:nonexist}{next2} 는 모든 존재하지 않는 쓰레드를 건너 뛰고,
+\clnrefrange{loop3:b}{loop3:e} 의 루프는 현재 쓰레드의 \co{theft} 상태가 READY
+가 될 때까지 기다립니다.
+라인~\lnref{block} 은 우선순위 역전 문제를 방지하기 위해 1 밀리세컨드 동안
+블록되고, 라인~\lnref{check:REQ} 가 이 쓰레드의 시그널이 아직 도착하지 않았음을
+판단하면, 라인~\lnref{signal2} 는 이 시그널을 다시 보냅니다.
+수행은 이 쓰레드의 \co{theft} 상태가 READY 가 되었을 때 라인~\lnref{thiev:b} 에
+도달하며, 따라서 \clnrefrange{thiev:b}{thiev:e} 는 값 가져오기를 합니다.
+라인~\lnref{IDLE} 은 이제 이 쓰레드의 \co{theft} 상태를 IDLE 로 되돌립니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_lim_sig:migration:flush]
 The loop spanning \clnrefrange{loop2:b}{loop2:e} waits until each
@@ -5074,6 +5238,8 @@ Execution reaches line~\lnref{thiev:b} when the thread's \co{theft} state become
 READY, so \clnrefrange{thiev:b}{thiev:e} do the thieving.
 Line~\lnref{IDLE} then sets the thread's \co{theft} state back to IDLE\@.
 \end{fcvref}
+
+\fi
 
 \QuickQuiz{
 	In Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions},
