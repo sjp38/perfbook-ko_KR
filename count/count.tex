@@ -5434,6 +5434,20 @@ reader.
 
 \subsection{Signal-Theft Limit Counter Discussion}
 
+제 코어 여섯개짜리 x86 랩톱에서 이 시그널 기반 구현은 어토믹 구현에 비해 8배나
+빨리 돌아갑니다.
+이게 항상 선호될 만 할까요?
+
+이 시그널 기반 구현은 펜티엄 4 시스템에서는 어토믹 인스트럭션이 느리므로 상당히
+선호될 수 있겠습니다만, 오래된 80386 기반의 Sequent Symmetry 시스템은 어토믹
+구현의 더 짧은 코드 길이를 훨씬 잘 수행해낼 수 있을 겁니다.
+그러나, 이 증가된 업데이트 쪽 성능은 높아진 읽기 쪽 오버헤드의 비용과 함께
+옵니다: 이 POSIX 시그널은 공짜가 아닙니다.
+만약 궁극의 성능이 핵심이라면, 여러분은 여러분의 어플리케이션이 실제 배포되는
+시스템에서도 그것들을 모두 측정해 봐야 할 겁니다.
+
+\iffalse
+
 The signal-theft implementation runs more than eight times as fast as the
 atomic implementation on my six-core x86 laptop.
 Is it always preferable?
@@ -5447,12 +5461,33 @@ prices of higher read-side overhead: Those POSIX signals are not free.
 If ultimate performance is of the essence, you will need to measure
 them both on the system that your application is to be deployed on.
 
+\fi
+
 \QuickQuiz{
+	POSIX 시그널은 느리기만 한 게 아니고, 시그널을 각 쓰레드에 보내는 것은
+	확장이 안됩니다.
+	만약 여러분이 (예를 들어) 10,000 쓰레드를 가지고 있고 이 읽기 쪽이
+	빠르게 만들어야 한다면 어떻게 하겠습니까?
+
+	\iffalse
+
 	Not only are POSIX signals slow, sending one to each thread
 	simply does not scale.
 	What would you do if you had (say) 10,000 threads and needed
 	the read side to be fast?
+
+	\fi
+
 }\QuickQuizAnswer{
+	한가지 방법은
+	Section~\ref{sec:count:Eventually Consistent Implementation}
+	에 보인 기법으로, 전체 카운터 값에 대한 근사치를 단일 변수에 요약하는
+	겁니다.
+	또다른 방법은 여러 쓰레드가 읽기를 수행하게끔 해서, 각 쓰레드가
+	업데이트를 하는 쓰레드 중 일부 집합들과만 상호작용하게 하는 겁니다.
+
+	\iffalse
+
 	One approach is to use the techniques shown in
 	Section~\ref{sec:count:Eventually Consistent Implementation},
 	summarizing an approximation to the overall counter value in
@@ -5460,21 +5495,51 @@ them both on the system that your application is to be deployed on.
 	Another approach would be to use multiple threads to carry
 	out the reads, with each such thread interacting with a
 	specific subset of the updating threads.
+
+	\fi
+
 }\QuickQuizEnd
+
+이건 하지만 왜 고품질 API 가 그렇게 중요한가에 대한 한가지 이유에 불과합니다:
+그것은 계속해서 바뀌는 하드웨어 성능 특성에 의해 필요시 되는대로 구현이 바뀔 수
+있게 해줍니다.
+
+\iffalse
 
 This is but one reason why high-quality APIs are so important:
 they permit implementations to be changed as required by ever-changing
 hardware performance characteristics.
 
+\fi
+
 \QuickQuiz{
+	만약 여러분이 원하는 건 이 정확한 리미트 카운터가 아래쪽 한계에는
+	정확하지만 위쪽 한계에는 정확하지 않아도 되는 것이라면 어떻게
+	하시겠습니까?
+
+	\iffalse
+
 	What if you want an exact limit counter to be exact only for
 	its lower limit, but to allow the upper limit to be inexact?
+
+	\fi
+
 }\QuickQuizAnswer{
+	한가지 간단한 해결책은 위쪽 한계를 원하는 만큼 실제보다 크게 잡는
+	겁니다.
+	그런 부풀리기의 제약은 이 위쪽 한계가 이 카운터가 표현할 수 있는 가장
+	큰 값이 되는 경우입니다.
+
+	\iffalse
+
 	One simple solution is to overstate the upper limit by the
 	desired amount.
 	The limiting case of such overstatement results in the
 	upper limit being set to the largest value that the counter is
 	capable of representing.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Applying Exact Limit Counters}
