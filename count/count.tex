@@ -5545,6 +5545,25 @@ hardware performance characteristics.
 \subsection{Applying Exact Limit Counters}
 \label{sec:count:Applying Exact Limit Counters}
 
+이 섹션에서 소개된 정확한 한계 카운터 구현들이 매우 유용할 수 있긴 하지만, 이
+카운터의 값이 항상 0 근처라면 별로 도움이 되지 못할 텐데, I/O 기기로의 액세스
+수를 세는 게 그럴 수도 있을 겁니다.
+그런 0 근처에서의 카운팅의 높은 오버헤드는 우리가 거기 얼마나 많은 참조가
+있는지에 대해선 보통 관심이 없다는 점에서 특히 고통스럽습니다.
+\QuickQuizRef{\QcountQIOcnt} 에 나온 제거 가능한 I/O 기기 액세스 카운트
+문제에서 이야기 되었듯이, 액세스 횟수는 누군가가 정말로 이 기기를 제거하려고 할
+때 같은 드문 경우를 제외하고는 상관없습니다.
+
+이 문제에 대한 한가지 간단한 해결책은 이 카운터가 효율적으로 동작할 수 있을
+만큼 그 값이 0으로부터 멀다는 것을 보장하기 위해 큰 ``편향치'' (예를 들어, 10억
+정도) 를 더하는 것입니다.
+누군가가 이 기기를 제거하고자 한다면, 이 편향치는 이 카운터 값으로부터
+빼집니다.
+마지막 몇 액세스를 카운팅 하는건 상당히 비효율적이게 되겠지만, 그 전의 많은
+액세스는 온전한 속도로 카운트 되었을 거라는 게 핵심입니다.
+
+\iffalse
+
 Although the exact limit counter implementations presented in this
 section can be very useful, they are not much help if the counter's value
 remains near zero at all times, as it might when counting the number
@@ -5566,14 +5585,45 @@ Counting the last few accesses will be quite inefficient,
 but the important point is that the many prior accesses will have been
 counted at full speed.
 
+\fi
+
 \QuickQuiz{
+	편향된 카운터를 사용할 때 상황을 더 좋게 하기 위해 여러분이 해보았을
+	법한 더 나은 방법은 무엇이 있을까요?
+
+	\iffalse
+
 	What else had you better have done when using a biased counter?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 위쪽 한계를 이 편향치, 예상되는 최대 액세스 횟수, 그리고
+	``엎질러짐'' 을 충분히 받아들일 수 있을 만큼 크게 설정해서 액세스
+	횟수가 그 최대치일 때에도 일이 효율적으로 진행되게 하는 것이 좋을
+	겁니다.
+
+	\iffalse
+
 	You had better have set the upper limit to be large enough
 	accommodate the bias, the expected maximum number of accesses,
 	and enough ``slop'' to allow the counter to work efficiently
 	even when the number of accesses is at its maximum.
+
+	\fi
+
 }\QuickQuizEnd
+
+편향된 카운터가 상당히 도움되고 유용할 수 있지만, 이는
+page~\pageref{chp:Counting} 에서 나온, 제거 가능한 I/O 기기 액세스 카운트
+문제의 부분적 해결책일 뿐입니다.
+기기를 제거하고자 할 때, 우린 현재 I/O 액세스의 정확한 횟수만 알아야 하는 것이
+아니라, 시작부터의 미래 액세스도 예측해야 합니다.
+이를 달성하는 한가지 방법은 이 카운터를 업데이트 할 때 reader-writer 락을 읽기
+모드로 획득하고, 이 카운터를 체크할 때에는 쓰기 모드로 획득하는 것입니다.
+I/O 를 하기 위한 코드는 다음과 같을 수 있을 겁니다:
+
+\iffalse
 
 Although a biased counter can be quite helpful and useful, it is only a
 partial solution to the removable I/O device access-count problem
@@ -5586,6 +5636,8 @@ One way to accomplish this is to read-acquire a reader-writer lock
 when updating the counter, and to write-acquire that same reader-writer
 lock when checking the counter.
 Code for doing I/O might be as follows:
+
+\fi
 
 \begin{fcvlabel}[ln:count:inline:I/O]
 \begin{VerbatimN}[commandchars=\\\[\]]
@@ -5603,6 +5655,19 @@ if (removing) {			\lnlbl[check]
 \end{fcvlabel}
 
 \begin{fcvref}[ln:count:inline:I/O]
+라인~\lnref{acq} 는 이 락을 읽기 모드로 획득하고, 라인~\lnref{rel1}
+또는~\lnref{rel2} 에서 이를 해제합니다.
+라인~\lnref{check} 는 이 기기가 제거되었는지 검사하고, 그렇다면
+라인~\lnref{rel1} 에서 이 락을 해제하고 라인~\lnref{cancel} 에서 이 I/O 를
+취소하거나 이 기기가 제거될 것임을 생각할 때 적절할 무슨 행동이든 취합니다.
+그렇지 않다면, 라인~\lnref{inc} 는 이 액세스 카운트를 증가시키고,
+라인~\lnref{rel2} 는 이 락을 해제하며, 라인~\lnref{do} 가 I/O 를 행하고,
+라인~\lnref{dec} 는 이 액세스 카운트를 감소시킵니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:count:inline:I/O]
 Line~\lnref{acq} read-acquires the lock, and either
 line~\lnref{rel1} or~\lnref{rel2} releases it.
 Line~\lnref{check} checks to see if the device is being removed, and, if so,
@@ -5615,18 +5680,45 @@ lock, line~\lnref{do} performs the I/O, and
 line~\lnref{dec} decrements the access count.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	웃기네요!
+	이 카운터를 \emph{업데이트} 하기 위해 reader-writer 락을 \emph{읽기}
+	모드로 획득한다구요?
+	뭐하는 짓이예요???
+
+	\iffalse
+
 	This is ridiculous!
 	We are \emph{read}-acquiring a reader-writer lock to
 	\emph{update} the counter?
 	What are you playing at???
+
+	\fi
+
 }\QuickQuizAnswer{
+	아마도, 이상하겠죠, 하지만 정말입니다!
+	이건 ``Reader-writer lock'' 이란 이름은 생각 없이 붙여진 것이라
+	여러분이 생각하게 하기 충분할 거예요, 그렇지 않나요?
+
+	\iffalse
+
 	Strange, perhaps, but true!
 	Almost enough to make you think that the name
 	``reader-writer lock'' was poorly chosen, isn't it?
+
+	\fi
+
 }\QuickQuizEnd
 
+이 기기를 제거하기 위한 코드는 다음과 같을 수 있겠습니다:
+
+\iffalse
+
 The code to remove the device might be as follows:
+
+\fi
 
 \begin{fcvlabel}[ln:count:inline:remove]
 \begin{VerbatimN}[commandchars=\\\[\]]
@@ -5642,6 +5734,18 @@ remove_device();		\lnlbl[remove]
 \end{fcvlabel}
 
 \begin{fcvref}[ln:count:inline:remove]
+라인~\lnref{acq} 는 이 락을 쓰기 모드로 획득하고 라인~\lnref{rel} 은 이를
+해제합니다.
+라인~\lnref{note} 는 이 기기가 제거되는 중임을 알리고,
+\clnrefrange{loop:b}{loop:e} 의 루프는 모든 I/O 오퍼레이션이 완료되기를
+기다립니다.
+마지막으로, 라인~\lnref{remove} 는 기기 제거를 준비하기 위해 필요한 모든 추가적
+처리를 행합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:count:inline:remove]
 Line~\lnref{acq} write-acquires the lock and
 line~\lnref{rel} releases it.
 Line~\lnref{note} notes that the device is being removed, and the loop spanning
@@ -5650,9 +5754,44 @@ Finally, line~\lnref{remove} does any additional processing needed to prepare fo
 device removal.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	실제 시스템에서는 어떤 다른 문제들이 해결되어야 할까요?
+
+	\iffalse
+
 	What other issues would need to be accounted for in a real system?
+
+	\fi
+
 }\QuickQuizAnswer{
+	무척 많은 것들이 있습니다!
+
+	여기 몇가지 생각을 시작해 볼만한 것들이 있습니다:
+
+	\begin{enumerate}
+	\item	기기가 얼마든지 있을 수 있으며, 따라서 전역 변수들은 적절치
+		않을 것이고, \co{do_io()} 같은 함수로의 인자의 부재도
+		그렇습니다.
+	\item	루프에서의 폴링은 실제 시스템에서는 CPU 시간과 전력을
+		낭비하므로 문제가 될 수 있습니다.
+	\item	I/O 는 실패할 수도 있으며, 따라서 \co{do_io()} 는 리턴 값을
+		가져야 할 겁니다.
+	\item	만약 이 기기가 고장나면, 마지막 I/O 는 결코 완료되지 않을
+		겁니다.
+		그런 경우라면, 에러로부터의 회복을 위해 시간 제한 같은 게
+		필요할 수도 있습니다.
+	\item	\co{add_count()} 도 \co{sub_count()} 도 실패할 수 있습니다만,
+		이것들의 리턴값이 체크되지 않고 있습니다.
+	\item	Reader-writer 락은 잘 확장되지 못합니다.
+		Reader-writer 락의 이 높은 읽기 모드 획득 쪽 비용을 제거하기
+		위한 한가지 방법이
+		\cref{chp:Locking,chp:Deferred Processing} 에 소개됩니다.
+	\end{enumerate}
+
+	\iffalse
+
 	A huge number!
 
 	Here are a few to start with:
@@ -5678,6 +5817,9 @@ device removal.
 		of reader-writer locks is presented in
 		\cref{chp:Locking,chp:Deferred Processing}.
 	\end{enumerate}
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Parallel Counting Discussion}
