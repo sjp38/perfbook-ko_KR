@@ -5918,6 +5918,22 @@ will expand on these lessons.
 \subsection{Parallel Counting Performance}
 \label{sec:count:Parallel Counting Performance}
 
+\Cref{tab:count:Statistical/Limit Counter Performance on x86}
+의 위쪽 절반은 앞서 본 네개의 병렬 통계적 카운팅 알고리즘들의 성능을 보입니다.
+네개의 알고리즘 모두 업데이트에 대해 거의 완벽한 선형 확장성을 보입니다.
+이 쓰레드별 변수 구현 (\path{count_end.c}) 은 배열 기반 구현
+(\path{count_stat.c}) 보다 업데이트에 있어 무척 빠르지만, 많은 수의 코어
+위에서는 읽기가 더 느리며, 많은 병렬 읽기 쓰레드가 존재할 때에는 상당한 락
+경쟁으로 힘들어합니다.
+이 경쟁은 Chapter~\ref{chp:Deferred Processing} 에서 소개하는 뒤로 미뤄
+처리하기 기법으로
+\cref{tab:count:Statistical/Limit Counter Performance on x86}
+의 \path{count_end_rcu.c} 열에서 보였듯 해결될 수 있습니다.
+미뤄 처리하기는 또한 결과적 일관성 덕분에 \path{count_stat_eventual.c} 열에서도
+빛을 발합니다.
+
+\iffalse
+
 The top half of \cref{tab:count:Statistical/Limit Counter Performance on x86}
 shows the performance of the four parallel statistical counting
 algorithms.
@@ -5935,15 +5951,37 @@ as shown on the \path{count_end_rcu.c} row of
 Deferred processing also shines on the \path{count_stat_eventual.c} row,
 courtesy of eventual consistency.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\Cref{tab:count:Statistical/Limit Counter Performance on x86}
+	의 \path{count_stat.c} 열에서, 우린 읽기쪽의 쓰레드 수에 따른 선형적
+	확장성을 볼 수 있습니다.
+	더 많은 쓰레드가 존재할수록 더 많은 쓰레드별 카운터가 합산되어야 하는데
+	이게 어떻게 가능하죠?
+
+	\iffalse
+
 	On the \path{count_stat.c} row of
 	\cref{tab:count:Statistical/Limit Counter Performance on x86},
 	we see that the read-side scales linearly with the number of
 	threads.
 	How is that possible given that the more threads there are,
 	the more per-thread counters must be summed up?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	읽기쪽 코드는 쓰레드 수에 관계 없이 고정된 크기의 배열 전체를 스캔해야
+	하며, 따라서 성능에 차이가 없습니다.
+	대조적으로, 마지막 두개의 알고리즘에서, 읽기 쓰레드는 더 많은 쓰레드가
+	있을 때 더 많은 일을 해야 합니다.
+	또한, 마지막 두개의 알고리즘은 쓰레드 ID 라는 정수로부터 연관된
+	\co{__thread} 변수로의 매핑을 가지므로 추가적인 간접 단계를 갖습니다.
+
+	\iffalse
+
 	The read-side code must scan the entire fixed-size array, regardless
 	of the number of threads, so there is no difference in performance.
 	In contrast, in the last two algorithms, readers must do more
@@ -5951,15 +5989,45 @@ courtesy of eventual consistency.
 	In addition, the last two algorithms interpose an additional
 	level of indirection because they map from integer thread ID
 	to the corresponding \co{__thread} variable.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\Cref{tab:count:Statistical/Limit Counter Performance on x86}
+	의 네번째 열에서조차도, 이 통계적 카운터 구현의 읽기쪽 성능은 상당히
+	무섭네요.
+	그런데도 왜 이걸 신경쓰죠?
+
+	\iffalse
+
 	Even on the fourth row of
 	\cref{tab:count:Statistical/Limit Counter Performance on x86},
 	the read-side performance of these statistical counter
 	implementations is pretty horrible.
 	So why bother with them?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	``주어진 일에 적합한 도구를 사용하라.''
+
+	Figure~\ref{fig:count:Atomic Increment Scalability on x86}
+	에서 볼 수 있듯이, 병렬 업데이트의 많은 사용이 필요한 일에 단일 변수
+	어토믹 값 증가는 사용될 필요 없습니다.
+	반면, 
+	\cref{tab:count:Statistical/Limit Counter Performance on x86}
+	의 위쪽 절반에 보여진 알고리즘들은 업데이트가 많은 상황의 일을 훌륭하게
+	해냅니다.
+	물론, 읽기가 대부분인 상황이라면, 여러분은 다른 무언가, 예를 들면
+	Section~\ref{sec:count:Eventually Consistent Implementation}
+	에서 사용된 방법과 비슷한, 단일 로드를 이용해 읽어질 수 있는 단일
+	어토믹하게 값 증가되는 변수를 사용한 결과적 일관성 설계를 사용해야
+	합니다.
+
+	\iffalse
+
 	``Use the right tool for the job.''
 
 	As can be seen from
@@ -5975,8 +6043,21 @@ courtesy of eventual consistency.
 	variable that can be read out using a single load,
 	similar to the approach used in
 	Section~\ref{sec:count:Eventually Consistent Implementation}.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\Cref{tab:count:Statistical/Limit Counter Performance on x86}
+의 아래쪽 절반은 병렬 한계 카운팅 알고리즘의 성능을 보입니다.
+한계의 정확한 제한은 업데이트 쪽 성능 페널티에 큰 영향을 끼칩니다, 이 x86
+시스템에서 그 페널티는 어토믹 오퍼레이션을 시그널로 대체함으로써 크게
+줄어들지만요.
+이 모든 구현이 동시의 읽기 쓰레드들이 있을 때에는 읽기 쪽 락 경쟁으로
+고통받습니다.
+
+\iffalse
 
 The bottom half of \cref{tab:count:Statistical/Limit Counter Performance on x86}
 shows the performance of the parallel limit-counting algorithms.
@@ -5986,12 +6067,38 @@ reduced by substituting signals for atomic operations.
 All of these implementations suffer from read-side lock contention
 in the face of concurrent readers.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\Cref{tab:count:Statistical/Limit Counter Performance on x86}
+	의 아래쪽 절반에 보여진 성능 데이터를 놓고 보면, 우린 항상 어토믹
+	오퍼레이션보다 시그널을 선호해야 하겠군요, 그렇죠?
+
+	\iffalse
+
 	Given the performance data shown in the bottom half of
 	\cref{tab:count:Statistical/Limit Counter Performance on x86},
 	we should always prefer signals over atomic operations, right?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	그건 워크로드에 달려 있습니다.
+	64 코어 시스템에서라면, 단 하나의 시그널을 (거의 5
+	\emph{마이크로세컨드} 성능 저하를 일으키는) 위해서도 100개가 넘는
+	어토믹이 아닌 오퍼레이션이 필요함을 (대략 40 나노세컨드 성능 이득을
+	위해) 알아 두시기 바랍니다.
+	훨씬 더 읽기 집약도가 높은 워크로드가 많이 있긴 하지만, 여러분은
+	여러분의 워크로드를 고려해야 할 겁니다.
+
+	또한, 역사적으로 메모리 배리어는 평범한 인스트럭션들보다 비쌌지만,
+	여러분이 사용할 실제 하드웨어 위에서 이걸 체크해 보셔야 합니다.
+	컴퓨터 하드웨어의 특성은 시간에 따라 변하며, 알고리즘은 그에 따라
+	변해야만 합니다.
+
+	\iffalse
+
 	That depends on the workload.
 	Note that on a 64-core system, you need more than
 	one hundred non-atomic operations (with roughly
@@ -6006,13 +6113,35 @@ in the face of concurrent readers.
 	check this on the specific hardware you will be running.
 	The properties of computer hardware do change over time,
 	and algorithms must change accordingly.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\Cref{tab:count:Statistical/Limit Counter Performance on x86}
+	의 아래쪽 절반에 보여진 읽기 쓰레드의 락 경쟁을 해결하기 위해 진보된
+	기법들이 사용될 수 있을까요?
+
+	\iffalse
+
 	Can advanced techniques be applied to address the lock
 	contention for readers seen in the bottom half of
 	\cref{tab:count:Statistical/Limit Counter Performance on x86}?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	한가지 방법은 scalable non-zero indicators
+	(SNZI)~\cite{FaithEllen:2007:SNZI} 에서처럼 업데이트 쪽 성능을 포기하는
+	것입니다.
+	이에 대해선 해볼만한 여러 방법들이 있으며, 이것들은 독자 여러분의
+	연습문제로 남겨 두겠습니다.
+	빈번한 전역 락 획득을 연관된 아래 계층의 지역 락 획득으로 대체하는 모든
+	방법들 역시 상당히 잘 동작할 겁니다.
+
+	\iffalse
+
 	One approach is to give up some update-side performance, as is
 	done with scalable non-zero indicators
 	(SNZI)~\cite{FaithEllen:2007:SNZI}.
@@ -6021,8 +6150,19 @@ in the face of concurrent readers.
 	Any number of approaches that apply hierarchy, which replace
 	frequent global-lock acquisitions with local lock acquisitions
 	corresponding to lower levels of the hierarchy, should work quite well.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+요약하자면, 이 챕터는 여러 특수한 경우에 성능도 확장성도 굉장히 좋은 카운팅
+알고리즘 여럿을 보였습니다.
+하지만 우리의 병렬 카운팅은 특수 경우에만 국한되어야만 할까요?
+모든 경우에 효율적으로 동작하는 범용 알고리즘을 가지면 더 좋지 않을까요?
+다음 섹션인 이 질문들을 돌아봅니다.
+
+\iffalse
 
 In short, this chapter has demonstrated a number of counting algorithms
 that perform and scale extremely well in a number of special cases.
@@ -6030,6 +6170,8 @@ But must our parallel counting be confined to special cases?
 Wouldn't it be better to have a general algorithm that operated
 efficiently in all cases?
 The next section looks at these questions.
+
+\fi
 
 \subsection{Parallel Counting Specializations}
 \label{sec:count:Parallel Counting Specializations}
