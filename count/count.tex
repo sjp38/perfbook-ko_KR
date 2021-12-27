@@ -6521,6 +6521,24 @@ Summarizing the summary:
 \fi
 
 \begin{enumerate}
+\item	분할하기는 성능과 확장성을 향상시킵니다.
+\item	부분적 분할하기, 즉 일반적 코드 패쓰에만 분할하기를 적용하는 것은 거의
+	항상 잘 동작한다.
+\item	부분적 분할하기는 코드에 적용될 수 있지만 (
+	Section~\ref{sec:count:Statistical Counters} 의 통계적 카운터의 분할된
+	업데이트와 분할되지 않은 읽기처럼), 시간에 대해서도 적용될 수 있습니다
+	(Section~\ref{sec:count:Approximate Limit Counters} 과
+	Section~\ref{sec:count:Exact Limit Counters} 의 한계로부터 멀때는 훨씬
+	빠르게 동작하고, 한계에 가까울 때에는 느리게 동작하는 한계
+	카운터들처럼).
+\item	시간을 통한 분할하기는 비싼 전역 오퍼레이션의 횟수를 줄이고, 그럼으로써
+	동기화 오버헤드를 줄이고, 결국 성능과 확장성을 향상시키게끔 종종
+	업데이트를 지역적으로 몰아서 합니다.
+	\cref{tab:count:Statistical/Limit Counter Performance on x86}
+	는 몰아서 하기를 상당히 많이 사용합니다.
+
+\iffalse
+
 \item	Partitioning promotes performance and scalability.
 \item	Partial partitioning, that is, partitioning applied only to
 	common code paths, works almost as well.
@@ -6539,6 +6557,31 @@ Summarizing the summary:
 	All the algorithms shown in
 	\cref{tab:count:Statistical/Limit Counter Performance on x86}
 	make heavy use of batching.
+
+\fi
+
+\item	읽기만 하는 코드 패쓰는 읽기만 하도록 남아있어야 합니다:  공유
+	메모리로의 가짜 동기화 쓰기는 
+	\cref{tab:count:Statistical/Limit Counter Performance on x86}.
+	의 \path{count_end.c} 열에서 보여진 것처럼 성능과 확장성을 죽일 수
+	있습니다.
+\item	지연의 현명한 사용은
+	Section~\ref{sec:count:Eventually Consistent Implementation}
+	에서 보인 것처럼 성능과 확장성을 향상시킵니다.
+\item	병렬 성능과 확장성은 보통 균형잡기입니다: 어떤 지점을 넘어서면, 일부
+	코드 패쓰를 최적화 하는 것은 다른 부분의 성능을 하락시킵니다.
+	\Cref{tab:count:Statistical/Limit Counter Performance on x86}
+	의 \path{count_stat.c} 와 \path{count_end_rcu.c} 열이 이 점을 잘
+	보입니다.
+\item	다른 수준의 성능과 확장성은 다른 많은 요소들처럼 알고리즘과 자료구조
+	설계에 영향을 끼칩니다.
+	\Cref{fig:count:Atomic Increment Scalability on x86}
+	가 이 점을 잘 보이고 있습니다:  어토믹 값 증가는 두개 CPU 를 갖는
+	시스템에서는 완전히 허용 가능하지만 여덟개 CPU 를 갖는 시스템에서는
+	말도 안됩니다.
+
+\iffalse
+
 \item	Read-only code paths should remain read-only:  Spurious
 	synchronization writes to shared memory kill performance
 	and scalability, as seen in the \path{count_end.c} row of
@@ -6558,6 +6601,9 @@ Summarizing the summary:
 	illustrates this point:  Atomic increment might be completely
 	acceptable for a two-CPU system, but be completely inadequate for an
 	eight-CPU system.
+
+\fi
+
 \end{enumerate}
 
 \begin{figure}[tb]
@@ -6566,6 +6612,29 @@ Summarizing the summary:
 \caption{Optimization and the Four Parallel-Programming Tasks}
 \label{fig:count:Optimization and the Four Parallel-Programming Tasks}
 \end{figure}
+
+계속해서 요약을 해보자면, 우린 ``큰 세개의'' 성능과 확장성 증가 방법이 있는데,
+각각
+(1) CPU 와 쓰레드들에 걸쳐 \emph{분할하기},
+(2) 더 많은 일이 각각의 비용 높은 동기화 오퍼레이션을 통해 처리되도록
+\emph{몰아서 처리하기}, 그리고
+(3) 가능한 곳에서는 동기화 오퍼레이션을 \emph{약화시키기}.
+대략적인 법칙으로, 여러분은 이 방법들을
+page~\pageref{fig:intro:Ordering of Parallel-Programming Tasks}
+의
+Figure~\ref{fig:intro:Ordering of Parallel-Programming Tasks}
+의 토론에서 앞서 이야기 되었듯 이 순서대로 적용해야 합니다.
+Figure~\ref{fig:count:Optimization and the Four Parallel-Programming Tasks}
+에 보여진 대로, 분할하기 최적화는 ``Resource Partitioning and Replication'' 에,
+몰아서 처리하기 최적화는 ``Work Partitioning'' 으로, 그리고 약화시키기 최적화는
+``Parallel Access Control'' 에 적용 되어야 합니다.
+물론, 디지털 신호 처리기 (DSP), field-programmable gate arrays (FPGAs), 또는
+범용 그래픽 처리기 (GPGPU) 를 가지고 있다면, 설계 과정 중에 ``Interacting With
+Hardware'' 부분에 대해서도 많은 관심을 기울여야 합니다.
+예를 들어, GPGPU 의 하드웨어 쓰레드와 메모리 연결성 구조는 매우 주의 깊은
+분할하기와 몰아서 처리하기 설계 결정에 큰 영향을 끼칠 겁니다.
+
+\iffalse
 
 Summarizing still further, we have the ``big three'' methods of
 increasing performance and scalability, namely
@@ -6593,11 +6662,22 @@ For example, the structure of a GPGPU's hardware threads and memory
 connectivity might richly reward very careful partitioning
 and batching design decisions.
 
+\fi
+
+짧게 말해서, 이 챕터의 시작점에서 이야기 되었듯, 카운팅의 단순성은 복잡한
+동기화 기능들이나 복잡한 데이터 구조로부터 방해받지 않고서 많은 기본적 동시성
+문제를 탐험할 수 있게 해 주었습니다.
+그런 동기화 도구들과 데이터 구조들은 뒤의 챕터에서 다루어집니다.
+
+\iffalse
+
 In short, as noted at the beginning of this chapter, the simplicity
 of counting have allowed us to explore many
 fundamental concurrency issues without the distraction of
 complex synchronization primitives or elaborate data structures.
 Such synchronization primitives and data structures are covered
 in later chapters.
+
+\fi
 
 \QuickQuizAnswersChp{qqzcount}
