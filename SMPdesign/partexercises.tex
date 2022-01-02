@@ -41,6 +41,17 @@ revisits the double-ended queue.
 \ContributedBy{Figure}{fig:SMPdesign:Dining Philosophers Problem}{Kornilios Kourtis}
 \end{figure}
 
+Figure~\ref{fig:SMPdesign:Dining Philosophers Problem} 는 고전의
+\IX{Dining Philosophers problem}~\cite{Dijkstra1971HOoSP} 의 다이어그램을
+보입니다.
+이 문제는 생각하고 먹기 위해 두개의 포크가 필요한 ``무척 어려운 종류의
+스파게티'' 를 먹는 다섯명의 철학자들로 구성됩니다.\footnote{
+	포크 대신 젓가락으로 생각해도 좋습니다.}
+한명의 철학자는 그 또는 그녀의 바로 오른쪽과 왼쪽에 있는 포크만 사용할 수
+있는데, 충분히 스파게티를 먹기 전까진 포크를 내려놓지 않습니다.
+
+\iffalse
+
 Figure~\ref{fig:SMPdesign:Dining Philosophers Problem} shows a diagram
 of the classic \IX{Dining Philosophers problem}~\cite{Dijkstra1971HOoSP}.
 This problem features five philosophers who do nothing but think and
@@ -50,12 +61,27 @@ to eat.\footnote{
 A given philosopher is permitted to use only the forks to his or her
 immediate right and left, but will not put a given fork down until sated.
 
+\fi
+
 \begin{figure*}[tb]
 \centering
 \resizebox{5in}{!}{\includegraphics{cartoons/Dining-philosophers}}
 \caption{Partial Starvation Is Also Bad}
 \ContributedBy{Figure}{fig:cpu:Partial Starvation Is Also Bad}{Melissa Broussard}
 \end{figure*}
+
+목표는 말 그대로 기아를 방지할 수 있는 알고리즘을 만드는 것입니다.
+가능한 한가지 기아 시나리오는 모든 철학자가 각자의 왼쪽 포크를 동시에 집어드는
+경우입니다.
+이들 중 누구도 그들이 식사를 끝내기 전까지는 자신의 포크를 내려놓지 않을
+것이므로, 그리고 이들 중 누구도 이들 중 한명이라도 식사를 끝내기 전까지는
+두번째 포크를 갖지 못할 것이므로, 이들은 모두 굶게 됩니다.
+최소 한명의 철학자를 식사할 수 있게 하는 것만으로는 충분치 않음을 알아 두시기
+바랍니다.
+Figure~\ref{fig:cpu:Partial Starvation Is Also Bad} 가 보이듯, 오직 소수의
+철학자가 기아에 빠지는 것조차도 방지되어야 합니다.
+
+\iffalse
 
 The object is to construct an algorithm that, quite literally,
 prevents starvation.
@@ -69,12 +95,38 @@ to eat.
 As Figure~\ref{fig:cpu:Partial Starvation Is Also Bad}
 shows, starvation of even a few of the philosophers is to be avoided.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \includegraphics[scale=.7]{SMPdesign/DiningPhilosopher5TB}
 \caption{Dining Philosophers Problem, Textbook Solution}
 \ContributedBy{Figure}{fig:SMPdesign:Dining Philosophers Problem, Textbook Solution}{Kornilios Kourtis}
 \end{figure}
+
+\pplsur{Edsger W.}{Dijkstra} 의 해결책은 1980년대 말 또는 1990년대 초에는
+적절치 못하게 된, 무시할만한 통신 딜레이라는 가정을 적용하면 잘 동작하는 전역
+세마포어를 사용했습니다.\footnote{
+	2021년의 시각에서 Dijkstra 를 모욕하기는 너무도 쉽습니다, 50년이나 지난
+	이야기니까요.
+	여전히 Dijkstra 를 모욕해야 한다고 느끼신다면, 저는 무언가를 출판하고,
+	50년을 기다린 후, \emph{여러분의} 아이디어가 그 시간동안의 시험을
+	얼마나 잘 버텨냈는지 보라는 조언을 하겠습니다.}
+보다 최신의 해결책은
+Figure~\ref{fig:SMPdesign:Dining Philosophers Problem, Textbook Solution}
+에 보인 것처럼 포크에 수를 매기는 것입니다.
+각 철학자는 그 또는 그녀의 접시 옆에 있는 더 낮은 수를 가지는 포크를 집고,
+그다음 다음 포크를 집습니다.
+따라서, 이 그림에서 가장 위쪽에 앉은 철학자는 왼쪽 포크를 먼저 집어들고, 이어서
+오른쪽 포크를 집어드는데, 나머지 철학자들은 각자의 오른쪽 포크를 먼저
+집어듭니다.
+두명의 철학자들이 포크~1 을 먼저 집어들려고 노력할 것이므로, 그리고 이 두
+철학자들 중 한명만이 성공할 것이므로, 네명의 철학자에게 다섯개의 포크가 사용
+가능하게 될 겁니다.
+이 네명의 철학자 중 최소 한명은 두개의 포크를 가지게 될거고 따라서 식사를 할 수
+있습니다.
+
+\iffalse
 
 \pplsur{Edsger W.}{Dijkstra}'s solution used a global semaphore,
 which works fine assuming
@@ -98,6 +150,30 @@ there will be five forks available to four philosophers.
 At least one of these four will have two forks, and will thus be able
 to eat.
 
+\fi
+
+이 자원에 숫자를 매기고 그 숫자 순서대로 자원을 획득하는 일반적인 기법은 데드락
+방지 기법으로 널리 사용되었습니다.
+하지만, 모두가 배고픈데 한번에 단 한명의 철학자만이 식사를 하는 상황이 초래되는
+사건의 연속을 쉽게 상상해 볼 수 있습니다:
+
+\begin{enumerate}
+    \item P2 가 포크~1 을 집어들어, P1 이 포크를 집는 걸 방지합니다.
+    \item P3 가 포크~2 를 집어듭니다.
+    \item P4 가 포크~3 를 집어듭니다.
+    \item P5 가 포크~4 를 집어듭니다.
+    \item P5 가 포크~5 를 집어들고 식사를 합니다.
+    \item P5 가 포크~4 와~5 를 내려놓습니다.
+    \item P4 가 포크~4 를 집어들고 식사를 합니다.
+\end{enumerate}
+
+요약하자면, 이 알고리즘은 동시에 두 철학자가 식사를 하기 충분한 것 이상의
+포크가 존재함에도 불구하고 모든 철학자가 배고플 때에도 한번에 하나의 철학자만
+식사를 하는 상황을 초래할 수 있습니다.
+이보다 더 잘할 수 있어야 합니다!
+
+\iffalse
+
 This general technique of numbering resources and acquiring them in
 numerical order is heavily used as a deadlock-prevention technique.
 However, it is easy to imagine a sequence of events that will result
@@ -119,12 +195,28 @@ despite the fact that there are more than enough forks for two
 philosophers to eat concurrently.
 It should be possible to do better than this!
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \includegraphics[scale=.7]{SMPdesign/DiningPhilosopher4part-b}
 \caption{Dining Philosophers Problem, Partitioned}
 \ContributedBy{Figure}{fig:SMPdesign:Dining Philosophers Problem, Partitioned}{Kornilios Kourtis}
 \end{figure}
+
+한가지 해결책이
+Figure~\ref{fig:SMPdesign:Dining Philosophers Problem, Partitioned}
+에 그려져 있는데, 이 파티셔닝 기법을 더 잘 보이기 위해 다섯명이 아닌 네명의
+철학자만 포함하고 있습니다.
+여기서 위쪽과 오른쪽의 철학자들은 한쌍의 포크를 공유하며, 아래쪽과 왼쪽의
+철학자는 다른 한쌍의 포크를 공유합니다.
+만약 모든 철학자들이 동시에 배고파지면, 최소 두명은 항상 동시에 식사를 할 수
+있습니다.
+또한, 그림에 보여져 있듯이, 이 포크들은 이제 한쌍으로 묶여있을 수 있어서 두개씩
+동시에 집어지고 내려놓아질 수 있게 되어, 획득과 해제 알고리즘을 단순화
+시킵니다.
+
+\iffalse
 
 One approach is shown in
 Figure~\ref{fig:SMPdesign:Dining Philosophers Problem, Partitioned},
@@ -138,10 +230,29 @@ In addition, as shown in the figure, the forks can now be bundled
 so that the pair are picked up and put down simultaneously, simplifying
 the acquisition and release algorithms.
 
+\fi
+
 \QuickQuiz{
+	이 Dining Philosophers 문제에 더 나은 해결책이 있을까요?
+
+	\iffalse
+
 	Is there a better solution to the Dining
 	Philosophers Problem?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그런 향상된 해결책 하나가
+	Figure~\ref{fig:SMPdesign:Dining Philosophers Problem, Fully Partitioned}
+	에 보여져 있는데, 단순히 철학자들에게 추가의 다섯개 포크를 제공하는
+	것입니다.
+	모든 다섯명의 철학자가 이제 동시에 식사를 할 수 있고, 어떤 철학자도
+	다른 누군가를 기다릴 필요가 없습니다.
+	또한, 이 방법은 무척 향상된 재앙 통제를 제공합니다.
+
+	\iffalse
+
 	One such improved solution is shown in
 	Figure~\ref{fig:SMPdesign:Dining Philosophers Problem, Fully Partitioned},
 	where the philosophers are simply provided with an additional
@@ -150,6 +261,8 @@ the acquisition and release algorithms.
 	is never any need for philosophers to wait on one another.
 	In addition, this approach offers greatly improved disease control.
 
+	\fi
+
 \begin{figure}[tb]
 \centering
 \includegraphics[scale=.7]{SMPdesign/DiningPhilosopher5PEM}
@@ -157,10 +270,26 @@ the acquisition and release algorithms.
 \QContributedBy{Figure}{fig:SMPdesign:Dining Philosophers Problem, Fully Partitioned}{Kornilios Kourtis}
 \end{figure}
 
+	이 해결책은 누군가에겐 속임수처럼 보일 수도 있겠습니다만, 이런 종류의
+	``속임수'' 가 많은 동시성 문제에 있어 좋은 해결책을 찾기 위한
+	열쇠입니다.
+
+	\iffalse
+
 	This solution might seem like cheating to some, but such
 	``cheating'' is key to finding good solutions to many
 	concurrency problems.
+
+	\fi
+
 }\QuickQuizEnd
+
+이는 ``수평 병렬성''~\cite{Inman85} 또는 ``데이터 병렬성'' 의 한 예로, 이
+철학자들 쌍 간에는 어떤 의존성이 없기 때문에 그렇게 이름지어졌습니다.
+수평적으로 병렬인 데이터 처리 시스템에서, 데이터의 특정 항목은 복사된
+소프트웨어 컴포넌트들 중 하나에 의해서만 처리될 겁니다.
+
+\iffalse
 
 This is an example of ``horizontal parallelism''~\cite{Inman85}
 or ``data parallelism'',
@@ -169,10 +298,31 @@ In a horizontally parallel data-processing system, a given item of data
 would be processed by only one of a replicated set of software
 components.
 
+\fi
+
 \QuickQuiz{
+	그리고 어떤 의미에서 이 ``수평적 병렬성'' 은 ``수평적'' 이라고 불릴 수
+	있는 건가요?
+
+	\iffalse
+
 	And in just what sense can this ``horizontal parallelism'' be
 	said to be ``horizontal''?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Inman 은 일반적으로 어플리케이션이 꼭대기에, 그리고 하드웨어 연결부가
+	바닥에, 수직으로 그려지는 프로토콜 스택을 가지고 일하고 있었습니다.
+	데이터는 이 스택의 위에서 아래로 흐릅니다.
+	``수평적 병렬성'' 은 패킷을 다른 네트워크 연결부로부터 병렬로 처리하는
+	반면, ``수직 병렬성'' 은 주어진 패킷을 다른 프로토콜 처리 단계로 동시에
+	처리합니다.
+
+	``수직 병렬성'' 은 또한 ``파이프라이닝'' 이라고도 불립니다.
+
+	\iffalse
+
 	Inman was working with protocol stacks, which are normally
 	depicted vertically, with the application on top and the
 	hardware interconnect on the bottom.
@@ -183,6 +333,9 @@ components.
 	packet in parallel.
 
 	``Vertical parallelism'' is also called ``pipelining''.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Double-Ended Queue}
