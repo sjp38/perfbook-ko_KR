@@ -425,6 +425,23 @@ It is far better to consider other designs.
 \label{fig:SMPdesign:Compound Double-Ended Queue}
 \end{figure}
 
+겹치지 않는 락 도메인을 강제하기 위한 한가지 방법이
+Figure~\ref{fig:SMPdesign:Compound Double-Ended Queue}
+에 보여져 있습니다.
+두개의 double-ended queue 들이 동시에 동작하는데, 각각 자신의 락으로
+보호됩니다.
+이는 원소들이 결국은 한쪽 double-ended queue 에서 다른 쪽으로 옮겨져야 하며,
+이때는 양쪽 락이 모두 잡혀야만 함을 의미합니다.
+데드락을 방지하기 위해 간단한 락 계층이 사용될 수 있는데, 예를 들면 오른쪽 락을
+잡기 전에 항상 왼쪽 락을 잡는 겁니다.
+이러면 우리는 조건 없이 왼쪽 queue 에 원소를 왼쪽 집어넣기하고 오른쪽 queue 에
+원소를 오른쪽 집어넣기를 할 수 있으므로, 같은 double-ended queue 에 두개의 락을
+적용하는 것보다는 훨씬 간단할 것입니다.
+비어있는 queue 에서 꺼내기를 하려 할 때 주요한 복잡도가 나타나는데, 이 경우에는
+다음과 같은 처리가 필요합니다:
+
+\iffalse
+
 One way of forcing non-overlapping lock domains is shown in
 Figure~\ref{fig:SMPdesign:Compound Double-Ended Queue}.
 Two separate double-ended queues are run in tandem, each protected by
@@ -441,23 +458,61 @@ queue.
 The main complication arises when dequeuing from an empty queue, in
 which case it is necessary to:
 
+\fi
+
 \begin{enumerate}
+\item	오른쪽 락을 잡고 있다면, 이를 해제하고 왼쪽 락을 잡습니다.
+\item	오른쪽 락을 잡습니다.
+\item	두 queue 에 원소를 고르게 분배시킵니다.
+\item	제거하려는 원소가 있다면 제거합니다.
+\item	두 락을 모두 해제합니다.
+
+\iffalse
+
 \item	If holding the right-hand lock, release it and acquire the
 	left-hand lock.
 \item	Acquire the right-hand lock.
 \item	Rebalance the elements across the two queues.
 \item	Remove the required element if there is one.
 \item	Release both locks.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	이 compound double-ended queue 구현에서는, 이 락을 해제하고 재획득 하는
+	동안에 이 queue 가 비어있지 않게 되면 어떡해야 하죠?
+
+	\iffalse
+
 	In this compound double-ended queue implementation, what should
 	be done if the queue has become non-empty while releasing
 	and reacquiring the lock?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 경우에는, 그냥 이 비어있지 않은 큐에서 원소를 제거하고, 두 락을
+	해제하고, 리턴하면 됩니다.
+
+	\iffalse
+
 	In this case, simply dequeue an item from the non-empty
 	queue, release both locks, and return.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 결과로 나오는 코드는 (\path{locktdeq.c}) 상당히 간단합니다.
+원소 재분배 오퍼레이션은 주어진 원소를 두 queue 사이에서 어느 쪽으로든 옮길
+수도 있어서, 시간을 낭비하고, 최적의 성능을 위해선 워크로드 종속적 휴리스틱을
+필요로 할 수도 있습니다.
+이게 어떤 경우에는 최선의 방법이 될수도 있겠습니다만, 알고리즘을 더 큰 결정성을
+가지고 시도해 보는것도 흥미로울 겁니다.
+
+\iffalse
 
 The resulting code (\path{locktdeq.c}) is quite straightforward.
 The rebalancing operation might well shuttle a given element back
@@ -465,6 +520,8 @@ and forth between the two queues, wasting time and possibly requiring
 workload-dependent heuristics to obtain optimal performance.
 Although this might well be the best approach in some cases, it is
 interesting to try for an algorithm with greater determinism.
+
+\fi
 
 \subsubsection{Hashed Double-Ended Queue}
 \label{sec:SMPdesign:Hashed Double-Ended Queue}
