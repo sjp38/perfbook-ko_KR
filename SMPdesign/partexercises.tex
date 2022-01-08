@@ -371,6 +371,26 @@ general approaches in the following sections.
 \label{fig:SMPdesign:Double-Ended Queue With Left- and Right-Hand Locks}
 \end{figure}
 
+간단해 보이는 한가지 전략은 왼쪽 끝으로의 enqueue 와 dequeue 오퍼레이션을 위한
+왼쪽 락과 오른쪽 끝으로의 오퍼레이션들을 위한 오른쪽 락을 갖는 doubly linked
+list 를 사용하는 것으로,
+Figure~\ref{fig:SMPdesign:Double-Ended Queue With Left- and Right-Hand Locks}
+에 보이는 것과 같습니다.
+하지만, 이 방법의 문제는 이 리스트에 네개 미만의 원소만이 존재할 때에는 이 두
+락의 도메인이 겹친다는 것입니다.
+이 겹침은 어떤 원소를 제거하는 것이 그 원소만이 아니라 그것의 왼쪽과 오른쪽
+이웃 원소에게도 영향을 끼친다는 사실 때문입니다.
+이 도메인들은 이 그림에 색깔로 표시되어 있는데, 아래쪽으로의 줄무늬를 가진
+파랑은 왼쪽 락의 도메인을, 위쪽으로의 줄무늬를 가진 빨강은 오른쪽 락의
+도메인을, 그리고 (줄무늬가 없는) 보라색은 겹치는 도메인을 표시합니다.
+이 방식으로 동작하는 알고리즘을 만드는 것도 가능하지만, 다섯개 미만이 아닌 특수
+경우들이 존재한다는 사실은 커다랗고 빨간 경고등을 띄우는데, 이 리스트의 다른
+끝쪽에서의 동시의 행동들이 이 queue 를 언제든 하나의 특수 경우에서 다른 경우로
+바꿀 수 있다는 점에서 특히 그렇습니다.
+다른 설계를 고려하는 게 훨씬 나을 겁니다.
+
+\iffalse
+
 One seemingly straightforward approach would be to use a doubly
 linked list with a left-hand lock
 for left-hand-end enqueue and dequeue operations along with a right-hand
@@ -392,6 +412,8 @@ a big red flag, especially given that concurrent activity at the other
 end of the list can shift the queue from one special case to another
 at any time.
 It is far better to consider other designs.
+
+\fi
 
 \subsubsection{Compound Double-Ended Queue}
 \label{sec:SMPdesign:Compound Double-Ended Queue}
