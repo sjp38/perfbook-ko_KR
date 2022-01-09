@@ -572,6 +572,8 @@ Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue} 가 네개의 해쉬 체인
 회피되며, 특정 타입의 (인덱스 또는 체인) 락은 한번에 두개 이상 획득하지
 않습니다.
 
+\iffalse
+
 Given this approach, we assign one lock to guard the left-hand index,
 one to guard the right-hand index, and one lock for each hash chain.
 Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue} shows the resulting
@@ -580,12 +582,37 @@ Note that the lock domains do not overlap, and that deadlock is avoided
 by acquiring the index locks before the chain locks, and by never
 acquiring more than one lock of a given type (index or chain) at a time.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{SMPdesign/lockdeqhash1R}}
 \caption{Hashed Double-Ended Queue After Insertions}
 \label{fig:SMPdesign:Hashed Double-Ended Queue After Insertions}
 \end{figure}
+
+각 해쉬 체인은 그 자체로 double-ended queue 이며, 이 예에서는 각각이 네개의
+원소씩을 쥐고 있습니다.
+Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue After Insertions}
+의 가장 위쪽은 하나의 원소가 (``R$_1$'') 오른쪽으로 넣어지고, 해쉬 체인~2 를
+참조하게끔 증가된 오른쪽 인덱스를 갖게 된 후의 상태를 보입니다.
+이 그림의 가운데 부분은 세개의 원소가 추가적으로 오른쪽으로 넣어진 후의 상태를
+보입니다.
+보시다시피, 인덱스들은 각자의 초기 상태로 되돌아가져 있습니다
+(Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue}를 보세요), 하지만 각 해시
+체인은 이제 비어 있습니다.
+이 그림의 아래쪽은 세개의 추가적인 원소가 왼쪽으로 들어오고 또하나의 원소가
+오른쪽으로 들어온 후의 상태를 보입니다.
+
+Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue After Insertions} 에 보인
+마지막 상태로부터, 왼쪽 dequeue 오퍼레이션은 원소 ``L$_{-2}$'' 를 리턴하고,
+왼쪽 인덱스가 해쉬 체인~2 를 참조하는대로 둘 것이며, 이 체인은 단 하나의
+원소만을 (``R$_2$'') 가지고 있게 됩니다.
+이 상태에서, 왼쪽 enqueue 가 오른쪽 enqueue 와 동시에 수행되면 락 경쟁이 발생할
+겁니다만, 그런 경쟁 상태의 확률은 더 큰 해쉬 테이블을 사용함으로써 무척 낮은
+수준으로 줄일 수 있습니다.
+
+\iffalse
 
 Each hash chain is itself a double-ended queue, and in this example,
 each holds every fourth element.
@@ -612,6 +639,8 @@ In this state, a left-enqueue running concurrently with a right-enqueue
 would result in lock contention, but the probability of such contention
 can be reduced to arbitrarily low levels by using a larger hash table.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{1.5in}{!}{\includegraphics{SMPdesign/lockdeqhashlots}}
@@ -620,16 +649,42 @@ can be reduced to arbitrarily low levels by using a larger hash table.
 \end{figure}
 
 Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue With 16 Elements}
+는 16개의 원소가 네개 해쉬 버킷 기반의 병렬 double-ended queue 에 어떻게 관리될
+지 보입니다.
+아랫단의 단일 락 기반 double-ended queue 각각은 전체 병렬 double-ended queue 의
+1/4 조각을 갖습니다.
+
+\iffalse
+
+Figure~\ref{fig:SMPdesign:Hashed Double-Ended Queue With 16 Elements}
 shows how 16 elements would be organized in a four-hash-bucket
 parallel double-ended queue.
 Each underlying single-lock double-ended queue holds a one-quarter
 slice of the full parallel double-ended queue.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/SMPdesign/lockhdeq@struct_pdeq.fcv}
 \caption{Lock-Based Parallel Double-Ended Queue Data Structure}
 \label{lst:SMPdesign:Lock-Based Parallel Double-Ended Queue Data Structure}
 \end{listing}
+
+Listing~\ref{lst:SMPdesign:Lock-Based Parallel Double-Ended Queue Data Structure}
+은 평범하게 락으로 관리되는 double-ended-queue 구현을 제공하는 \co{struct deq}
+가 존재한다는 가정 하에 앞에서 이야기한 것에 연관되는 C-언어 데이터 구조를
+보입니다.
+\begin{fcvref}[ln:SMPdesign:lockhdeq:struct_pdeq]
+이 데이터 구조는 라인~\lnref{llock} 에 왼쪽 락을, 라인~\lnref{lidx} 에 왼쪽
+인덱스를, 라인~\lnref{rlock} 에 오른쪽 락을 (실제 구현에서는 캐쉬라인 사이즈로
+정렬된), 라인~\lnref{ridx} 에 오른쪽 인덱스를, 그리고 마지막으로,
+라인~\lnref{bkt} 에 간단한 락 기반 double-ended queue 의 배열을 가지고
+있습니다.
+고성능 구현체는 거짓 공유를 피하기 위해 패딩이나 특수한 정렬 지시어 등을 사용할
+겁니다.
+\end{fcvref}
+
+\iffalse
 
 Listing~\ref{lst:SMPdesign:Lock-Based Parallel Double-Ended Queue Data Structure}
 shows the corresponding C-language data structure, assuming an
@@ -645,11 +700,34 @@ A high-performance implementation would of course use padding or special
 alignment directives to avoid false sharing.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/SMPdesign/lockhdeq@pop_push.fcv}
 \caption{Lock-Based Parallel Double-Ended Queue Implementation}
 \label{lst:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
 \end{listing}
+
+Listing~\ref{lst:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
+(\path{lockhdeq.c})
+은 enqueue 와 dequeue 함수의 구현을 보입니다.\footnote{
+	어떤 언어를 사용해서든 다양한 형태의 구현을 만들 수 있겠습니다만, 그건
+	독자 여러분의 연습 문제로 남겨 두겠습니다.}
+이야기는 왼쪽 오퍼레이션들에 집중할텐데, 오른쪽 오퍼레이션들은 쉽게 왼쪽의
+것들로부터 나올 것이기 때문입니다.
+
+\begin{fcvref}[ln:SMPdesign:lockhdeq:pop_push:popl]
+\Clnrefrange{b}{e} 는 왼쪽 dequeue 를 하고 가능하면 원소를, 그렇지 않다면
+\co{NULL} 을 리턴하는 \co{pdeq_pop_l()} 을 보입니다.
+라인~\lnref{acq} 는 왼쪽 스핀락을 획득하고, 라인~\lnref{idx} 는 dequeue 될
+인덱스를 계산합니다.
+라인~\lnref{deque} 는 이 원소를 꺼내고, 라인~lnref{check} 에서 이 결과가
+\co{NULL} 이 아닐 것으로 판명되면, 라인~\lnref{rel} 에서 락을 해제하고,
+마지막으로 라인~\lnref{return} 에서 거기 원소가 있었다면 그것을, 아니면
+\co{NULL} 을 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 Listing~\ref{lst:SMPdesign:Lock-Based Parallel Double-Ended Queue Implementation}
 (\path{lockhdeq.c})
@@ -675,6 +753,24 @@ finally, line~\lnref{return} returns
 the element if there was one, or \co{NULL} otherwise.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:SMPdesign:lockhdeq:pop_push:pushl]
+\Clnrefrange{b}{e} 는 특정 원소를 왼쪽으로 enqueue 하는 \co{pdeq_push_l()} 을
+보입니다.
+라인~\lnref{acq} 는 왼쪽 락을 획득하고, 라인~\lnref{idx} 에서 왼쪽 인덱스를
+잡습니다.
+라인~\lnref{enque} 는 이 원소를 이 왼쪽 인덱스로 가리켜지는 double-ended queue
+에 왼쪽으로 enqueue gkqslek.
+라인~\lnref{update} 는 이어서 이 왼쪽 인덱스를 업데이트 하고 라인~\lnref{rel}
+에서 이 락을 해제합니다.
+\end{fcvref}
+
+앞에서도 이야기 했듯, 오른쪽 오퍼레이션들은 왼쪽의 것들과 완전히 비슷하므로,
+그것들의 분석은 독자 여러분의 연습 문제로 남겨 둡니다.
+
+\iffalse
+
 \begin{fcvref}[ln:SMPdesign:lockhdeq:pop_push:pushl]
 \Clnrefrange{b}{e} show \co{pdeq_push_l()},
 which left-enqueues the specified
@@ -693,10 +789,35 @@ As noted earlier, the right-hand operations are completely analogous
 to their left-handed counterparts, so their analysis is left as an
 exercise for the reader.
 
+\fi
+
 \QuickQuiz{
+	해쉬 기반의 double-ended queue 는 좋은 해결책일까요?
+	왜 그렇고 왜 그렇지 않을까요?
+
+	\iffalse
+
 	Is the hashed double-ended queue a good solution?
 	Why or why not?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여기 답변하는 최선의 방법은 여러개의 다른 멀티프로세서 시스템에서
+	\path{lockhdeq.c} 를 수행해 보는 것이며, 여러분이 가능한 시간 내에
+	그렇게 할 것을 장려합니다.
+	걱정을 할 수 있는 한가지 이유는 이 구현에서 각 오퍼레이션은 하나가 아닌
+	두개의 락을 획득해야 한다는 것입니다.
+
+	잘 설계된 첫번째 성능 연구가 예로 들어질 겁니다.\footnote{
+		Dalessandro 등의
+		연구~\cite{LukeDalessandro:2011:ASPLOS:HybridNOrecSTM:deque}
+		와 Dice 등의 연구~\cite{DavidDice:2010:SCA:HTM:deque} 는 훌륭한
+		시작 지점이 될 겁니다.}
+	순차적 구현과의 비교도 잊지 마십시오!
+
+	\iffalse
+
 	The best way to answer this is to run \path{lockhdeq.c} on
 	a number of different multiprocessor systems, and you are
 	encouraged to do so in the strongest possible terms.
@@ -713,6 +834,9 @@ exercise for the reader.
 		and Dice et al.~\cite{DavidDice:2010:SCA:HTM:deque} are
 		excellent starting points.}
 	Do not forget to compare to a sequential implementation!
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Compound Double-Ended Queue Revisited}
