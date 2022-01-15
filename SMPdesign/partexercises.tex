@@ -842,15 +842,40 @@ exercise for the reader.
 \subsubsection{Compound Double-Ended Queue Revisited}
 \label{sec:SMPdesign:Compound Double-Ended Queue Revisited}
 
+이 섹션은 조합된 double-ended queue 를 비어 있지 않은 queue 에서 이제 비어 있는
+queue 로 모든 원소를 옮기는 간단한 균형 맞추기를 사용하는 방법으로 다시
+풀어봅니다.
+
+\iffalse
+
 This section revisits the compound double-ended queue, using a trivial
 rebalancing scheme that moves all the elements from the non-empty
 queue to the now-empty queue.
 
+\fi
+
 \QuickQuiz{
+	빈 queue 로 \emph{모든} 원소를 옮긴다구요?
+	이 미친 해결책이 대체 어떤 세상에서는 최적인거죠???
+
+	\iffalse
+
 	Move \emph{all} the elements to the queue that became empty?
 	In what possible universe is this brain-dead solution in any
 	way optimal???
+
+	\fi
+
 }\QuickQuizAnswer{
+	데이터 흐름의 방향이 가끔씩만 바뀌는 경우에 최적입니다.
+	이 double-ended queue 가 동시에 양 끝에서 비워지는 경우엔 물론 무척
+	안좋은 선택일 겁니다.
+	이는 물론 다른 질문을 떠오르게 하는데, 양끝에서 동시에 비우기를 하는건
+	대체 어떤 세상에서 합리적인 일이겠냐는 겁니다.
+	이 질문에 대한 가능한 답 중 하나는 work stealing queue 입니다.
+
+	\iffalse
+
 	It is optimal in the case where data flow switches direction only
 	rarely.
 	It would of course be an extremely poor choice if the double-ended
@@ -859,12 +884,23 @@ queue to the now-empty queue.
 	universe emptying from both ends concurrently would be a reasonable
 	thing to do.
 	Work-stealing queues are one possible answer to this question.
+
+	\fi
+
 }\QuickQuizEnd
+
+앞의 섹션에서 보인 해쉬 기반 구현과 대조적으로, 이 조합 구현은 락도 어토믹
+오퍼레이션도 사용하지 않는 순차적 구현의 double-ended queue 위에서 구현될
+겁니다.
+
+\iffalse
 
 In contrast to the hashed implementation presented in
 the previous section, the compound implementation will build on
 a sequential implementation of a double-ended queue that uses
 neither locks nor atomic operations.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/SMPdesign/locktdeq@pop_push.fcv}
@@ -873,20 +909,63 @@ neither locks nor atomic operations.
 \end{listing}
 
 Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+이 이 구현을 보이고 있습니다.
+해쉬 기반의 구현과 달리, 이 조합 구현은 비대칭적이어서, \co{pdeq_pop_l()} 과
+\co{pdeq_pop_r()} 구현을 별개로 봐야만 합니다.
+
+\iffalse
+
+Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
 shows the implementation.
 Unlike the hashed implementation, this compound implementation is
 asymmetric, so that we must consider the \co{pdeq_pop_l()}
 and \co{pdeq_pop_r()} implementations separately.
 
+\fi
+
 \QuickQuiz{
+	조합된 병렬 double-ended queue 구현은 왜 대칭적일 수 없죠?
+
+	\iffalse
+
 	Why can't the compound parallel double-ended queue
 	implementation be symmetric?
+
+	\fi
+
 }\QuickQuizAnswer{
+	락 계층을 사용해 데드락을 회피해야한다는 필요성이 비대칭성을
+	강제하는데, 식사하는 철학자들 문제의 포크 번호 매기기 해결책과 같은
+	것입니다
+	(Section~\ref{sec:SMPdesign:Dining Philosophers Problem} 을
+	참고하세요).
+
+	\iffalse
+
 	The need to avoid deadlock by imposing a lock hierarchy
 	forces the asymmetry, just as it does in the fork-numbering
 	solution to the Dining Philosophers Problem
 	(see Section~\ref{sec:SMPdesign:Dining Philosophers Problem}).
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:popl]
+\co{pdeq_pop_l()} 구현이 이 코드의 \clnrefrange{b}{e} 에 보여져 있습니다.
+라인~\lnref{acq:l} 은 왼쪽 락을 획득하는데, 이 락은 라인~\lnref{rel:l} 에서
+해제됩니다.
+라인~\lnref{deq:ll} 은 아랫단의 double-ended queue 의 왼쪽으로부터 원소를
+빼내려 시도하고, 이게 성공하면 간단히 이 원소를 리턴하기 위해
+\clnrefrange{acq:r}{skip} 을 건너뜁니다.
+그렇지 않다면, 라인~\lnref{acq:r} 은 오른쪽 락을 획득하고, 라인~\lnref{deq:lr}
+에서 오른쪽 queue 로부터 원소를 왼쪽 꺼내기 하고 라인~\lnref{move} 에서 오른쪽
+queue 의 모든 남아있는 원소를 왼쪽 queue 로 옮기며, 라인~\lnref{init:r} 에서
+오른쪽 queue 를 초기화 하고, 라인~\lnref{rel:r} 에서 이 오른쪽 락을 해제합니다.
+만약 존재한다면 라인~\lnref{deq:lr} 에서 dequeue 된 원소가 리턴됩니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:popl]
 The \co{pdeq_pop_l()} implementation is shown on
@@ -907,6 +986,28 @@ the right-hand queue,
 and line~\lnref{rel:r} releases the right-hand lock.
 The element, if any, that was dequeued on line~\lnref{deq:lr} will be returned.
 \end{fcvref}
+
+\fi
+
+\begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:popr]
+\co{pdeq_pop_r()} 구현이 이 코드의 \clnrefrange{b}{e} 에 보여져 있습니다.
+전과 같이, 라인~\lnref{acq:r1} 은 이 오른쪽 락을 획득하고 (그리고
+라인~\lnref{rel:r2} 에서 이를 해제합니다), 라인~\lnref{deq:rr1} 에서 오른쪽
+queue 로부터 원소 하나를 오른쪽 꺼내기 하려 시도하고, 만약 성공한다면 이 원소를
+단순히 리턴하기 위해 \clnrefrange{rel:r1}{skip2} 를 건너뜁니다.
+하지만, 라인~\lnref{check1} 이 dequeue 할 원소가 존재하지 않았음을 알아내면
+라인~\lnref{rel:r1} 은 이 오른쪽 락을 해제하고 \clnrefrange{acq:l}{acq:r2} 가
+올바른 순서로 두 락을 잡습니다.
+라인~\lnref{deq:rr2} 는 이제 오른쪽 queue 로부터 원소 하나를 다시 오른쪽 꺼내기
+하려 시도하고, 라인~\lnref{check2} 가 이 두번째 시도가 실패했음을 확인하면,
+라인~\lnref{deq:rl} 은 왼쪽 queue 로부터 원소 하나를 오른쪽 dequeue 하고
+(원소가 있었다면), 라인~\lnref{move} 는 모든 남아있는 원소들을 왼쪽 queue
+로부터 오른쪽 queue 로 옮기고, 라인~\lnref{init:l} 은 왼쪽 queue 를 초기화
+합니다.
+어떻게 되었든, 라인~\lnref{rel:l} 은 왼쪽 락을 해제합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:popr]
 The \co{pdeq_pop_r()} implementation is shown on \clnrefrange{b}{e}
@@ -930,6 +1031,8 @@ from the left-hand queue to the right-hand queue, and line~\lnref{init:l}
 initializes the left-hand queue.
 Either way, line~\lnref{rel:l} releases the left-hand lock.
 \end{fcvref}
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
