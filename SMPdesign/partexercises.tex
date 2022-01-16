@@ -1036,33 +1036,91 @@ Either way, line~\lnref{rel:l} releases the left-hand lock.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	의 라인~\ref{ln:SMPdesign:locktdeq:pop_push:popr:deq:rr2}
+	에서의 오른쪽 dequeue 재시도가 왜 필요하죠?
+
+	\iffalse
+
 	Why is it necessary to retry the right-dequeue operation
 	on line~\ref{ln:SMPdesign:locktdeq:pop_push:popr:deq:rr2} of
 	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:popr]
+	이 쓰레드가 라인~\lnref{rel:r1} 에서 \co{d->rlock} 을 내려놓고
+	라인~\lnref{acq:r2} 에서 이 락을 다시 획득하는 사이에 다른 쓰레드가
+	원소를 하나 enqueue 했을 수도 있기 때문에 이 재시도가 필요합니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:popr]
 	This retry is necessary because some other thread might have
 	enqueued an element between the time that this thread dropped
 	\co{d->rlock} on line~\lnref{rel:r1} and the time that it reacquired this
 	same lock on line~\lnref{acq:r2}.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	분명 왼쪽 락은 \emph{가끔은} 획득 가능할 거예요!!!
+	그런데도 왜
+	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	의 라인~\ref{ln:SMPdesign:locktdeq:pop_push:popr:rel:r1}
+	에서는 무조건적으로 오른쪽 락을 해제해야 하는 거죠?
+
+	\iffalse
+
 	Surely the left-hand lock must \emph{sometimes} be available!!!
 	So why is it necessary that
         line~\ref{ln:SMPdesign:locktdeq:pop_push:popr:rel:r1} of
 	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
 	unconditionally release the right-hand lock?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	왼쪽 락을 획득 가능할 때 획득하기 위해서 \co{spin_trylock()} 을
+	사용하는 것도 가능할 겁니다.
+	하지만, 그 실패의 경우에는 여전히 이 오른쪽 락을 내려놓고 두 락을
+	제대로 된 순서로 다시 획득해야 할 겁니다.
+	이 변화를 만드는 것은 (그리고 이게 그럴 가치가 있는지 알아내는 것은)
+	독자 여러분의 연습문제로 남겨두겠습니다.
+
+	\iffalse
+
 	It would be possible to use \co{spin_trylock()} to attempt
 	to acquire the left-hand lock when it was available.
 	However, the failure case would still need to drop the
 	right-hand lock and then re-acquire the two locks in order.
 	Making this transformation (and determining whether or not
 	it is worthwhile) is left as an exercise for the reader.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:pushl]
+\co{pdeq_push_l()} 구현이
+Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+의 \clnrefrange{b}{e} 에 보여져 있습니다.
+라인~\lnref{acq:l} 은 왼쪽 스핀락을 획득하고, 라인~\lnref{que:l} 은 이 원소를
+왼쪽 큐에 왼쪽으로 집어넣고, 마지막으로 라인~\lnref{rel:l} 은 이 락을
+해제합니다.
+\end{fcvref}
+\begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:pushr]
+\co{pdeq_push_r()} 구현은 (\clnrefrange{b}{e} 에 보여져 있습니다) 상당히
+비슷합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:SMPdesign:locktdeq:pop_push:pushl]
 The \co{pdeq_push_l()} implementation is shown on
@@ -1078,7 +1136,19 @@ The \co{pdeq_push_r()} implementation (shown on \clnrefrange{b}{e})
 is quite similar.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	하지만 데이터가 한 방향으로만 흐르는 경우에,
+	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
+	에 보인 알고리즘은 마지막 원소를 가져가서 아랫단의 double-ended queue
+	를 비울 때마다 양 끝단이 같은 락을 획득하려 할 겁니다.
+	이는 이 알고리즘이 양 끝단으로 동시의 액세스를 제공하는 것이 이 queue
+	가 상당히 큰 수의 원소를 가지고 있을 때조차 실패할 수 있음을 의미하지
+	않나요?
+
+	\iffalse
+
 	But in the case where data is flowing in only one direction,
 	the algorithm shown in
 	Listing~\ref{lst:SMPdesign:Compound Parallel Double-Ended Queue Implementation}
@@ -1088,7 +1158,30 @@ is quite similar.
 	Doesn't that mean that sometimes this algorithm fails to
 	provide concurrent access to both ends of the queue even
 	when the queue contains an arbitrarily large number of elements?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그렇습니다!
+
+	하지만 같은 속성을 가지고 있다고 하는 다른 알고리즘들도 마찬가지입니다.
+	예를 들어, 락들의 해쉬 배열을 사용하는 소프트웨어 트랜잭셔널 메모리
+	메커니즘을 사용하는 해결책들에서는 가장 왼쪽과 가장 오른쪽 원소들의
+	주소가 가끔은 같은 락에 해쉬되는 경우가 있을 겁니다.
+	이런 해쉬 충돌 역시 동시의 액세스를 방지할 겁니다.
+	다른 예를 하나 들어보자면, 소프트웨어 fallback 을 갖추고 하드웨어
+	트랜잭셔널 메모리 메커니즘을 사용하는
+	해결책에서는~\cite{Yoo:2013:PEI:2503210.2503232,RickMerrit2011PowerTM,ChristianJacobi2012MainframeTM}
+	이 소프트웨어 fallback 내에서 락킹을 종종 사용할 것이고, 따라서 무엇이
+	되었든 이 락킹 해결책이 겪는 한계만큼 한계를 겪을 겁니다 (비록 뜸하긴
+	하길 바랍니다만).
+
+	따라서 2021년 기준으로, compound double-ended queue 를 포함한 동시의
+	double-ended queue 문제를 위한 모든 실용적 해결책은 적어도 어떤
+	환경에서는 완전한 동시성을 제공하지 못합니다.
+
+	\iffalse
+
 	Indeed it does!
 
 	But the same is true of other algorithms claiming this property.
@@ -1108,6 +1201,9 @@ is quite similar.
 	concurrent double-ended queue problem fail to provide full
 	concurrency in at least some circumstances, including the
 	compound double-ended queue.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Double-Ended Queue Discussion}
