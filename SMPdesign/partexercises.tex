@@ -1358,6 +1358,17 @@ overall design.
 \subsection{Partitioning Example Discussion}
 \label{sec:SMPdesign:Partitioning Example Discussion}
 
+Section~\ref{sec:SMPdesign:Dining Philosophers Problem}
+의 Quick Quiz 의 답에서 주어진 dining philosophers 문제의 최적의 해결책은
+``수평적 병렬성'' 또는 ``데이터 병렬성'' 의 훌륭한 예입니다.
+이 경우의 동기화 오버헤드는 거의 (또는 심지어 정확히) 없습니다.
+반대로, double-ended queue 구현은 한 쓰레드에서 다른 쓰레드로 데이터가
+움직인다는 점에서 ``수직적 병렬성'' 또는 ``파이프라이닝'' 의 예입니다.
+파이프라이닝을 위해 더 타이트한 협력이 필요해질수록 주어진 수준의 효율성을 얻기
+위해 더 많은 단위의 일을필요로 합니다.
+
+\iffalse
+
 The optimal solution to the dining philosophers problem given in
 the answer to the Quick Quiz in
 Section~\ref{sec:SMPdesign:Dining Philosophers Problem}
@@ -1371,13 +1382,40 @@ queue implementations are examples of ``vertical parallelism'' or
 The tighter coordination required for pipelining in turn requires
 larger units of work to obtain a given level of efficiency.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	연결 기반 double-ended queue 는 해쉬 기반 double-ended queue 보다
+	두배나 빠르게 동작합니다, 제가 이 해쉬 테이블의 크기를 미친듯이 크게
+	늘려도 말이죠.
+	왜 그런거죠?
+
+	\iffalse
+
 	The tandem double-ended queue runs about twice as fast as
 	the hashed double-ended queue, even when I increase the
 	size of the hash table to an insanely large number.
 	Why is that?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 해쉬 기반의 double-ended queue 의 락킹 설계는 한번에 한 쓰레드만이
+	각 끝에 있을 수 있게 하며, 따라서 각 오퍼레이션을 위해 두개의 락 획득을
+	필요로 합니다.
+	연결 기반 double-ended queue 또한 한번에 각 끝에 하나의 쓰레드만 있을
+	수 있게 하고, 대부분의 경우 오퍼레이션 당 하나의 락 획득만을 필요로
+	합니다.
+	따라서, 이 연결 기반 double-ended queue 는 해쉬 기반 double-ended queue
+	보다 빠르게 동작할 것으로 기대됩니다.
+
+	각 끝에서 한번에 여러 동시의 오퍼레이션을 가능하게 하는 double-ended
+	queue 를 만들 수 있겠습니까?
+	만약 그렇다면, 또는 그렇지 않다면, 왜입니까?
+
+	\iffalse
+
 	The hashed double-ended queue's locking design only permits
 	one thread at a time at each end, and further requires
 	two lock acquisitions for each operation.
@@ -1390,12 +1428,38 @@ larger units of work to obtain a given level of efficiency.
 	Can you create a double-ended queue that allows multiple
 	concurrent operations at each end?
 	If so, how?  If not, why not?
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	Double-ended queue 를 위해 동시성을 제어하는 훨씬 나은 방법이 있을까요?
+
+	\iffalse
+
 	Is there a significantly better way of handling concurrency
 	for double-ended queues?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	한가지 가능한 방법은 여러 double-ended queue 가 병렬로 사용될 수 있게
+	해서 더 간단한 단일 락 기반 double-ended queue 가 사용될 수 있도록,
+	그리고 어쩌면 각 double-ended queue 또한 한짝의 평범한 단일 끝단 queue
+	로 바꿀 수 있게끔, 문제 자체를 해결 가능하게 바꾸는 것입니다.
+	그런 ``수평 확장'' 없이는 속도 향상은 2.0 으로 제한됩니다.
+	반면에, 수평-확장 설계는 매우 큰 속도 향상을 얻을 수 있으며, 이 queue
+	의 양 끝에서 동작하는 여러 쓰레드가 있을 때 특히 매력적인데, 이 멀티
+	쓰레드 경우에는 dequeue 가 강한 순서 보장을 할 수 없게 되기 때문입니다.
+	어쨌건, 어떤 쓰레드가 어떤 아이템을 첫번째로 제거했다는 사실은 그게 그
+	쓰레드가 그 아이템을 첫번째로 처리할 것이라는 의미를 갖지
+	않습니다~\cite{AndreasHaas2012FIFOisnt}.
+	그리고 보장이 없다면, 이 보장을 제공하는 걸 거부하는데서 오는 성능
+	이득을 얻을 수도 있을 겁니다.
+
+	\iffalse
+
 	One approach is to transform the problem to be solved
 	so that multiple double-ended queues can be used in parallel,
 	allowing the simpler single-lock double-ended queue to be used,
@@ -1416,6 +1480,23 @@ larger units of work to obtain a given level of efficiency.
 	guarantees.
 	% about twice as fast as hashed version on 4.2GHz Power.
 
+	\fi
+
+	이 문제가 여러 queue 를 사용할 수 있게끔 변환이 가능한가에 관계없이, 각
+	enqueue 와 dequeue 오퍼레이션이 더 큰 단위의 일에 연관될 수 있게끔 일을
+	뭉쳐서 (batching) 할 수 있는지도 물어볼 가치가 있습니다.
+	이 batching 방법은 이 queue 자료 구조로의 경쟁을 줄이는데, 이는
+	Section~\ref{sec:SMPdesign:Synchronization Granularity}
+	에서 보게 되겠지만 성능도 확장성도 증가시킵니다.
+	어쨌건, 여러분이 높은 동기화 오버헤드를 일으켜야만 한다면, 여러분은
+	여러분의 돈의 가치를 얻게 됨을 분명히 해두십시오.
+
+	다른 연구자들은 queue 에서의 제한된 순서 보장으로부터 장점을 취하는
+	다른 방법들에 대해 연구하고
+	있습니다~\cite{ChristophMKirsch2012FIFOisntTR}.
+
+	\iffalse
+
 	Regardless of whether or not the problem can be transformed
 	to use multiple queues, it is worth asking whether work can
 	be batched so that each enqueue and dequeue operation corresponds
@@ -1430,8 +1511,19 @@ larger units of work to obtain a given level of efficiency.
 	Other researchers are working on other ways to take advantage
 	of limited ordering guarantees in
 	queues~\cite{ChristophMKirsch2012FIFOisntTR}.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 두 예는 파티셔닝이 병렬 알고리즘을 고안하는데 있어 얼마나 강력한지 보입니다.
+Section~\ref{sec:SMPdesign:Locking Granularity and Performance}
+에서는 세번째 예인 행렬 곱셈을 간단히 보겠습니다.
+하지만, 이 세개의 예 모두 병렬 프로그램 분야에서의 더 나은 설계를 필요로
+하는데, 이 주제는 뒤 섹션에서 이야기 합니다.
+
+\iffalse
 
 These two examples show just how powerful partitioning can be in
 devising parallel algorithms.
@@ -1439,3 +1531,5 @@ Section~\ref{sec:SMPdesign:Locking Granularity and Performance}
 looks briefly at a third example, matrix multiply.
 However, all three of these examples beg for more and better design
 criteria for parallel programs, a topic taken up in the next section.
+
+\fi
