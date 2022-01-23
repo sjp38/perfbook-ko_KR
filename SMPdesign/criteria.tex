@@ -60,10 +60,43 @@ these forces being called ``design patterns''~\cite{Alexander79,GOF95}.
 
 \fi
 
+이 세개의 병렬 프로그래밍 목표를 이루기 위한 설계 기준은 속도 향상, 경쟁,
+일 대비 동기화 비율, 읽기 대비 쓰기 비율, 그리고 복잡도입니다:
+
+\iffalse
+
 The design criteria for attaining the three parallel-programming goals
 are speedup,
 contention, work-to-synchronization ratio, read-to-write ratio, and complexity:
+
+\fi
+
 \begin{description}
+\item[속도 향상 (speedup):]  Section~\ref{sec:intro:Parallel Programming Goals}
+	에서 이야기 되었듯 향상된 성능이 병렬화를 위하 필요한 시간과 문제들을
+	감수하는 주요 이유입니다.
+	속도 향상은 어떤 프로그램의 순차적 버전을 수행하는데 걸리는 시간 대비
+	병렬 버전을 수행하는데 걸리는 시간의 비율입니다.
+\item[경쟁 (contention):]  병렬 프로그램에 의해 바쁘게 유지될 수 있는 것보다 그
+	프로그램에 더 많은 수의 CPU 가 사용된다면 이 여분의 CPU 들은 경쟁에
+	의해 유용한 일을 하지 못하게 됩니다.
+	이는 락 경쟁, 메모리 경쟁, 또는 다른 성능 문제를 일으키는 것이 될 수도
+	있습니다.
+\item[일-대-동기화 비율:]  단일 프로세서를 사용하고 싱글쓰레드 기반이며
+	프리엠션 (preemption) 불가능한, 그리고 인터럽트도 불가능한\footnote{
+		인터럽트 마스킹을 통해서든 그걸 알지 못해서든.}
+	버전의 병렬 프로그램은 어떤 동기화 도구도 필요치 않을 겁니다.
+	따라서, 이 기능들에 의해 소모되는 모든 시간은 (통신 캐쉬 미스는 물론
+	메세지 응답 시간, 락킹 도구, 어토믹 인스트럭션, 그리고 메모리 배리어를
+	포함) 이 프로그램이 하고자 하는 융요한 일에 직접적으로 기여하지 않는
+	오버헤드입니다.
+	여기서의 중요한 측정할 것은 동기화 오버헤드와 크리티컬 섹션의 코드의
+	오버헤드의 관계로, 더 큰 크리티컬 섹션은 더 큰 동기화 오버헤드를 견뎌낼
+	수 있습니다.
+	이 일 대비 동기화 비율은 동기화 효율성의 개념에 연관되어 있습니다.
+
+\iffalse
+
 \item[Speedup:]  As noted in
 	Section~\ref{sec:intro:Parallel Programming Goals},
 	increased performance is the major reason
@@ -95,6 +128,32 @@ contention, work-to-synchronization ratio, read-to-write ratio, and complexity:
 	critical sections able to tolerate greater synchronization overhead.
 	The work-to-synchronization ratio is related to
 	the notion of synchronization efficiency.
+
+\fi
+
+\item[읽기 대비 쓰기 비율:] 가끔만 업데이트 되는 데이터 구조는 종종 분할되기
+	보다는 복사되고, 더 나아가 읽기 쓰레드의 동기화 오버헤드를 쓰기
+	쓰레드의 비용을 늘려 줄이는 비대칭적인 동기화 기능을 사용해
+	보호함으로써 전체적인 동기화 오버헤드를 줄일 수도 있습니다.
+	비슷한 최적화들이 Chapter~\ref{chp:Counting} 에서 논의 되었듯 자주
+	업데이트 되는 데이터 구조에서도 가능합니다.
+\item[복잡도 (complexity):]  병렬 프로그램은 똑같은 순차적 프로그램보다 이
+	병렬프로그램은 이 순차적 프로그램보다 훨씬 큰 상태 공간을 가지기 때문에
+	더 복잡합니다, 정규적 구조를 갖는 큰 상태 공간은 가끔은 쉽게 이해될 수
+	있긴 하지만요.
+	병렬 프로그래머는 이 더 커다란 상태 공간의 맥락에서 동기화 도구,
+	메세징, 락킹 설계, 크리티컬 섹션 인식, 그리고 데드락을 고려해야만
+	합니다.
+
+	이 거대한 복잡도는 종종 더 높은 개발과 유지 비용으로 번역됩니다.
+	따라서, 예산상의 한계는 존재하는 프로그램에 가해질 수 있는 변경의 수와
+	종류에 제약을 가하게 되는데, 어떤 정도의 속도 향상은 오로지 그만큼의
+	시간과 문제 만큼만 가치 있기 때문입니다.
+	더 나쁜게, 추가된 복잡도는 성능과 확장성을 실제로 \emph{줄일 수}
+	있습니다.
+
+\iffalse
+
 \item[Read-to-Write Ratio:]  A data structure that is
 	rarely updated may often be replicated rather than partitioned,
 	and furthermore may be protected with asymmetric
@@ -123,6 +182,16 @@ contention, work-to-synchronization ratio, read-to-write ratio, and complexity:
 	Worse yet, added complexity can actually \emph{reduce}
 	performance and scalability.
 
+\fi
+
+	따라서, 어떤 지점을 넘어서면서 부터는, 병렬화보다 더 비용이 저렴하고
+	효과적인 잠재적 순차적 최적화가 있을수도 있습니다.
+	Section~\ref{sec:intro:Performance} 에서 이야기 되었듯, 병렬화는 많은
+	성능 최적화 방버들 중 하나일 뿐이며, 더 나아가 CPU 기반의 병목현상에
+	대해서만 대부분 적용되는 최적화입니다.
+
+	\iffalse
+
 	Therefore, beyond a certain point,
 	there may be potential sequential optimizations
 	that are cheaper and more effective than parallelization.
@@ -131,7 +200,27 @@ contention, work-to-synchronization ratio, read-to-write ratio, and complexity:
 	parallelization is but one performance optimization of
 	many, and is furthermore an optimization that applies
 	most readily to CPU-based bottlenecks.
+
+	\fi
+
 \end{description}
+이 표준들은 최대 성능향상을 강제하기 위해 함께 사용될 겁니다.
+앞의 세개의 표준은 깊이 상호 관계되어 있으며, 따라서 이 섹션의 나머지 부분은 이
+상호관계를 분석해 봅니다.\footnote{
+	실제 세계의 병렬 시스템은 데이터 구조 레이아웃, 메모리 크기, 메모리
+	계층 응답시간, 대역폭 한계, 그리고 I/O 문제 등의 많은 추가적인 설계
+	표준을 갖게 될겁니다.}
+
+이 표준들은 요구사항 명세서의 한 부분으로 나타나게 될수도 있음을 알아두시기
+바랍니다.
+예를 들어, 속도 향상은 상대적으로 원하는 것으로 동작하거나 (``더 빠를수록 더
+좋음'') 해당 워크로드의 절대적 요구사항이 될 수도 (``이 시스템은 최소 초당
+1,000,000 웹 히트를 지원해야만 한다'') 있습니다.
+전통적 디자인 패턴 언어들은 상대적으로 원하는 것을 힘 (force) 이라 이야기 하고
+절대적 요구사항은 맥락 (context) 이라고 이야기 합니다.
+
+\iffalse
+
 These criteria will act together to enforce a maximum speedup.
 The first three criteria are deeply interrelated, so
 the remainder of this section analyzes these
@@ -149,6 +238,8 @@ or as an absolute requirement of the workload (``the system
 must support at least 1,000,000 web hits per second'').
 Classic design pattern languages describe relative desiderata as forces
 and absolute requirements as context.
+
+\fi
 
 An understanding of the relationships between these design criteria can
 be very helpful when identifying appropriate design tradeoffs for a
