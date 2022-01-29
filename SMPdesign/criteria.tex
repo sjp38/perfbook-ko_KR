@@ -241,6 +241,29 @@ and absolute requirements as context.
 
 \fi
 
+이 설계 표준간의 관계에 대한 이해는 병렬 프로그램을 위한 설계상 적절한
+트레이드오프를 찾는데 도움이 될 겁니다.
+\begin{enumerate}
+\item	프로그램이 배타적 락 크리티컬 섹션에서 더 적은 시간을 보낼수록 잠재적
+	속도 향상은 커집니다.
+	이는 한번에 하나의 CPU 만이 해당 배타적 락 크리티컬 섹션을 수행할 수
+	있으므로, 암달의 법칙~\cite{GeneAmdahl1967AmdahlsLaw} 의 결론입니다.
+
+	더 구체적으로 보면, 바운드 되지 않은 선형 확장성을 위해선, 프로그램이
+	배타적 크리티컬 섹션에서 보내는 시간은 CPU 의 수가 늘어날수록
+	감소해야만 합니다.
+	예를 들어, 프로그램은 가장 제한적인 배타적 락 크리티컬 섹션에서 그 수행
+	시간의 10분의 1보다 훨씬 적은 시간만을 보내지 않는다면 10개의 CPU 까지
+	확장되지 못할 겁니다.
+\item	경쟁 효과는 실제 속도 향상이 사용 가능한 CPU 의 수보다 적을 때 상당한
+	CPU 와/또는 절대적 시간을 소모합니다.
+	CPU 의 수와 실제 속도 향상 사이의 차이가 커질수록, 이 CPU 들은 덜
+	효율적으로 사용될 겁니다.
+	비슷하게, 필요한 효율성이 커질수록, 얻을 수 있는 속도 향상은 더 작아질
+	겁니다.
+
+\iffalse
+
 An understanding of the relationships between these design criteria can
 be very helpful when identifying appropriate design tradeoffs for a
 parallel program.
@@ -265,6 +288,28 @@ parallel program.
 	CPUs will be used.
 	Similarly, the greater the desired efficiency, the smaller
 	the achievable speedup.
+\fi
+
+\item	사용 가능한 동기화 기능들이 그것들이 지키는 크리티컬 섹션에 비해 높은
+	오버헤드를 갖는다면 속도 향상을 개선하는 최선의 방법은 이 동기화
+	기능들이 사용되는 횟수를 줄이는 겁니다.
+	이는 크리티컬 섹션들을 몰아서 처리하는 것, 데이터 소유권
+	(\cref{chp:Data Ownership} 을 참고하세요) 의 사용, 비대칭 기능의 사용
+	(Section~\ref{chp:Deferred Processing} 을 참고하세요),
+	또는 코드 락킹과 같은 거친 규모의 설계를 사용하는 것으로 할 수 있습니다.
+\item	이 크리티컬 섹션이 그걸 지키는 기능들에 비해 높은 오버헤드를 갖는다면,
+	속도 향상을 개선하는 최고의 방법은 reader/writer 락킹, 데이터 락킹,
+	비대칭, 또는 데이터 소유권을 사용해 병렬성을 증가시키는 것입니다.
+\item	이 크리티컬 섹션이 그걸 지키는 기능들에 비해 높은 오버헤드를 갖고 이
+	지켜지는 데이터 구조가 수정되기보다 읽히는 경우가 훨씬 많다면, 병렬성을
+	증가시키는 최고의 방법은 reader/writer 락킹 또는 비대칭 기능을 사용하는
+	겁니다.
+\item	SMP 성능을 개선하는 많은 변화들, 예를 들어 락 경쟁을 줄이는 것은 또한
+	리얼타임 반응시간을 개선합니다~\cite{PaulMcKenney2005h}.
+\end{enumerate}
+
+\iffalse
+
 \item	If the available synchronization primitives have
 	high overhead compared to the critical sections
 	that they guard, the best way to improve speedup
@@ -290,12 +335,34 @@ parallel program.
 	latencies~\cite{PaulMcKenney2005h}.
 \end{enumerate}
 
+\fi
+
 \QuickQuiz{
+	이 모든 크리티컬 섹션에 대한 문제들은 우리가 단순히 크리티컬 섹션을
+	갖지 않는 non-blocking 동기화~\cite{MauriceHerlihy90a} 를 항상 사용해야
+	함을 의미하지 않나요?
+
+	\iffalse
+
 	Don't all these problems with critical sections mean that
 	we should just always use
 	non-blocking synchronization~\cite{MauriceHerlihy90a},
 	which don't have critical sections?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Non-blocking 동기화는 일부 상황에서는 매우 유용할 수 있긴 합니다만,
+	\cref{sec:advsync:Non-Blocking Synchronization} 에서 이야기 되었듯
+	만병통치약은 아닙니다.
+	또한, non-blocking 동기화는 Josh Triplett 에 의해 이야기 되었듯
+	실제로는 크리티컬 섹션을 갖습니다.
+	예를 들어, compare-and-swap 오퍼레이션에 기반한 non-blocking
+	알고리즘에서 최초의 로드로부터 시작해서 compare-and-swap 으로 이어가는
+	코드는 락 기반의 크리티컬 섹션과 비슷합니다.
+
+	\iffalse
+
 	Although non-blocking synchronization can be very useful
 	in some situations, it is no panacea, as discussed in
 	\cref{sec:advsync:Non-Blocking Synchronization}.
@@ -305,9 +372,20 @@ parallel program.
 	compare-and-swap operations, the code starting at the
 	initial load and continuing to the compare-and-swap
 	is analogous to a lock-based critical section.
+
+	\fi
+
 }\QuickQuizEnd
+
+경쟁 (contention) 은 많은 모습을 가지고 있음을 다시 이야기할 가치가 있는데, 락
+경쟁, 메모리 경쟁, 캐시 오버플로우, 열 제어, 그 외에도 많은 것들이 포함됩니다.
+이 챕터는 주로 락과 메모리 경쟁에 대해서만 봅니다.
+
+\iffalse
 
 It is worth reiterating that contention has many guises, including
 lock contention, memory contention, cache overflow, thermal throttling,
 and much else besides.
 This chapter looks primarily at lock and memory contention.
+
+\fi
