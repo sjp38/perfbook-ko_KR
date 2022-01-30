@@ -263,6 +263,31 @@ int hash_search(struct hash_table *h, long key)
 \subsection{Code Locking}
 \label{sec:SMPdesign:Code Locking}
 
+코드 락킹은 그것이 글로벌 락을 사용한다는 사실 때문에 무척
+간단합니다.\footnote{
+	여러분이 그대신 데이터 구조들을 위해 여러 락을 사용한다면, 또는 Java 의
+	경우 동기화된 인스턴스들을 가지고 클래스들을 사용한다면, 여러분은
+	Section~\ref{sec:SMPdesign:Data Locking} 에서 이야기 되는 ``데이터
+	락킹'' 을 사용하고 있는 겁니다.}
+이 기법은 특히 존재하는 프로그램을 멀티프로세서에서 돌아갈 수 있게끔 코드
+락킹을 사용하도록 개량하기가 쉽습니다.  만약 이 프로그램이 하나의 공유 리소스만
+가지고 있다면, 코드 락킹은 최적의 성능을 제공할 수도 있습니다.
+하지만, 많은 더 크도 복잡한 프로그램들이 많은 수행들이 크리티컬 섹션에서 일어날
+것을 요구하며, 이는 결국 코드 락킹이 그 확장성을 제한하게끔 만듭니다.
+
+따라서, 여러분은 크리티컬 섹션 또는 약간의 확장만이 필요한 곳에서 수행 시간의
+작은 부분만을 소모하는 프로그램에서 코드 락킹을 사용해야 합니다.
+이런 경우에, 코드 락킹은
+Listing~\ref{lst:SMPdesign:Code-Locking Hash Table Search}
+에서 보이는 것과 같이 그 순차적 버전과 매우 비슷한 비교적 간단한 프로그램을
+제공할 겁니다.
+하지만,
+Listing~\ref{lst:SMPdesign:Sequential-Program Hash Table Search}
+의 \co{hash_search()} 에서의 간단한 비교 결과 리턴은 이 리턴 전에 락을 해제해야
+하므로 세개의 선언문이 되었음을 알아 두시기 바랍니다.
+
+\iffalse
+
 Code locking is quite simple due to the fact that it uses only
 global locks.\footnote{
 	If your program instead has locks in data structures,
@@ -291,6 +316,8 @@ However, note that the simple return of the comparison in
 Listing~\ref{lst:SMPdesign:Sequential-Program Hash Table Search}
 has now become three statements due to the need to release the
 lock before returning.
+
+\fi
 
 \begin{listing}[tbhp]
 \begin{VerbatimL}[commandchars=\\\[\]]
@@ -330,12 +357,23 @@ int hash_search(struct hash_table *h, long key)
 \label{lst:SMPdesign:Code-Locking Hash Table Search}
 \end{listing}
 
+불행히도, 코드 락킹은 특히 여러 CPU 들이 동시에 락을 획득하려 할 때 벌어지는
+``락 경쟁'' 에 취약합니다.
+어린 아이들의 그룹을 (또는 아이처럼 행동하는 노인들의 그룹을) 관리해야 하는 SMP
+프로그래머들은
+Figure~\ref{fig:SMPdesign:Lock Contention}. 에 그려진 것과 같은, 그 중 하나만을
+가질 때의 위험을 알고 있을 겁니다.
+
+\iffalse
+
 Unfortunately, code locking is particularly prone to ``lock contention'',
 where multiple CPUs need to acquire the lock concurrently.
 SMP programmers who have taken care of groups of small children
 (or groups of older people who are acting like children) will immediately
 recognize the danger of having only one of something,
 as illustrated in Figure~\ref{fig:SMPdesign:Lock Contention}.
+
+\fi
 
 % ./test_hash_codelock.exe 1000 0/100 1 1024 1
 % ./test_hash_codelock.exe: nmilli: 1000 update/total: 0/100 nelements: 1 nbuckets: 1024 nthreads: 1
@@ -353,8 +391,15 @@ as illustrated in Figure~\ref{fig:SMPdesign:Lock Contention}.
 % ./test_hash_codelock.exe: nmilli: 1000 update/total: 0/100 nelements: 1 nbuckets: 1024 nthreads: 2
 % ./test_hash_codelock.exe: avg = 502.737  max = 980.924  min = 374.406  std = 239.383
 
+이 문제에 대한 한가지 해결책, 이름하여 ``data locking'' 이 다음 섹션에서
+설명됩니다.
+
+\iffalse
+
 One solution to this problem, named ``data locking'', is described
 in the next section.
+
+\fi
 
 \begin{figure}[tbh]
 \centering
