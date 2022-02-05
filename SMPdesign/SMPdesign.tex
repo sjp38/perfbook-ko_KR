@@ -411,6 +411,21 @@ in the next section.
 \subsection{Data Locking}
 \label{sec:SMPdesign:Data Locking}
 
+많은 데이터 구조가 쪼개지고 이 데이터 구조의 각 조각이 각자의 락을 가질 수
+있습니다.
+그러면 각 데이터 구조의 조각을 위한 크리티컬 섹션은 병렬로 수행될 수 있습니다,
+각 조각을 위한 크리티컬 섹션은 한번에 하나씩만 수행될 수 있긴 하지만요.
+경쟁이 줄어야 할 때, 그리고 동기화 오버헤드가 속도 향상을 제한하지 않을 때,
+여러분은 데이터 락킹을 사용해야 합니다.
+데이터 락킹은 지나치게 큰 크리티컬 섹션을 여러 데이터 구조로 분산시켜서 경쟁을
+줄이는데, 예를 들어
+Listing~\ref{lst:SMPdesign:Data-Locking Hash Table Search}
+에 보인 것과 같이 해시테이블에 해시 버킷별 크리티컬 섹션을 유지하는 식입니다.
+그렇게 증가된 확장성은 역시 추가된 데이터 구조, \co{struct bucket} 의 형태로
+복잡도를 약간 높입니다.
+
+\iffalse
+
 Many data structures may be partitioned,
 with each partition of the data structure having its own lock.
 Then the critical sections for each part of the data structure
@@ -427,6 +442,8 @@ hash table, as shown in
 Listing~\ref{lst:SMPdesign:Data-Locking Hash Table Search}.
 The increased scalability again results in a slight increase in complexity
 in the form of an additional data structure, the \co{struct bucket}.
+
+\fi
 
 \begin{listing}[tb]
 \begin{VerbatimL}
@@ -471,6 +488,15 @@ int hash_search(struct hash_table *h, long key)
 \label{lst:SMPdesign:Data-Locking Hash Table Search}
 \end{listing}
 
+Figure~\ref{fig:SMPdesign:Lock Contention} 에 보인 것과 같은 경쟁적인 상황과
+반대로, 데이터 락킹은
+Figure~\ref{fig:SMPdesign:Data Locking} 에 보인 것과 같이 하모니를 조장하며
+병렬 프로그램에서 이는 \emph{거의} 항상 향상된 성능과 확장성으로 귀결됩니다.
+이런 이유로, 데이터 락킹은 Sequent 에 의해 그 커널에서 무척 많이
+사용되었습니다~\cite{Beck85,Inman85,Garg90,Dove90,McKenney92b,McKenney92a,McKenney93}.
+
+\iffalse
+
 In contrast with the contentious situation
 shown in Figure~\ref{fig:SMPdesign:Lock Contention},
 data locking helps promote harmony, as illustrated by
@@ -479,6 +505,8 @@ this \emph{almost} always translates into increased performance and
 scalability.
 For this reason, data locking was heavily used by Sequent in its
 kernels~\cite{Beck85,Inman85,Garg90,Dove90,McKenney92b,McKenney92a,McKenney93}.
+
+\fi
 
 \begin{figure}[tbh]
 \centering
@@ -503,6 +531,20 @@ kernels~\cite{Beck85,Inman85,Garg90,Dove90,McKenney92b,McKenney92a,McKenney93}.
 % ./test_hash_spinlock.exe: nmilli: 1000 update/total: 0/100 nelements: 1 nbuckets: 1024 nthreads: 2
 % ./test_hash_spinlock.exe: avg = 305.807  max = 481.685  min = 167.939  std = 132.589
 
+하지만, 어린 아이들을 맡아본 사람들은 또한번 증언할 수 있겠지만, 가지고 놀기
+충분한 것을 주는 것만으로는 평안을 보장할 수 없습니다.
+비슷한 상황이 SMP 프로그램에서도 일어날 수 있습니다.
+예를 들어, 리눅스 커널은 파일과 디렉토리들의 캐쉬 (``dcache'' 라 불립니다) 를
+유지합니다.
+이 캐쉬의 각 항목은 각자의 락을 가지고 있습니다만, 루트 디렉토리와 그 직접적
+후손에 연관된 항목들은 다른 것들에 비해 훨씬 더 자주 접근될 가능성이 높습니다.
+이는 많은 CPU 들이 이런 인기있는 항목들의 락에 대해 경쟁하게 되는 상황을
+초래하고, 이는
+Figure~\ref{fig:SMPdesign:Data and Skew} 에 보인 것과 다르지 않은 상황을 초래할
+수 있습니다.
+
+\iffalse
+
 However, as those who have taken care of small children can again attest,
 even providing enough to go around is no guarantee of tranquillity.
 The analogous situation can arise in SMP programs.
@@ -515,12 +557,35 @@ This can result in many CPUs contending for the locks of these popular
 entries, resulting in a situation not unlike that
 shown in Figure~\ref{fig:SMPdesign:Data and Skew}.
 
+\fi
+
 \begin{figure}[tbh]
 \centering
 \resizebox{\twocolumnwidth}{!}{\includegraphics{cartoons/r-2014-Data-many-fighting}}
 \caption{Data Locking and Skew}
 \ContributedBy{Figure}{fig:SMPdesign:Data and Skew}{Melissa Broussard}
 \end{figure}
+
+많은 경우, 알고리즘은 데이터 편중을 줄이도록 설계될 수 있고, 어떤 경우에는 이를
+완전히 제거할 수도 있습니다 (예를 들면, 리눅스 커널의 dcache
+에서처럼요~\cite{McKenney04a,JonathanCorbet2010dcacheRCU,NeilBrown2015PathnameLookup,NeilBrown2015RCUwalk,NeilBrown2015PathnameSymlinks}).
+데이터 락킹은 해쉬 테이블과 같은 쪼개질 수 있는 데이터 구조에서, 그리고 여러
+항목이 각각 주어진 데이터 구조의 인스턴스를 나타내는 상황에서도 종종
+사용됩니다.
+리눅스 커널의 task 리스트는 뒤의 것의 한 예로, 각 task 구조체는 각자의
+\co{alloc_lock} 과 \co{pi_lock} 을 갖습니다.
+
+동적으로 할당되는 구조체들에 대한 데이터 락킹에서의 주요 과제는 이 구조체가 이
+락이 잡혀 있는 동안 존재를 유지함을 보장하는 것입니다~\cite{Gamsa99}.
+Listing~\ref{lst:SMPdesign:Data-Locking Hash Table Search}
+의 코드는 이 과제를 락들을 정적으로 할당된, 따라서 결코 해제되지 않는 해시
+버킷에 위치시킴으로써 해결했습니다.
+하지만, 이 트릭은 해시 테이블의 크기가 변할 수 있다면, 따라서 락이 이제
+동적으로 할당되어야 한다면 동작하지 않을 겁니다.
+이 경우, 해시 버킷은 그 락이 획득되어 있는 동안은 해제되는 것을 방지할 방법이
+필요할 겁니다.
+
+\iffalse
 
 In many cases, algorithms can be designed to reduce the instance of
 data skew, and in some cases eliminate it entirely
@@ -544,10 +609,39 @@ so that the locks were now dynamically allocated.
 In this case, there would need to be some means to prevent the hash
 bucket from being freed during the time that its lock was being acquired.
 
+\fi
+
 \QuickQuiz{
+	어떤 구조체를 그것의 락이 획득되어 있는 동안 해제되지 않게 하는
+	방법들로는 어떤 게 있나요?
+
+	\iffalse
+
 	What are some ways of preventing a structure from being freed while
 	its lock is being acquired?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여기 \emph{존재 보장} 문제에 대한 몇가지 해결책이 있습니다:
+
+	\begin{enumerate}
+	\item	구조체별 락이 획득되어있는 동안 잡히는 정적으로 할당된 락을
+		제공하는 것으로, 이는 계층적 락킹의 한 예입니다
+		(Section~\ref{sec:SMPdesign:Hierarchical Locking} 을
+		참고하세요).
+		물론, 이 목적으로 하나의 전역 락을 사용하는 것은 받아들이기
+		어려울 정도로 높은 수준의 락 경쟁을 일으켜서 성능과 확장성을
+		극적으로 떨어뜨릴 겁니다.
+	\item	Chapter~\ref{chp:Locking} 에서 보인 것처럼 정적으로 할당된
+		락들의 배열을 제공하고, 이 구조체의 주소를 획득할 락을 선택하기
+		위해 해싱하는 것.
+		충분히 높은 품질의 해시 함수가 있다면, 이는 단일 전역 락의
+		확장성 제한을 막아줍니다만, 읽기가 대부분인 상황에서는 이 락
+		획득 오버헤드가 받아들이기 어려울 정도의 성능 하락을 초래할 수
+		있습니다.
+	\iffalse
+
 	Here are a few possible solutions to this \emph{existence guarantee}
 	problem:
 
@@ -566,6 +660,28 @@ bucket from being freed during the time that its lock was being acquired.
 		avoids the scalability limitations of the single global
 		lock, but in read-mostly situations, the lock-acquisition
 		overhead can result in unacceptably degraded performance.
+
+	\fi
+
+	\item	가비지 콜렉터를 제공하는 소프트웨어 환경이라면 그것을 사용해서
+		구조체가 참조되는 동안은 할당 해제되지 못하게 하는 방법이
+		있습니다.
+		이는 무척 잘 동작하고, 개발자들의 어깨로부터 존재 보장 부담을
+		(그 외에도 많은 것을) 제거합니다만, 프로그램에 가비지 콜렉션
+		오버헤드를 부과합니다.
+		가비지 콜렉션 기술은 지난 수십년간 상당히 발전했긴 합니다만, 그
+		오버헤드는 어떤 어플리케이션들에게는 받아들이기 어려울 정도로
+		높을 수 있습니다.
+		또한, 일부 어플리케이션은 개발자들이 대부분의 가비지 콜렉션
+		기반 환경들이 허용하는 것에 비해 데이터 구조의 레이아웃과
+		위치에 더 많은 제어를 필요로 하기도 합니다.
+	\item	가비지 콜렉터의 한 특수한 경우로, 전역 레퍼런스 카운터를, 또는
+		레퍼런스 카운터의 전역적 배열을 사용하는 것.
+		이는 앞의 락을 사용하는 방법에서 이야기 된 것과 유사한 강점과
+		한계점을 갖습니다.
+
+	\iffalse
+
 	\item	Use a garbage collector, in software environments providing
 		them, so that a structure cannot be deallocated while being
 		referenced.
@@ -584,6 +700,35 @@ bucket from being freed during the time that its lock was being acquired.
 		reference counter, or a global array of reference counters.
 		These have strengths and limitations similar to those
 		called out above for locks.
+
+	\fi
+
+	\item	내부에서 바깥으로의 레퍼런스 카운트라고 생각될 수 있는,
+		\emph{해저드 포인터} 를 사용하는 것.
+		해저드 포인터 기반 알고리즘은 쓰레드별 포인터 리스트를
+		유지하여서, 이 리스트에 특정 포인터가 보이는 것은 해당
+		구조체로의 레퍼런스처럼 동작합니다.
+		해저드 포인터는 프로덕션에서의 상당한 사용을 보이기 시작하고
+		있습니다
+		(\cref{sec:defer:Production Uses of Hazard Pointers} 를
+		참고하세요).
+	\item	트랜잭셔널 메모리 (Transactional Memory:
+		TM)~\cite{Herlihy93a,DBLomet1977SIGSOFT,Shavit95} 를 사용해서
+		이 데이터 구조로의 모든 참조와 수정이 어토믹하게 수행되도록
+		하는 것.
+		TM 이 최근 몇년간 많은 흥분을 일으켰고 프로덕션 소프트웨어에서
+		일부 사용될 가능성이 보이긴 합니다만, 개발자들은 일부 주의를
+		해야하는데~\cite{Blundell2005DebunkTM,Blundell2006TMdeadlock,McKenney2007PLOSTM},
+		특히 성능에 중요한 코드에서 그렇습니다.
+		특히, 존재 보장은 이 트랜잭션인 전역 레퍼런스로부터 업데이트
+		되는 데이터 항목으로의 전체 과정을 커버할 것을 필요로 합니다.
+		그것을 다른 동기화 메커니즘들과 결합해 그 취약성을 극복하는
+		방법들을 포함한 TM 에 대한 더 많은 정보를 위해선
+		\cref{sec:future:Transactional Memory,sec:future:Hardware
+		Transactional Memory} 를 참고하세요.
+
+	\iffalse
+
 	\item	Use \emph{hazard pointers}~\cite{MagedMichael04a}, which
 		can be thought of as an inside-out reference count.
 		Hazard-pointer-based algorithms maintain a per-thread list of
@@ -609,6 +754,21 @@ bucket from being freed during the time that its lock was being acquired.
 		weaknesses by combining it with other synchronization
 		mechanisms, see
 		\cref{sec:future:Transactional Memory,sec:future:Hardware Transactional Memory}.
+
+	\fi
+
+	\item	극단적으로 가벼운 가비지 콜렉터 같은 것이라 생각될 수 있는 RCU
+		를 사용하는 것.
+		업데이트 쓰레드는 RCU 읽기 쓰레드가 아직 참조하고 있을 수 있는
+		RCU 로 보호되는 데이터 구조체를 할당 해제할 수 없게 되어
+		있습니다.
+		RCU 는 읽기가 대부분인 데이터 구조체에서 무척 많이 사용되고
+		있으며,
+		\cref{sec:defer:Read-Copy Update (RCU)} 에서 길게 이야기
+		됩니다.
+
+	\iffalse
+
 	\item	Use RCU, which can be thought of as an extremely lightweight
 		approximation to a garbage collector.
 		Updaters are not permitted to free RCU-protected
@@ -616,10 +776,22 @@ bucket from being freed during the time that its lock was being acquired.
 		RCU is most heavily used for read-mostly data structures,
 		and is discussed at length in
 		\cref{sec:defer:Read-Copy Update (RCU)}.
+
+	\fi
+
 	\end{enumerate}
+
+	존재 보장의 제공에 대한 더 많은 내용을 위해선,
+	Chapters~\ref{chp:Locking} 와 \ref{chp:Deferred Processing} 를
+	읽어보시기 바랍니다.
+
+	\iffalse
 
 	For more on providing existence guarantees, see
 	Chapters~\ref{chp:Locking} and \ref{chp:Deferred Processing}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Data Ownership}
