@@ -797,6 +797,33 @@ bucket from being freed during the time that its lock was being acquired.
 \subsection{Data Ownership}
 \label{sec:SMPdesign:Data Ownership}
 
+데이터 소유권 (data ownership) 은 주어진 데이터 구조를 쓰레드 또는 CPU 들에게
+분할하여, 각 Thread/CPU 가 각자의 데이터 구조 부분을 아무런 동기화 오버헤드
+없이 액세스 할 수 있게 합니다.
+하지만, 한 쓰레드가 어떤 다른 쓰레드의 데이터에 액세스 하고자 한다면, 이 첫번째
+쓰레드는 직접 그럴 수는 없습니다.
+그 대신, 그 첫번째 쓰레드는 이 두번째 쓰레드와 통신을 해서 이 두번째 쓰레드가
+그 첫번째 쓰레드 대신 이 오퍼레이션을 수행하거나, 그 데이터를 첫번째 쓰레드에게
+넘겨줘야만 합니다.
+
+데이터 소유권은 애매해 보일 수도 있겠습니다만, 매우 자주 사용됩니다:
+\begin{enumerate}
+\item	한 CPU 또는 쓰레드에 의해서만 액세스 가능한 모든 변수는 (C 와 C++
+	에서의 {\tt auto} 변수 같은) 해당 CPU 또는 쓰레드에게 소유됩니다.
+\item	유저 인터페이스의 한 인스턴스는 연관된 사용자의 컨텍스트를 소유합니다.
+	병렬 데이터베이스 엔진과 상호작용하는 어플리케이션들이 완전한 순차적
+	프로그램인 것마냥 작성되는 것은 매우 흔한 일입니다.
+	그런 어플리케이션은 유저 인터페이스와 사용자의 현재 동작을 소유합니다.
+	따라서 명시적 병렬성은 데이터베이스 엔진 스스로에게 국한됩니다.
+\item	패러미터를 가질 수 있는 시뮬레이션들은 각 쓰레드가 패러미터 공간의 특정
+	영역에 대한 소유권을 각 쓰레드가 갖게 함으로써 종종 간단히 병렬화
+	됩니다.
+	이런 종류의 문제를 위해 설계된 컴퓨팅 프레임웍도
+	있습니다~\cite{BOINC2008}.
+\end{enumerate}
+
+\iffalse
+
 Data ownership partitions a given data structure over the threads
 or CPUs, so that each thread/CPU accesses its subset of the data
 structure without any synchronization overhead whatsoever.
@@ -825,6 +852,22 @@ Data ownership might seem arcane, but it is used very frequently:
 	type of problem~\cite{BOINC2008}.
 \end{enumerate}
 
+\fi
+
+상당한 데이터 공유가 있다면, 이 쓰레드 또는 CPU 들 간의 통신은 상당한 복잡도와
+오버헤드를 초래할 수 있습니다.
+더 나아가, 가장 많이 사용되는 데이터가 단일 CPU 에게 소유된다면, 해당 CPU 는
+``핫스팟'' 이 될 것이고, Figure~\ref{fig:SMPdesign:Data and Skew} 에서 보인
+것과 같은 결과에 이르게 할 수 있습니다.
+하지만, 공유가 필요치 않은 상황에서는 데이터 소유권이 이상적인 성능을 이루며,
+Listing~\ref{lst:SMPdesign:Sequential-Program Hash Table Search} 에 보인 것처럼
+순차적 프로그램만큼이나 코드도 단순해 집니다.
+그런 상황은 종종 ``당황스러울 만큼 병렬적'' 이라고 이야기 되며, 가장 좋은
+상황에서는 앞서 Figure~\ref{fig:SMPdesign:Data Locking} 에서 보인 것과 같은
+상황을 가능하게 합니다.
+
+\iffalse
+
 If there is significant sharing, communication between the threads
 or CPUs can result in significant complexity and overhead.
 Furthermore, if the most-heavily used data happens to be that owned
@@ -837,6 +880,8 @@ Listing~\ref{lst:SMPdesign:Sequential-Program Hash Table Search}.
 Such situations are often referred to as ``embarrassingly
 parallel'', and, in the best case, resemble the situation
 previously shown in Figure~\ref{fig:SMPdesign:Data Locking}.
+
+\fi
 
 % ./test_hash_null.exe 1000 0/100 1 1024 1
 % ./test_hash_null.exe: nmilli: 1000 update/total: 0/100 nelements: 1 nbuckets: 1024 nthreads: 1
@@ -854,12 +899,21 @@ previously shown in Figure~\ref{fig:SMPdesign:Data Locking}.
 % ./test_hash_null.exe: nmilli: 1000 update/total: 0/100 nelements: 1 nbuckets: 1024 nthreads: 2
 % ./test_hash_null.exe: avg = 46.6858  max = 52.6278  min = 45.1761  std = 2.97102
 
+데이터 소유권의 또다른 중요한 예는 데이터 읽기 전용일 때 일어나는데, 모든
+쓰레드가 복사를 통해 그것을 ``소유'' 합니다.
+
+데이터 소유권은 Chapter~\ref{chp:Data Ownership} 에서 더 자세히 다뤄집니다.
+
+\iffalse
+
 Another important instance of data ownership occurs when the data
 is read-only, in which case,
 all threads can ``own'' it via replication.
 
 Data ownership will be presented in more detail in
 Chapter~\ref{chp:Data Ownership}.
+
+\fi
 
 \subsection{Locking Granularity and Performance}
 \label{sec:SMPdesign:Locking Granularity and Performance}
