@@ -918,6 +918,22 @@ Chapter~\ref{chp:Data Ownership}.
 \subsection{Locking Granularity and Performance}
 \label{sec:SMPdesign:Locking Granularity and Performance}
 
+이 섹션은 수학적 동기화 효율성 관점에서 락킹 세밀도와 성능을 바라봅니다.
+수학에 관심이 없는 독자 여러분은 이 섹션을 건너뛰실 수도 있겠습니다.
+
+이는 M/M/1 큐 (queue) 에 기반해 하나의 공유 전역 변수에 대해 동작하는 동기화
+메커니즘의 효율성을 위한 거친 큐잉 (queueing) 모델을 사용합니다.
+M/M/1 큐잉 모델은 지수적으로 분산된 ``inter-arrival rate'' $\lambda$ 와
+지수적으로 분산된 ``service rate'' $\mu$ 에 기반합니다.
+이 inter-arrival rate $\lambda$ 는 이 시스템이 동기화로부터 자유로웠더라면 초당
+수행했을 동기화 오퍼레이션의 평균 횟수로 생각될 수 있는데, 달리 말하면
+$\lambda$ 는 각 동기화가 아닌 일 단위의 오버헤드의 반대 오버헤드입니다.
+예를 들어, 만약 각 일의 단위가 트랜잭션이라면, 그리고 각 트랜잭션이 수행되는데
+1 밀리세컨드를 소요한다면, 동기화 오버헤드를 제외하고, $\lambda$ 는 초당 1,000
+트랜잭션이 됩니다.
+
+\iffalse
+
 This section looks at locking granularity and performance from
 a mathematical synchronization\-/efficiency viewpoint.
 Readers who are uninspired by mathematics might choose to skip
@@ -937,6 +953,29 @@ unit of work.
 For example, if each unit of work was a transaction, and if each transaction
 took one millisecond to process, excluding synchronization overhead,
 then $\lambda$ would be 1,000~transactions per second.
+
+\fi
+
+Service rate $\mu$ 는 비슷하게 정의됩니다만, 각 트랜잭션 오버헤드가 0일 때,
+그리고 CPU 들이 서로의 동기화 오퍼레이션의 완료를 기다려야 한다는 사실을 무시할
+때 이 시스템이 처리할 초당 동기화 오퍼레이션의 평균 수를 의미하는데, 달리
+말하자면 $\mu$ 는 경쟁이 없을 때의 동기화 오버헤드라고 대략 생각될 수 있습니다.
+예를 들어, 각 트랜잭션의 동기화 오퍼레이션이 하나의 어토믹 값 증가 인스트럭션을
+사용하며, 이 컴퓨터 시스템은 각 CPU 에서 5 나노세컨드마다 지역변수의 어토믹 값
+증가가 가능하다고 해 봅시다 (\cref{fig:count:Atomic Increment Scalability on
+x86} 를 참고하세요).\footnote{
+	물론, 같은 공유 변수를 값 증가시키는 8개의 CPU 가 존재한다면, 각 CPU 는
+	자신의 값 증가를 위한 5 나노세컨드를 사용하기 전에 다른 CPU 들이 모두
+	값 증가를 할 수 있도록 최소 35 나노세컨드를 기다려야 합니다.
+	실제로, 그 기다림은 이 변수를 한 CPU 에서 다른 CPU 로 옮겨야 하는
+	필요성 때문에 더 길어질 겁니다.}
+따라서 $\mu$ 의 값은 초당 200,000,000 어토믹 값 증가가 됩니다.
+
+물론, $\lambda$ 의 값은 공유 변수의 값을 증가하는 CPU 의 수가 늘어날수록
+증가되는데, 각 CPU 는 개별적으로 트랜잭션을 처리할 수 있기 때문입니다 (다시
+말하지만, 동기화를 무시한 겁니다):
+
+\iffalse
 
 The service rate $\mu$ is defined similarly, but for the average
 number of synchronization operations per second that the system
@@ -962,9 +1001,22 @@ Of course, the value of $\lambda$ increases as increasing numbers of CPUs
 increment a shared variable because each CPU is capable of processing
 transactions independently (again, ignoring synchronization):
 
+\fi
+
 \begin{equation}
 	\lambda = n \lambda_0
 \end{equation}
+
+여기서 $n$ 은 CPU 의 수이고 $\lambda_0$ 는 단일 CPU 의 트랜잭션 처리
+능력입니다.
+경쟁이 없을 때 단일 CPU 가 단일 트랜잭션을 처리하는데 걸릴 것으로 예상되는
+시간은 $1 / \lambda_0$ 임을 알아 두시기 바랍니다.
+
+CPU 들은 서로가 이 단일 공유 변수의 값을 증가할 기회를 위해 ``줄을 서서
+기다려야'' 하기 때문에, 예상되는 전체 대기 시간을 위해 M/M/1 큐잉 모델 표현을
+사용할 수 있습니다:
+
+\iffalse
 
 Here, $n$ is the number of CPUs and $\lambda_0$ is the transaction-processing
 capability of a single CPU\@.
@@ -975,19 +1027,34 @@ Because the CPUs have to ``wait in line'' behind each other to get their
 chance to increment the single shared variable, we can use the M/M/1
 queueing-model expression for the expected total waiting time:
 
+\fi
+
 \begin{equation}
 	T = \frac{1}{\mu - \lambda}
 \end{equation}
 
+앞의 $\lambda$ 값을 대입해 보면:
+
+\iffalse
+
 Substituting the above value of $\lambda$:
+
+\fi
 
 \begin{equation}
 	T = \frac{1}{\mu - n \lambda_0}
 \end{equation}
 
+이제, 효율성은 동기화가 있을 때 트랜잭션 하나를 처리하는데 드는 시간 ($T + 1 /
+\lambda_0$) 대비 동기화가 없을 때의 그것의 ($1 / \lambda_0$) 비율입니다:
+
+\iffalse
+
 Now, the efficiency is just the ratio of the time required to process
 a transaction in absence of synchronization ($1 / \lambda_0$)
 to the time required including synchronization ($T + 1 / \lambda_0$):
+
+\fi
 
 \begin{equation}
 	e = \frac{1 / \lambda_0}{T + 1 / \lambda_0}
