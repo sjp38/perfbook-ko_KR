@@ -1060,16 +1060,30 @@ to the time required including synchronization ($T + 1 / \lambda_0$):
 	e = \frac{1 / \lambda_0}{T + 1 / \lambda_0}
 \end{equation}
 
+앞의 $T$ 값을 대입하고 간략화 하면:
+
+\iffalse
+
 Substituting the above value for $T$ and simplifying:
+
+\fi
 
 \begin{equation}
 	e = \frac{\frac{\mu}{\lambda_0} - n}{\frac{\mu}{\lambda_0} - (n - 1)}
 \end{equation}
 
+하지만 $\mu / \lambda_0$ 의 값은 동기화 오버헤드 자체 (컨텐션 부재시) 대비
+트래잭션 처리에 걸리는 시간 (동기화 오버헤드 부재시) 의 비율입니다.
+우리가 이 비율을 $f$ 라고 부르면:
+
+\iffalse
+
 But the value of $\mu / \lambda_0$ is just the ratio of the time required
 to process the transaction (absent synchronization overhead) to that of
 the synchronization overhead itself (absent contention).
 If we call this ratio $f$, we have:
+
+\fi
 
 \begin{equation}
 	e = \frac{f - n}{f - (n - 1)}
@@ -1081,6 +1095,22 @@ If we call this ratio $f$, we have:
 \caption{Synchronization Efficiency}
 \label{fig:SMPdesign:Synchronization Efficiency}
 \end{figure}
+
+Figure~\ref{fig:SMPdesign:Synchronization Efficiency} 는 동기화 효율성 $e$ 를
+오버헤드 비율 $f$ 의 일부 값에 대한 CPU/쓰레드 갯수 $n$ 의 함수로 그려냅니다.
+예를 들어, 5 나노세컨드 어토믹 값 증가 연산을 다시 생각해 보면, $f=10$ 선은 매
+50 나노세컨드마다 각 CPU 가 어토믹 값 증가를 하는 상황에 연관되며, $f=100$ 선은
+각 CPU 가 매 500 나노세컨드마다 어토믹 값 증가를 하는 상황에 연관되어서,
+결국은 수백개의 (어쩌면 수천개의) 인스트럭션들에 연관되게 됩니다.
+각 선이 증가하는 CPU 또는 쓰레드 갯수에 의해 빠르게 떨어지는 것을 보면, 우린
+단일 전역 공유 변수에 대한 어토믹 값 조정에 기반한 동기화 메커니즘은 현재의
+상용 하드웨어 위에서 많이 사용될 경우 잘 확장되지 못할 것이라고 결론내릴 수
+있습니다.
+이는 Chapter~\ref{chp:Counting} 에서 이야기 했던 병렬 카운팅 알고리즘을 이끌게
+하는 원동력에 대한 대략적 수학적 묘사입니다.
+여러분의 실제 세계는 다를 수 있습니다.
+
+\iffalse
 
 Figure~\ref{fig:SMPdesign:Synchronization Efficiency} plots the synchronization
 efficiency $e$ as a function of the number of CPUs/threads $n$ for
@@ -1100,6 +1130,20 @@ to the parallel counting algorithms that were discussed in
 Chapter~\ref{chp:Counting}.
 Your real-world mileage may differ.
 
+\fi
+
+그러나, 효율성의 개념은 유용한데, 동기화가 적거나 정형적이지 않을 때 조차도
+그렇습니다.
+예를 들어 한 행렬의 행들이 다른 행렬의 열들과 곱해져 (``dot 연산을 통해'')
+세번째 행렬의 각 항을 만들게 되는 행렬 곱셈을 생각해 봅시다.
+이 오퍼레이션들은 서로 충돌하지 않으므로, 첫번째 행렬의 행들을 쓰레드들로
+분리시키고, 각 쓰레드는 결과 행렬의 각 행을 계산하게 하는 것이 가능합니다.
+따라서 이 쓰레드들은 동기화 오버헤드건 뭐건 없이 완전히 개별적으로
+\path{matmul.c} 처럼 동작할 수 있습니다.
+따라서 어떤 사람들은 완전한 효율성인 1.0을 생각할 겁니다.
+
+\iffalse
+
 Nevertheless, the concept of efficiency is useful, and even in cases
 having little or no formal synchronization.
 Consider for example a matrix multiply, in which the columns of one
@@ -1113,12 +1157,34 @@ synchronization overhead whatsoever, as is done in
 \path{matmul.c}.
 One might therefore expect a perfect efficiency of 1.0.
 
+\fi
+
 \begin{figure}[tbp]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{SMPdesign/matmuleff}}
 \caption{Matrix Multiply Efficiency}
 \label{fig:SMPdesign:Matrix Multiply Efficiency}
 \end{figure}
+
+하지만,
+Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency}
+는 다른 이야기를 하는데, 특히 64-by-64 행렬 곱셈에서는 0.3 이상의 효율성을 결코
+얻지 못하는데, 단일 쓰레드로 동작할 때조차 그러하며, 더 많은 쓰레드가 사용되면
+효율성이 떨어집니다.\footnote{
+	\cref{fig:SMPdesign:Synchronization Efficiency} 에서의 부드러운 선과
+	대조적인
+	\cref{fig:SMPdesign:Matrix Multiply Efficiency} 의 넓은 에러바와
+	요동치는 선들은 그 실제 세계의 특성에 대한 증거를 보입니다.}
+128-by-128 행렬은 좀 낫습니다만, 여전히 추가되는 쓰레드에 맞춰 훨씬 나은 성능을
+보이지는 못합니다.
+256-by-256 행렬은 제법 잘 확장됩니다만, 약간의 CPU 들까지만 그렇습니다.
+512-by-512 행렬 곱셈의 효율성은 10개 쓰레드까지만 1.0 보다 좀 낮게 측정되며,
+심지어 1024-by-1024 행렬 곱셈도 수십개의 쓰레드가 사용되었을 때에는 확연히
+흔들립니다.
+그러나, 이 그림은 batching 의 성능과 확장성 이익을 확연히 보이고 있습니다:
+여러분이 동기화 오버헤드를 일으켜야만 한다면, 여러분의 돈의 가치를 얻을 겁니다.
+
+\iffalse
 
 However,
 Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency}
@@ -1141,20 +1207,50 @@ Nevertheless, this figure clearly demonstrates the performance and
 scalability benefits of batching: If you must incur synchronization
 overhead, you may as well get your money's worth.
 
+\fi
+
 \QuickQuiz{
+	어떻게 싱글쓰레드 기반 64-by-64 행렬 곱셈이 1.0 보다 낮은 효율성을 가질
+	수 있죠?
+	Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency}
+	의 모든 선들은 하나의 쓰레드만 사용했을 때에는 1.0의 효율성을 보여야
+	하는 거 아닌가요?
+
+	\iffalse
+
 	How can a single-threaded 64-by-64 matrix multiple possibly
 	have an efficiency of less than 1.0?
 	Shouldn't all of the traces in
 	Figure~\ref{fig:SMPdesign:Matrix Multiply Efficiency}
 	have efficiency of exactly 1.0 when running on one thread?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\path{matmul.c} 프로그램은 지정된 수의 작업 쓰레드를 만드는데, 하나의
+	작업 쓰레드의 경우에조차도 쓰레드 생성 오버헤드를 일으킵니다.
+	단일 작업 쓰레드의 경우를 위한 쓰레드 생성 오버헤드를 제거하는 데
+	필요한 변경 작업은 독자 여러분의 연습문제로 남겨둡니다.
+
+	\iffalse
+
 	The \path{matmul.c} program creates the specified number of
 	worker threads, so even the single-worker-thread case incurs
 	thread-creation overhead.
 	Making the changes required to optimize away thread-creation
 	overhead in the single-worker-thread case is left as an
 	exercise to the reader.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 비효율성을 놓고 보면,
+Section~\ref{sec:SMPdesign:Data Locking} 에서 이야기된 데이터 락킹이나 다음
+섹션에서 이야기될 병렬-fastpath 접근법과 같은 더 확장 가능한 접근법을
+알아보는게 가치있을 겁니다.
+
+\iffalse
 
 Given these inefficiencies,
 it is worthwhile to look into more-scalable approaches
@@ -1162,11 +1258,46 @@ such as the data locking described in
 Section~\ref{sec:SMPdesign:Data Locking}
 or the parallel-fastpath approach discussed in the next section.
 
+\fi
+
 \QuickQuiz{
+	데이터 병렬 기법이 어떻게 행렬 곱셈을 도울 수 있죠?
+	이건 \emph{이미} 데이터 병렬이라구요!!!
+
+	\iffalse
+
 	How are data-parallel techniques going to help with matrix
 	multiply?
 	It is \emph{already} data parallel!!!
+
+	\fi
+
 }\QuickQuizAnswer{
+	주의를 기울여주신 것에 감사합니다!
+	이 예제는 데이터 병렬성이 매우 좋은 것일 수 있긴 하지만, 그것이 모든
+	비효율성의 원인을 자동으로 사라지게 하는 어떤 마법 지팡이는 아니라는
+	것을 보이기 위함입니다.
+	완전한 성능으로의 선형적 확장은 ``오직'' 64 쓰레드에 대해서라도 설계와
+	구현의 모든 단계에 주의를 필요로 합니다.
+
+	특히, 여러분은 각 조각의 크기에 주의를 기울여야 합니다.
+	예를 들어, 여러분이 64-by-64 행렬 곱셈을 64 쓰레드로 쪼갠다면, 각
+	쓰레드는 오직 64개의 부동소수점 곱셈만을 합니다.
+	부동소수점 곱셈의 비용은 쓰레드 생성의 오버헤드에 비해 아주 작으며,
+	캐쉬 미스 오버헤드 또한 이론적으로 완벽한 확장성을 망치는 (그리고 이
+	선을 그렇게나 흔들리게 하는) 역할을 합니다.
+	448 하드웨어 쓰레드의 완전한 사용의 경우에는 좋은 확장성을 얻기 위해
+	수십만개의 열과 행을 갖는 행렬을 필요로 할텐데, 그 지점부터는 GPGPU 가
+	상당히 매력적인 선택이 되는데, 특히 가격/성능의 관점에서 그렇습니다.
+
+	여러분이 다양한 입력을 받는 병렬 프로그램을 가지고 있다면, 입력의
+	크기가 병렬화를 하기에 가치가 있기엔 너무 작지 않은지에 대한 체크를
+	항상 포함시키십시오.
+	그리고 병렬화가 도움이 되지 않을 때에는, 쓰레드를 만들기 위한
+	오버헤드를 일으키는건 도움이 되지 않습니다.
+
+	\iffalse
+
 	I am glad that you are paying attention!
 	This example serves to show that although data parallelism can
 	be a very good thing, it is not some magic wand that automatically
@@ -1192,6 +1323,8 @@ or the parallel-fastpath approach discussed in the next section.
 	be worth parallelizing.
 	And when it is not helpful to parallelize, it is not helpful
 	to incur the overhead required to spawn a thread, now is it?
+
+	\fi
 }\QuickQuizEnd
 
 \section{Parallel Fastpath}
