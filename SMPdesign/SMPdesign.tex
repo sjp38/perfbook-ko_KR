@@ -1508,6 +1508,18 @@ Chapter~\ref{chp:Locking}.
 \subsection{Hierarchical Locking}
 \label{sec:SMPdesign:Hierarchical Locking}
 
+계층적 (hierarchical) 락킹의 아이디어는 어떤 미세 단위 락을 획득할지 선택하는
+동안만 거대 단위 락을 갖자는 것입니다.
+Listing~\ref{lst:SMPdesign:Hierarchical-Locking Hash Table Search}
+은 우리의 해쉬 테이블 탐색이 어떻게 계층적 락킹을 적용하도록 될 수 있는지
+보입니다만, 또한 이 방법의 큰 약점도 보입니다:
+우린 두번째 락을 획득하기 위한 오버헤드를 지불했습니다만, 우린 이를 짧은
+시간동안만 쥐고 있습니다.
+이 경우, 더욱 간단한 데이터 락킹 접근법은 더 간단할 것이고 성능도 높을 가능성이
+큽니다.
+
+\iffalse
+
 The idea behind hierarchical locking is to have a coarse-grained lock
 that is held only long enough to work out which fine-grained lock
 to acquire.
@@ -1518,6 +1530,8 @@ we have paid the overhead of acquiring a second lock, but we only
 hold it for a short time.
 In this case, the simpler data-locking approach would be simpler
 and likely perform better.
+
+\fi
 
 \begin{listing}[tb]
 \begin{fcvlabel}[ln:SMPdesign:Hierarchical-Locking Hash Table Search]
@@ -1568,8 +1582,24 @@ int hash_search(struct hash_table *h, long key)
 \end{listing}
 
 \QuickQuiz{
+	어떤 경우에 계층적 락킹이 잘 동작하나요?
+
+	\iffalse
+
 	In what situation would hierarchical locking work well?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Listing~\ref{lst:SMPdesign:Hierarchical-Locking Hash Table Search} 의
+	line~\ref{ln:SMPdesign:Hierarchical-Locking Hash Table Search:retval}
+	에서의 비교가 훨씬 무거운 오퍼레이션으로 대체되었다면,
+	\co{bp->bucket_lock} 의 해제는 \emph{어쩌면} \co{cur->node_lock} 의
+	추가적인 획득과 해제의 오버헤드를 넘어설 정도로 락 컨텐션을 줄였을 수도
+	있습니다.
+
+	\iffalse
+
 	If the comparison on
         line~\ref{ln:SMPdesign:Hierarchical-Locking Hash Table Search:retval} of
 	Listing~\ref{lst:SMPdesign:Hierarchical-Locking Hash Table Search}
@@ -1577,6 +1607,9 @@ int hash_search(struct hash_table *h, long key)
 	then releasing \co{bp->bucket_lock} \emph{might} reduce lock
 	contention enough to outweigh the overhead of the extra
 	acquisition and release of \co{cur->node_lock}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Resource Allocator Caches}
