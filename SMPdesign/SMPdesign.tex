@@ -1424,6 +1424,19 @@ as depicted in Figure~\ref{fig:SMPdesign:Parallel-Fastpath Design Patterns}:
 \subsection{Reader/Writer Locking}
 \label{sec:SMPdesign:Reader/Writer Locking}
 
+동기화 오버헤드가 크지 않다면 (예를 들어, 프로그램이 큰 크리티컬 섹션과 함께
+거친 단위의 병렬성을 사용하고 있다면), 그리고 그 크리티컬 섹션의 작은 부분만이
+데이터를 수정한다면, 여러 읽기 쓰레드가 병렬로 수행될 수 있게 하는 것은
+확장성을 크게 향상시킬 수 있습니다.
+쓰기 쓰레드는 읽기 쓰레드와 서로들을 모두 배제시켜야 합니다.
+Reader-writer 락킹의 여러 구현이 존재하는데,
+Section~\ref{sec:toolsoftrade:POSIX Reader-Writer Locking} 에서 설명된 POSIX
+구현이 포함됩니다.
+Listing~\ref{lst:SMPdesign:Reader-Writer-Locking Hash Table Search}
+은 해쉬 탐색이 reader-writer 락킹을 이용해 어떻게 구현될 수 있는지 보입니다.
+
+\iffalse
+
 If synchronization overhead is negligible (for example, if the program
 uses coarse-grained parallelism with large critical sections), and if
 only a small fraction of the critical sections modify data, then allowing
@@ -1434,6 +1447,8 @@ the POSIX implementation described in
 Section~\ref{sec:toolsoftrade:POSIX Reader-Writer Locking}.
 Listing~\ref{lst:SMPdesign:Reader-Writer-Locking Hash Table Search}
 shows how the hash search might be implemented using reader-writer locking.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{VerbatimL}[commandchars=\\\[\]]
@@ -1473,12 +1488,22 @@ int hash_search(struct hash_table *h, long key)
 \label{lst:SMPdesign:Reader-Writer-Locking Hash Table Search}
 \end{listing}
 
+Reader/writer 락킹은 비대칭 락킹의 간단한 한가지 예입니다.
+Snaman~\cite{Snaman87} 은 여러 클러스터 시스템에서 사용된 화려한 여섯개의
+비대칭 락킹 설계모드를 설명합니다.
+일반적인 락킹과 reader-writer 락킹이
+Chapter~\ref{chp:Locking} 에서 자세하게 설명되어 있습니다.
+
+\iffalse
+
 Reader/writer locking is a simple instance of asymmetric locking.
 Snaman~\cite{Snaman87} describes a more ornate six-mode
 asymmetric locking design used in several clustered systems.
 Locking in general and reader-writer locking in particular is described
 extensively in
 Chapter~\ref{chp:Locking}.
+
+\fi
 
 \subsection{Hierarchical Locking}
 \label{sec:SMPdesign:Hierarchical Locking}
