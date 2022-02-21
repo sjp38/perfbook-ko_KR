@@ -1794,6 +1794,28 @@ smaller than the number of non-\co{NULL} pointers.
 \subsubsection{Allocation Function}
 
 \begin{fcvref}[ln:SMPdesign:smpalloc:alloc]
+Listing~\ref{lst:SMPdesign:Allocator-Cache Allocator Function} 에 할당 함수
+\co{memblock_alloc()} 이 보일 겁니다.
+라인~\lnref{pick} 은 현재 쓰레드의 쓰레드별 풀을 집고, 라인~\lnref{chk:empty}
+는 그게 비어 있는지 검사합니다.
+
+만약 그렇다면, \clnrefrange{ack}{rel} 은 글로벌 풀로부터 라인~\lnref{ack} 에서
+얻어지고 라인~\lnref{rel} 에서 놓아지는 스핀락 하에 글로벌 풀로부터 쓰레드별
+풀을 다시 채웁니다.
+\Clnrefrange{loop:b}{loop:e} 는 블록들을 글로벌 풀러부터 쓰레드별 풀로 이 로컬
+풀이 그 목표 크기 (반) 까지 도달하거나 글로벌 풀이 비어버릴 때까지 옮기며
+라인~\lnref{set} 은 이 쓰레드별 풀의 카운트를 옳은 값으로 설정합니다.
+
+어떤 경우든, 라인~\lnref{chk:notempty} 는 이 쓰레드별 풀이 여전히 비어있는지
+검사하고, 그렇지 않다면 \clnrefrange{rem:b}{rem:e} 는 블록 하나를 제거하고
+그것을 리턴합니다.
+그렇지 않다면, 라인~\lnref{ret:NULL} 은 메모리가 남아있지 않다는 슬픈 이야기를
+전합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:SMPdesign:smpalloc:alloc]
 The allocation function \co{memblock_alloc()} may be seen in
 Listing~\ref{lst:SMPdesign:Allocator-Cache Allocator Function}.
 Line~\lnref{pick} picks up the current thread's per-thread pool,
@@ -1813,6 +1835,8 @@ pool still being
 empty, and if not, \clnrefrange{rem:b}{rem:e} remove a block and return it.
 Otherwise, line~\lnref{ret:NULL} tells the sad tale of memory exhaustion.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/SMPdesign/smpalloc@alloc.fcv}
