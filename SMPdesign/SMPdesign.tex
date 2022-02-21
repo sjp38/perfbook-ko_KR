@@ -1847,6 +1847,25 @@ Otherwise, line~\lnref{ret:NULL} tells the sad tale of memory exhaustion.
 \subsubsection{Free Function}
 
 \begin{fcvref}[ln:SMPdesign:smpalloc:free]
+Listing~\ref{lst:SMPdesign:Allocator-Cache Free Function} 은 메모리 블록 해제
+함수를 보입니다.
+라인~\lnref{get} 은 이 쓰레드의 풀로의 포인터를 가져오고, 라인~\lnref{chk:full}
+은 이 쓰레드별 풀이 가득 찼는지 검사합니다.
+
+만약 그렇다면, \clnrefrange{acq}{empty:e} 는 이 쓰레드별 풀의 절반을 글로벌
+풀로 라인~\lnref{acq} 와~\lnref{rel} 에서 스핀락을 획득하고 해제하면서 넘겨서
+비웁니다.
+\Clnrefrange{loop:b}{loop:e} 는 블록들을 로컬 풀에서 글로벌 풀로 옮기는
+반복문을 구현하며, 라인~\lnref{set} 은 이 쓰레드별 풀의 카운트를 올바른 값으로
+설정합니다.
+
+어떤 경우든, 라인~\lnref{place} 는 새로 해제된 블록을 쓰레드별 풀에
+위치시킵니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:SMPdesign:smpalloc:free]
 Listing~\ref{lst:SMPdesign:Allocator-Cache Free Function} shows
 the memory-block free function.
 Line~\lnref{get} gets a pointer to this thread's pool, and
@@ -1864,6 +1883,8 @@ In either case, line~\lnref{place} then places the newly freed block into the
 per-thread pool.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/SMPdesign/smpalloc@free.fcv}
 \caption{Allocator-Cache Free Function}
@@ -1871,16 +1892,36 @@ per-thread pool.
 \end{listing}
 
 \QuickQuiz{
+	이 리소스 할당자 설계는
+	Section~\ref{sec:count:Approximate Limit Counters} 에서 이야기한 대략적
+	리미트 카운터의 그것과 닮지 않았나요?
+
+	\iffalse
+
 	Doesn't this resource-allocator design resemble that of
 	the approximate limit counters covered in
 	Section~\ref{sec:count:Approximate Limit Counters}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그렇습니다!
+	우린 메모리를 할당하고 해제하는 것을 생각하고 있었습니다만,
+	Section~\ref{sec:count:Approximate Limit Counters}
+	의 알고리즘은 ``카운트'' 를 할당하고 해제하는 매우 비슷한 일을 하고
+	있었습니다.
+
+	\iffalse
+
 	Indeed it does!
 	We are used to thinking of allocating and freeing memory,
 	but the algorithms in
 	Section~\ref{sec:count:Approximate Limit Counters}
 	are taking very similar actions to allocate and free
 	``count''.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Performance}
