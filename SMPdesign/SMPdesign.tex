@@ -2015,19 +2015,56 @@ this book.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	Figure~\ref{fig:SMPdesign:Allocator Cache Performance} 에서, 수행
+	길이를 증가시킴에 따라 성능이 올라감에는 세개의 샘플 그룹에 의하는
+	패턴이 있는데 예를 들면 수행 길이 10, 11, 12가 그렇습니다.
+	왜죠?
+
+	\iffalse
+
 	In Figure~\ref{fig:SMPdesign:Allocator Cache Performance},
 	there is a pattern of performance rising with increasing run
 	length in groups of three samples, for example, for run lengths
 	10, 11, and 12.
 	Why?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이는 CPU 별 타겟 값이 셋이기 때문입니다.
+	수행 길이 12 의 경우는 글로벌 풀 락을 두번 획득해야만 하는 반면, 수행
+	길이 13 의 경우는 이 글로벌 풀 락을 세번 획득해야만 합니다.
+
+	\iffalse
+
 	This is due to the per-CPU target value being three.
 	A run length of 12 must acquire the global-pool lock twice,
 	while a run length of 13 must acquire the global-pool lock
 	three times.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	할당 실패는 두개 쓰레드 테스트에서 수행 길이가 19 이상일 경우에
+	관측되었습니다.
+	글로벌 풀의 크기가 40이고 쓰레드별 타겟 풀 크기 $s$ 가 셋이고, 쓰레드
+	수 $n$ 이 2 이며, 이 쓰레드별 풀이 초기에는 어떤 메모리도 사용되지 않고
+	있으므로 비어있음을 놓고 생각해 보면, 실패가 일어날 수 있는 최소한의
+	할당 수행 길이 $m$ 은 무엇일까요?
+	(각 쓰레드는 반복적으로 $m$ 블록의 메모리를 할당하고, 이어서 $m$ 블록의
+	메모리를 해제함을 기억하시기 바랍니다.)
+	달리 생각하면, $n$ 쓰레드가 풀 크기 $s$ 를 가지고 있으며 각 쓰레드가
+	반복적으로 $m$ 블록의 메모리를 할당받고 이어서 $m$ 블록의 메모리를
+	해제함을 고려할 때, 글로벌 풀의 크기는 얼마나 커야 할까요?
+	\emph{Note:} 정확한 답을 얻기 위해선 여러분이 \path{smpalloc.c} 소스
+	코드를 들여다 보고 그걸 한 단계씩 수행해 보기도 할 것을 필요로 할
+	겁니다.
+	경고 했어요!
+
+	\iffalse
+
 	Allocation failures were observed in the two-thread
 	tests at run lengths of 19 and greater.
 	Given the global-pool size of 40 and the per-thread target
@@ -2045,6 +2082,9 @@ this book.
 	examine the \path{smpalloc.c} source code, and very likely
 	single-step it as well.
 	You have been warned!
+
+	\fi
+
 }\QuickQuizAnswerE{
 	This solution is adapted from one put forward by Alexey Roytman.
 	It is based on the following definitions:
