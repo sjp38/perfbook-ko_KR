@@ -1926,6 +1926,26 @@ per-thread pool.
 
 \subsubsection{Performance}
 
+대략적인 성능 결과\footnote{
+	이 데이터는 통계쩍으로 의미있는 방식으로 모아지지 않았으며, 따라서 많은
+	회의적으로 의심 섞인 시선으로 보여져야 합니다.
+	좋은 데이터 수집과 축소 방법은 Chapter~\ref{chp:Validation} 에서 이야기
+	됩니다.
+	그러나, 반복된 수행이 비슷한 결과를 냈으며, 이 결과들은 비슷한
+	알고리즘의 보다 주의깊은 평가 결과와 일치합니다.}
+가 Figure~\ref{fig:SMPdesign:Allocator Cache Performance} 에 보여져 있는데, 이
+결과는 1\,GHz (4300 bogomips per CPU) 의 속도로 각 CPU 의 캐쉬에 여섯 블락이
+허용된 듀얼코어 인텔 x86 에서 수행되었습니다.
+이 마이크로 벤치마크에서, 각 쓰레드는 반복적으로 한 그룹의 블락을 할당하고 모든
+블록을 해제하며, 이 그룹에 있는 블록의 갯수는 x 축에 표시된 ``할당 수행 길이''
+가 됩니다.
+Y 축은 마이크로세컨드당 성공한 할당/해제 쌍의 수를 보입니다---실패한 할당은
+세어지지 않습니다.
+``X'' 는 두개 쓰레드 수행에서의 것이며, ``+'' 는 단일 쓰레드 수행에서의
+것입니다.
+
+\iffalse
+
 Rough performance results\footnote{
 	This data was not collected in a statistically meaningful way,
 	and therefore should be viewed with great skepticism and suspicion.
@@ -1947,12 +1967,31 @@ microsecond---failed allocations are not counted.
 The ``X''s are from a two-thread run, while the ``+''s are from a
 single-threaded run.
 
+\fi
+
 \begin{figure}[tbp]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{SMPdesign/smpalloc}}
 \caption{Allocator Cache Performance}
 \label{fig:SMPdesign:Allocator Cache Performance}
 \end{figure}
+
+수행 길이 여섯까지는 선형적으로 확장되며 대단한 성능을 제공하지만, 여섯을 넘는
+수행 길이부터는 낮은 성능을 보이며 거의 항상 \emph{음의} 확장을 보임을 보시기
+바랍니다.
+따라서 이는 \co{TARGET_POOL_SIZE} 를 충분히 크게 잡는게 중요함을 보이는데, 실제
+상황에서는 다행히도 그러기가 상당히 쉬우며~\cite{McKenney01e}, 특히 오늘날의 큰
+메모리에선 그렇습니다.
+예를 들어, 대부분의 시스템에서 \co{TARGET_POOL_SIZE} 을 100으로 설정하는건
+상당히 합리적인데, 이는 할당과 해제가 쓰레드별 풀에서 최소한 99\,\% 의 시간동안
+처리될 것을 보장합니다.
+
+그림에서 볼 수 있듯이, 일반적인 경우의 데이터 소유권이 허용되는 상황은
+(여섯까지의 수행 길이) 락이 획득되어야만 하는 경우에 비해 상당히 향상된 성능을
+제공합니다.
+일반적인 경우에 동기화를 피하는 것은 이 책의 반복적인 테마가 될 겁니다.
+
+\iffalse
 
 Note that run lengths up to six scale linearly and give excellent performance,
 while run lengths greater than six show poor performance and almost always
@@ -1971,6 +2010,8 @@ data-ownership applies (run lengths up to six) provide greatly improved
 performance compared to the cases where locks must be acquired.
 Avoiding synchronization in the common case will be a recurring theme through
 this book.
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
