@@ -2086,6 +2086,21 @@ this book.
 	\fi
 
 }\QuickQuizAnswerE{
+	이 해결책은 Alexey Roytman 이 제공한 것에서 채택되었습니다.
+	이는 다음의 정의들에 기반합니다:
+
+	\begin{description}
+	\item[$g$]	전역적으로 사용 가능한 블록들의 갯수.
+	\item[$i$]	초기화 쓰레드의 쓰레드별 풀에 남아있는 블록의 갯수.
+			(이게 여러분이 코드를 봐야 하는 이유 중 하나입니다!)
+	\item[$m$]	할당/해제 수행 길이.
+	\item[$n$]	초기화 쓰레드를 제외한 쓰레드들의 수.
+	\item[$p$]	실제로 할당된 블록들과 쓰레드별 풀에 남아있는 블록들을
+			포함해 쓰레드별 최대 블록 소비.
+	\end{description}
+
+	\iffalse
+
 	This solution is adapted from one put forward by Alexey Roytman.
 	It is based on the following definitions:
 
@@ -2101,15 +2116,30 @@ this book.
 			remaining in the per-thread pool.
 	\end{description}
 
+	\fi
+
+	$g$, $m$, 그리고 $n$ 의 값은 주어졌습니다.  $p$ 의 값은 $m$ 을 다음 $s$
+	의 배까지 올림되는데, 다음과 같습니다:
+
+	\iffalse
+
 	The values $g$, $m$, and $n$ are given.  The value for $p$ is
 	$m$ rounded up to the next multiple of $s$, as follows:
+
+	\fi
 
 	\begin{equation}
 		p = s \left \lceil \frac{m}{s} \right \rceil
 	\label{sec:SMPdesign:p}
 	\end{equation}
 
+	$i$ 의 값은 다음과 같습니다:
+
+	\iffalse
+
 	The value for $i$ is as follows:
+
+	\fi
 
 	\begin{equation}
 		i = \left \{
@@ -2127,6 +2157,26 @@ this book.
 	\caption{Allocator Cache Run-Length Analysis}
 	\label{fig:SMPdesign:Allocator Cache Run-Length Analysis}
 	\end{figure}
+
+	이 크기들 간의 관계가
+	Figure~\ref{fig:SMPdesign:Allocator Cache Run-Length Analysis}
+	에 보여져 있습니다.
+	글로벌 풀은 이 그림의 꼭대기에 보여져 있으며, ``나머지'' 초기화
+	쓰레드의 쓰레드별 풀과 쓰레드별 할당은 왼쪽 한쌍의 박스들로 그려져
+	있습니다.
+	이 초기화 쓰레드는 할당한 블록이 없습니다만, 자신의 쓰레드별 풀에
+	남겨진 $i$ 블록들을 가지고 있습니다.
+	오른쪽 두쌍의 상자는 최대로 가능한 수의 블록을 잡아두고 있는 쓰레드들의
+	쓰레드별 풀들과 쓰레드별 할당들인데, 왼쪽으로부터 두번째 한쌍의
+	상자들은 현재 할당을 시도하고 있는 쓰레드를 나타냅니다.
+
+	전체 블록들의 갯수는 $g$ 이며, 쓰레드별 할당과 쓰레드별 풀을 더하면,
+	우리는 이 글로벌 풀이 $g-i-p(n-1)$ 블록을 포함하고 있음을 알 수
+	있습니다.
+	이 할당 쓰레드가 성공하게 되려면, 글로벌 풀에 최소 $m$ 블록들이 있어야
+	하는데, 달리 말하면:
+
+	\iffalse
 
 	The relationships between these quantities are shown in
 	Figure~\ref{fig:SMPdesign:Allocator Cache Run-Length Analysis}.
@@ -2146,10 +2196,29 @@ this book.
 	If the allocating thread is to be successful, it needs at least
 	$m$ blocks in the global pool, in other words:
 
+	\fi
+
 	\begin{equation}
 		g - i - p(n - 1) \ge m
 	\label{sec:SMPdesign:g-vs-m}
 	\end{equation}
+
+	이 질문에서 $g=40$, $s=3$, 그리고 $n=2$ 입니다.
+	식~\ref{sec:SMPdesign:i} 은 $i=4$ 를 제공하고, and
+	식~\ref{sec:SMPdesign:p} 은 $m=18$ 을 위해 $p=18$ 이라는 결과를, $m=19$
+	를 위해 $p=21$ 이라는 결과를 제공합니다.
+	이를 식~\ref{sec:SMPdesign:g-vs-m} 에 끼워넣으면, $m=18$ 은 넘쳐나지만,
+	$m=19$ 는 잘 될 수 있음을 보입니다.
+
+	$i$ 의 존재는 버그로 여겨질 수도 있습니다.
+	어쨌건, 초기화 쓰레드의 캐쉬에 남아있기만을 위해서 왜 메모리를
+	할당하겠습니까?
+	이를 고치는 한가지 방법은 현재 쓰레드의 풀의 것을 글로벌 풀로
+	비워버리는 \co{memblock_flush()} 함수를 제공하는 것일 겁니다.
+	그러면 이 초기화 쓰레드는 모든 블록을 해제한 후에 이 함수를 호출할 수
+	있을 겁니다.
+
+	\iffalse
 
 	The question has $g=40$, $s=3$, and $n=2$.
 	Equation~\ref{sec:SMPdesign:i} gives $i=4$, and
@@ -2167,6 +2236,9 @@ this book.
 	global pool.
 	The initialization thread could then invoke this function
 	after freeing all of the blocks.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
