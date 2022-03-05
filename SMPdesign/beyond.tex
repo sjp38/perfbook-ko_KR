@@ -9,6 +9,21 @@
 \epigraph{It is all right to aim high if you have plenty of ammunition.}
 	 {\emph{Hawley R. Everhart}}
 
+이 챕터는 선형적으로 확장하는 간단한 병렬 프로그램을 설계하는데에 데이터
+파티셔닝이 어떻게 사용될 수 있는지 알아보았습니다.
+Section~\ref{sec:SMPdesign:Data Ownership} 은 데이터 복사의 확률에 대한 힌트를
+제공했는데, 이는 Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 큰 효과를
+발휘할 겁니다.
+
+파티셔닝과 복사를 활용하는 것의 주요 목표는 선형적인 속도 향상을 얻는 것으로,
+달리 말하면 필요한 전체 일의 양이 CPU 또는 쓰레드의 수가 증가함에 따라 크게
+증가하지 않음을 보장하는 것입니다.
+파티셔닝과, 또는 복사를 통해 해결될 수 있으며 결과적으로 선형적 속도향상을 이룰
+수 있는 문제는 \emph{당황스럽게 병렬적} 입니다.
+하지만 우린 이를 더 잘 할 수 있을까요?
+
+\iffalse
+
 This chapter has discussed how data partitioning can be used to design
 simple linearly scalable parallel programs.
 Section~\ref{sec:SMPdesign:Data Ownership} hinted at the possibilities
@@ -23,6 +38,20 @@ A problem that can be solved via partitioning and/or replication,
 resulting in linear speedups, is \emph{embarrassingly parallel}.
 But can we do better?
 
+\fi
+
+이 질문에 답하기 위해, 미궁과 미로 문제를 살펴 봅시다.
+물론, 미궁과 미로는 수백만년동안 유혹의 대상이었으며~\cite{WikipediaLabyrinth},
+따라서 이것들이 생체 컴퓨터~\cite{AndrewAdamatzky2011SlimeMold},
+GPGPU~\cite{ChristerEricson2008GPUMaze}, 심지어 분산
+하드웨어~\cite{MIT:TRMag:MemristorMazes} 를 포함한 컴퓨터들을 통해 생성되고
+풀이되었음은 놀랄 일이 아닐 겁니다.
+미로에 대한 병렬 풀이가 대학에서의 수업에서의 프로젝트로 가끔 사용되곤
+하며~\cite{ETHZurich:FS2011maze,UMD:CMSC433maze} 병렬 프로그래밍 프레임웍의
+장점을 시연하는 장치로도 사용됩니다~\cite{RonFosner2010maze}.
+
+\iffalse
+
 To answer this question, let us examine the solution of
 labyrinths and mazes.
 Of course, labyrinths and mazes have been objects of fascination for
@@ -36,6 +65,28 @@ Parallel solution of mazes is sometimes used as a class project in
 universities~\cite{ETHZurich:FS2011maze,UMD:CMSC433maze} and
 as a vehicle to demonstrate the benefits of parallel-programming
 frameworks~\cite{RonFosner2010maze}.
+
+\fi
+
+흔한 조언은 parallel work-queue 알고리즘
+(PWQ)~\cite{ETHZurich:FS2011maze,RonFosner2010maze} 을 사용하라는 것입니다.
+이 섹션은 PWQ 를 순차적 알고리즘 (SEQ) 과, 그리고 대안적인 병렬 알고리즘과
+무작위적으로 생성된 사각형 미로를 풀어보면서 비교함으로써 이 조언을 평가해
+보겠습니다.
+Section~\ref{sec:SMPdesign:Work-Queue Parallel Maze Solver} 은 PWQ 에 대해
+논하고,
+Section~\ref{sec:SMPdesign:Alternative Parallel Maze Solver} 은 대안적인 병렬
+알고리즘을 논하며,
+Section~\ref{sec:SMPdesign:Performance Comparison I} 은 그것의 이례적인 성능을
+분석하고,
+Section~\ref{sec:SMPdesign:Alternative Sequential Maze Solver} 은 이 대안적
+병렬 알고리즘으로부터 향상된 순차적 알고리즘을 도출해 보며,
+Section~\ref{sec:SMPdesign:Performance Comparison II} 은 추가적 성능 비교를
+해보고, 마지막으로
+Section~\ref{sec:SMPdesign:Future Directions and Conclusions} 은 미래의 뱡향을
+제시하고 결론을 맺습니다.
+
+\iffalse
 
 Common advice is to use a parallel work-queue algorithm
 (PWQ)~\cite{ETHZurich:FS2011maze,RonFosner2010maze}.
@@ -54,6 +105,8 @@ comparisons,
 and finally
 Section~\ref{sec:SMPdesign:Future Directions and Conclusions}
 presents future directions and concluding remarks.
+
+\fi
 
 \subsection{Work-Queue Parallel Maze Solver}
 \label{sec:SMPdesign:Work-Queue Parallel Maze Solver}
