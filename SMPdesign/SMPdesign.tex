@@ -2244,6 +2244,25 @@ this book.
 
 \subsubsection{Real-World Design}
 
+이 장난감 병렬 리소스 할당자는 상당히 간단했습니다만, 실제 세계의 설계는 이
+방법에서 여러가지 방향으로 확장될 수 있습니다.
+
+첫째로, 실제 세계의 할당자는 이 장난감 예에서의 한가지 크기와 달리 넓은 범위의
+할당 크기를 다뤄야 합니다.
+이를 위한 한가지 인기있는 방법은 1980년대 후반 BSD 메모리
+할당자~\cite{McKusick88} 에서처럼 내부 파편화와 외부 파편화 사이의 밸런스를
+잡을 수 있게끔 고정된 크기들의 집합을 제공하는 것입니다.
+이렇게 하는 것은 ``globalmem'' 변수가 크기별로 복사될 것을, 그리고 연관된 락
+역시 비슷하게 복사될 것을 필요로 해서 이 장난감 프로그램의 코드 락킹이 아닌
+데이터 락킹으로 귀결될 것을 의미합니다.
+
+둘째로, 제품 품질 시스템은 메모리를 재활용 할 수 있어야 하는데, 블락들을
+페이지와 같은 더 커대한 구조체로 합칠 수 있어야만 합니다~\cite{McKenney93}.
+이 합치기는 또한 락으로 보호되어야 하는데, 이것 역시 사이즈별로 복사될 수 있을
+겁니다.
+
+\iffalse
+
 The toy parallel resource allocator was quite simple, but real-world
 designs expand on this approach in a number of ways.
 
@@ -2264,6 +2283,22 @@ such as pages~\cite{McKenney93}.
 This coalescing will also need to be protected by a lock, which again
 could be replicated on a per-size basis.
 
+\fi
+
+셋째로, 합쳐진 메모리는 아랫단의 메모리 시스템으로 반환되어야만 하며, 메모리의
+페이지들 역시 아랫단의 메모리 시스템으로부터 할당되어야만 합니다.
+이 단계에서 필요한 락킹은 아랫단 메모리 시스템에 의존되지만, 코드 락킹이 될수도
+있습니다.
+코드 락킹은 이 단계에서 종종 허용되곤 하는데, 이 단계는 잘 설계된 시스템에서는
+가끔씩만 사용되기 때문입니다~\cite{McKenney01e}.
+
+이 실제 세계 설계의 거대한 복잡성에도 불구하고, 아랫단의 아이디어는
+동일합니다---
+Table~\ref{fig:app:questions:Schematic of Real-World Parallel Allocator}
+에 보인 것과 같은 반복된 어플리케이션의 병렬 fastpath.
+
+\iffalse
+
 Third, coalesced memory must be returned to the underlying memory
 system, and pages of memory must also be allocated from the underlying
 memory system.
@@ -2276,6 +2311,8 @@ Despite this real-world design's greater complexity, the underlying
 idea is the same---repeated application of parallel fastpath,
 as shown in
 Table~\ref{fig:app:questions:Schematic of Real-World Parallel Allocator}.
+
+\fi
 
 \begin{table}[tbp]
 \rowcolors{1}{}{lightgray}
