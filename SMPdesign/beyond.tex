@@ -625,6 +625,27 @@ The next section analyzes this anomaly.
 \label{fig:SMPdesign:CDF of SEQ/PWQ and SEQ/PART Solution-Time Ratios}
 \end{figure}
 
+예상 외의 성능 결과에 대해 해야할 첫번째 반응은 버그 검사입니다.
+이 알고리즘은 실제로 유효한 미로 해법을 찾아냈지만,
+Figure~\ref{fig:SMPdesign:CDF of Solution Times For SEQ, PWQ, and PART}
+의 CDF 그림은 비종속적 데이터 포인트들을 가정합니다.
+이건 그 경우가 아닙니다:  이 성능 테스트는 무작위로 미로를 만들어내고, 모든
+미로 해법기를 해당 미로에 대해 동작시킵니다.
+따라서
+Figure~\ref{fig:SMPdesign:CDF of SEQ/PWQ and SEQ/PART Solution-Time Ratios}
+에 보인 것처럼 각각의 생성된 미로에 대한 해결책 시간의 비율을 CDF 로 그리는게
+합리적이며, CDF 들의 겹침을 크게 줄여줍니다.
+이 그림은 일부 미로에 대해선, PART 가 SEQ 보다 \emph{40} 배가 넘게 빠름을
+보입니다.
+대조적으로, PWQ 는 SEQ 보다 두배 이상 빠르지 않습니다.
+두 쓰레드를 사용하고 40배의 속도향상을 이룬것에 대해선 설명이 필요합니다.
+어쨌건, 이건 그냥 파티셔닝 가능성은 쓰레드를 추가하기만 한다는 것이 전체 계산
+비용을 늘리지는 않음을 의미하는 당황스러울 정도의 병렬성이 아닙니다.
+이건 그보다는 \emph{굴욕적인 병렬성} 입니다: 쓰레드를 추가하는 것이 전체 계산
+비용을 줄여서 알고리즘의 초선형적 속도향상을 이뤘습니다.
+
+\iffalse
+
 The first reaction to a performance anomaly is to check for bugs.
 Although the algorithms were in fact finding valid solutions, the
 plot of CDFs in
@@ -648,6 +669,8 @@ It is instead \emph{humiliatingly parallel}: Adding threads
 significantly reduces the overall computational cost, resulting in
 large algorithmic superlinear speedups.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{1.4in}{!}{\includegraphics{SMPdesign/maze_in_way10a}}
@@ -661,6 +684,30 @@ large algorithmic superlinear speedups.
 \caption{Correlation Between Visit Percentage and Solution Time}
 \label{fig:SMPdesign:Correlation Between Visit Percentage and Solution Time}
 \end{figure}
+
+계속된 조사는 PART 가 가끔은 미로의 셀들 중 2\,\% 미만의 것들만을 방문한 반면,
+SEQ 와 PWQ 는 9\,\% 미만을 방문한 적이 없음을 드러냈습니다.
+이 차이에 대한 이유는
+Figure~\ref{fig:SMPdesign:Reason for Small Visit Percentages}
+에 보여져 있습니다.
+좌상단부터 해결책을 찾는 쓰레드가 원을 만나면, 다른 쓰레드는 미로의 우상단에
+닿지 못합니다.
+비슷하게, 이 다른 쓰레드가 네모를 만나면 첫번째 쓰레드는 미로의 좌하단에 닿지
+못합니다.
+따라서, PART 는 해법이 아닌 셀들의 작은 부분만을 방문하게 될 겁니다.
+요약하자면, 이 초선형적 속도향상은 서로의 방향을 향하는 쓰레드들 때문입니다.
+이는 각 쓰레드가 서로의 방향 \emph{바깥으로} 유지시키려 노력해왔던 병렬
+프로그래밍에 대한 수십년의 경험에 상당히 대조적인 결과입니다.
+
+Figure~\ref{fig:SMPdesign:Correlation Between Visit Percentage and Solution Time}
+는 이 세개의 방법들의 해결책 탐색 시간과 방문된 셀들 사이의 강한 상관관계를
+확인시켜 줍니다.
+PART 의 그림의 비탈은 SEQ 의 것보다 작아서, PART 의 한쌍의 쓰레드는 미로의
+주어진 부분을 SEQ 의 단일 쓰레드가 하는 것보다 빠르게 방문함을 보입니다.
+PART 의 그림은 또한 작은 방문 퍼센티지로 기울어 있어서, PART 가 더 적은 전체
+일을 하며, 따라서 굴욕적인 병렬성을 보였음을 확인시켜 줍니다.
+
+\iffalse
 
 Further investigation showed that
 PART sometimes visited fewer than 2\,\% of the maze's cells,
@@ -691,12 +738,29 @@ PART's scatterplot is also weighted toward small visit
 percentages, confirming that PART does less total work, hence
 the observed humiliating parallelism.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{1.4in}{!}{\includegraphics{SMPdesign/maze_PWQ_vs_PART}}
 \caption{PWQ Potential Contention Points}
 \label{fig:SMPdesign:PWQ Potential Contention Points}
 \end{figure}
+
+PWQ 에 의해 방문된 셀들의 부분은 SEQ 의 것과 비슷합니다.
+또한, PWQ 의 해법 탐색 시간은 PART 의 그것보다 큰데, 비슷한 방문 비율에
+대해서조차 그렇습니다.
+이에 대한 이유가
+Figure~\ref{fig:SMPdesign:PWQ Potential Contention Points} 에 그려져 있는데, 각
+셀에 두개 이상의 이웃을 가진 빨간 원이 있습니다.
+그런 각각의 셀은 PWQ 에서 컨텐션을 유발할 수 있는데, 한 쓰레드가 들어갈 수
+있지만 두 쓰레드는 나올 수 없어서, 이 챕터의 앞부분에서 이야기 했듯 성능을
+하락시키게 되기 때문입니다.
+대조적으로, PART 는 그런 컨텐션을 한번만 일으키는데, 해결책이 찾아졌을
+때입니다.
+물론, SEQ 는 결코 컨텐션을 갖지 않습니다.
+
+\iffalse
 
 The fraction of cells visited by PWQ is similar to that of SEQ\@.
 In addition, PWQ's solution time is greater than that of PART,
@@ -711,12 +775,28 @@ In contrast, PART can incur such contention but once, namely
 when the solution is located.
 Of course, SEQ never contends.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.2in}{!}{\includegraphics{SMPdesign/500-ms_seqVfg_part_seqO3-cdf}}
 \caption{Effect of Compiler Optimization (-O3)}
 \label{fig:SMPdesign:Effect of Compiler Optimization (-O3)}
 \end{figure}
+
+PART 의 속도 향상이 인상적이긴 하지만, 순차적 최적화를 무시해선 안됩니다.
+Figure~\ref{fig:SMPdesign:Effect of Compiler Optimization (-O3)} 는 -O3 로
+컴파일 되었을 때 SEQ 가 최적화 되지 않은 PWQ 보다 두배 가량 빨라서, 최적화 되지
+않은 PART 에 근접함을 보입니다.
+세 알고리즘을 모두 -O3 로 컴파일 했을 때의 결과는
+Figure~\ref{fig:SMPdesign:CDF of SEQ/PWQ and SEQ/PART Solution-Time Ratios}
+에 보인 것과 같이 (더 빨라졌긴 하지만) 비슷한 결과를 보이는데, PWQ 가 SEQ 에
+비해 속도 향상은 거의 제공하지 않아, 암달의
+법칙~\cite{GeneAmdahl1967AmdahlsLaw} 이 유지됨도 보입니다.
+하지만, 목표가 최적화 자체가 아니라 최적화 되지 않은 SEQ 에 비해 두배의 성능을
+달성하는 것이라면, 컴파일러 최적화는 상당히 매력적인 것입니다.
+
+\iffalse
 
 Although PART's speedup is impressive, we should not neglect sequential
 optimizations.
@@ -731,6 +811,25 @@ to SEQ, in keeping with Amdahl's Law~\cite{GeneAmdahl1967AmdahlsLaw}.
 However, if the goal is to double performance compared to unoptimized
 SEQ, as opposed to achieving optimality, compiler
 optimizations are quite attractive.
+
+\fi
+
+캐쉬 정렬과 패딩은 거짓 공유를 줄임으로써 성능을 종종 향상시킵니다.
+하지만, 이 미로 해법 탐색 알고리즘에서 미로 셀 배열을 정렬하고 패딩하는 것은
+1000x1000 미로에 대해 최대 42\,\% 까지 성능을 \emph{떨어뜨립니다}.
+캐쉬 지역성은 거짓 공유를 막는 것보다 더 중요하며, 특히 큰 미로에 대해선
+그렇습니다.
+더 작은 20-by-20 이나 50-by-50 미로들에 대해선 정렬과 패딩이 PART 의 경우 최대
+40\,\% 성능 향상을 만들어냈습니다만, 그런 작은 크기에 대해서는 SEQ 가 어쨌건 더
+나은데 PART 가 쓰레드생성과 정리에 드는 오버헤드를 감당할 중분한 시간이 없기
+때문입니다.
+
+요약하자면, 파티셔닝 된 병렬 미로 해법 탐색기는 알고리즘상의 초선형적
+속도향상의 흥미로운 예입니다.
+만약 ``알고리즘상의 초선형적 속도향상'' 이 인지부조화를 일으킨다면, 다음
+섹션으로 넘어가시기 바랍니다.
+
+\iffalse
 
 Cache alignment and padding often improves performance by reducing
 false sharing.
@@ -748,6 +847,8 @@ In short, the partitioned parallel maze solver is an interesting example
 of an algorithmic superlinear speedup.
 If ``algorithmic superlinear speedup'' causes cognitive dissonance,
 please proceed to the next section.
+
+\fi
 
 \subsection{Alternative Sequential Maze Solver}
 \label{sec:SMPdesign:Alternative Sequential Maze Solver}
