@@ -10,6 +10,20 @@
 	  to the memory of Winston Churchill and to whoever he was
 	  quoting}}
 
+최근의 동시성 연구에서, 락킹은 종종 악당의 역할을 맡게 됩니다.
+락킹은 deadlock, convoying, starvation, unfairness, data race, 그리고 모든 다른
+동시성에서의 죄악적인 것들을 일으킨다는 비난을 받고 있습니다.
+흥미롭게도, 제품 수준 공유 메모리 병렬 소프트웨어에서의 아주 많은 일을 처리하는
+사람의 역할 역시 락킹이 맡고 있습니다.
+이 챕터는
+Figure~\ref{fig:locking:Locking: Villain or Slob?}
+와~\ref{fig:locking:Locking: Workhorse or Hero?}
+에서 그린 것과 같은 이 악당과 영웅 사이의 이분법을 들여다 봅니다.
+
+이 지킬과 하이드 이분법에는 여러 이유들이 있습니다:
+
+\iffalse
+
 In recent concurrency research, locking often plays the role of villain.
 Locking stands accused of inciting deadlocks, convoying, starvation,
 unfairness, data races, and all manner of other concurrency sins.
@@ -22,7 +36,39 @@ and~\ref{fig:locking:Locking: Workhorse or Hero?}.
 
 There are a number of reasons behind this Jekyll-and-Hyde dichotomy:
 
+\fi
+
 \begin{enumerate}
+\item	락킹의 죄악 중 많은 것들은 대부분의 경우에 잘 동작하는 실용적 설계
+	디자인이 있는데, 예를 들면:
+	\begin{enumerate}
+	\item	데드락 방지를 위해 락 계층을 사용하는 것.
+	\item	리눅스 커널의 lockdep~\cite{JonathanCorbet2006lockdep} 과 같은
+		데드락 탐지 도구들.
+	\item	배열, 해시 테이블, radix tree 와 같은,
+		챕터~\ref{chp:Data Structures} 에서 다루어질 락킹에 친화적인
+		데이터 구조들.
+	\end{enumerate}
+\item	락킹의 죄들 중 일부는 잘 설계되지 못한 프로그램에서만 이를 수 있는 높은
+	수준의 contention 에서만 존재합니다.
+\item	락킹의 죄들 중 일부는 락킹과 함께 다른 동기화 메커니즘들을 사용함으로써
+	방지될 수 있습니다.
+	이런 다른 메커니즘들에는 통계적 카운터
+	(Chapter~\ref{chp:Counting} 를 참고하세요),
+	레퍼런스 카운터
+	(Section~\ref{sec:defer:Reference Counting} 를 참고하세요),
+	해저드 포인터
+	(Section~\ref{sec:defer:Hazard Pointers} 를 참고하세요),
+	시퀀스 락킹 읽기 쓰레드
+	(Section~\ref{sec:defer:Sequence Locks} 를 참고하세요),
+	RCU
+	(see Section~\ref{sec:defer:Read-Copy Update (RCU)}),
+	그리고 간단한 non-blocking 데이터 구조들
+	(Section~\ref{sec:advsync:Non-Blocking Synchronization} 를 참고하세요)
+	이 있습니다.
+
+\iffalse
+
 \item	Many of locking's sins have pragmatic design solutions that
 	work well in most cases, for example:
 	\begin{enumerate}
@@ -50,6 +96,22 @@ There are a number of reasons behind this Jekyll-and-Hyde dichotomy:
 	(see Section~\ref{sec:defer:Read-Copy Update (RCU)}),
 	and simple non-blocking data structures
 	(see Section~\ref{sec:advsync:Non-Blocking Synchronization}).
+
+\fi
+
+\item	최근 전까지, 거의 모든 거대 공유 메모리 병렬 프로그램들이 비밀리에
+	개발되었으며, 따라서 이런 실용적 해결책을 배우기가 쉽지 않았습니다.
+\item	락킹은 일부 소프트웨어 작품에 대해서는 무척 잘 동작하지만 다른 것들에는
+	무척 잘 동작하지 못합니다.
+	락킹이 잘 동작하는 작품을 위해 일해온 개발자들은 락킹이 잘 동작하지
+	못하는 작품을 위해 일해온 사람들에 비해 락킹에 대해 훨씬 긍정적인
+	의견을 가지게 될 것이라 예상할 수 있는데, 이에 대해
+	Section~\ref{sec:locking:Locking: Hero or Villain?} 에서 다룹니다.
+\item	모든 좋은 이야기에는 악당이 필요하기 마련이며, 락킹은 연구 논문의
+	희생양으로 일하는 길고 영광스러운 역사를 가지게 되었습니다.
+
+\iffalse
+
 \item	Until quite recently, almost all large shared-memory parallel
 	programs were developed in secret, so that it was not easy
 	to learn of these pragmatic solutions.
@@ -62,20 +124,45 @@ There are a number of reasons behind this Jekyll-and-Hyde dichotomy:
 	Section~\ref{sec:locking:Locking: Hero or Villain?}.
 \item	All good stories need a villain, and locking has a long and
 	honorable history serving as a research-paper whipping boy.
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	희생양 역할을 하는게 어떻게 영광스러운 것일 수 있죠???
+
+	\iffalse
+
 	Just how can serving as a whipping boy be considered to be
 	in any way honorable???
+
+	\fi
+
 }\QuickQuizAnswer{
+	락킹이 연구 논문의 희생양이 된 이유는 그것이 실제 세계에서 굉장히 많이
+	사용되었기 때문입니다.
+	반면에, 누구도 락킹을 사용하지 않거나 신경쓰지 않았다면, 대부분의 연구
+	논문은 그걸 언급조차 하지 않았을 겁니다.
+
+	\iffalse
+
 	The reason locking serves as a research-paper whipping boy is
 	because it is heavily used in practice.
 	In contrast, if no one used or cared about locking, most research
 	papers would not bother even mentioning it.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 챕터는 락킹의 더 심각한 죄들을 막기 위한 여러 방법을 알아봅니다.
+
+\iffalse
 
 This chapter will give an overview of a number of ways to avoid locking's
 more serious sins.
+
+\fi
 
 \begin{figure}[tb]
 \centering
