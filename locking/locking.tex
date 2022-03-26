@@ -437,6 +437,20 @@ to enforce your locking hierarchy.
 \subsubsection{Local Locking Hierarchies}
 \label{sec:locking:Local Locking Hierarchies}
 
+하지만, 락킹 계층의 전역적 특성은 그것을 라이브러리 함수에 적용하기 어렵게
+합니다.
+무엇보다도, 특정 라이브러리 함수를 사용하는 어떤 프로그램이 아직 작성되지
+않았을 때, 이 불쌍한 라이브러리 함수 구현자는 아직 정의되지 않은 락킹 계층을
+따를 수 있겠습니까?
+
+한가지 특수한 (하지만 흔한) 경우는 이 라이브러리 함수가 호출자의 코드를
+호출하지 않을 때입니다.
+이 경우, 이 호출자의 락은 이 라이브러리의 락을 잡고 있는 사이에 얻어지려 하지
+않을 것이며, 따라서 라이브러리와 호출자 모두의 락이 포함된 데드락 사이클은
+존재하지 않을 것입니다.
+
+\iffalse
+
 However, the global nature of locking hierarchies makes them difficult to
 apply to library functions.
 After all, when a program using a given library function has not yet
@@ -449,12 +463,52 @@ In this case, the caller's locks will never be acquired while holding
 any of the library's locks, so that there cannot be a deadlock cycle
 containing locks from both the library and the caller.
 
+\fi
+
 \QuickQuiz{
+	이 규칙에 대한 어떤 예외가 있어서, 라이브러리 코드가 호출자의 함수를
+	전혀 호출하지 않음에도 라이브러리와 호출자 양쪽의 락이 포함된 데드락
+	사이클이 존재할 수도 있나요?
+
+	\iffalse
+
 	Are there any exceptions to this rule, so that there really could be
 	a deadlock cycle containing locks from both the library and
 	the caller, even given that the library code never invokes
 	any of the caller's functions?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그런 예외가 있습니다!
+	여기 그 중 일부가 있습니다:
+	\begin{enumerate}
+	\item	이 라이브러리 함수의 인자 중 하나가 이 라이브러리 함수가
+		획득해야 하는 어떤 락으로의 포인터이고 이 라이브러리 함수가 이
+		호출자의 락을 잡는 동안 자신의 락을 잡고 있다면, 호출자와
+		라이브러리의 락 모두가 포함된 데드락 사이클을 가질 수 있습니다.
+	\item	이 라이브러리 함수 중 하나가 호출자에 의해 획득된 락으로의
+		포인터를 리턴한다면, 그리고 이 호출자가 이 라이브러리의 락이
+		잡혀 있는 사이 자신의 락을 잡았다면, 우린 호출자와 라이브러리의
+		락들이 포함된 데드락 사이클을 가질 수 있습니다.
+	\item	이 라이브러리 함수들 중 하나가 락을 획득하고 그걸 잡고 있는
+		채로 리턴한다면, 그리고 이 호출자가 자신의 락 중 하나를
+		잡는다면, 우린 호출자와 라이브러리의 락들이 모두 포함된 데드락
+		사이클을 만들 수 있는 또다른 방법을 가지고 있게 됩니다.
+	\item	이 호출자가 락을 잡는 시그널 핸들러를 가지고 있다면, 데드락
+		사이클은 호출자와 라이브러리 락 모두를 가질 수 있습니다.
+		하지만, 이 경우 라이브러리의 락은 이 데드락 사이클에서 결백한
+		방관자입니다.
+		그러나, 시그널 핸들러에서 락을 획득하는 것은 대부분의 경우 하면
+		안될 일임을 알아두시기 바랍니다---그건 그냥 나쁜 생각이 아니라,
+		하면 안되는 행동입니다.
+		하지만 여러분이 시그널 핸들러 내에서 명확히 락을 잡아야만
+		한다면, 해당 쓰레드 컨텍스트 내에서 같은 락을 잡는 것을 막기
+		위해 그 시그널을 막아둘 것을 분명히 하십시오.
+	\end{enumerate}
+
+	\iffalse
+
 	Indeed there are!
 	Here are a few of them:
 	\begin{enumerate}
@@ -486,7 +540,30 @@ containing locks from both the library and the caller.
 		handler, be sure to block that signal while holding that
 		same lock in thread context.
 	\end{enumerate}
+
+	\fi
+
 }\QuickQuizEnd
+
+하지만 이 라이브러리 함수는 호출자의 코드를 수행한다고 가정해 봅시다.
+예를 들어, \co{qsort()} 는 호출자가 제공한 비교 함수를 호출합니다.
+이 비교 함수는 일반적으로는 변하지 않는 로컬 데이터를 가지고 동작해서,
+\cref{fig:locking:No qsort() Compare-Function Locking} 에 보인 것처럼 락을 잡을
+필요가 없을 겁니다.
+하지만 어떤 사람은 키가 변화하는 데이터 모음을 정렬할 만큼 미쳐 있어서 이 비교
+함수가 락을 잡을 것을 필요로 할 수도 있는데, 이것은
+\cref{fig:locking:Without qsort() Local Locking Hierarchy} 에 보인 것처럼
+데드락을 유발할 수도 있습니다.
+이 라이브러리 함수는 어떻게 데드락을 막을 수 있을까요?
+
+이 경우의 황금 규칙은 ``알려지지 않은 코드를 수행하기 전에 모든 락을 해제하라''
+입니다.
+이 규칙을 따르기 위해, \co{qsort()} 함수는 비교 함수를 호출하기 전에 자신의
+모든 락을 내려 놓아야 합니다.
+따라서 \co{qsort()} 는 비교 함수가 호출자의 락을 잡는 동안 자신의 어떤 락도
+쥐고 있지 않으며, 따라서 데드락이 방지됩니다.
+
+\iffalse
 
 But suppose that a library function does invoke the caller's code.
 For example, \co{qsort()} invokes a caller-provided comparison function.
@@ -506,11 +583,36 @@ locks before invoking the comparison function.
 Thus \co{qsort()} will not be holding any of its locks while the comparison
 function acquires any of the caller's locks, thus avoiding deadlock.
 
+\fi
+
 \QuickQuiz{
+	하지만 \co{qsort()} 가 비교 함수를 호출하기 전에 자신의 락을 모두
+	내려놓는다면, 다른 \co{qsort()} 쓰레드와의 레이스로부터 어떻게 자신을
+	보호하나요?
+
+	\iffalse
+
 	But if \co{qsort()} releases all its locks before invoking
 	the comparison function, how can it protect against races
 	with other \co{qsort()} threads?
+
+	\fi
+
 }\QuickQuizAnswer{
+	비교되는 데이터 원소들의 소유권을 자신의 것으로 하거나
+	(Chapter~\ref{chp:Data Ownership} 에서 이야기 되었습니다) 레퍼런스
+	카운팅과 같은
+	미루기 메커니즘을 사용해서
+	(Chapter~\ref{chp:Deferred Processing} 에서 이야기 되었습니다) 그럴 수
+	있습니다.
+	또는 \cref{sec:locking:Layered Locking Hierarchies} 에서 이야기 되었듯
+	레이어 기반 락킹 계층을 사용할 수 있습니다. 
+
+	다른 한편, 정렬되고 있는 키를 변경하는 것은 아무리 좋게 이야기 해도
+	용감하다고 밖에 할 도리가 없습니다.
+
+	\iffalse
+
 	By privatizing the data elements being compared
 	(as discussed in Chapter~\ref{chp:Data Ownership})
 	or through use of deferral mechanisms such as
@@ -521,6 +623,9 @@ function acquires any of the caller's locks, thus avoiding deadlock.
 
 	On the other hand, changing a key in a list that is
 	currently being sorted is at best rather brave.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -543,6 +648,32 @@ function acquires any of the caller's locks, thus avoiding deadlock.
 \caption{Local Locking Hierarchy for \tco{qsort()}}
 \label{fig:locking:Local Locking Hierarchy for qsort()}
 \end{figure}
+
+로컬 락킹 계층화의 장점을 보기 위해,
+Figure~\ref{fig:locking:Without qsort() Local Locking Hierarchy} 와
+\ref{fig:locking:Local Locking Hierarchy for qsort()}
+를 비교해 보시기 바랍니다.
+두 그림에서, 어플리케이션 함수 \co{foo()} 와 \co{bar()} 는 각각 락~A 와~B 를
+잡고서 \co{qsort()} 를 호출합니다.
+이것은 \co{qsort()} 의 병렬 구현이므로, 락~C 를 잡습니다.
+함수 \co{foo()} 는 함수 \co{cmp()} 를 \co{qsort()} 에 넘기고, \co{cmp(()} 는
+락~B 를 잡습니다.
+함수 \co{bar()} 는 간단한 정수 비교 함수 (여기엔 보이지 않았습니다) 를
+\co{qsort()} 에 넘기고, 이 간단한 함수는 어떤 락도 잡지 않습니다.
+
+이제, \co{qsort()} 가
+Figure~\ref{fig:locking:Without qsort() Local Locking Hierarchy} 에 보인 것처럼
+\co{cmp()} 를 호출하는 동안 락~C 를 잡고 있어서 앞의 황금 규칙을 어긴다면,
+데드락이 발생할 수 있습니다.
+이를 자세히 보기 위해, 한 쓰레드가 두번째 쓰레드가 동시에 \co{bar()} 를
+수행하는 사이에 \co{foo()} 를 호출한다고 생각해 봅시다.
+첫번째 쓰레드의 \co{qsort()} 호출은 락~C 를 잡을 것이고, 이어서 \co{cmp()} 를
+호출할 때 락~B 를 잡을 수 없을 겁니다.
+하지만 첫번째 쓰레드는 락~C 를 잡고 있고, 따라서 두번째 쓰레드의 \co{qsort()}
+는 그 락을 잡을 수 없고, 따라서 락~B 를 해제할 수 없어서 데드락에 이르게
+됩니다.
+
+\iffalse
 
 To see the benefits of local locking hierarchies, compare
 Figures~\ref{fig:locking:Without qsort() Local Locking Hierarchy} and
@@ -571,6 +702,19 @@ But the first thread holds Lock~C, so the second thread's call to
 \co{qsort()} will be unable to acquire it, and thus unable to release
 Lock~B, resulting in deadlock.
 
+\fi
+
+대조적으로, \co{qsort()} 각 락~C 를 \co{qsort()} 의 관점에서는 알려지지 않은
+코드인 이 비교 함수를 호출하기 전에 내려놓는다면, 
+Figure~\ref{fig:locking:Local Locking Hierarchy for qsort()} 에 보인 것과 같이
+데드락이 방지됩니다.
+
+각 모듈이 알려지지 않은 코드를 호출하기 전에 모든 락을 내려놓는다면, 각 모듈이
+개별적으로 데드락을 방지하고 있는 한 전체 데드락이 방지됩니다.
+따라서 이 규칙은 데드락 분석을 상당히 단순화 하고 모듈성을 크게 개선합니다.
+
+\iffalse
+
 In contrast, if \co{qsort()} releases Lock~C before invoking the
 comparison function, which is unknown code from \co{qsort()}'s perspective,
 then deadlock is avoided as shown in
@@ -580,6 +724,8 @@ If each module releases all locks before invoking unknown code, then
 deadlock is avoided if each module separately avoids deadlock.
 This rule therefore greatly simplifies deadlock analysis and greatly
 improves modularity.
+
+\fi
 
 \subsubsection{Layered Locking Hierarchies}
 \label{sec:locking:Layered Locking Hierarchies}
