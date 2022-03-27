@@ -737,6 +737,20 @@ improves modularity.
 \label{fig:locking:Layered Locking Hierarchy for qsort()}
 \end{figure}
 
+불행히도, \co{qsort()} 가 비교 함수를 호출하기 전에 자신의 락들을 모두 내려놓는
+것은 불가능할 수도 있습니다.
+이런 경우, 우린 알려지지 않은 코드를 호출하기 전에 모든 락을 내려놓아 로컬 락킹
+계층을 구성하지 못할 겁니다.
+하지만, 우리는 그 대신에
+Figure~\ref{fig:locking:Layered Locking Hierarchy for qsort()} 에 보인 것처럼
+레이어 기반 락킹 계층을 만들 수 있습니다.
+여기서, \co{cmp()} 함수는 락~A, B, 그리고~C 를 모두 획득한 후에 새로운 락~D 를
+사용해서 데드락을 막습니다.
+따라서 우리는 글로벌 데드락 계층에 세개의 레이어를 갖는 셈인데, 첫번째 레이어는
+락~A 와~B 를, 두번째 레이어는 락~C 를, 그리고 세번째 레이어는 락~D 를 갖습니다.
+
+\iffalse
+
 Unfortunately, it might not be possible for \co{qsort()} to release
 all of its locks before invoking the comparison function.
 In this case, we cannot construct a local locking hierarchy by
@@ -749,11 +763,31 @@ We therefore have three layers to the global deadlock hierarchy, the
 first containing Locks~A and~B, the second containing Lock~C, and
 the third containing Lock~D\@.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/locking/locked_list@start_next.fcv}
 \caption{Concurrent List Iterator}
 \label{lst:locking:Concurrent List Iterator}
 \end{listing}
+
+기계적으로 \co{cmp()} 를 새 락~D 를 사용하도록 바꾸는 것은 일반적으로
+불가능함을 알아 두시기 바랍니다.
+상당히 그 반대입니다: 설계 수준에서의 근본적 변경이 종종 필요합니다.
+그러나, 그런 변경에 필요한 노력은 일반적으로 데드락을 방지하기 위한 비용으로는
+작은 것입니다.
+이 부분에 대해 더 말해보자면, 이 잠재적 데드락은 어떤 코드가 만들어지기 전,
+설계 시간에 발견되는 것이 선호되어야 합니다!
+
+알려지지 않은 코드를 호출하기 전에 모든 락을 내려놓는 것이 불가능한 또다른 예를
+위해서는
+Listing~\ref{lst:locking:Concurrent List Iterator} (\path{locked_list.c}) 에
+보인 것과 같은 링크드 리스트를 순회하는 코드를 생각해 보시기 바랍니다.
+\co{list_start()} 함수는 이 리스트에서 락을 획득하고 첫번째 원소를 (존재한다면)
+리턴하고, \co{list_next()} 는 이 리스트의 다음 원소로의 포인터를 리턴하거나 이
+리스트의 끝에 도달했다면 이 락을 해제하고 \co{NULL} 을 리턴합니다.
+
+\iffalse
 
 Please note that it is not typically possible to mechanically
 change \co{cmp()} to use the new Lock~D\@.
@@ -773,11 +807,29 @@ the first element (if there is one), and
 or releases the lock and returns \co{NULL} if the end of the list has
 been reached.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/locking/locked_list@list_print.fcv}
 \caption{Concurrent List Iterator Usage}
 \label{lst:locking:Concurrent List Iterator Usage}
 \end{listing}
+
+\begin{fcvref}[ln:locking:locked_list:list_print:ints]
+Listing~\ref{lst:locking:Concurrent List Iterator Usage} 이 이 리스트 순회자가
+어떻게 사용될 수 있는지 보입니다.
+\Clnrefrange{b}{e} 는 하나의 정수를 담는 \co{list_ints} 원소를 정의하며,
+\end{fcvref}
+\begin{fcvref}[ln:locking:locked_list:list_print:print]
+\clnrefrange{b}{e} 는 이 리스트를 어떻게 순회하는지 보입니다.
+라인~\lnref{start} 는 리스트를 잠그고 첫번째 원소로의 포인터를 가져오고,
+라인~\lnref{entry} 는 우리의 \co{list_ints} 구조체로의 포인터를 제공하며,
+라인~\lnref{print} 는 연관된 정수를 출력하고,
+라인~\lnref{next} 는 다음 원소로 넘어갑니다.
+이는 상당히 간단하며, 모든 락킹을 숨기고 있습니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:locking:locked_list:list_print:ints]
 Listing~\ref{lst:locking:Concurrent List Iterator Usage} shows how
@@ -793,6 +845,27 @@ line~\lnref{print} prints the corresponding integer, and
 line~\lnref{next} moves to the next element.
 This is quite simple, and hides all of the locking.
 \end{fcvref}
+
+\fi
+
+즉, 각 리스트 원소를 처리하는 코드가 데드락을 초래하게끔 그 스스로
+\co{list_start()} 나 \co{list_next()} 호출을 건너 잡히는 락을 획득하지 않는다면
+락킹은 숨겨져 있습니다.
+우린 이 락킹 계층이 리스트 순회자 락킹을 처리하게끔 레이어를 추가함으로써
+데드락을 막을 수 있습니다.
+
+이 레이어 기반 접근법은 임의의 많은 수의 레이어들로 확장될 수 있습니다만,
+추가되는 각 레이어는 락킹 설계의 복잡도를 증가시킵니다.
+그런 복잡도 증가는 일반적으로 몇몇 종류의 객체 지향 설계에 불편을 가중시키는데,
+제멋대로 많은 객체 그룹 사이를 오가는 컨트롤의 경우 그렇습니다.\footnote{
+	이에 대한 이름들 중 하나는 ``객체 지향 스파게티 코드'' 입니다.}
+이 객체 지향 설계 습관과 데드락 방지의 필요성 사이의 미스매치는 병렬
+프로그래밍이 누군가에게는 어렵다고 인식되는 중요한 이유입니다.
+
+고도의 레이어 기반 계층에 대한 일부 대안이
+Chapter~\ref{chp:Deferred Processing} 에서 다뤄집니다.
+
+\iffalse
 
 That is, the locking remains hidden as long as the code processing each
 list element does not itself acquire a lock that is held across some
@@ -813,6 +886,8 @@ is perceived by some to be so difficult.
 
 Some alternatives to highly layered locking hierarchies are covered in
 Chapter~\ref{chp:Deferred Processing}.
+
+\fi
 
 \subsubsection{Locking Hierarchies and Pointers to Locks}
 \label{sec:locking:Locking Hierarchies and Pointers to Locks}
