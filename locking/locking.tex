@@ -1002,6 +1002,24 @@ this is unlikely.
 \subsubsection{Conditional Locking}
 \label{sec:locking:Conditional Locking}
 
+하지만 합리적인 락킹 계층이 존재하지 않는다고 생각해 봅시다.
+이는 실제 삶에서 일어날 수 있는데, 예를 들어, 패킷이 양방향으로 떠다니는 어떤
+종류의 레이어화 된 네트워크 프로토콜 스택, 또는 예를 들어 분산된 락 관리자
+구현이 있겠습니다.
+네트워킹의 경우, 패킷을 한 레이어에서 다른 레이어로 넘길 때 양 레이어로부터
+락을 잡아야 할수도 있습니다.
+패킷은 프로토콜 스택의 위로도 아래로도 갈 수 있다는 점을 생각하면, 이는
+Listing~\ref{lst:locking:Protocol Layering and Deadlock}
+에 그린 것처럼 데드락을 일으키기 위한 훌륭한 방법입니다.
+\begin{fcvref}[ln:locking:Protocol Layering and Deadlock]
+여기서, 통신선을 향해 스택의 아래 방향으로 움직이는 패킷은 다름 레이어의 락을
+순서 반대로 잡아야만 합니다.
+통신선으로부터 멀어지는, 스택 위쪽으로 움직이는 패킷은 락을 순서대로 잡는다는
+점을 놓고 보면, 라인~\lnref{acq} 에서의 락 획득은 데드락을 일으킬 수 있습니다.
+\end{fcvref}
+
+\iffalse
+
 But suppose that there is no reasonable locking hierarchy.
 This can happen in real life, for example, in some types of layered
 network protocol stacks where packets flow in both directions, for
@@ -1019,6 +1037,8 @@ the locks in order, the lock acquisition in line~\lnref{acq} of the listing
 can result in deadlock.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:locking:Protocol Layering and Deadlock]
 \begin{VerbatimL}[commandchars=\\\{\}]
@@ -1035,6 +1055,18 @@ spin_unlock(&nextlayer->lock1);
 \label{lst:locking:Protocol Layering and Deadlock}
 \end{listing}
 
+이 경우에 데드락을 방지하는 한가지 방법은 락킹 계층을 암시하지만 락을 반대
+순서로 잡아야 할 경우에는
+Listing~\ref{lst:locking:Avoiding Deadlock Via Conditional Locking}
+에 보인 것처럼 그것을 조건적으로 잡는 것입니다.
+\begin{fcvref}[ln:locking:Avoiding Deadlock Via Conditional Locking]
+무조건적으로 layer-1 락을 잡는 대신, 라인~\lnref{trylock} 은
+\co{spin_trylock()} 기능을 사용해 조건적으로 락을 잡습니다.
+이 기능은 이 락이 잡을 수 있다면 바로 잡지만 (0이 아닌 값을 리턴합니다), 그렇지
+않다면 락을 잡지 않은 채 0 을 리턴합니다.
+
+\iffalse
+
 One way to avoid deadlocks in this case is to impose a locking hierarchy,
 but when it is necessary to acquire a lock out of order, acquire it
 conditionally, as shown in
@@ -1044,6 +1076,8 @@ Instead of unconditionally acquiring the layer-1 lock, line~\lnref{trylock}
 conditionally acquires the lock using the \co{spin_trylock()} primitive.
 This primitive acquires the lock immediately if the lock is available
 (returning non-zero), and otherwise returns zero without acquiring the lock.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:locking:Avoiding Deadlock Via Conditional Locking]
@@ -1071,6 +1105,21 @@ retry:
 \label{lst:locking:Avoiding Deadlock Via Conditional Locking}
 \end{listing}
 
+이 \co{spin_trylock()} 이 성공했다면, 라인~\lnref{l1_proc} 은 필요한 layer-1
+처리를 진행합니다.
+그렇지 않다면, 라인~\lnref{rel2} 는 락을 내려놓고, 라인~\lnref{acq1}
+과~\lnref{acq2} 는 그것들을 옳은 순서로 획득합니다.
+불행히도, 시스템에는 여러 네트워킹 디바이스가 있을 수 있으며 (예를 들면,
+이더넷과 와이파이), 따라서 \co{layer_1()} 함수는 라우팅 결정을 내려야만 합니다.
+이 결정은 언제든 바뀔 수 있는데, 특히나 이 시스템이 모바일이라면
+그렇습니다.\footnote{
+	그리고, 1900년대와 달리, 모바일 환경은 흔합니다.}
+따라서, 라인~\lnref{recheck} 은 이 결정을 다시 검사하고, 그게 변경되었다면, 이
+락을 내려놓고 재시작 해야 합니다.
+\end{fcvref}
+
+\iffalse
+
 If \co{spin_trylock()} was successful, line~\lnref{l1_proc} does the needed
 layer-1 processing.
 Otherwise, line~\lnref{rel2} releases the lock, and
@@ -1086,13 +1135,33 @@ Therefore, line~\lnref{recheck} must recheck the decision, and if it has changed
 must release the locks and start over.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:locking:Protocol Layering and Deadlock} 에서
+	Listing~\ref{lst:locking:Avoiding Deadlock Via Conditional Locking}
+	로의 변환은 어디서든 적용될 수 있나요?
+
+	\iffalse
+
 	Can the transformation from
 	Listing~\ref{lst:locking:Protocol Layering and Deadlock} to
 	Listing~\ref{lst:locking:Avoiding Deadlock Via Conditional Locking}
 	be applied universally?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	결코 아닙니다!
+
+	이 변환은 \co{layer_2_processing()} 함수가 멱등하다고 가정하는데,
+	\co{layer_1()} 라우팅 결정이 변화될 때 같은 함수에 대해서도 여러번
+	실행될 수 있다는 사실 때문입니다.
+	따라서, 실제 삶에서는, 이 변환이 무척 복잡할 수 있습니다.
+
+	\iffalse
+
 	Absolutely not!
 
 	This transformation assumes that the
@@ -1101,13 +1170,36 @@ must release the locks and start over.
 	the \co{layer_1()} routing decision changes.
 	Therefore, in real life, this transformation can become
 	arbitrarily complex.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	하지만
+	Listing~\ref{lst:locking:Avoiding Deadlock Via Conditional Locking}
+	의 복잡도는 그게 데드락을 방지한다는 점을 생각하면 가치있죠, 그렇죠?
+
+	\iffalse
+
 	But the complexity in
 	Listing~\ref{lst:locking:Avoiding Deadlock Via Conditional Locking}
 	is well worthwhile given that it avoids deadlock, right?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	아마도요.
+
+	\co{layer_1()} 에서의 라우팅 결정이 충분히 자주 바뀐다면, 이 코드는
+	항상 재시도를 하고 결코 진행을 못낼 겁니다.
+	이는 어떤 쓰레드도 진행을 못낸다면 ``livelock'' 이라고, 그렇지 않고
+	일부 쓰레드는 진행을 내지만 나머지는 그러지 못한다면 ``starvation''
+	이라고 불립니다
+	(Section~\ref{sec:locking:Livelock and Starvation} 을 참고하세요).
+
+	\iffalse
+
 	Maybe.
 
 	If the routing decision in \co{layer_1()} changes often enough,
@@ -1116,6 +1208,9 @@ must release the locks and start over.
 	``starvation''
 	if some threads make forward progress but others do not
 	(see Section~\ref{sec:locking:Livelock and Starvation}).
+
+	\fi
+
 }\QuickQuizEndE
 }
 
