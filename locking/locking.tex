@@ -892,18 +892,50 @@ Chapter~\ref{chp:Deferred Processing}.
 \subsubsection{Locking Hierarchies and Pointers to Locks}
 \label{sec:locking:Locking Hierarchies and Pointers to Locks}
 
+일부 예외가 있기는 하지만, 락으로의 포인터를 포함하는 외부 API 는 종종 잘못
+설계된 API 입니다.
+내부의 락을 다른 소프트웨어 컴포넌트에 넘기는 것은 어쨌건 핵심 설계 교리인 정보
+은닉의 안티테제입니다.
+
+\iffalse
+
 Although there are some exceptions, an external API containing a pointer
 to a lock is very often a misdesigned API\@.
 Handing an internal lock to some other software component is after all
 the antithesis of information hiding, which is in turn a key design
 principle.
 
+\fi
+
 \QuickQuiz{
+	락으로의 포인터가 함수에 넘겨지는 흔한 경우 하나를 이야기해 보시죠.
+
+	\iffalse
+
 	Name one common situation where a pointer to a lock is passed
 	into a function.
+
+	\fi
+
 }\QuickQuizAnswer{
+	물론 락킹 기능들이죠!
+
+	\iffalse
+
 	Locking primitives, of course!
+
+	\fi
+
 }\QuickQuizEnd
+
+한가지 예외는 어떤 것들을 넘겨주는 함수인데 이 호출자의 락이 이 넘겨주기가
+완료될 때까지는 잡혀져 있어야 하지만 이 락이 이 함수의 리턴 전에 해제되어야
+하는 경우입니다.
+그런 함수의 예 중 하나로는 POSIX \co{pthread_cond_wait()} 함수가 있겠는데,
+여기선 잃어버린 깨우기 때문에 멈춰있는 경우를 막기 위해 \co{pthread_mutex_t}
+로의 포인터가 넘겨집니다.
+
+\iffalse
 
 One exception is functions that hand off some entity,
 where the caller's lock must be held until the handoff is complete,
@@ -912,10 +944,32 @@ One example of such a function is the POSIX \co{pthread_cond_wait()}
 function, where passing an pointer to a \co{pthread_mutex_t}
 prevents hangs due to lost wakeups.
 
+\fi
+
 \QuickQuiz{
+	\co{pthread_cond_wait()} 이 먼저 이 뮤텍스를 해제하고 다시 그 뮤텍스를
+	획득한다는 사실은 데드락의 가능성을 제거하지 않나요?
+
+	\iffalse
+
 	Doesn't the fact that \co{pthread_cond_wait()} first releases the
 	mutex and then re-acquires it eliminate the possibility of deadlock?
+
+	\fi
+
 }\QuickQuizAnswer{
+	결코 아닙니다!
+
+	\co{mutex_a} 를 획득하고 이어서 \co{mutex_b} 를 획득하는, 그리고 나서는
+	\co{mutex_a} 를 \co{pthread_cond_wait()} 에 넘기는 프로그램을 생각해
+	봅시다.
+	이제, \co{pthread_cond_wait()} 은 \co{mutex_a} 를 해제하지만 리턴하기
+	전에 이를 다시 획득할 겁니다.
+	만약 어떤 다른 쓰레드가 그 사이에 \co{mutex_a} 를 획득하고 \co{mutex_b}
+	를 기다리며 블락된다면, 이 프로그램은 데드락에 걸립니다.
+
+	\iffalse
+
 	Absolutely not!
 
 	Consider a program that acquires \co{mutex_a}, and then
@@ -925,13 +979,25 @@ prevents hangs due to lost wakeups.
 	will re-acquire it before returning.
 	If some other thread acquires \co{mutex_a} in the meantime
 	and then blocks on \co{mutex_b}, the program will deadlock.
+
+	\fi
+
 }\QuickQuizEnd
+
+요약하자면, 여러분이 외부로의 API 에 락으로의 포인터를 인자로 또는 리턴 값으로
+노출하고 있다면, 여러분의 API 설계를 다시 고민해 보세요.
+그게 맞는 행동일 수도 있습니다만, 경험은 그렇지 않을 가능성이 높다고 이야기
+합니다.
+
+\iffalse
 
 In short, if you find yourself exporting an API with a pointer to a
 lock as an argument or the as the return value, do yourself a favor and
 carefully reconsider your API design.
 It might well be the right thing to do, but experience indicates that
 this is unlikely.
+
+\fi
 
 \subsubsection{Conditional Locking}
 \label{sec:locking:Conditional Locking}
