@@ -1217,6 +1217,18 @@ must release the locks and start over.
 \subsubsection{Acquire Needed Locks First}
 \label{sec:locking:Acquire Needed Locks First}
 
+조건적 락킹의 중요한 특수 경우에는 모든 필요한 락들이 어떤 처리가 이어지기 전에
+획득됩니다.
+이 경우, 처리는 멱등적일 필요가 없습니다: 이미 획득되어 있는 락을 먼저 내려놓지
+않고는 해당 락을 획득할 수 없다면, 모든 락을 내려놓고 다시 시도합니다.
+모든 락들이 획득된 다음에야 어떤 처리든 이어질 수 있습니다.
+
+하지만, 이 방법은
+Section~\ref{sec:locking:Livelock and Starvation} 에서도 이야기 될
+\emph{livelock} 을 초래할 수 있습니다.
+
+\iffalse
+
 In an important special case of conditional locking, all needed
 locks are acquired before any processing is carried out.
 In this case, processing need not be idempotent: if it turns out
@@ -1229,17 +1241,55 @@ However, this procedure can result in \emph{livelock}, which will
 be discussed in
 Section~\ref{sec:locking:Livelock and Starvation}.
 
+\fi
+
 \QuickQuiz{
+	Section~\ref{sec:locking:Acquire Needed Locks First} 에서 설명된
+	``필요한 락들을 먼저 획득하기'' 접근법을 사용할 때 livelock 은 어떻게
+	회피할 수 있나요?
+
+	\iffalse
+
 	When using the ``acquire needed locks first'' approach described in
 	Section~\ref{sec:locking:Acquire Needed Locks First},
 	how can livelock be avoided?
+
+	\fi
+
 }\QuickQuizAnswer{
+	추가적인 전역 락을 제공합니다.
+	어떤 쓰레드가 반복적으로 필요한 락을 획득하는 걸 시도하고 실패한다면,
+	해당 쓰레드가 조건 없이 새로운 전역 락을 획득하고, 이어서 조건적으로
+	모든 필요한 락들을 획득합니다. (Doug Lea 에 의해 제안되었습니다.)
+
+	\iffalse
+
 	Provide an additional global lock.
 	If a given thread has repeatedly tried and failed to acquire the needed
 	locks, then have that thread unconditionally acquire the new
 	global lock, and then unconditionally acquire any needed locks.
 	(Suggested by Doug Lea.)
+
+	\fi
+
 }\QuickQuizEnd
+
+연관된 접근법인 two-phase locking~\cite{PhilipABernstein1987} 은 트랜잭셔널
+데이터베이스 시스템에서 오랫동안 제품군에서 사용되었습니다.
+Two-phase locking 의 첫번째 단계에서는 락들이 획득되기만 하고 해제되지
+않습니다.
+일단 모든 필요한 락들이 획득되면, 트랜잭션은 두번째 단계로 들어가서, 락들은
+해제되기만 하지 획득되지 않습니다.
+이 락킹 접근법은 데이터베이스가 트랜잭션에 serializability 보장을 제공하게
+하는데, 달리 말하자면 트랜잭션에 의해 보이고 만들어지는 모든 값들이 모든
+트랜잭션 사이의 어떤 전역적 순서와 함께 일관적일 것을 보장하기 위함입니다.
+그런 많은 시스템이 트랜잭션을 중단할 수 있는 기능에 의존하는데, 이게 모든
+락들이 획득되기 전까지 공유된 데이터에 어떤 변경도 만드는 걸 회피함으로써
+단순화 될 수 있긴 합니다.
+Livelock 과 deadlock 은 그런 시스템에서 문제가 됩니다만, 실용적인 해결책은 여러
+데이터베이스 교재에서 찾을 수 있을 겁니다.
+
+\iffalse
 
 A related approach, two-phase locking~\cite{PhilipABernstein1987},
 has seen long production use in transactional database systems.
@@ -1256,6 +1306,8 @@ this can be simplified by avoiding making any changes to shared data
 until all needed locks are acquired.
 Livelock and deadlock are issues in such systems, but practical
 solutions may be found in any of a number of database textbooks.
+
+\fi
 
 \subsubsection{Single-Lock-at-a-Time Designs}
 \label{sec:locking:Single-Lock-at-a-Time Designs}
