@@ -1351,6 +1351,21 @@ Chapter~\ref{chp:Deferred Processing}.
 \subsubsection{Signal/Interrupt Handlers}
 \label{sec:locking:Signal/Interrupt Handlers}
 
+시그널 핸들러가 연관되는 deadlock 은 시그널 핸들러 내에서
+\co{pthread_mutex_lock()} 을 호출하는 것이 합법적이지 않음을 알리는 것으로 종종
+금방 사라지기도 합니다.
+하지만, 시그널 핸들러에서 호출될 수 \emph{있는} 손으로 만든 락킹 기능을
+사용하는 것도 (많은 경우 현명치 못한 일이지만) 가능합니다.
+거의 모든 운영체제 커널이 시그널 핸들러와 비슷한 인터럽트 핸들러 내에서 락을
+잡을 수 있게 합니다.
+
+여기서의 트릭은 시그널 (또는 인터럽트) 핸들러 내에서 잡힐 수 있는 어떤 락을
+잡을 때마다 시그널을 블록 (또는 경우에 따라 인터럽트를 불능화) 시키는 것입니다.
+더 나아가서, 그런 락을 잡을 때에는 시그널을 블록 시키지 않고서 시그널 핸들러의
+바깥에서 잡힌 어떤 락도 잡으려 시도해선 안됩니다.
+
+\iffalse
+
 Deadlocks involving signal handlers are often quickly dismissed by
 noting that it is not legal to invoke \co{pthread_mutex_lock()} from
 within a signal handler~\cite{OpenGroup1997pthreads}.
@@ -1367,14 +1382,44 @@ Furthermore, if holding such a lock, it is illegal to attempt to
 acquire any lock that is ever acquired
 outside of a signal handler without blocking signals.
 
+\fi
+
 \QuickQuiz{
+	락~A 가 어떤 시그널 핸들러의 내부에선 결코 잡히지 않았지만, 락~B 는
+	쓰레드 컨텍스트에서도 시그널 핸들러에서도 잡혔다고 해봅시다.
+	나아가서 락~A 는 가끔 시그널이 블록되지 않은 상태에서도 잡힌다고
+	해봅시다.
+	락~B 를 잡고 있는 사이에 락~A 를 획득하는 건 왜 불법인가요?
+
+	\iffalse
+
 	Suppose Lock~A is never acquired within a signal handler,
 	but Lock~B is acquired both from thread context and by signal
 	handlers.
 	Suppose further that Lock~A is sometimes acquired with signals
 	unblocked.
 	Why is it illegal to acquire Lock~A holding Lock~B?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이는 데드락을 초래할 테니까요.
+	락~A 는 가끔 시그널 핸들러 바깥에서 시그널을 블록하지 않은 상태에서
+	잡힌다는 걸 놓고 보면, 이 락을 잡는 사이 시그널이 처리될 수 있습니다.
+	여기 연관된 시그널 핸들러는 락~B 를 잡을 수도 있고, 따라서 락~B 는 락~A
+	를 쥔 상태에서 획득될 수 있습니다.
+	따라서, 우리가 락~B 를 잡은 상태에서 락~A 도 잡으면, 우린 deadlock
+	사이클을 갖게 됩니다.
+	이 문제는 락~B 를 잡고 있는 사이 시그널이 블록되어 있다 해도 존재함을
+	알아두시기 바랍니다.
+
+	이는 인터럽트나 시그널 핸들러 내에서 획득되는 락에 무척 조심스러워야
+	하는 또다른 이유입니다.
+	하지만 리눅스 커널의 락 의존성 검사기는 이 상황을 포함해 많은 걸 알고
+	있으니, 부디 그걸 항상 사용하십시오!
+
+	\iffalse
+
 	Because this would lead to deadlock.
 	Given that Lock~A is sometimes held outside of a signal
 	handler without blocking signals, a signal might be handled while
@@ -1391,20 +1436,57 @@ outside of a signal handler without blocking signals.
 	But the Linux kernel's lock dependency checker knows about this
 	situation and many others as well, so please do make full use
 	of it!
+
+	\fi
+
 }\QuickQuizEnd
+
+어떤 락이 여러 시그널을 위한 핸들러에 의해 획득된다면, 해당 락이 하나의 시그널
+핸들러에 의해서 획득될 때 조차도 해당 락이 획득될 때마다 이 시그널들은 모두
+블록되어야만 할 겁니다.
+
+\iffalse
 
 If a lock is acquired by the handlers for several signals, then each
 and every one of these signals must be blocked whenever that lock is
 acquired, even when that
 lock is acquired within a signal handler.
 
+\fi
+
 \QuickQuiz{
+	시그널 핸들러 내에서 어떻게 시그널들을 합법적으로 블록할 수 있죠?
+
+	\iffalse
+
 	How can you legally block signals within a signal handler?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그렇게 할 수 있는 가장 간단하고 빠른 방법은 해당 시그널을 설정할 때
+	\co{sigaction()} 에 넘기는 \co{struct sigaction} 의 \co{sa_mask} 필드를
+	사용하는 겁니다.
+
+	\iffalse
+
 	One of the simplest and fastest ways to do so is to use
 	the \co{sa_mask} field of the \co{struct sigaction} that
 	you pass to \co{sigaction()} when setting up the signal.
+
+	\fi
+
 }\QuickQuizEnd
+
+불행히도, 시그널을 블록하고 블록 해제하는 것은 리눅스를 포함한 일부
+운영체제에선 값비싼 행위이므로, 성능에 대한 염려는 시그널 핸들러 내에서
+획득되는 락들은 시그널 핸들러에서만 획득되며, 어플리케이션 코드와 시그널 핸들러
+사이에서 통신하는 데에는 lockless 동기화 메커니즘이 사용되어야 함을 의미합니다.
+
+또는 시그널 핸들러는 치명적 에러를 처리하는 경우를 제외하고는 완전히 사용되지
+않을 수도 있겠습니다.
+
+\iffalse
 
 Unfortunately, blocking and unblocking signals can be expensive in
 some operating systems, notably including Linux, so performance
@@ -1416,10 +1498,32 @@ signal handlers.
 Or that signal handlers are avoided completely except for handling
 fatal errors.
 
+\fi
+
 \QuickQuiz{
+	시그널 핸들러 내에서 락을 잡는게 그렇게 나쁜 생각이라면, 그걸 안전하게
+	하는 방법을 이야기 하는 이유는 뭐죠?
+
+	\iffalse
+
 	If acquiring locks in signal handlers is such a bad idea, why
 	even discuss ways of making it safe?
+
+	\fi
+
 }\QuickQuizAnswer{
+	똑같은 규칙이 운영체제 커널과 일부 임베디드 어플리케이션의 인터럽트
+	핸들러에도 적용되기 때문입니다.
+
+	많은 어플리케이션 환경에서, 시그널 핸들러 내에서 락을 잡는 건 나쁜
+	행위로 알려져 있습니다~\cite{OpenGroup1997pthreads}.
+	하지만, 이는 영리한 개발자들이 (아마도 현명치 못하게도) 어토믹
+	오퍼레이션을 가지고 집에서 만든 락 기능을 사용하는 걸 막지는 못합니다.
+	그리고 어토믹 오퍼레이션들은 많은 경우 시근러 핸들러 내에서 사용이
+	합법입니다.
+
+	\iffalse
+
 	Because these same rules apply to the interrupt handlers used in
 	operating-system kernels and in some embedded applications.
 
@@ -1429,6 +1533,9 @@ fatal errors.
 	unwisely) fashioning home-brew locks out of atomic operations.
 	And atomic operations are in many cases perfectly legal in
 	signal handlers.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Discussion}
