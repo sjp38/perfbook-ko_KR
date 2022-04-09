@@ -1541,6 +1541,15 @@ fatal errors.
 \subsubsection{Discussion}
 \label{sec:locking:Locking Hierarchy Discussion}
 
+공유메모리 병렬 프로그래머가 사용할 수 있는 굉장히 많은 deadlock 회피 기법들이
+존재합니다만, 그것들 중 어느 것도 잘 들어맞지 않는 순차적 프로그램들이
+있습니다.
+이는 전문가 프로그래머들이 그들의 도구상자에 여러개의 도구를 가지고 다니는
+이유입니다: 락킹은 강력한 동시성 도구이지만, 다른 도구들로 처리되는게 나은
+일들도 있습니다.
+
+\iffalse
+
 There are a large number of deadlock-avoidance strategies available to
 the shared-memory parallel programmer, but there are sequential
 programs for which none of them is a good fit.
@@ -1548,14 +1557,50 @@ This is one of the reasons that expert programmers have more than
 one tool in their toolbox: locking is a powerful concurrency
 tool, but there are jobs better addressed with other tools.
 
+\fi
+
 \QuickQuiz{
+	간단한 락킹 계층, 레이어나 다른 것들이 존재 하지 않게끔 제어를 객체
+	그룹 간에 자유로이 넘겨대는 객체 지향 어플리케이션에서\footnote{
+		``객체 지향 스파게티 코드'' 라고도 알려져 있습니다.}
+	는 이 어플리케이션을 어떻게 병렬화 시킬 수 있을까요?
+
+	\iffalse
+
 	Given an object-oriented application that passes control freely
 	among a group of objects such that there is no straightforward
 	locking hierarchy,\footnote{
 		Also known as ``object-oriented spaghetti code.''}
 	layered or otherwise, how can this
 	application be parallelized?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여러 방법들이 있습니다:
+	\begin{enumerate}
+	\item	많은 수의 시뮬레이션이 (예를 들면) 기계적이나 전자적 기기의
+		좋은 설계로 수렴되게 하게끔 하는 시뮬레이션을 통한 패러메트릭
+		탐색의 경우, 시뮬레이션을 싱글쓰레드고 두되, 시뮬레이션의 각
+		인스턴스를 병렬로 돌립니다.
+		이는 객체 지향 설계를 유지하며, 높은 단계에서의 병렬성을 얻게
+		하며, 또한 deadklock 과 동기화 오버헤드를 회피합니다.
+	\item	객체를 한번에 하나의 그룹 이상의 객체들과는 작업하지 않게끔
+		여러 그룹으로 나눕니다.
+		그러고 나면 각 그룹에 락 하나씩을 연관짓습니다.
+		이는
+		Section~\ref{sec:locking:Single-Lock-at-a-Time Designs}
+		에서 이야기 된 한번에 하나의 락 설계의 예입니다.
+	\item	객체를 어떤 그룹 기반 순서대로 각 그룹의 객체들과 작업하게끔
+		그룹짓습니다.
+		그리고 각 그룹별로 락을 연관짓고, 그룹들 간의 락킹 계층을
+		넣습니다.
+	\item	임의로 선택된 계층을 락들에 넣고, 락을 역순서로 획득해야 하면
+		Section~\ref{sec:locking:Conditional Locking} 에서 이야기한
+		조건적 락킹을 사용합니다.
+
+	\iffalse
+
 	There are a number of approaches:
 	\begin{enumerate}
 	\item	In the case of parametric search via simulation,
@@ -1583,6 +1628,31 @@ tool, but there are jobs better addressed with other tools.
 		and then use conditional locking if it is necessary
 		to acquire a lock out of order, as was discussed in
 		Section~\ref{sec:locking:Conditional Locking}.
+
+	\fi
+
+	\item	주어진 오퍼레이션 그룹을 이어가기 전에, 어떤 락이 획득될지
+		예측하고, 실제로 어떤 업데이트를 하기 전에 그것들을 획득하려
+		합니다.
+		만약 이 예측이 올바르지 않았음이 드러난다면, 모든 락을 내려놓고
+		경험의 이익을 포함하는 업데이트 된 예측을 가지고 재시도 합니다.
+		이 방법은
+		Section~\ref{sec:locking:Acquire Needed Locks First}
+		에서 이야기 되었습니다.
+	\item	트랜잭셔널 메모리를 사용합니다.
+		이 방법은
+		\crefrange{sec:future:Transactional Memory}{sec:future:Hardware Transactional Memory}
+		에서 이야기 될 여러 장단점을 가지고 있습니다.
+	\item	어플리케이션을 더욱 동시성 친화적으로 리팩토링 합니다.
+		이는 싱글쓰레드로 돌아갈 때 조차도 더 빨리 수행되도록
+		어플리케이션을 만드는 부작용 또한 가질 확률이 높으나,
+		어플리케이션을 수정하기 더 어렵게 할수도 있습니다.
+	\item	락킹에 추가적으로 뒤 챕터들에서 다룰 기법들을 사용합니다.
+	\end{enumerate}
+
+	\iffalse
+
+
 	\item	Before carrying out a given group of operations, predict
 		which locks will be acquired, and attempt to acquire them
 		before actually carrying out any updates.
@@ -1601,10 +1671,19 @@ tool, but there are jobs better addressed with other tools.
 		also make it more difficult to modify the application.
 	\item	Use techniques from later chapters in addition to locking.
 	\end{enumerate}
+
+	\fi
+
 }\QuickQuizEnd
+
+그러나, 이 섹션에서 이야기된 전법들은 많은 상황에서 유용함으로 증명되었습니다.
+
+\iffalse
 
 Nevertheless, the strategies described in this section have proven
 quite useful in many settings.
+
+\fi
 
 \subsection{Livelock and Starvation}
 \label{sec:locking:Livelock and Starvation}
