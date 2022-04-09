@@ -1688,12 +1688,24 @@ quite useful in many settings.
 \subsection{Livelock and Starvation}
 \label{sec:locking:Livelock and Starvation}
 
+조건적 락킹이 효과적인 deadlock 회피 메커니즘이 될 수 있지만, 오용될 수
+있습니다.
+예를 들어
+Listing~\ref{lst:locking:Abusing Conditional Locking} 에 보인 아름답도록
+대칭적인 예를 예로 들어 봅시다.
+이 예의 아름다움은 추악한 livelock 을 감춥니다.
+이를 보기 위해, 아래와 같은 이벤트들의 순서를 생각해 봅시다:
+
+\iffalse
+
 Although conditional locking can be an effective deadlock-avoidance
 mechanism, it can be abused.
 Consider for example the beautifully symmetric example shown in
 Listing~\ref{lst:locking:Abusing Conditional Locking}.
 This example's beauty hides an ugly livelock.
 To see this, consider the following sequence of events:
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:locking:Abusing Conditional Locking]
@@ -1733,6 +1745,22 @@ retry:					\lnlbl[thr2:retry]
 
 \begin{fcvref}[ln:locking:Abusing Conditional Locking]
 \begin{enumerate}
+\item	쓰레드~1 이 라인~\lnref{thr1:acq1} 에서 \co{lock1} 을 잡고,
+	\co{do_one_thing()} 을 호출합니다.
+\item	쓰레드~2 가 라인~\lnref{thr2:acq2} 에서 \co{lock2} 를 잡고
+	\co{do_a_third_thing()} 을 호출합니다.
+\item	쓰레드~1 이 라인~\lnref{thr1:try2} 에서 \co{lock2} 를 잡으려 하지만,
+	쓰레드~2 가 이를 잡고 있으므로 실패합니다.
+\item	쓰레드~2 가 라인~\lnref{thr2:try1} 에서 \co{lock1} 을 잡으려 하지만,
+	쓰레드~1 이 이를 잡고 있으므로 실패합니다.
+\item	쓰레드~1 이 라인~\lnref{thr1:rel1} 에서 \co{lock1} 을 놓고,
+	라인~\lnref{thr1:retry} 의 \co{retry} 로 점프합니다.
+\item	쓰레드~2 가 라인~\lnref{thr2:rel2} 에서 \co{lock2} 를 내려놓고,
+	라인~\lnref{thr2:retry} 의 \co{retry} 로 점프합니다.
+\item	이 livelock 이 처음부터 반복됩니다.
+
+\iffalse
+
 \item	Thread~1 acquires \co{lock1} on line~\lnref{thr1:acq1}, then invokes
 	\co{do_one_thing()}.
 \item	Thread~2 acquires \co{lock2} on line~\lnref{thr2:acq2}, then invokes
@@ -1746,14 +1774,45 @@ retry:					\lnlbl[thr2:retry]
 \item	Thread~2 releases \co{lock2} on line~\lnref{thr2:rel2},
 	and jumps to \co{retry} at line~\lnref{thr2:retry}.
 \item	The livelock dance repeats from the beginning.
+
+\fi
+
 \end{enumerate}
 \end{fcvref}
 
 \QuickQuiz{
+	Listing~\ref{lst:locking:Abusing Conditional Locking}
+	에 보인 livelock 은 어떻게 회피될 수 있나요?
+
+	\iffalse
+
 	How can the livelock shown in
 	Listing~\ref{lst:locking:Abusing Conditional Locking}
 	be avoided?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Listing~\ref{lst:locking:Avoiding Deadlock Via Conditional Locking}
+	은 몇가지 좋은 힌트를 제공합니다.
+	많은 경우, livelock 은 여러분이 락킹 설계를 다시 고려해야 한다는
+	힌트입니다.
+	또는 여러분의 락킹 설계가 ``막 자랐다면'' 처음으로 방문해야 하는
+	곳입니다.
+
+	그러나, Doug Lea 가 제안한 충분히 좋은 한가지 방법은
+	Section~\ref{sec:locking:Conditional Locking} 에 이야기된 것과 같이
+	조건적 락킹을 사용하되 이를
+	Section~\ref{sec:locking:Acquire Needed Locks First}
+	에서 이야기한 것처럼 공유된 데이터를 수정하기 전에 모든 필요한 락들을
+	먼저 잡는 것입니다.
+	특정 크리티컬 섹션이 너무 여러번 재시도 된다면, 무조건적으로 전역 락을
+	잡고, 무조건적으로 모든 필요한 락들을 잡습니다.
+	이는 deadlock 과 livelock 을 모두 회피하며, 이 전역 락은 너무 자주
+	잡히지 않는다는 가정 하에 합리적 수준으로 확장합니다.
+
+	\iffalse
+
 	Listing~\ref{lst:locking:Avoiding Deadlock Via Conditional Locking}
 	provides some good hints.
 	In many cases, livelocks are a hint that you should revisit your
@@ -1772,7 +1831,19 @@ retry:					\lnlbl[thr2:retry]
 	a global lock, then unconditionally acquire all the needed locks.
 	This avoids both deadlock and livelock, and scales reasonably
 	assuming that the global lock need not be acquired too often.
+
+	\fi
+
 }\QuickQuizEnd
+
+Livelock 은 한 그룹의 쓰레드 중 하나가 아니라 전체가 기아에 빠지는 극단적
+형태의 starvation 이라 할 수 있습니다.\footnote{
+	Livelock, starvation, 그리고 unfairness 같은 용어들의 정확한 정의에
+	너무 매달려 있지는 마세요.
+	어떤 그룹의 쓰레드들이 적절한 진행을 내는 것을 막는 모든 것은 고쳐져야
+	하는 버그이며, 논쟁적인 이름들은 버그를 고치지 않습니다.}
+
+\iffalse
 
 Livelock can be thought of as an extreme form of starvation where
 a group of threads starves, rather than just one of them.\footnote{
@@ -1781,6 +1852,8 @@ a group of threads starves, rather than just one of them.\footnote{
 	Anything that causes a group of threads to fail to make adequate
 	forward progress is a bug that needs to be fixed, and debating
 	names doesn't fix bugs.}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:locking:Conditional Locking and Exponential Backoff]
@@ -1824,6 +1897,16 @@ retry:
 \label{lst:locking:Conditional Locking and Exponential Backoff}
 \end{listing}
 
+Livelock 과 starvation 은 소프트웨어 트랜잭셔널 메모리 구현의 심각한 문제이며,
+이 문제를 캡슐화 하기 위해 \emph{컨텐션 매니저} 의 개념이 도입되었습니다.
+락킹의 경우, 간단한 exponential backoff 는 livelock 과 starvation 을 종종
+해결할 수 있습니다.
+아이디어는
+Listing~\ref{lst:locking:Conditional Locking and Exponential Backoff}
+에 보인 것과 같이 각 재시도 사이의 딜레이를 지수적으로 증가시키는 겁니다.
+
+\iffalse
+
 Livelock and starvation are serious issues in software transactional
 memory implementations, and so the concept of \emph{contention
 manager} has been introduced to encapsulate these issues.
@@ -1833,10 +1916,33 @@ The idea is to introduce exponentially increasing delays before each
 retry, as shown in
 Listing~\ref{lst:locking:Conditional Locking and Exponential Backoff}.
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:locking:Conditional Locking and Exponential Backoff}
+	의 코드에는 어떤 문제들이 있나요?
+
+	\iffalse
+
 	What problems can you spot in the code in
 	Listing~\ref{lst:locking:Conditional Locking and Exponential Backoff}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여기 두가지 문제가 있습니다:
+	\begin{enumerate}
+	\item	1초의 대기는 대부분의 경우 너무 깁니다.
+		대기 기간은 대략 이 크리티컬 섹션을 수행하는데 걸리는 시간으로
+		시작되어야 하는데, 이는 보통 마리크로세컨드나 밀리세컨드 범위가
+		될 겁니다.
+	\item	이 코드는 오버플로우를 검사하지 않습니다.
+		한편, 이 버그는 앞의 버그에 의해 제거될 수 있습니다: 32 비트로
+		초를 저장하면 50년도 넘는 시간을 표현할 수 있습니다.
+	\end{enumerate}
+
+	\iffalse
+
 	Here are a couple:
 	\begin{enumerate}
 	\item	A one-second wait is way too long for most uses.
@@ -1848,7 +1954,20 @@ Listing~\ref{lst:locking:Conditional Locking and Exponential Backoff}.
 		by the previous bug: 32 bits worth of seconds is
 		more than 50 years.
 	\end{enumerate}
+
+	\fi
+
 }\QuickQuizEnd
+
+더 나은 결과를 위해, backoff 는 제한되어야 하며, 이보다도 나은 높은
+컨텐션에서의 결과는
+Section~\ref{sec:locking:Other Exclusive-Locking Implementations}
+에서 더 이야기 되는 queued locking~\cite{Anderson90} 을 통해 얻어질 수
+있습니다.
+물론, 최고의 방법은 낮은 락 컨텐션을 유지함으로써 이런 문제들을 방지하는 좋은
+병렬 설계를 사용하는 것입니다.
+
+\iffalse
 
 For better results, backoffs should be bounded, and
 even better high-contention results are obtained via queued
@@ -1856,6 +1975,8 @@ locking~\cite{Anderson90}, which is discussed more in
 Section~\ref{sec:locking:Other Exclusive-Locking Implementations}.
 Of course, best of all is to use a good parallel design that avoids
 these problems by maintaining low lock contention.
+
+\fi
 
 \subsection{Unfairness}
 \label{sec:locking:Unfairness}
