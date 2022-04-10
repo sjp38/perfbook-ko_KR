@@ -1988,6 +1988,19 @@ these problems by maintaining low lock contention.
 \label{fig:locking:System Architecture and Lock Unfairness}
 \end{figure}
 
+Unfairness 는 쓰레드들 중 특정 락을 가지고 경쟁하는 일부가 획득의 특권을 갖는,
+덜 심각한 형태의 starvation 으로 생각될 수 있습니다.
+이는 공유된 캐시나 NUMA 특성을 갖는 기계에서 일어날 수 있는데, 예를 들면
+Figure~\ref{fig:locking:System Architecture and Lock Unfairness} 와 같습니다.
+CPU~0 이 모든 다른 CPU 들이 획득하고자 하는 락을 놓으면, CPU~0 과~1 사이에
+공유된 연결부는 CPU~1 이 CPU~2--7 보다 이득을 얻을 것을 의미합니다.
+따라서 CPU~1 은 락을 획득할 가능성이 높습니다.
+CPU~0 이 이 락을 다시 잡으려 할만큼 충분히 CPU~1 이 이 락을 길게 소유한다면,
+그리고 그 반대의 경우에도, 이 락은 CPU~2--7 을 제끼고 CPU~0 과~1 사이에서
+돌아다닐 겁니다.
+
+\iffalse
+
 Unfairness can be thought of as a less-severe form of starvation,
 where a subset of threads contending for a given lock are granted
 the lion's share of the acquisitions.
@@ -2002,10 +2015,32 @@ If CPU~1 holds the lock long enough for CPU~0 to be requesting the
 lock by the time CPU~1 releases it and vice versa, the lock can
 shuttle between CPUs~0 and~1, bypassing CPUs~2--7.
 
+\fi
+
 \QuickQuiz{
+	Unfairness 를 회피할 정도로 락 경쟁을 낮게 유지하는 좋은 병렬 설계를
+	사용하는게 낫지 않을까요?
+
+	\iffalse
+
 	Wouldn't it be better just to use a good parallel design
 	so that lock contention was low enough to avoid unfairness?
+
+	\fi
 }\QuickQuizAnswer{
+	어떤 면에선 그게 낫겠습니다만, 때로는 높은 락 경쟁을 초래하는 설계를
+	사용하는게 적절한 상황이 있습니다.
+
+	예를 들어, 드문 에러 조건을 갖는 시스템을 상상해 보세요.
+	그런 드문 에러 조건 중 하나가 발동되었을 때에만 도움이 되는 복잡하고
+	디버깅 하기 어려운 설계보다는 이 드문 에러 상황의 기간 동안만 낮은
+	성능과 확장성을 갖는 간단한 에러 처리 설계가 최고일 수도 있습니다.
+
+	그러나, 예를 들면 문제 자체를 쪼개는 것과 같은, 간단하면서도 에러 조건
+	하에서도 효율적인 설계를 시도하는 노력을 할 가치는 있습니다.
+
+	\iffalse
+
 	It would be better in some sense, but there are situations
 	where it can be appropriate to use
 	designs that sometimes result in high lock contentions.
@@ -2022,6 +2057,9 @@ shuttle between CPUs~0 and~1, bypassing CPUs~2--7.
 	attempting to produce a design that both simple as well as
 	efficient during error conditions, for example by partitioning
 	the problem.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Inefficiency}
