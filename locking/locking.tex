@@ -1990,7 +1990,7 @@ these problems by maintaining low lock contention.
 
 Unfairness 는 쓰레드들 중 특정 락을 가지고 경쟁하는 일부가 획득의 특권을 갖는,
 덜 심각한 형태의 starvation 으로 생각될 수 있습니다.
-이는 공유된 캐시나 NUMA 특성을 갖는 기계에서 일어날 수 있는데, 예를 들면
+이는 공유된 캐쉬나 NUMA 특성을 갖는 기계에서 일어날 수 있는데, 예를 들면
 Figure~\ref{fig:locking:System Architecture and Lock Unfairness} 와 같습니다.
 CPU~0 이 모든 다른 CPU 들이 획득하고자 하는 락을 놓으면, CPU~0 과~1 사이에
 공유된 연결부는 CPU~1 이 CPU~2--7 보다 이득을 얻을 것을 의미합니다.
@@ -2065,6 +2065,28 @@ shuttle between CPUs~0 and~1, bypassing CPUs~2--7.
 \subsection{Inefficiency}
 \label{sec:locking:Inefficiency}
 
+락은 어토믹 인스트럭션과 메모리 배리어를 사용해 구현되며 종종 캐쉬 미스를
+일으킵니다.
+Chapter~\ref{chp:Hardware and its Habits} 에서 보았듯, 이 인스트럭션들은 상당히
+미용이 높은데, 간단한 인스트럭션들보다 대략 수백배 높은 오버헤드를 갖습니다.
+이는 락킹에 있어 중요한 문제가 될 수 있습니다: 여러분이 하나의 인스트럭션을
+락으로 보호한다면, 여러분은 이 오버헤드를 백배 가량 증가시키게 됩니다.
+완벽한 확장성을 가정한다 해도, 같은 코드를 락킹 없이 수행하는 하나의 CPU 의
+성능을 내려면 \emph{백개의} CPU 가 필요할 겁니다.
+
+이 상황은 Section~\ref{sec:SMPdesign:Synchronization Granularity}, 특히
+Figure~\ref{fig:SMPdesign:Synchronization Efficiency} 에서 설명한
+동기화\-/granularity 트레이드오프의 중요성을 강조합니다:
+너무 coarse 한 granularity 는 확장성을 제한하는 반면, 너무 fine 한 granularity
+는 지나친 동기화 오버헤드를 초래합니다.
+
+락을 잡는 건 높은 비용을 초래하지만, 일단 잡고 나면, 이 CPU 의 캐쉬는 적어도 큰
+크리티컬 섹션에 대해서는 효과적인 성능 부스터가 됩니다.
+또한, 일단 락을 잡고 나면, 이 락에 의해 보호되는 데이터는 다른 쓰레드로부터의
+간섭 없이 이 락을 잡은 쓰레드에 의해 접근될 수 있습니다.
+
+\iffalse
+
 Locks are implemented using atomic instructions and memory barriers,
 and often involve cache misses.
 As we saw in Chapter~\ref{chp:Hardware and its Habits},
@@ -2088,9 +2110,33 @@ are an effective performance booster, at least for large critical sections.
 In addition, once a lock is held, the data protected by that lock can
 be accessed by the lock holder without interference from other threads.
 
+\fi
+
 \QuickQuiz{
+	락을 잡은 쓰레드는 어떻게 간섭받을 수 있나요?
+
+	\iffalse
+
 	How might the lock holder be interfered with?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 락에 의해 보호되는 데이터가 락 자체와 같은 캐쉬라인에 존재한다면
+	다른 CPU 들의 이 락을 획득하려는 시도들은 이 락을 쥐고 있는 CPU 에게
+	비싼 캐쉬 미스를 일으킬 겁니다.
+	이는 거짓 공유 (false sharing) 의 특수한 경우로, 다른 락들로 보호되는
+	한쌍의 변수가 같은 캐쉬 라인에 있을 때에도 일어날 수 있습니다.
+	반대로, 이 락이 자신이 보호하는 데이터와 다른 캐쉬 라인에 있다면, 이
+	락을 쥐고 있는 CPU 는 해당 변수로의 첫번째 액세스 때에만 캐쉬 미스를 낼
+	겁니다.
+
+	물론, 락과 데이터를 별도의 캐쉬 라인에 두는 것의 단점은 경쟁되지 않은
+	경우에 단 하나가 아니라 두개의 캐쉬 미스를 일으킬 것이라는 겁니다.
+	항상 그렇듯, 현명한 선택을 하세요!
+
+	\iffalse
+
 	If the data protected by the lock is in the same cache line
 	as the lock itself, then attempts by other CPUs to acquire
 	the lock will result in expensive cache misses on the part
@@ -2107,6 +2153,9 @@ be accessed by the lock holder without interference from other threads.
 	cache lines is that the code will incur two cache misses rather
 	than only one in the uncontended case.
 	As always, choose wisely!
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Types of Locks}
