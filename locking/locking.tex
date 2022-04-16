@@ -2187,6 +2187,18 @@ and scoped locking (Section~\ref{sec:locking:Scoped Locking}).
 \subsection{Exclusive Locks}
 \label{sec:locking:Exclusive Locks}
 
+배타적 락은 말 그대로입니다: 한번에 하나의 쓰레드만이 이 락을 잡을 수 있습니다.
+따라서, 이런 락을 잡은 쓰레드는 해당 락에 의해 보호되는 모든 데이터로의 배타적
+접근 권한을 가지며, 그런 이유로 그런 이름이 붙었습니다.
+
+물론, 이는 이 락이 이 락에 의해 보호되는 데이터에 대한 모든 접근 시에 잡힌다는
+것을 가정하고 있습니다.
+도움을 줄 수 있는 도구가 일부 있기는 하지만 (예를 들어
+Section~\ref{sec:formal:Axiomatic Approaches and Locking} 을 참고하세요), 이
+락이 항상 획득된다는 것을 보장하는 궁극적 책임은 개발자에게 있습니다.
+
+\iffalse
+
 Exclusive locks are what they say they are: only one thread may hold
 the lock at a time.
 The holder of such a lock thus has exclusive access to all data protected
@@ -2199,11 +2211,44 @@ Section~\ref{sec:formal:Axiomatic Approaches and Locking}),
 the ultimate responsibility for ensuring that the lock is always acquired
 when needed rests with the developer.
 
+\fi
+
 \QuickQuiz{
+	배타적 락을 잡자마자 곧바로 놔버리는, 즉 텅 빈 크리티컬 섹션 같은 것을
+	갖는 것은 말이 될까요?
+
+	\iffalse
+
 	Does it ever make sense to have an exclusive lock acquisition
 	immediately followed by a release of that same lock, that is,
 	an empty critical section?
+
+	\fi
+
 }\QuickQuizAnswer{
+	텅 빈 락 기반 크리티컬 섹션은 드물게만 사용되지만, 쓰임새가 있습니다.
+	핵심은 배타적 락의 의미는 두개의 컴포넌트를 갖는다는 것입니다:
+	(1)~친숙한 데이터 보호 의미 그리고 (2)~어떤 락을 해제한다는 것이 같은
+	락의 획득을 기다리는 쓰레드에게 보내는 메세지의 의미.
+	텅 빈 크리티컬 섹션은 데이터 보호 컴포넌트 없이 이 메세지 컴포넌트를
+	사용합니다.
+
+	이 답의 나머지 부분은 텅 빈 크리티컬 섹션의 사용 예를 제공합니다만, 이
+	예들은 ``회색 마법'' 으로 여겨져야 합니다.\footnote{
+		이 설명을 제공한 Alexey Roytman 에게 감사를 표합니다.}
+	그처럼, 텅 빈 크리티컬 섹션은 실제 환경에서는 거의 사용되지 않습니다.
+	그러나, 이 회색 영역으로 들어가 봅시다 \ldots
+
+	텅 빈 크리티컬 섹션의 역사적 사용 중 하나는 2.4 리눅스 커널의 네트워킹
+	스택에 ``big reader lock'' 의 약자로 \co{brlock} 이라 불린, 읽기
+	쓰레드쪽 확장성 있는 reader-writer 락에 의해 등장했습니다.
+	이 사용 예는
+	Section~\ref{sec:defer:Read-Copy Update (RCU)} 에서 설명되는 read-copy
+	update (RCU) 의 의미를 간략화 하는 방법이었습니다.
+	그리고 실제로 이 리눅스 커널의 사용 예는 RCU 로 대체되었습니다.
+
+	\iffalse
+
 	Empty lock-based critical sections are rarely used, but they
 	do have their uses.
 	The point is that the semantics of exclusive locks have two
@@ -2230,6 +2275,22 @@ when needed rests with the developer.
 	And in fact this Linux-kernel use case has been replaced
 	with RCU\@.
 
+	\fi
+
+	이 텅 빈 락 기반 크리티컬 섹션 사용법은 일부 상황에서 락 컨텐션을
+	줄이기 위해 사용될 수도 있습니다.
+	예를 들어, 각 쓰레드가 쓰레드별 리스트에 관리되는 일의 단위를 처리하며,
+	쓰레드들은 각자의 리스트를 만지는 게
+	금지된~\cite{PaulEMcKenney2012EmptyLocks} 멀티쓰레드 기반 유저 스페이스
+	어플리케이션을 생각해 봅시다.
+	앞서 스케쥴된 모든 일 단위들이 업데이트가 진행되기 전에 완료되어야 함을
+	필요로 하는 업데이트도 있을 수 있습니다.
+	이를 처리하는 한가지 방법은 각 쓰레드에 하나의 일 단위를 스케쥴 해서,
+	이 모든 일 단위들이 완료되었을 때, 업데이트가 진행될 수 있게 하는
+	것입니다.
+
+	\iffalse
+
 	The empty-lock-critical-section idiom can also be used to
 	reduce lock contention in some situations.
 	For example, consider a multithreaded user-space application where
@@ -2242,6 +2303,25 @@ when needed rests with the developer.
 	One way to handle this is to schedule a unit of work on each
 	thread, so that when all of these units of work complete, the
 	update may proceed.
+
+	\fi
+
+	일부 어플리케이션에서, 쓰레드는 오고 갈 수 있습니다.
+	예를 들어, 각 쓰레드는 어플리케이션의 한 사용자에 연관될 수도 있고,
+	따라서 해당 유저가 로그아웃 하거나 연결이 끊겼을 때 제거될 수 있습니다.
+	많은 어플리케이션에서, 쓰레드는 원자적으로 떠날 수 없습니다: 그대신
+	명시적으로 스스로를 특정 순서의 액션들을 사용해 어플리케이션의 다양한
+	부분으로부터 제거해야 합니다.
+	그런 특정 액션 하나는 다른 쓰레드로부터 더이상 요청을 받는 것을
+	거부하는 것, 그리고 다른 특정 액션은 자신의 리스트의 남아있는 일
+	단위들을 폐기하는 것, 예를 들어 이 일 단위들을 전역 일 항목 폐기
+	리스트에 넣어 남아있는 쓰레드 중 하나가 이를 취하도록 하는 것일 겁니다.
+	(왜 그 일들을 직접 함으로써 이 쓰레드의 일 항목 리스트를 비우지
+	않을까요?
+	주어진 일 항목이 더 많은 일 항목을 생성해서 이 리스트가 빠른 시간 내에
+	비워지지 않을 수 있기 때문입니다.)
+
+	\iffalse
 
 	In some applications, threads can come and go.
 	For example, each thread might correspond to one user of the
@@ -2260,6 +2340,22 @@ when needed rests with the developer.
 	Because a given work item might generate more work items, so
 	that the list could not be drained in a timely fashion.)
 
+	\fi
+
+	이 어플리케이션이 성능도 좋고 확장성도 좋아야 한다면, 좋은 락킹 설계가
+	필요합니다.
+	한가지 흔한 해결책은 쓰레드 제거 전체 프로세스를 위한 하나의 전역 락을
+	(\co{G} 라 부릅시다) 개별 제거 오퍼레이션을 보호하는 잔 규모의 락과
+	함께 사용하는 것입니다.
+
+	이제, 제거되는 쓰레드는 자신의 리스트의 일을 폐기하기 전에 이어지는
+	요청들을 받는 것을 분명히 거부해야 하는데, 그러지 않는다면 이 폐기 액션
+	후에 추가적인 일이 도착할 수 있으며, 이는 이 폐기 액션이 효과적이지
+	못하게 할 것이기 때문입니다.
+	따라서 제거되는 쓰레드를 위한 간략화된 슈도코드는 다음과 같을 겁니다:
+
+	\iffalse
+
 	If the application is to perform and scale well, a good locking
 	design is required.
 	One common solution is to have a global lock (call it \co{G})
@@ -2274,7 +2370,21 @@ when needed rests with the developer.
 	which would render that disposal action ineffective.
 	So simplified pseudocode for a departing thread might be as follows:
 
+	\fi
+
 	\begin{enumerate}
+	\item	\co{G} 락을 획득합니다.
+	\item	통신을 보호하는 락을 잡습니다.
+	\item	다른 쓰레드로부터의 더이상의 통신을 거부합니다.
+	\item	통신을 보호하는 락을 해제합니다.
+	\item	전역 일 항목 폐기 리스트를 보호하는 락을 잡습니다.
+	\item	모든 보류 중인 일 항목을 전역 일 항목 폐기 리스트로
+		이동시킵니다.
+	\item	전역 일 항목 폐기 리스트를 보호하는 락을 해제합니다.
+	\item	\co{G} 락을 해제합니다.
+
+	\iffalse
+
 	\item	Acquire lock \co{G}.
 	\item	Acquire the lock guarding communications.
 	\item	Refuse further communications from other threads.
@@ -2284,7 +2394,35 @@ when needed rests with the developer.
 		work-item-disposal list.
 	\item	Release the lock guarding the global work-item-disposal list.
 	\item	Release lock \co{G}.
+
+	\fi
+
 	\end{enumerate}
+
+	물론, 모든 미리 존재하던 일 항목을 기다려야 하는 쓰레드는 떠나는
+	쓰레드를 신경써야 합니다.
+	이를 자세히 알아보기 위해, 어떤 제거되는 쓰레드가 다른 쓰레드로부터의
+	더이상의 통신을 거부한 직후에 모든 미리 존재한 일 항목을 기다리는
+	쓰레드가 시작되었다고 생각해 봅시다.
+	쓰레드들은 서로의 일 항목 리스트에 접근할 수 없는데 이 쓰레드는 이
+	제거되는 쓰레드의 일 항목이 완료되기를 기다릴 수 있을까요?
+
+	한가지 간단한 방법은 이 쓰레드가 \co{G} 를, 그리고 전역 일 항목 폐기
+	리스트를 보호하는 락을 잡고, 이 일 항목들을 자신의 리스트로 옮기는
+	것입니다.
+	이 쓰레드는 이후에 두 락을 해제하고, 일 항목 중 하나를 자신의 리스트의
+	끝에 위치시키고, 각 쓰레드의 리스트 (자신의 것 포함) 에 있는 일
+	항목들이 모두 완료되기를 기다립니다.
+
+	이 방법은 많은 경우에 잘 동작합니다만, 각 일 항목이 전역 일 항목 폐기
+	리스트에서 가져와 지는 만큼 특별한 처리가 필요하다면, \co{G} 로의
+	지나친 컨텐션이 초래될 수 있습니다.
+	이 컨텐션을 방지하는 한가지 방법은 \co{G} 를 획득하고는 곧바로 해제하는
+	것입니다.
+	그러면 앞의 모든 일 항목이 완료되기를 기다리는 프로세스는 다음과 같이
+	됩니다:
+
+	\iffalse
 
 	Of course, a thread that needs to wait for all pre-existing work
 	items will need to take departing threads into account.
@@ -2311,6 +2449,8 @@ when needed rests with the developer.
 	immediately release it.
 	Then the process of waiting for all prior work items look
 	something like the following:
+
+	\fi
 
 	\begin{enumerate}
 	\item	Set a global counter to one and initialize a condition
