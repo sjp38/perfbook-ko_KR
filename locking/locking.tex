@@ -2453,6 +2453,29 @@ when needed rests with the developer.
 	\fi
 
 	\begin{enumerate}
+	\item	한 전역 카운터를 1로 값 설정하고 한 조건 변수를 0으로 초기화
+		합니다.
+	\item	모든 쓰레드에게 그것들이 원자적으로 이 전역 카운터의 값을
+		증가시키도록, 그리고 나서 일 항목을 넣도록 메세지를 보냅니다.
+		이 일 항목은 원자적으로 이 전역 카운터의 값을 감소시키며, 그
+		결과 그 값이 0이 되면, 이는 한 조건 변수의 값을 1로 설정합니다.
+	\item	모든 현재 제거되는 중인 쓰레드가 제거되기를 끝낼 때까지
+		기다리게끔 \co{G} 를 획득합니다.
+		한번에 하나의 쓰레드만 제거될 것이므로, 모든 남아있는 쓰레드는
+		이미 앞의 단계에서 보낸 메세지를 받았을 겁니다.
+	\item	\co{G} 를 해제함.
+	\item	전역 일 항목 폐기 리스트를 보호하는 락을 획득합니다.
+	\item	모든 일 항목을 전역 일 항목 폐기 리스트에서 이 쓰레드의
+		리스트로 이동시키고, 그것들을 필요한 대로 처리합니다.
+	\item	전역 일 항목 폐기 리스트를 보호하는 락을 해제합니다.
+	\item	추가적인 일 항목을 이 쓰레드의 리스트에 넣습니다.
+		(앞에서와 마찬가지로, 이 일 항목은 원자적으로 전역 카운터의
+		값을 감소시키고, 그 결과 값이 0이 되면 조건 변수를 1로
+		설정합니다.)
+	\item	이 조건 변수가 값 1이 되기를 기다립니다.
+
+	\iffalse
+
 	\item	Set a global counter to one and initialize a condition
 		variable to zero.
 	\item	Send a message to all threads to cause them to atomically
@@ -2476,15 +2499,40 @@ when needed rests with the developer.
 		the global counter, and if the result is zero, it will
 		set a condition variable to one.)
 	\item	Wait for the condition variable to take on the value one.
+
+	\fi
+
 	\end{enumerate}
+
+	이 프로세스가 완료되면, 모든 앞서서부터 존재한 일 항목들은 완료되었을
+	것이 보장됩니다.
+	텅 빈 크리티컬 섹션은 락킹을 메세징은 물론이고 데이터의 보호를 위해서도
+	사용됩니다.
+
+	\iffalse
 
 	Once this procedure completes, all pre-existing work items are
 	guaranteed to have completed.
 	The empty critical sections are using locking for messaging as
 	well as for protection of data.
+
+	\fi
+
 }\QuickQuizEnd
 
 \QuickQuizLabel{\QlockingQemptycriticalsection}
+
+무조건적으로 배타적 락을 획득하는 것이 두가지 영향을 끼침을 알아두는 것이
+중요합니다:
+(1)~해당 락을 앞서 잡은 모든 쓰레드가 그것을 놓기를 기다림, 그리고
+(2)~이 락이 해제되기 전까지는 모든 이 락을 잡으려는 시도가 블록됨.
+그 결과, 락 획득 시점에서, 모든 동시의 해당 락에 대한 획득은 앞서 락을 잡고
+있던 쓰레드와 뒤따라 락을 잡는 쓰레드로 분리됩니다.
+다른 종류의 배타적 락은 다른 분리 전략을
+사용하는데~\cite{BjoernBrandenburgPhD,Guerraoui:2019:LPA:3319851.3301501}, 예를
+들면:
+
+\iffalse
 
 It is important to note that unconditionally acquiring an exclusive lock
 has two effects:
@@ -2497,7 +2545,22 @@ Different types of exclusive locks use different partitioning
 strategies~\cite{BjoernBrandenburgPhD,Guerraoui:2019:LPA:3319851.3301501},
 for example:
 
+\fi
+
 \begin{enumerate}
+\item	락을 먼저 획득하고자 한 쓰레드가 먼저 락을 획득하는 엄격한 FIFO.
+\item	충분히 먼저 락을 획득하고자 한 쓰레드가 먼저 락을 획득하는 대략적 FIFO.
+\item	비슷한 시점에 락을 획득하려 시도하는 어떤 낮은 우선순위 쓰레드보다 더
+	높은 우선순위를 갖고 일찍 락을 획득하고자 한 쓰레드가 먼저 락을
+	획득하게 되는, 하지만 같은 우선순위의 쓰레드 사이에는 약간의 FIFO 순서
+	규칙이 적용되는 우선순위 단계 기반 FIFO.
+\item	새로운 락 획득 쓰레드는 타이밍에 관계 없이 해당 락을 획득하려는 쓰레드
+	중 하나가 무작위로 뽑혀지는 무작위 방식.
+\item	특정 락 획득 시도가 결코 락을 획득하지 못하게 될수도 있는 unfair 방식
+	(see \cref{sec:locking:Unfairness}).
+
+\iffalse
+
 \item	Strict FIFO, with acquisitions starting earlier acquiring
 	the lock earlier.
 \item	Approximate FIFO, with acquisitions starting sufficiently
@@ -2511,7 +2574,21 @@ for example:
 \item	
 	Unfair, so that a given acquisition might never acquire the lock
 	(see \cref{sec:locking:Unfairness}).
+
+\fi
+
 \end{enumerate}
+
+불행히도, 더 강력한 보장을 제공하는 락킹 구현은 일반적으로 더 높은 오버헤드를
+일으켜서, 제품들에서 사용되는 다양한 락킹 구현의 모티베이션이 되었습니다.
+예를 들어, 리얼타임 시스템은 종종 다른 것들보다도 우선순위 단계를 갖는
+어느정도의 FIFO 순서 규칙을 필요로 하는 반면
+(\cref{sec:advsync:Event-Driven Real-Time Support} 를 참고하세요),
+높은 컨텐션을 갖는 비 리얼타임 시스템은 starvation 을 피하기 충분한
+순서규칙만을 필요로 할 수 있으며, 마지막으로, 컨텐션을 방지하게끔 설계된 비
+리얼타임 시스템은 fairness 자체가 필요하지 않을 수도 있습니다.
+
+\iffalse
 
 Unfortunately, locking implementations with stronger guarantees
 typically incur higher overhead, motivating the wide variety of locking
@@ -2522,6 +2599,8 @@ ordering within priority level, and much else besides
 while non-realtime systems subject to high contention might require
 only enough ordering to avoid starvation, and finally, non-realtime
 systems designed to avoid contention might not need fairness at all.
+
+\fi
 
 \subsection{Reader-Writer Locks}
 \label{sec:locking:Reader-Writer Locks}
