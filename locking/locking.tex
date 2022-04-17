@@ -2605,6 +2605,24 @@ systems designed to avoid contention might not need fairness at all.
 \subsection{Reader-Writer Locks}
 \label{sec:locking:Reader-Writer Locks}
 
+Reader-writer 락~\cite{Courtois71} 은 여러 읽기 쓰레드가 동시에 락을 쥐고
+있거나 하나의 쓰기 쓰레드만이 이 락을 쥐고 있을 수 있는 것을 허용합니다.
+이러면, 이론상으로 reader-writer 락은 종종 읽히고 가끔만 쓰여지는 데이터에 대해
+훌륭한 확장성을 허용해야만 합니다.
+실전에서는, 이 확장성은 이 reader-writer 락 구현에 의존적입니다.
+
+고전적인 reader-writer 락 구현은 원자적으로 조정되는 카운터와 플래그 집합을
+사용합니다.
+이런 종류의 구현은 짧은 크리티컬 섹션을 갖는 배타적 락킹과 같은 문제로 고통받게
+됩니다: 이 락을 획득하고 해제하는 오버헤드가 간단한 인스트럭션 하나의
+오버헤드의 수백배는 큽니다.
+물론, 이 크리티컬 섹션이 충분히 길다면, 이 락을 획득하고 해제하는데 드는
+오버헤드는 무시할 수 있게 됩니다.
+하지만, 한번에 하나의 쓰레드만이 이 락을 조정할 수 있으므로, 필요한 크리티컬
+섹션 크기는 CPU 수에 비례해 늘어납니다.
+
+\iffalse
+
 Reader-writer locks~\cite{Courtois71}
 permit any number of readers to hold the lock
 concurrently on the one hand or a single writer to hold the lock
@@ -2627,6 +2645,25 @@ However, because only
 one thread at a time can be manipulating the lock, the required
 critical-section size increases with the number of CPUs.
 
+\fi
+
+쓰레드별 배타적 락을 사용해 훨씬 읽기 쓰레드에게 우호적인 reader-writer 락을
+설계하는 것도 가능합니다~\cite{WilsonCHsieh92a}.
+읽기를 하려면, 자신의 락만을 획득합니다.
+쓰기를 하려면, 모든 락을 획득합니다.
+쓰기 쓰레드가 없을 때에는, 각 읽기 쓰레드는 어토믹 인스트럭션과 메모리 배리어
+오버헤드만을 일으키며, 캐쉬 미스도 일으키지 않아서, 락킹 기능에게는 상당히
+좋습니다.
+불행히도, 쓰기 쓰레드는 어토믹 인스트럭션과 메모리 배리어 오버헤드에 더해 캐쉬
+미스를 일으켜야만 합니다---여기에 쓰레드의 수를 곱한 만큼의 오버헤드.
+
+짧게 요약해서, reader-writer 락은 여러 상황에서 상당히 유용할 수 있습니다만,
+각각의 구현의 종류들은 각자의 단점을 갖습니다.
+Reader-writer 락킹의 흔한 사용 예는 매우 긴 읽기 쪽 크리티컬 섹션을 사용하는데,
+수백 마이크로세컨드에서 심지어 밀리세컨드까지 되는 길이가 선호됩니다.
+
+\iffalse
+
 It is possible to design a reader-writer lock that is much more
 favorable to readers through use of per-thread exclusive
 locks~\cite{WilsonCHsieh92a}.
@@ -2643,6 +2680,31 @@ situations, but each type of implementation does have its drawbacks.
 The canonical use case for reader-writer locking involves very long
 read-side critical sections, preferably measured in hundreds of microseconds
 or even milliseconds.
+
+\fi
+
+배타적 락에서와 같이, reader-writer 락 획득은 모든 앞의 충돌하는 해당 락을 쥐고
+있던 쓰레드가 이를 해제하기 전까지는 완료될 수 없습니다.
+만약 어떤 락이 읽기 모드로 잡히면, 읽기 모드 획득은 곧바로 성공할 수
+있습니다만, 쓰기 모드 획득은 더이상 이 락을 읽기 모드로 잡고 있는 쓰레드가 없을
+때까지 기다려야만 합니다.
+락이 쓰기 모드로 잡혀 있다면, 모든 락 획득 시도는 이 쓰기 쓰레드가 이 락을
+해제하기 전까지 기다려야만 합니다.
+역시 배타적 락에서와 마찬가지로, 다른 reader-writer 락 구현은 읽기 쓰레드와
+쓰기 쓰레드에게 다른 수준의 FIFO 순서 규칙을 제공합니다.
+
+하지만 많은 수의 읽기 쓰레드가 이 락을 잡고 있고 한 쓰기 쓰레드가 이 락을 잡기
+위해 기다리고 있다고 생각해 봅시다.
+쓰기 쓰레드가 starvation 에 빠질 가능성이 있는데도 읽기 쓰레드들은 이 락을 잡고
+있는 걸 계속하도록 허용해야할까요?
+비슷하게, 한 쓰기 쓰레드가 이 락을 잡고 있고 많은 수의 읽기 쓰레드와 쓰기
+쓰레드가 이 락을 잡으려 기다리고 있다고 해봅시다.
+현재의 쓰기 쓰레드가 이 락을 해제할 때, 이 락은 읽기 쓰레드와 다른 쓰기 쓰레드
+중 누구에게 주어져야 할까요?
+이게 읽기 쓰레드에게 주어진다면, 얼마나 많은 읽기 쓰레드가 다음 쓰기 쓰레드가
+이 락을 잡기 전에 이 락을 잡도록 허용해야 할까요?
+
+\iffalse
 
 As with exclusive locks, a reader-writer lock acquisition cannot complete
 until all prior conflicting holders of that lock have released it.
@@ -2665,6 +2727,8 @@ When the current writer release the lock, should it be given to a reader
 or to another writer?
 If it is given to a reader, how many readers should be allowed to acquire
 the lock before the next writer is permitted to do so?
+
+\fi
 
 There are many possible answers to these questions, with different
 levels of complexity, overhead, and fairness.
