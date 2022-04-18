@@ -2730,6 +2730,15 @@ the lock before the next writer is permitted to do so?
 
 \fi
 
+이 질문들에는 다른 수준의 복잡도, 오버헤드, 그리고 fairness 를 갖는 많은 답변이
+가능합니다.
+다른 구현은 다른 비용을 가질 수도 있는데, 예를 들어 어떤 종류의 reader-writer
+락은 읽기 모드로 잡힌 상태에서 쓰기 모드로 잡히는 변경 과정에서 엄청나게 큰
+지연시간을 일으킵니다.
+여기 몇가지 가능한 방법들이 있습니다:
+
+\iffalse
+
 There are many possible answers to these questions, with different
 levels of complexity, overhead, and fairness.
 Different implementations might have different costs, for example,
@@ -2737,7 +2746,24 @@ some types of reader-writer locks incur extremely large latencies
 when switching from read-holder to write-holder mode.
 Here are a few possible approaches:
 
+\fi
+
 \begin{enumerate}
+\item
+	읽기 쓰레드를 선호하는 구현은 무조건적으로 쓰기 쓰레드보다 읽기
+	쓰레드를 선호해서, 쓰기 모드 락 획득을 무한정 블록되어 있게 할 수도
+	있습니다.
+\item	Batch-fair 구현은 읽기 쓰레드와 쓰기 쓰레드가 모두 이 락을 획득하려 할
+	때, 둘 다 batching 을 통해 합리적인 액세스를 갖습니다.
+	예를 들어, 이 락은 CPU 당 다섯개의 읽기 쓰레드, 이어서 두개의 쓰기
+	쓰레드, 다음엔 CPU 당 다섯개의 추가적 읽기 쓰레드, 이런 식으로 주어질
+	수 있습니다.
+\item	쓰기 쓰레드를 선호하는 구현은 무제한적으로 읽기 쓰레드보다 쓰기
+	쓰레드를 선호해서, 읽기 모드 락 회득을 무한정 블록되어 있게 할 수도
+	있습니다.
+
+\iffalse
+
 \item	
 	Reader-preference implementations unconditionally favor readers
 	over writers, possibly allowing write acquisitions to be
@@ -2749,7 +2775,18 @@ Here are a few possible approaches:
 \item	Writer-preference implementations unconditionally favor
 	writers over readers, possibly allowing read acquisitions to be
 	indefinitely blocked.
+
+\fi
+
 \end{enumerate}
+
+물론, 이 차이는 높은 락 컨텐션 조건 아래에서만 문제가 됩니다.
+
+락의 대기/블록 이라는 본성을 항상 마음에 새겨두시기 바랍니다.
+이는 \cref{chp:Deferred Processing} 의 확장성 있는 고성능의 특수 목적 락킹
+대체제들에 대한 토론에서 다시 이야기 될 겁니다.
+
+\iffalse
 
 Of course, these distinctions matter only under conditions of high
 lock contention.
@@ -2757,6 +2794,8 @@ lock contention.
 Please keep the waiting/blocking dual nature of locks firmly in mind.
 This will be revisited in \cref{chp:Deferred Processing}'s discussion
 of scalable high-performance special-purpose alternatives to locking.
+
+\fi
 
 \subsection{Beyond Reader-Writer Locks}
 \label{sec:locking:Beyond Reader-Writer Locks}
