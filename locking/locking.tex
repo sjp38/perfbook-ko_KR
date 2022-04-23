@@ -3002,6 +3002,28 @@ compared to VAX/VMS's six.
 \subsection{Scoped Locking}
 \label{sec:locking:Scoped Locking}
 
+지금까지 설명해온 락킹 기능들은 획득과 해제 기능, 예를 들면 \co{spin_lock()} 과
+\co{spin_unlock()} 같은 것을 필요로 합니다.
+다른 방법은 객체 지향 ``resource allocation is initialization'' (RAII)
+패턴~\cite{MargaretAEllis1990Cplusplus} 입니다.\footnote{
+	\url{https://www.stroustrup.com/bs_faq2.html\#finally} 에 더 분명히
+	설명되어 있긴 합니다.}
+이 패턴은 C++ 같은 언어의 auto 변수들에 종종 적용되는데, 연관된
+\emph{constructor} 가 이 객체의scope 진입 시에 호출되고, 연관된
+\emph{destructor} 가 이 scope 을 빠져나올 때 호출됩니다.
+이는 이 constructor 가 락을 획득하고 destructor 가 이를 해제하는 식으로
+락킹에도 적용될 수 있습니다.
+
+이 방법은 상당히 유용할 수 있으며, 실제로 저는 1990년에 이것이야말로 필요한
+유일한 락킹 타입이라고 생각했습니다.\footnote{
+	Sequent Computer Systems 에서의 나중의 병렬성에 대한 제 일은 매우
+	빠르게 이게 잘못된 방향이었음을 알려주었습니다.}
+RAII 락킹의 한가지 매우 좋은 특성은 여러분이 이 scope 을 빠져나가는 모든 코드
+경로에서 조심스레 락을 해제할 필요가 없다는 것으로, 이는 문제있는 여러 버그들을
+제거할 수 있습니다.
+
+\iffalse
+
 The locking primitives discussed thus far require explicit acquisition and
 release primitives, for example, \co{spin_lock()} and \co{spin_unlock()},
 respectively.
@@ -3023,6 +3045,30 @@ was the only type of locking that was needed.\footnote{
 One very nice property of RAII locking is that you don't need to carefully
 release the lock on each and every code path that exits that scope,
 a property that can eliminate a troublesome set of bugs.
+
+\fi
+
+하지만, RAII 는 어두운 부분도 존재합니다.
+RAII 는 락 획득과 해제를 캡슐화 하는 것을 상당히 어렵게 하는데, 예를 들면
+iterator 에서 그렇습니다.
+많은 iterator 구현에서, 여러분은 이 락을 이 iterator 의 ``시작'' 함수에서 잡고
+``종료'' 함수에서 해제하고 싶을 겁니다.
+RAII 락킹은 그러는 대신 이 락의 획득과 해제가 어떤 scope 의 단계에서 이뤄질
+것을 필요로 해서, 그런 캡슐화를 어렵거나 심지어 불가능하게 합니다.
+
+엄격한 RAII 락킹은 또한 크리티컬 섹션들을 겹치는 것을 불가능하게 하는데, scope
+들이 중첩되어야 하기 때문입니다.
+이는 여러 유용한 구조를 어렵거나 불가능하게 만드는데, 예를 들면 어떤 이벤트를
+동시에 단정하기 위한 여러 시도들 사이의 조정을 위한 락킹 트리 같은 것입니다.
+많은 그룹의 동시적시도들 가운데 하나만이 성공해야 하는데, 나머지 시도들에 대한
+최고의 전략은 최대한 빠르고 고통 없이 실패하는 것입니다.
+그러지 않으면, 락 컨텐션은 거대한 시스템에서는 (``거대함'' 이란 수백개의 CPU 를
+의미합니다) 병적이 될 것입니다.
+따라서, C++17~\cite{RichardSmith2019N4800} 은 \co{unique_lock} 클래스에서는
+엄격한 RAII 로부터 벗어나는데, 크리티컬 섹션의 scope 이 명시적 락 획득과 해제
+기능에 의해 얻어지는 정도와 거의 똑같은 제어를 가능하게 합니다.
+
+\iffalse
 
 However, RAII locking also has a dark side.
 RAII makes it quite difficult to encapsulate lock acquisition and release,
@@ -3048,6 +3094,8 @@ Therefore, C++17~\cite{RichardSmith2019N4800} has escapes from strict RAII
 in its \co{unique_lock} class, which allows the scope of the critical
 section to be controlled to roughly the same extent as can be achieved
 with explicit lock acquisition and release primitives.
+
+\fi
 
 \begin{figure}[tb]
 \centering
