@@ -2829,6 +2829,28 @@ of scalable high-performance special-purpose alternatives to locking.
 \label{tab:locking:VAX/VMS Distributed Lock Manager Policy}
 \end{table}
 
+Reader-writer 락과 배타적 락은 허용 정책에 있어 다름을 갖습니다: 배타적 락은
+최대 하나의 쓰레드만 락을 잡는 것을 허용하는 반면, reader-writer 락은 읽기
+모드로 얼마든지 되는 수의 쓰레드가 락을 잡는 것을 (하지만 쓰기 모드로는 하나의
+쓰레드만) 허용합니다.
+매우 많은 허용 정책이 존재할 수 있는데, 그 중 하나는
+Table~\ref{tab:locking:VAX/VMS Distributed Lock Manager Policy}
+에 보인 VAX/VMS 분산 락 매니저 (distributed lock manager: DLM) 입니다.
+비어있는 셀은 호환가능한 모드를 나타내며, ``X'' 로 채워진 셀은 비호환 모드를
+의미합니다.
+
+VAX/VMS DLM 은 여섯개의 모드를 사용합니다.
+비교의 목적을 위해 보자면, 배타적 락은 두개의 모드를 (획득되지 않았음과
+획득되었음), reader-writer 락은 세개의 모드를 (획득되지 않았음, 읽기 모드로
+획득되었음, 그리고 쓰기 모드로 획득되었음) 사용합니다.
+
+첫번째 모드는 null, 또는 쥐어지지 않았음 입니다.
+이 모드는 모든 다른 모드와 호환 가능한데, 이는 다음과 같은 예상을 갖습니다:
+만약 한 쓰레드가 어떤 락을 쥐고 있지 않다면, 이는 다른 쓰레드가 해당 락을
+획득하는 것을 막지 않아야 합니다.
+
+\iffalse
+
 Reader-writer locks and exclusive locks differ in their admission
 policy: exclusive locks allow at most one holder, while reader-writer
 locks permit an arbitrary number of read-holders (but only one write-holder).
@@ -2848,6 +2870,32 @@ The first mode is null, or not held.
 This mode is compatible with all other modes, which is to be expected:
 If a thread is not holding a lock, it should not prevent any
 other thread from acquiring that lock.
+
+\fi
+
+두번째 모드는 동시 읽기로, 배타 모드를 제외한 모든 다른 모드와 호환
+가능합니다.
+이 동시 읽기 모드는 어떤 데이터 구조에 동시의 업데이트를 허용하면서 대략적
+통계를 내기 위해 사용될 수 있습니다.
+
+세번째 모드는 동시 쓰기로, null, 동시 읽기, 그리고 동시 쓰기 모드와 호환
+가능합니다.
+이 동시 쓰기 모드는 동시의 읽기와 업데이트가 계속 이뤄지게 허용하면서도 대략적
+통계를 업데이트 하기 위해 사용될 수 있습니다.
+
+네번째 모드는 보호된 읽기로, null, 동시 읽기, 그리고 보호 읽기 모드와 호환
+가능합니다.
+이 보호된 읽기 모드는 어떤 데이터 구조에 동시의 읽기는 허용하면서도 동시의
+업데이트는 금지하면서 일관적인 스냅샷을 얻기 위해 사용될 수 있습니다.
+
+다섯번째 모드는 보호된 쓰기로, null 과 동시 읽기 모드와 호환됩니다.
+이 보호된 쓰기 모드는 보호된 읽기를 간섭할 수 있지만 동시 읽기에는 문제를
+일으키지 않는 데이터 구조에 업데이트를 하기 위해 사용될 수 있습니다.
+
+여섯번째 마지막 모드는 배타 모드로, null 과만 호환됩니다.
+이 배타 모드는 모든 다른 액세스를 배타시켜야 할 때 사용될 수 있습니다.
+
+\iffalse
 
 The second mode is concurrent read, which is compatible with every other
 mode except for exclusive.
@@ -2876,16 +2924,41 @@ be tolerated by concurrent readers.
 The sixth and final mode is exclusive, which is compatible only with null.
 The exclusive mode is used when it is necessary to exclude all other accesses.
 
+\fi
+
+배타적 락과 reader-writer 락은 VAX/VMS DLM 에 의해 에뮬레이션 될 수 있다는 점은
+흥미롭습니다.
+배타적 락은 null 과 배타 모드만 사용할 것이며, reader-writer 락은 null, 보호
+읽기, 그리고 보호 쓰기 모드만을 사용할 겁니다.
+
+\iffalse
+
 It is interesting to note that exclusive locks and reader-writer locks
 can be emulated by the VAX/VMS DLM\@.
 Exclusive locks would use only the null and exclusive modes, while
 reader-writer locks might use the null, protected-read, and
 protected-write modes.
 
+\fi
+
 \QuickQuiz{
+	VAX/VMS DLM 이 reader-writer 락을 에뮬레이션 하는 다른 방법도 있을까요?
+
+	\iffalse
+
 	Is there any other way for the VAX/VMS DLM to emulate
 	a reader-writer lock?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 여러가지가 있습니다.
+	한가지 방법은 null, 보호 읽기, 그리고 배타 모드를 사용하는 것입니다.
+	다른 방법은 null, 보호 읽기, 그리고 동시 쓰기 모드를 사용하는 것입니다.
+	세번째 방법은 null, 동시 읽기, 그리고 배타 모드를 사용하는 것입니다.
+
+	\iffalse
+
 	There are in fact several.
 	One way would be to use the null, protected-read, and exclusive
 	modes.
@@ -2893,7 +2966,23 @@ protected-write modes.
 	concurrent-write modes.
 	A third way would be to use the null, concurrent-read, and
 	exclusive modes.
+
+	\fi
+
 }\QuickQuizEnd
+
+VAX/VMS DLM 정책이 분산 데이터베이스를 위한 광범위한 제품군에서의 사용을 보이긴
+했지만, 공유 메모리 어플리케이션에서는 그만큼 널리 쓰이지 않았습니다.
+이에 대한 그럴싸한 한가지 이유는 분산 데이터베이스의 거대한 통신 오버헤드가
+VAX/VMS DLM 의 더 복잡한 허용 정책의 큰 오버헤드를 가릴 수 있다는 것입니다.
+
+그러나, VAX/VMS DLM 은 락킹 뒤의 컨셉이 얼마나 유연할 수 있는지를 보여주는
+흥미로운 경우입니다.
+이는 또한 VAX/VMS 의 여섯 모드에 비하면 훨씬 많은 30개가 넘는 락킹 모드를
+가지기도 하는, 현대의 DBMS 들에 의해 사용되는, 락킹에 대한 매우 간단한
+소개이기도 합니다.
+
+\iffalse
 
 Although the VAX/VMS DLM policy has seen widespread production use
 for distributed databases, it does not appear to be used much in
@@ -2907,6 +2996,8 @@ how flexible the concepts behind locking can be.
 It also serves as a very simple introduction to the locking schemes
 used by modern DBMSes, which can have more than thirty locking modes,
 compared to VAX/VMS's six.
+
+\fi
 
 \subsection{Scoped Locking}
 \label{sec:locking:Scoped Locking}
