@@ -3104,6 +3104,30 @@ with explicit lock acquisition and release primitives.
 \label{fig:locking:Locking Hierarchy}
 \end{figure}
 
+리눅스 커널 RCU 의 엄격한 RAII 에 친화적이지 않은 데이터 구조의 예가
+Figure~\ref{fig:locking:Locking Hierarchy} 에 보여져 있습니다.
+여기서, 각 CPU 는 leaf \co{rcu_node} 구조체를 할당받으며, 각 \co{rcu_node}
+구조체는 각자의 부모 (\co{->parent} 라 이름지어진) 로의 포인터를 가지며, 이
+구조는 \co{NULL} \co{->parent} 포인터를 갖는 루트 \co{rcu_node} 구조체까지
+이어집니다.
+부모당 자식 \co{rcu_node} 구조체의 갯수는 다양할 수 있는데, 보통은 32 또는 64
+입니다.
+각 \co{rcu_node} 구조체는 또한 \co{->fqslock} 이라 이름지어진 락을 갖습니다.
+
+일반적인 접근법은 각 CPU 가 반복적으로 자신의 leaf \co{rcu_node} 구조체의
+\co{->fqslock} 을 획득하고, 거기 성공하면 그 부모를 획득하려 시도하며, 그
+후에는 자식의 락을 내려놓는 겁니다.
+또한, 각 레벨마다, CPU 는 전역 \co{gp_flags} 변수를 검사하고, 이 변수가 어떤
+다른 CPU 가 이 이벤트를 단정했음을 알리며, 이 첫번째 CPU 는 이 경쟁에서
+빠집니다.
+이 획득하고 해제하기 흐름은 \co{gp_flags} 변수가 누군가가 이 토너먼트에서
+승리했음을 알리거나, \co{->fqslock} 획득 시도가 실패하거나, 또는 루트
+\co{rcu_node} 구조체의 \co{->fqslock} 획득이 성공했을 때까지 계속됩니다.
+루트 \co{rcu_node} 구조체의 \co{->fqslock} 이 획득되면,
+\co{do_force_quiescent_state()} 라는 이름의 함수가 호출됩니다.
+
+\iffalse
+
 Example strict-RAII-unfriendly data structures from Linux-kernel RCU
 are shown in
 Figure~\ref{fig:locking:Locking Hierarchy}.
@@ -3128,6 +3152,8 @@ one of the attempts to acquire an \co{->fqslock} fails, or
 the root \co{rcu_node} structure's \co{->fqslock} has been acquired.
 If the root \co{rcu_node} structure's \co{->fqslock} is acquired,
 a function named \co{do_force_quiescent_state()} is invoked.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:locking:Conditional Locking to Reduce Contention]
@@ -3160,6 +3186,18 @@ void force_quiescent_state(struct rcu_node *rnp_leaf)
 \label{lst:locking:Conditional Locking to Reduce Contention}
 \end{listing}
 
+이를 구현하는 간략화 된 코드가
+Listing~\ref{lst:locking:Conditional Locking to Reduce Contention} 에 보여져
+있습니다.
+이 함수의 목적은 \co{do_force_quiescent_state()} 함수를 호출해야 할 필요를
+동시에 느끼는 CPU 들 사이의 중재를 하는 것입니다.
+언제든, \co{do_force_quiescent_state()} 의 인스턴스 중 하나만이 액티브한 것만이
+말이 되며, 따라서 여러 동시의 호출자가 있을 때, 우린 그것들 중 최대 하나만이
+실제로 \co{do_force_quiescent_state()} 를 호출하게 해야 하며, 나머지는 (최대한
+고통없고 빠르게) 포기하고 떠나야 합니다.
+
+\iffalse
+
 Simplified code to implement this is shown in
 Listing~\ref{lst:locking:Conditional Locking to Reduce Contention}.
 The purpose of this function is to mediate between CPUs who have concurrently
@@ -3169,6 +3207,36 @@ At any given time, it only makes sense for one instance of
 concurrent callers, we need at most one of them to actually invoke
 \co{do_force_quiescent_state()}, and we need the rest to (as quickly and
 painlessly as possible) give up and leave.
+
+\fi
+
+\begin{fcvref}[ln:locking:Conditional Locking to Reduce Contention]
+이 때문에, \clnrefrange{loop:b}{loop:e} 의 루프의 각 패스는 \co{rcu_node}
+구조의 한단계 위로 넘어가려 시도합니다.
+만약 \co{gp_flags} 변수가 이미 설정되었거나 (라인~\lnref{flag_set} 현재
+\co{rcu_node} 구조체의 \co{->fqslock} 을 획득하려는 시도가 실패했다면
+(라인~\lnref{trylock}), 지역 변수 \co{ret} 가 1로 설정 됩니다.
+라인~\lnref{non_NULL} 이 지역 변수 \co{rnp_old} 가 \co{NULL} 이 아님을, 즉
+우리가 \co{rnp_old} 의 \co{->fqs_lock} 을 쥐고 있음을 알게 된다면,
+라인~\lnref{rel1} 은 이 락을 놓습니다 (하지만 부모 \co{rcu_node} 구조체의
+\co{->fqslock} 을 획득하려는 시도가 만들어진 다음입니다).
+라인~\lnref{giveup} 이 라인~\lnref{flag_set} 또는~\lnref{trylock} 이 포기할
+어떤 이유를 봤음을 알게 되면, 라인~\lnref{return} 은 호출자에게 리턴합니다.
+그렇지 않다면, 우린 현재 \co{rcu_node} 구조체의 \co{->fqslock} 을 획득했어야
+하며, 따라서 라인~\lnref{save} 는 이 루프의 다음 패스로의 이행 준비를 위해 이
+구조체로의 포인터를 지역 변수 \co{rnp_old} 에 저장합니다.
+
+만약 컨트롤이 라인~\lnref{flag_not_set} 에 이르면, 우린 이 토너먼트에 승리한
+것이며, 이제 루트 \co{rcu_node} 구조체의 \co{->fqslock} 을 잡습니다.
+라인~\lnref{flag_not_set} 이 여전히 전역 변수 \co{gp_flags} 이 0임을 보게
+된다면 라인~\lnref{set_flag} 는 \co{gp_flags} 를 1로 설정하고,
+라인~\lnref{invoke} 는 \co{do_force_quiescent_state()} 를 호출하며,
+라인~\lnref{clr_flag} 은 \co{gp_flags} 를 0으로 다시 리셋합니다.
+어떤 경우이든, 라인~\lnref{rel2} 는 루트 \co{rcu_node} 구조체의 \co{->fqslock}
+을 해제합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:locking:Conditional Locking to Reduce Contention]
 To this end, each pass through the loop spanning \clnrefrange{loop:b}{loop:e} attempts
@@ -3197,21 +3265,54 @@ Either way, line~\lnref{rel2} releases the root \co{rcu_node} structure's
 \co{->fqslock}.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:locking:Conditional Locking to Reduce Contention}
+	의 코드는 우습고 복잡합니다!
+	왜 하나의 전역 락을 조건적으로 획득하지 않죠?
+
+	\iffalse
+
 	The code in
 	Listing~\ref{lst:locking:Conditional Locking to Reduce Contention}
 	is ridiculously complicated!
 	Why not conditionally acquire a single global lock?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	조건적으로 하나의 글로벌 락을 획득하는 것은 실제로 잘 동작합니다만,
+	상대적으로 적은 수의 CPU 에 대해서만 그렇습니다.
+	그게 왜 수백개의 CPU 를 가진 시스템에서는 문제가 되는지 알기 위해선
+	Figure~\ref{fig:count:Atomic Increment Scalability on x86} 를 보시기
+	바랍니다.
+
+	\iffalse
+
 	Conditionally acquiring a single global lock does work very well,
 	but only for relatively small numbers of CPUs.
 	To see why it is problematic in systems with many hundreds of
 	CPUs, look at
 	Figure~\ref{fig:count:Atomic Increment Scalability on x86}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\begin{fcvref}[ln:locking:Conditional Locking to Reduce Contention]
+	잠시만요!
+	우리가
+	Listing~\ref{lst:locking:Conditional Locking to Reduce Contention}
+	의 라인~\lnref{flag_not_set} 에서 이 토너먼트에 승리했다면 우린
+	\co{do_force_quiescent_state()} 의 일을 해야만 하게 됩니다.
+	이게 정확히 어떻게 승리라고 할 수 있나요?
+        \end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:locking:Conditional Locking to Reduce Contention]
 	Wait a minute!
 	If we ``win'' the tournament on line~\lnref{flag_not_set} of
@@ -3219,13 +3320,36 @@ Either way, line~\lnref{rel2} releases the root \co{rcu_node} structure's
 	we get to do all the work of \co{do_force_quiescent_state()}.
 	Exactly how is that a win, really?
         \end{fcvref}
+
+	\fi
 }\QuickQuizAnswerE{
+	진짜 어떻게 그럴까요?
+	이는 단지 동시성에서는 삶에서와 마찬가지로 게임을 하기 전에 승리가
+	정확히 무엇을 의미하는지 알고 주의해야 함을 의미합니다.
+
+	\iffalse
+
 	How indeed?
 	This just shows that in concurrency, just as in life, one
 	should take care to learn exactly what winning entails before
 	playing the game.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 함수는 계층적 락킹의 드물지 않은 패턴을 보입니다.
+이 패턴은 엄격한 RAII 락킹을 이용해 구현하기 어려우며,\footnote{
+	많은 RAII 락킹이 락을 획득된 scope 바깥, 그게 해제되었을 scope 으로
+	누출시키는 방법을 제공하는 이유입니다.
+	하지만, 일부 객체는 이 scope 누출을 중재해야만 하며, 이는 RAII 를
+	사용하지 않는 명시적 락킹 도구에 비해 복잡도를 더할 수 있습니다.}
+앞서 이야기 된 iterator 캡슐화도 마찬가지이고, 따라서 명시적 lock/unlock
+도구들은 (또는 C++17 스타일의 \co{unique_lock} escape) 앞으로도 한동안 필요할
+겁니다.
+
+\iffalse
 
 This function illustrates the not-uncommon pattern of hierarchical
 locking.
@@ -3238,6 +3362,8 @@ This pattern is difficult to implement using strict RAII locking,\footnote{
 just like the iterator encapsulation noted earlier, and so explicit
 lock/unlock primitives (or C++17-style \co{unique_lock} escapes) will
 be required for the foreseeable future.
+
+\fi
 
 \section{Locking Implementation Issues}
 \label{sec:locking:Locking Implementation Issues}
