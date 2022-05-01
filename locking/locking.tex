@@ -3595,6 +3595,19 @@ mechanisms have been used extensively as pure spinlocks in production.
 \subsection{Other Exclusive-Locking Implementations}
 \label{sec:locking:Other Exclusive-Locking Implementations}
 
+어토믹 인스트럭션에 기반한 락킹 구현들은 무척 많이 존재하는데, 그 중 많은
+것들은 Mellor-Crummey 와 Scott~\cite{MellorCrummey91a} 의 고전 페이퍼에 의해
+리뷰되었습니다.
+이 구현들은 다차원 설계
+트레이드오프~\cite{Guerraoui:2019:LPA:3319851.3301501,HugoGuirouxPhD,McKenney96a}
+에서의 다른 지점들을 보입니다.
+예를 들어, 앞의 섹션에서 본 어토믹 교환 기반의 test-and-set 락은 컨텐션이 낮을
+때 잘 동작하며 작은 메모리 사용량의 장점을 갖습니다.
+이 락은 그걸 사용할 수 없는 쓰레드에게 락을 주는 것을 방지합니다만, 그로 인해
+높은 컨텐션 수준에서는 unfairness 나 심지어 starvation 을 겪을 수도 있습니다.
+
+\iffalse
+
 There are a great many other possible implementations of locking based
 on atomic instructions, many of which are reviewed in the classic paper
 by Mellor-Crummey and Scott~\cite{MellorCrummey91a}.
@@ -3607,6 +3620,23 @@ of small memory footprint.
 It avoids giving the lock to threads that cannot use it, but as
 a result can suffer from unfairness or even starvation at high
 contention levels.
+
+\fi
+
+반면, 한때 리눅스 커널에서 사용되었던 티켓 락~\cite{MellorCrummey91a} 은 높은
+컨텐션 수준에서도 unfairness 를 방집합니다.
+하지만, 그 엄격한 FIFO 규칙의 결과로, 이 락을 어쩌면 preemption 당했거나
+interrupt 당해서 현재는 그걸 사용할 수도 없는 쓰레드에게 줄 수도 있습니다.
+다른 한편, 이 preemption 과 interrupt 에 대해 너무 걱정하지는 않는게
+중요합니다.
+어쨌건, 많은 경우에 이 preemption 과 interrupt 는 이 락이 획득된 직후에도
+일어날 수 있습니다.\footnote{
+	별개로, 높은 락 컨텐션을 처리하는 최고의 방법은 그걸 방지해 버리는
+	겁니다!
+	하지만 높은 락 컨텐션이 피할 수 없는 상황도 존재하며, 높은 수준의
+	컨텐션에 대응하는 방법들을 연구하는 것은 좋은 정신적 훈련입니다.}
+
+\iffalse
 
 In contrast, ticket lock~\cite{MellorCrummey91a}, which was once used
 in the Linux kernel, avoids unfairness at high contention levels.
@@ -3624,6 +3654,8 @@ acquired.\footnote{
 	is the lesser of the available evils, and in any case, studying
 	schemes that deal with high levels of contention is a good mental
 	exercise.}
+
+\fi
 
 All locking implementations where waiters spin on a single memory
 location, including both test-and-set locks and ticket locks,
