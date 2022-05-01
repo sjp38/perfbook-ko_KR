@@ -3393,6 +3393,18 @@ environments.
 \label{sec:locking:Sample Exclusive-Locking Implementation Based on Atomic Exchange}
 
 \begin{fcvref}[ln:locking:xchglock:lock_unlock]
+이 섹션은
+listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}
+에 보인 구현을 리뷰해 봅니다.
+이 락을 위한 데이터 구조는 라인~\lnref{typedef} 에 보인 것과 같이 그저 \co{int}
+입니다만, 어떤 완전한 타입도 될 수 있습니다.
+이 락의 초기 값은 라인~\lnref{initval}에 보인 것과 같이 0으로, ``락되지 않음''
+을 의미합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:locking:xchglock:lock_unlock]
 This section reviews the implementation shown in
 listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}.
 The data structure for this lock is just an \co{int}, as shown on
@@ -3400,6 +3412,8 @@ line~\lnref{typedef}, but could be any integral type.
 The initial value of this lock is zero, meaning ``unlocked'',
 as shown on line~\lnref{initval}.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/locking/xchglock@lock_unlock.fcv}
@@ -3409,15 +3423,46 @@ as shown on line~\lnref{initval}.
 
 \QuickQuiz{
 	\begin{fcvref}[ln:locking:xchglock:lock_unlock]
+	Listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}
+	의 라인~\lnref{initval} 에서 보인 명시적인 초기화를 사용하는 대신 C
+	언어의 기본 0으로 초기화 기능을 사용하지 않나요?
+	\end{fcvref}
+
+	\iffalse
+
+	\begin{fcvref}[ln:locking:xchglock:lock_unlock]
 	Why not rely on the C language's default initialization of
 	zero instead of using the explicit initializer shown on
 	line~\lnref{initval} of
 	Listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 기본 초기화 기능은 함수의 범위 내에서 auto 변수로 할당된 락에는
+	적용되지 않기 때문입니다.
+
+	\iffalse
+
 	Because this default initialization does not apply to locks
 	allocated as auto variables within the scope of a function.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:locking:xchglock:lock_unlock:lock]
+락 획득은 \clnrefrange{b}{e} 에 보인 \co{xchg_lock()} 함수에 의해 수행됩니다.
+이 함수는 중첩된 반복문을 사용하는데, 바깥 반복문은 반복적으로 락의 값을 1
+값으로 (``락 되었음'' 을 의미) 원자적 교환을 합니다.
+만약 기존 값이 이미 1 이었다면 (달리 말하자면 다른 누군가가 이미 이 락을
+잡았다면), 안쪽 반복문 (\clnrefrange{inner:b}{inner:e}) 는 이 락이 획득
+가능해질 때까지 수행되며, 이는 바깥 루프가 이 락을 획득하기 위한 또다른 시도를
+하는 시점이 됩니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:locking:xchglock:lock_unlock:lock]
 Lock acquisition is carried out by the \co{xchg_lock()} function
@@ -3431,14 +3476,41 @@ spins until the lock is available, at which point the outer loop
 makes another attempt to acquire the lock.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:locking:xchglock:lock_unlock:lock]
+	Listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}
+	의 \clnrefrange{inner:b}{inner:e} 에 있는 안쪽 반복문을 왜 신경쓰나요?
+	그냥 라인~\lnref{atmxchg} 에서 원자적 교환 오퍼레이션을 반복하는게
+	어떤가요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:locking:xchglock:lock_unlock:lock]
 	Why bother with the inner loop on \clnrefrange{inner:b}{inner:e} of
 	Listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}?
 	Why not simply repeatedly do the atomic exchange operation
 	on line~\lnref{atmxchg}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:locking:xchglock:lock_unlock:lock]
+	이 락이 이미 잡혔고 여러 쓰레드가 이 락을 잡으려 시도한다고 생각해
+	봅시다.
+	이 경우, 이 쓰레드들이 모두 어토믹 교환 오퍼레이션을 반복하고 있게
+	된다면, 이들은 서로들 사이에 이 락을 쥐고 있는 캐쉬 라인을 주고 받기를
+	반복할 것이어서, 인터컨넥트 부위에 로드를 의미합니다.
+	반면에, 이 쓰레드들이 \clnrefrange{inner:b}{inner:e} 의 안쪽 루프에서
+	수행을 반복하고 있으면, 각자의 캐쉬만 가지고 수행을 반복하므로
+	인터컨넥트에는 무시할 수 있을만한 부하만을 일으킬 겁니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:locking:xchglock:lock_unlock:lock]
 	Suppose that the lock is held and that several threads
 	are attempting to acquire the lock.
@@ -3451,7 +3523,18 @@ makes another attempt to acquire the lock.
         they will each spin within their own
 	caches, placing negligible load on the interconnect.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:locking:xchglock:lock_unlock:unlock]
+락 해제는 \clnrefrange{b}{e} 에서 보인 \co{xchg_unlock()} 함수에 의해 수행됩니다.
+라인~\lnref{atmxchg} 는 원자적으로 락의 값을 0 (``락이 잡히지 않음'') 으로
+교환하며, 따라서 이를 해제되었다고 표시합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:locking:xchglock:lock_unlock:unlock]
 Lock release is carried out by the \co{xchg_unlock()} function
@@ -3460,12 +3543,32 @@ Line~\lnref{atmxchg} atomically exchanges the value zero (``unlocked'') into
 the lock, thus marking it as having been released.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:locking:xchglock:lock_unlock:unlock]
+	Listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}
+	의 라인~\lnref{atmxchg} 에서는 왜 간단히 이 락에 0을 저장하지 않나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:locking:xchglock:lock_unlock:unlock]
 	Why not simply store zero into the lock word on line~\lnref{atmxchg} of
 	Listing~\ref{lst:locking:Sample Lock Based on Atomic Exchange}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	이것도 정당한 구현이 될 수 있습니다만, 이 저장이 메모리 배리어에 앞서고
+	\co{WRITE_ONCE()} 를 사용할 때에만 그렇습니다.
+	이 메모리 배리어는 \co{xchg()} 오퍼레이션이 사용될 때에는 요구되지
+	않는데 이 오퍼레이션은 그것이 값을 리턴한다는 사실 때문에 완전한 메모리
+	배리어를 내포하기 때문입니다.
+
+	\iffalse
+
 	This can be a legitimate implementation, but only if
 	this store is preceded by a memory barrier and makes use
 	of \co{WRITE_ONCE()}.
@@ -3473,11 +3576,21 @@ the lock, thus marking it as having been released.
 	operation is used because this operation implies a
 	full memory barrier due to the fact that it returns
 	a value.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 락은 test-and-set 락~\cite{Segall84} 의 간단한 예입니다만, 제품 단계에서
+순수한 스핀락으로써 많이 사용된 메커니즘과도 무척 비슷합니다.
+
+\iffalse
 
 This lock is a simple example of a test-and-set lock~\cite{Segall84},
 but very similar
 mechanisms have been used extensively as pure spinlocks in production.
+
+\fi
 
 \subsection{Other Exclusive-Locking Implementations}
 \label{sec:locking:Other Exclusive-Locking Implementations}
