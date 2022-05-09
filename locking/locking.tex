@@ -3657,6 +3657,22 @@ acquired.\footnote{
 
 \fi
 
+Test-and-set 락과 티켓 락을 포함해 대기 쓰레드가 하나의 메모리 위치에서
+기다리고 있어야 하는 모든 락킹 구현들은 높은 컨텐션 수준에서는 성능 문제로
+고통받습니다.
+문제는 락을 해제하는 쓰레드가 이 연관된 메모리 위치의 값을 업데이트 해야만
+한다는 것입니다.
+낮은 컨텐션에서는 이게 문제가 되지 않습니다: 연관된 캐쉬 라인은 여전히 로컬이고
+이 락을 쥐고 있는 쓰레드에 의해 쓰여질 수 있을 가능성이 높습니다.
+반면에, 높은 수준의 컨텐션에서는 이 락을 획득하려 하는 각 쓰레드가 이 캐쉬
+라인의 read-only 복사본을 가지고 있을 것이고, 이 락을 쥐고 있는 쓰레드는 그런
+모든 복사본들을 이 락을 해제하기 위한 업데이트를 진행하기 전에 무효화 시켜야
+합니다.
+일반적으로, 더 많은 CPU 와 쓰레드가 존재할수록, 높은 컨텐션 조건 아래에서 락을
+해제하려 할 때 발생하는 오버헤드가 거대해집니다.
+
+\iffalse
+
 All locking implementations where waiters spin on a single memory
 location, including both test-and-set locks and ticket locks,
 suffer from performance problems at high contention levels.
@@ -3672,6 +3688,29 @@ can carry out the update that releases the lock.
 In general, the more CPUs and threads there are, the greater the
 overhead incurred when releasing the lock under conditions of
 high contention.
+
+\fi
+
+이 음의 확장성은 여러 다른 queue 기반 락 구현의 모티베이션이
+되었으며~\cite{Anderson90,Graunke90,MellorCrummey91a,Wisniewski94,Craig93,Magnusson94,Takada93},
+그 중 일부는 최신 버전의 리눅스 커널에서
+사용되었습니다~\cite{JonathanCorbet2014qspinlocks}.
+Queue 기반 락은 높은 캐쉬 무효화 오버헤드를 각 쓰레드에게 queue 원소를
+할당함으로써 방지합니다.
+이 queue 원소들은 이 락이 대기 쓰레드들에게 돌아갈 순서를 조정하는 queue 로
+연결되어 있습니다.
+핵심은 각 쓰레드가 각자의 queue 원소에서 스핀을 하므로, 락을 쥐고 있는 쓰레드는
+다음 쓰레드의 CPU 의 캐쉬에 있는 queue 상 첫번째 원소만 무효화 하면 된다는
+것입니다.
+이 조정은 높은 수준의 컨텐션 아래에서 락 이동 오버헤드를 크게 줄여줍니다.
+
+더 최근의 queue 기반 락 구현은 또한 시스템의 구조를 신경쓰는데, starvation 을
+회피하면서도 락을 지역적으로 얻는 것을 선호하는
+것입니다~\cite{McKenney02e,radovic03hierarchical,radovic02efficient,BenJackson02,McKenney02d}.
+이 중 많은 것들이 전통적으로 disk I/O 스케쥴링에 사용되었던 엘레베이터
+알고리즘과 비슷한 것으로 생각될 수 있습니다.
+
+\iffalse
 
 This negative scalability has motivated a number of different
 queued-lock
@@ -3695,6 +3734,21 @@ starvation~\cite{McKenney02e,radovic03hierarchical,radovic02efficient,BenJackson
 Many of these can be thought of as analogous to the elevator algorithms
 traditionally used in scheduling disk I/O.
 
+\fi
+
+불행히도, 높은 컨텐션 아래에서 queue 기반 락의 효율성을 개선하는 같은 스케쥴링
+로직이 낮은 컨텐션에서의 오버헤드도 증가시킵니다.
+그래서 Beng-Hong Lim 과 Anat Agarwal 은 test-and-set 락을 낮은 컨텐션에서
+사용하고 높은 컨텐션에서는 queue 기반 락으로 교체하는 방식으로 간단한
+test-and-set 락을 queue 기반 락과 결합시켰는데, 따라서 낮은 단계의 컨텐션에서의
+낮은 오버헤드와 높은 컨텐션에서의 높은 처리량과 fairness 를 얻었습니다.
+Browning 등은 비슷한 시도를 했습니다만, 별도의 flag 의 사용을 회피했으며,
+따라서 test-and-set fast path 는 간단한 test-and-set 락에서 사용되는 것과 같은
+인스트럭션만을 사용하게 했습니다~\cite{LukeBrowning2005SimpleLockNUMAAware}.
+이 방법은 제품 단계에서 사용되었습니다.
+
+\iffalse
+
 Unfortunately, the same scheduling logic that improves the efficiency
 of queued locks at high contention also increases their overhead at
 low contention.
@@ -3710,6 +3764,22 @@ instructions that would be used in a simple test-and-set
 lock~\cite{LukeBrowning2005SimpleLockNUMAAware}.
 This approach has been used in production.
 
+\fi
+
+높은 컨텐션에서 발생하는 또다른 문제는 락을 쥐고 있는 쓰레드가 지연될 때로,
+특히 이 지연이 preemption 으로 인한 것일 때인데, 이는 \emph{우선순위 역전} 에
+이를 수 있는데, 즉 낮은 우선순위 쓰레드가 락을 잡고, 중간 우선순위 CPU-bound
+쓰레드에게 preemption 당하고, 결국 높은 우선순위 프로세스가 이 락을 잡으려 하는
+동안 블록 되어 있게 하는 것입니다.
+이 결과는 CPU-bound 중간 운선순위 프로세스가 높은 운선순위 프로세스의 수행을
+막는 것입니다.
+한가지 해결책은 \emph{우선순위 계승}~\cite{Lampson1980Mesa} 으로, 이에 대한
+일부 논란~\cite{Yodaiken2004FSM,DougLocke2002a} 에도 불구하고 리얼타임 컴퓨팅에
+널리 사용되어
+왔습니다~\cite{LuiSha1990PriorityInheritance,JonathanCorbet2006PriorityInheritance}.
+
+\iffalse
+
 Another issue that arises at high levels of contention is when the
 lock holder is delayed, especially when the delay is due to
 preemption, which can result in \emph{priority inversion},
@@ -3724,6 +3794,8 @@ which has been widely used for real-time
 computing~\cite{LuiSha1990PriorityInheritance,JonathanCorbet2006PriorityInheritance},
 despite some lingering controversy over this
 practice~\cite{Yodaiken2004FSM,DougLocke2002a}.
+
+\fi
 
 Another way to avoid priority inversion is to prevent preemption
 while a lock is held.
