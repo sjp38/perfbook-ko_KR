@@ -31,13 +31,35 @@ int delete(int key)
 \label{lst:locking:Per-Element Locking Without Existence Guarantees}
 \end{listing}
 
+병렬 프로그래밍에서의 핵심 도전사항은 \emph{존재 보장}~\cite{Gamsa99} 을
+제공하여, 특정 객체로의 액세스 시도가 해당 액세스 시도 동안은 객체의 존재에
+의존할 수 있게 하는 것입니다.
+어떤 경우, 존재 보장은 묵시적입니다:
+
+\iffalse
+
 A key challenge in parallel programming is to provide
 \emph{existence guarantees}~\cite{Gamsa99},
 so that attempts to access a given object can rely on that object
 being in existence throughout a given access attempt.
 In some cases, existence guarantees are implicit:
 
+\fi
+
 \begin{enumerate}
+\item	기본 모듈의 전역 변수와 정적 로컬 변수들은 해당 어플리케이션이 수행되는
+	동안은 존재합니다.
+\item	로드된 모듈의 전역 변수와 정적 로컬 변수는 이 모듈이 로드된 상태를
+	유지하는 동안은 존재합니다.
+\item	모듈은 그것의 함수들이 활동 상태의 인스턴스를 하나라도 가지고 있는
+	동안은 로드된 상태를 유지합니다.
+\item	특정 함수 인스턴스의 스택 상 변수들은 이 인스턴스가 리턴할 때까지는
+	존재합니다.
+\item	여러분이 어떤 함수 내에서 수행 중이거나 (직접적으로 또는 간접적으로)
+	해당 함수에서 호출되었다면, 이 함수는 활동 상태 인스턴스를 갖습니다.
+
+\iffalse
+
 \item	Global variables and static local variables in the base module
 	will exist as long as the application is running.
 \item	Global variables and static local variables in a loaded module
@@ -49,15 +71,51 @@ In some cases, existence guarantees are implicit:
 \item	If you are executing within a given function or have been
 	called (directly or indirectly) from that function,
 	then the given function has an active instance.
+
+\fi
+
 \end{enumerate}
+
+이 묵시적 존재 보장은 간단합니다만, 묵시적 존재 보장에 관련된 버그는 실제로
+일어날 수 있습니다.
+
+\iffalse
 
 These implicit existence guarantees are straightforward, though
 bugs involving implicit existence guarantees really can happen.
 
+\fi
+
 \QuickQuiz{
+	묵시적 존재 보장에 기대는게 어떻게 버그에 이를 수 있죠?
+
+	\iffalse
+
 	How can relying on implicit existence guarantees result in
 	a bug?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여기 올바르지 않은 묵시적 존재 보장의 사용으로부터 나올 수 있는
+	버그들이 있습니다:
+	\begin{enumerate}
+	\item	한 프로그램이 한 전역 변수로의 주소를 어떤 파일에 쓰고, 같은
+		프로그램의 나중 인스턴스가 이 주소를 읽고 역참조 하려 합니다.
+		이는 주소 공간 무작위화 (address-space randomization) 때문에
+		실패할 수 있으며, 이 프로그램의 재 컴파일링에 대해선 말할 것도
+		없습니다.
+	\item	어떤 모듈은 자신의 변수로의 주소를 어떤 다른 모듈에 위치한
+		포인터에 저장하고, 이 모듈이 언로드된 다음에 이 포인터를 역참조
+		하려 할 수 있습니다.
+	\item	어떤 함수는 자신의 스택 상의 변수의 주소를 어떤 전역 변수에
+		저장하고, 이 함수가 리턴된 다음에 어떤 다른 함수가 그 주소를
+		역참조 할 수도 있습니다.
+	\end{enumerate}
+	여러분은 추가적인 가능성을 가져올 수 있으리라 확신합니다.
+
+	\iffalse
+
 	Here are some bugs resulting from improper use of implicit
 	existence guarantees:
 	\begin{enumerate}
@@ -76,7 +134,29 @@ bugs involving implicit existence guarantees really can happen.
 		has returned.
 	\end{enumerate}
 	I am sure that you can come up with additional possibilities.
+
+	\fi
+
 }\QuickQuizEnd
+
+하지만 더 흥미로운---그리고 문제가 있을 수 있는---보장은 힙 메모리와
+연관됩니다: 동적으로 할당된 데이터 구조는 그것이 해제될 때까지 존재할 겁니다.
+해결되야 하는 문제는 이 구조체의 해제를 같은 구조체로의 동시의 액세스와 동기화
+시켜야 한다는 것입니다.
+이를 위한 한가지 방법은 락킹과 같은 \emph{명시적 보장} 입니다.
+주어진 구조체가 이 락을 잡은 상태에서만 해제된다면, 이 락을 잡는 것은 이
+구조체의 존재를 보장합니다.
+
+하지만 이 보장은 이 락 자체의 존재에 의존합니다.
+이 락의 존재를 보장하는 한가지 간단한 방법은 이 락을 전역 변수에 두는
+것입니다만, 전역 락킹은 확장성 제한의 단점을 갖습니다.
+데이터 구조체의 크기의 증가에 따라 개선되는 확장성을 제공하는 한가지 방법은 이
+구조체의 각 원소마다 락을 두는 것입니다.
+불행히도, 데이터 원소를 보호해야 하는 락을 데이터 원소 자체에 두는 것은
+Listing~\ref{lst:locking:Per-Element Locking Without Existence Guarantees}
+에 보인 것과 같이 일부 레이스 컨디션을 일으킵니다.
+
+\iffalse
 
 But the more interesting---and troublesome---guarantee involves
 heap memory: A dynamically allocated data structure will exist until it
@@ -99,17 +179,41 @@ in the data element itself is subject to subtle race conditions,
 as shown in
 Listing~\ref{lst:locking:Per-Element Locking Without Existence Guarantees}.
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:locking:Per-Element Locking Without Existence Guarantees]
+	우리가 제거해야 하는 원소가
+	Listing~\ref{lst:locking:Per-Element Locking Without Existence Guarantees}
+	의 라인~\lnref{chk_first} 에 있는 리스트의 첫번째 원소가 아니라면
+	어떻게 되는 걸까요?
+        \end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:locking:Per-Element Locking Without Existence Guarantees]
 	What if the element we need to delete is not the first element
 	of the list on line~\lnref{chk_first} of
 	Listing~\ref{lst:locking:Per-Element Locking Without Existence Guarantees}?
         \end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	이건 체이닝이 없는 매우 간단한 해쉬 테이블이며, 따라서 특정 버킷에
+	들어있는 유일한 원소는 첫번째 원소입니다.
+	독자 여러분은 이 예를 완전한 체이닝을 갖는 해쉬 테이블에 적용해 보셔도
+	좋겠습니다.
+
+	\iffalse
+
 	This is a very simple hash table with no chaining, so the only
 	element in a given bucket is the first element.
 	The reader is invited to adapt this example to a hash table with
 	full chaining.
+
+	\fi
+
 }\QuickQuizEnd
 
 
