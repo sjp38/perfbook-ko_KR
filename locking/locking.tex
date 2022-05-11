@@ -3797,6 +3797,23 @@ practice~\cite{Yodaiken2004FSM,DougLocke2002a}.
 
 \fi
 
+우선순위 역전을 회피하는 또다른 방법은 락이 잡혀 있는 동안의 preemption 을
+방지하는 것입니다.
+락이 잡힌 동안 Preemption 을 방지하는 것은 처리량 또한 개선시키므로, 대부분의
+독점 UNIX 커널들은 어떤 종류의 스케쥴러 친화적 동기화
+메커니즘~\cite{Kontothanassis97a} 을 제공하는데, 크게는 특정 규모 데이터베이스
+벤더의 노력 덕분입니다.
+이런 메커니즘은 보통 특정 코드 영역 내에서는 preemption 이 금지되어야 함을
+알리는 힌트의 형태를 취하는데, 이 힌트는 일반적으로 기계 레지스터에 위치하게
+됩니다.
+이런 힌트는 종종 특정 기계 레지스터의 한 bit 을 설정하는 형태를 취하는데, 이
+메커니즘을 위한 극단적으로 낮은 락 획득별 오버헤드를 가능하게 합니다.
+대조적으로, 리눅스는 이 힌트를 금지하고, 그 대신
+\emph{futexes}~\cite{HubertusFrancke2002Futex,IngoMolnar2006RobustFutexes,StevenRostedt2006piFutexes,UlrichDrepper2011Futexes}.
+라고 불리는 메커니즘으로부터 비슷한 결과를 얻습니다.
+
+\iffalse
+
 Another way to avoid priority inversion is to prevent preemption
 while a lock is held.
 Because preventing preemption while locks are held also improves throughput,
@@ -3812,6 +3829,28 @@ for these mechanisms.
 In contrast, Linux avoids these hints, instead getting
 similar results from a mechanism called
 \emph{futexes}~\cite{HubertusFrancke2002Futex,IngoMolnar2006RobustFutexes,StevenRostedt2006piFutexes,UlrichDrepper2011Futexes}.
+
+\fi
+
+흥미롭게도, 어토믹 인스트럭션은 락을 구현하는데 엄격히 말해 필요하지
+않습니다~\cite{Dijkstra65a,Lamport74a}.
+간단한 로드와 스토어에 기반한 락킹 구현을 둘러싼 문제들에 대한 훌륭한 설명은
+Herlihy 와 Shavit 의
+교재~\cite{HerlihyShavit2008Textbook,HerlihyShavit2020Textbook} 에서 찾을 수
+있을 겁니다.
+여기서 나온 핵심은 그런 구현은 현재로써 적은 실용적 어플리케이션을 가지고
+있으나, 그것들에 대한 주의 깊은 연구는 재미있고 깨달음을 주는 경험일 수 있다는
+것입니다.
+그러나, 아래에 설명된 한가지 예외와 함께, 그런 연구는 독자 여러분의 몫으로
+남겨져 있습니다.
+
+Gamsa 등~\cite[Section 5.3]{Gamsa99} 은 CPU 들 사이를 토큰이 순환하는 토큰 기반
+메커니즘을 이야기 합니다.
+이 토큰이 특정 CPU 에 도달했을 때, 이 CPU 는 이 토큰에 의해 보호되는 모든 것에
+대한 배타적 액세스를 갖습니다.
+토큰 기반 메커니즘을 구현하기 위한 여러 방법이 있을 수 있는데, 예를 들면:
+
+\iffalse
 
 Interestingly enough, atomic instructions are not strictly needed to
 implement locks~\cite{Dijkstra65a,Lamport74a}.
@@ -3831,7 +3870,25 @@ access to anything protected by that token.
 There are any number of schemes that may be used to implement
 the token-based mechanism, for example:
 
+\fi
+
 \begin{enumerate}
+\item	CPU 별 플래그를 유지하는데 이 플래그는 처음에는 하나의 CPU 를 제외하곤
+	모두 0으로 초기값이 지정되어 있습니다.
+	어떤 CPU 의 플래그가 0이 아닐 때, 그 CPU 는 이 토큰을 갖습니다.
+	토큰을 가지고 하는 일이 끝나면, 이 CPU 는 자신의 플래그를 0으로
+	설정하고 다음 CPU 의 플래그를 1로 (또는 뭐가 됐든 0이 아닌 값으로)
+	설정합니다.
+\item	CPU 별 카운터를 유지하는데, $N$ 이 이 시스템의 CPU 의 갯수라 할 때 $0$
+	부터 $N-1$ 의 범위를 가질 거라 가정할 수 있는 연관된 CPU 의 숫자로
+	초기값을 갖습니다.
+	한 CPU 의 카운터가 다음 CPU 의 것보다 큰 값을 가질 때 (카운터의 최대
+	값을 지정해 두고), 이 첫번째 CPU 는 이 토큰을 쥡니다.
+	이 CPU 가 토큰을 가지고 할 일이 끝나면, 다음 CPU 의 카운터를 자신의
+	카운터보다 1 큰 값으로 설정합니다.
+
+\iffalse
+
 \item	Maintain a per-CPU flag, which is initially
 	zero for all but one CPU\@.
 	When a CPU's flag is non-zero, it holds the token.
@@ -3846,19 +3903,54 @@ the token-based mechanism, for example:
 	CPU (taking counter wrap into account), the first CPU holds the token.
 	When it is finished with the token, it sets the next
 	CPU's counter to a value one greater than its own counter.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	카운터의 최대값이 정해져 있는데 어떻게 한 카운터가 다른 것보다 크다고
+	말할 수 있나요?
+
+	\iffalse
+
 	How can you tell if one counter is greater than another,
 	while accounting for counter wrap?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	C 언어에서라면 다음 매크로가 이를 올바르게 처리합니다:
+
+	\iffalse
+
 	In the C language, the following macro correctly handles this:
+
+	\fi
 
 \begin{VerbatimU}
 #define ULONG_CMP_LT(a, b) \
         (ULONG_MAX / 2 < (a) - (b))
 \end{VerbatimU}
+
+	간단히 두개의 부호 있는 정수를 빼기하고 싶을 수 있겠지만, 부호 있는
+	변수의 오버플로우는 C 언어에서 정의되지 않아 있으므로 사용되지 않아야
+	합니다.
+	예를 들어, 컴파일러가 이 값들 중 하나는 양수이고 나머지는 음수임을
+	안다면, 이 양수에서 이 음수를 빼는 것이 오버플로우를 일으키고 그 결과
+	음수가 될지라도 컴파일러는 이 양수가 음수보다 크다고 가정해 버릴 수
+	있습니다.
+
+	컴파일러는 두 숫자의 부호를 어떻게 알 수 있을까요?
+	이전의 값 할당과 비교로부터 이를 추측할 수도 있습니다.
+	이 경우, 이 CPU 별 카운터가 부호를 가지고 있었다면, 컴파일러는 그것이
+	항상 증가만 한다고 추측할 수 있고, 그러면 이것들이 결코 음수가 되지
+	않는다고 가정할 수도 있습니다.
+	이 가정은 이 컴파일러가 불행한 코드를 생성하게 만들 수
+	있습니다~\cite{PaulEMcKenney2012SignedOverflow,JohnRegehr2010UndefinedBehavior}.
+
+	\iffalse
 
 	Although it is tempting to simply subtract two signed integers,
 	this should be avoided because signed overflow is undefined
@@ -3878,16 +3970,49 @@ the token-based mechanism, for example:
 	then might assume that they would never go negative.
 	This assumption could well lead the compiler to generate
 	unfortunate code~\cite{PaulEMcKenney2012SignedOverflow,JohnRegehr2010UndefinedBehavior}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	뭐가 낫나요, 카운터 방법인가요 플래그 방법인가요?
+
+	\iffalse
+
 	Which is better, the counter approach or the flag approach?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	플래그 방법은 일반적으로 더 적은 캐쉬 미스를 낼 겁니다만, 더 나은
+	답변은 둘 다 시도해 보고 여러분의 특정 워크로드에 최선의 것이 무엇인지
+	보라는 것이겠습니다.
+
+	\iffalse
+
 	The flag approach will normally suffer fewer cache misses,
 	but a better answer is to try both and see which works best
 	for your particular workload.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 락은 다른 CPU 들이 락을 사용하고 있지 않을 때 조차도 특정 CPU 가 락을 즉각
+획득할 수 없다는 점에서 일반적이지 않습니다.
+그 대신, 이 CPU 는 이 토큰이 스스로에게 도달하기를 기다려야만 합니다.
+CPU 들이 크리티컬 섹션에 주기적으로 액세스 해야 하지만 토큰 순환 비율의
+변동성을 제어해야 할 때 유용합니다.
+Gamsa 등~\cite{Gamsa99} 은 read-copy update
+(Section~\ref{sec:defer:Read-Copy Update (RCU)} 을 참고하세요) 의 변종을 만드는
+데에 이를 이용했습니다만, 메모리 할당자에 의해 사용되는 CPU 별 캐쉬
+비우기~\cite{McKenney93}, CPU 별 데이터 구조의 garbage collection, 또는 공유
+저장소 (또는 대용량 저장소, 뭐가 됐던) 로의 CPU 별 데이터 비우기 같은 주기적
+CPU 별 오퍼레이션의 보호에도 사용될 수 있습니다.
+
+\iffalse
 
 This lock is unusual in that a given CPU cannot necessarily acquire it
 immediately, even if no other CPU is using it at the moment.
@@ -3900,6 +4025,30 @@ but it could also be used to protect periodic per-CPU operations such
 as flushing per-CPU caches used by memory allocators~\cite{McKenney93},
 garbage-collecting per-CPU data structures, or flushing per-CPU
 data to shared storage (or to mass storage, for that matter).
+
+\fi
+
+리눅스 커널은 현재 queue 기반 스핀락~\cite{JonathanCorbet2014qspinlocks} 을
+사용하고 있습니다만 다양한 컨텐션 수준에서도 좋은 성능을 제공하는 구현의 복잡도
+때문에 그 경로는 항상 부드럽지는
+않았습니다~\cite{CatalinMarinas2018qspinlockTLA,WillDeacon2018qspinlock}.
+점점 많은 사람들이 병렬 하드웨어와 증가하는 양의 병렬 코드에 익숙해져 가고
+있으므로, 우린 더 많은 특수 목적 락킹 기능이 나타날 것을 계속 기대할 수 있는데,
+Guerraoui 등의 연구~\cite{Guerraoui:2019:LPA:3319851.3301501,HugoGuirouxPhD} 를
+예로 들 수 있겠습니다.
+그러나, 이 중요한 안전에 대한 팁을 주의 깊게 고려하셔야 합니다:
+언제든 일반적으로 가능할 때에는 표준 동기화 기능을 사용하세요.
+표준 동기화 기능의 스스로 만드는 것들 대비 큰 이점은 표준 기능들은 일반적으로
+\emph{훨씬} 버그가 적다는 것입니다.\footnote{
+	그리고 그래요, 전 제 스스로 만든 동기화 기능을 공유한 적 있긴 해요.
+	하지만, 여러분은 제 머리카락이 그런 일을 시작하기 전에 비해 훨씬 하얗게
+	센 걸 알 수 있을 겁니다.
+	우연일까요?
+	어쩌면요.
+	하지만 여러분은 \emph{정말로} 여러분의 머리가 일찍 하얗게 세는 리스크를
+	지고 싶으십니까?}
+
+\iffalse
 
 The Linux kernel now uses queued spinlocks~\cite{JonathanCorbet2014qspinlocks},
 but because of the complexity of implementations that provide good
@@ -3922,6 +4071,8 @@ roll-your-own efforts is that the standard primitives are typically
 	Maybe.
 	But are you \emph{really} willing to risk your own hair turning
 	prematurely grey?}
+
+\fi
 
 \input{locking/locking-existence}
 
