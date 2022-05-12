@@ -216,6 +216,29 @@ Listing~\ref{lst:locking:Per-Element Locking Without Existence Guarantees}.
 
 }\QuickQuizEnd
 
+\begin{fcvref}[ln:locking:Per-Element Locking Without Existence Guarantees]
+이런 레이스 컨디션들 중 하나를 자세히 보기 위해, 다음 이벤트들을 생각해 봅시다:
+\begin{enumerate}
+	\item	쓰레드~0 이 \co{delete(0)} 를 호출하고, 이 listing 의
+		라인~\lnref{acq} 에 도달, 락을 잡습니다.
+	\item	쓰레드~1 이 \co{delete(0)} 을 호출하고, 라인~\lnref{acq} 에
+		도달하지만 쓰레드~0 이 이미 락을 잡고 있으므로 여기서
+		맴돕니다.
+	\item	쓰레드~0 이 \clnrefrange{NULL}{return1} 을 수행하고, 해쉬
+		테이블에서 원소를 제거하고, 락을 해제하고, 원소를 메모리 할당
+		해제합니다.
+	\item	쓰레드~0 이 수행을 계속해서 메모리를 할당받아 방금 해제한 바로
+		그 메모리 블록을 받습니다.
+	\item	쓰레드~0 은 이제 이 메모리 블록을 어떤 다른 타입의 구조체로
+		초기화 시킵니다.
+	\item	쓰레드~1 의 \co{spin_lock()} 오퍼레이션은 자신이 \co{p->lock}
+		이라 믿었던 게 더이상 스핀락이 아니게 되었으므로 실패합니다.
+\end{enumerate}
+어떤 존재 보장이 없으므로, 이 데이터 원소의 정체성은 이 쓰레드가 이 원소의 락을
+라인~\lnref{acq} 에서 획득하려 하는 사이에 바뀔 수 있습니다!
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:locking:Per-Element Locking Without Existence Guarantees]
 To see one of these race conditions, consider the following sequence
@@ -240,6 +263,8 @@ Because there is no existence guarantee, the identity of the
 data element can change while a thread is attempting to acquire
 that element's lock on line~\lnref{acq}!
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:locking:Per-Element Locking With Lock-Based Existence Guarantees]
@@ -270,6 +295,26 @@ int delete(int key)
 \end{listing}
 
 \begin{fcvref}[ln:locking:Per-Element Locking With Lock-Based Existence Guarantees]
+이 예를 고치는 한가지 방법은 해시된 전역 락 집합을 사용해서 각 해시 버킷이
+각자의 락을 가지게 하는 것으로,
+Listing~\ref{lst:locking:Per-Element Locking With Lock-Based Existence Guarantees}
+에 보여져 있습니다.
+이 방법은 데이터 원소로의 포인터를 얻기 전에 (라인~\lnref{getp}) 올바른 락을
+획득할 수 있게 (라인~\lnref{acq}) 해줍니다.
+이 방법이 이 listing 에 보인 해시 테이블과 같이 단일 분할 가능 데이터 구조체에
+포함되어 있는 원소들에는 상당히 잘 동작하지만, 주어진 데이터 원소가 여러 해시
+테이블 또는 트리나 graph 같은 더 복잡한 데이터 구조체에서는 문제가 있을 수
+있습니다.
+해결책은 이 문제만 해결할 뿐만 아니라, 락 기반 소프트웨어 트랜잭셔널 메모리
+구현의 기반을 형성합니다~\cite{Shavit95,DaveDice2006DISC}.
+하지만,
+Chapter~\ref{chp:Deferred Processing} 는 존재 보장을 제공하는 더
+간단한---그리고 더 빠른---방법을 설명합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:locking:Per-Element Locking With Lock-Based Existence Guarantees]
 One way to fix this example is to use a hashed set of global locks, so
 that each hash bucket has its own lock, as shown in
 Listing~\ref{lst:locking:Per-Element Locking With Lock-Based Existence Guarantees}.
@@ -287,3 +332,5 @@ However,
 Chapter~\ref{chp:Deferred Processing}
 describes simpler---and faster---ways of providing existence guarantees.
 \end{fcvref}
+
+\fi
