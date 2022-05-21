@@ -4296,6 +4296,25 @@ The strategy described in the next section can often be used in these cases.
 \subsubsection{Avoid Locking in Callbacks and Signal Handlers}
 \label{sec:locking:Avoid Locking in Callbacks and Signal Handlers}
 
+콜백도 시그널 핸들러도 락을 획득하지 않는다면, 그것들은 데드락 사이클에 관여될
+수 없는데, 이는 다시 라이브러리 함수들이 락킹 계층 트리의 이파리가 되게 하는
+간단한 락킹 계층을 가능하게 합니다.
+이 전략은 콜백이 단순히 그들에게 넘겨진 두개의 값을 비교하기만 하는 대부분의
+\co{qsort} 사용처에 잘 적용됩니다.
+이 전략은 또한 많은 시그널 핸들러에도 놀랍도록 잘 동작하는데, 특히 시그널
+핸들러 내에서 락을 획득하는게 일반적으로 눈살을 찌푸리게
+하지만~\cite{TheOpenGroup1997SUS},\footnote{
+	하지만 이 표준의 말들은 영리한 코더들이 각자의 집에서 어토믹
+	오퍼레이션을 가지고 스스로 만든 락킹 기능을 사용하는 걸 막지는
+	않습니다.}
+이 어플리케이션이 시그널 핸들러에서 복잡한 데이터 구조를 조정해야 한다면 실패할
+수 있습니다.
+
+복잡한 데이터 구조가 수정되어야 함에도 시그널 핸들러에서 락을 잡는 걸 막는
+몇가지 방법이 여기 있습니다:
+
+\iffalse
+
 If neither callbacks nor signal handlers acquire locks, then they
 cannot be involved in deadlock cycles, which allows straightforward
 locking hierarchies to once again consider library functions to
@@ -4313,7 +4332,23 @@ from a signal handler.
 Here are some ways to avoid acquiring locks in signal handlers even
 if complex data structures must be manipulated:
 
+\fi
+
 \begin{enumerate}
+\item	Section~\ref{sec:advsync:Simple NBS} 에서 이야기 하겠지만 non-blocking
+	동기화에 기반한 간단한 데이터 구조를 사용합니다.
+\item	이 데이터 구조가 합리적인 non-blocking 동기화의 사용에는 너무
+	복잡하다면, non-blocking enqueue 오퍼레이션을 허용하는 queue 를
+	만듭니다.
+	시그널 핸들러에서는 이 복잡한 데이터 구조를 조정하는 대신 요구되는
+	변경을 설명하는 원소를 이 queue 에 넣습니다.
+	그럼 별도의 쓰레드가 이 queue 에서 원소를 제거하고 평범한 락킹을 사용해
+	필요한 변경을 진행할 수 있습니다.
+	당장 사용할 수 있는 동시적 queue 의 구현들이 여럿
+	있습니다~\cite{ChristophMKirsch2012FIFOisntTR,MathieuDesnoyers2009URCU,MichaelScott96}.
+
+\iffalse
+
 \item	Use simple data structures based on non-blocking synchronization,
 	as will be discussed in
 	Section~\ref{sec:advsync:Simple NBS}.
@@ -4328,12 +4363,24 @@ if complex data structures must be manipulated:
 	There are a number of readily available implementations of
 	concurrent
 	queues~\cite{ChristophMKirsch2012FIFOisntTR,MathieuDesnoyers2009URCU,MichaelScott96}.
+
+\fi
+
 \end{enumerate}
+
+이 전략은 때때로의 수동적인 또는 (선호되건대) 자동화된 콜백과 시그널 핸들러의
+검사가 강제 되어야 합니다.
+이 검사를 할 때에는, 어토믹 오퍼레이션을 가지고 집에서 스스로 만든 락을 (현명치
+못하게) 사용하는 똑똑한 코더들을 주의해야 합니다.
+
+\iffalse
 
 This strategy should be enforced with occasional manual or (preferably)
 automated inspections of callbacks and signal handlers.
 When carrying out these inspections, be wary of clever coders who
 might have (unwisely) created home-brew locks from atomic operations.
+
+\fi
 
 \subsubsection{Caller Controls Synchronization}
 \label{sec:locking:Caller Controls Synchronization}
