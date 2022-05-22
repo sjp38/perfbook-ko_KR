@@ -4585,6 +4585,24 @@ human intuition~\cite{StevenRostedt2011locdepCryptic}.
 \subsubsection{Library Functions Used Between \tco{fork()} and \tco{exec()}}
 \label{sec:locking:Library Functions Used Between fork() and exec()}
 
+앞에서도 언급되었듯, 라이브러리 함수를 수행시키는 어떤 쓰레드가 다른 같은
+쓰레드가 \co{fork()} 를 호출하는 시점에 어떤 락을 잡고 있다면, 이 부모의
+메모리가 자식을 생성하기 위해 복사된다는 사실은 이 락이 이 자식의 컨텍스트에는
+처음부터 잡혀있을 것을 의미합니다.
+이 락을 해제할 쓰레드는 부모에서는 돌아가고 있지만 이 자식에서는 그렇지 않은데,
+이는 이 자식의 이 락의 복사본은 결코 해제되지 않을 것을 의미합니다.
+따라서, 이 자식에서의 같은 라이브러리 하무를 호출하는 모든 시도는 데드락을
+초래할 겁니다.
+
+이 문제를 해결하는 실용적이고 간단한 방법은 이 프로세스가 여전히 싱글 쓰레드인
+동안 자식 프로세스를 \co{fork()} 하고 이 자식 프로세스를 싱글 쓰레드인채로
+남겨두는 것입니다.
+그러면 더 많은 자식 프로세스를 생성하려는 요청은 이 최초 자식 프로세스에게
+전달될 수 있는데, 이는 모든 필요한 \co{fork()} 와 \co{exec()} 시스템콜을
+멀티쓰레드로 돌아가는 부모 프로세스 대신 안전하게 이뤄질 수 있습니다.
+
+\iffalse
+
 As noted earlier, if a thread executing a library function is holding
 a lock at the time that some other thread invokes \co{fork()}, the
 fact that the parent's memory is copied to create the child means that
@@ -4603,13 +4621,34 @@ to this initial child process, which can safely carry out any
 needed \co{fork()} and \co{exec()} system calls on behalf of its
 multi-threaded parent process.
 
+\fi
+
+이 문제를 위한 덜 실용적이고 덜 간단한 또다른 해결책은 이 라이브러리 함수가 이
+락의 소유자가 여전히 동작 중인지 확인하고, 그렇지 않다면 이를 재 초기화 하고
+획득함으로써 이 락을 ``깨트리는'' 겁니다.
+하지만, 이 방법은 두가지 취약점이 있습니다:
+
+\iffalse
+
 Another rather less pragmatic and straightforward solution to this problem
 is to have the library function check to see if the owner of the lock
 is still running, and if not, ``breaking'' the lock by re-initializing
 and then acquiring it.
 However, this approach has a couple of vulnerabilities:
 
+\fi
+
 \begin{enumerate}
+\item	이 락에 의해 보호되는 데이터 구조는 어떤 중간적 상태에 있어서
+	낙관적으로 이 락을 깨트리는 것은 임의의 메모리 오염을 초래할 수도
+	있습니다.
+\item	이 자식이 추가적인 쓰레드를 만든다면, 두개의 쓰레드는 이 락을
+	동시적으로 깨트릴 수 있는데, 그 결과는 두 쓰레드 모두 자신들이 락을
+	소유하고 있다고 믿게 되는 것입니다.
+	이는 역시 임의의 메모리 오염을 초래할 수 있습니다.
+
+\iffalse
+
 \item	The data structures protected by that lock are likely to
 	be in some intermediate state, so that naively breaking the lock
 	might result in arbitrary memory corruption.
@@ -4617,7 +4656,23 @@ However, this approach has a couple of vulnerabilities:
 	break the lock concurrently, with the result that both
 	threads believe they own the lock.
 	This could again result in arbitrary memory corruption.
+
+\fi
+
 \end{enumerate}
+
+\co{pthread_atfork()} 함수는 이 상황을 해결하기 위해 제공됩니다.
+아이디어는 세개의 함수를 등록시켜서, 하나는 \co{fork()} 전에 부모에 의해
+호출되고, 하나는 부모에 의해 \co{fork()} 전에 호출되고, 마지막 하나는 자식에
+의해 \co{fork()} 후에 호출되게 하는 것입니다.
+그러면 적절한 정리가 이 세개의 지점에서 이뤄질 수 있습니다.
+
+하지만, \co{pthread_atfork()} 핸들러를 코딩하는 것은 일반적으로 상당히 섬세함을
+경고 드려 둡니다.
+\co{pthread_atfork()} 가 가장 잘 동작하는 경우는 해당 데이터 구조가 자식에 의해
+간단히 재 초기화 될 수 있는 경우입니다.
+
+\iffalse
 
 The \co{pthread_atfork()} function is provided to help deal with these situations.
 The idea is to register a triplet of functions, one to be called by the
@@ -4629,6 +4684,8 @@ Be warned, however, that coding of \co{pthread_atfork()} handlers is quite subtl
 in general.
 The cases where \co{pthread_atfork()} works best are cases where the data structure
 in question can simply be re-initialized by the child.
+
+\fi
 
 \subsubsection{Parallel Libraries: Discussion}
 \label{sec:locking:Parallel Libraries: Discussion}
