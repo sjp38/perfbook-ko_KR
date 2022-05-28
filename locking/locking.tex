@@ -4747,6 +4747,28 @@ sections.
 \subsubsection{Partitioning Prohibited}
 \label{sec:locking:Partitioning Prohibited}
 
+여러분이 싱글 쓰레드 기반 해쉬 테이블 구현을 작성하고 있었다고 해봅시다.
+이 해시 테이블 내의 전체 아이템의 갯수를 유지하는 것은 쉽고 빠르며, 각 아이템
+더하기와 제거하기 오퍼레이션 시에 이 정확한 갯수를 리턴하는 것 역시 쉽고
+빠릅니다.
+그러니 그러지 않을 이유가 뭐겠어요?
+
+그 한가지 이유는 정확한 수치의 카운터는 Chapter~\ref{chp:Counting} 에서 알아
+봤듯이 멀티코어 시스템에서는 성능이 좋지도 않고 확장도 잘 되지 않기 때문입니다.
+그 결과, 해쉬 테이블의 이 병렬화된 구현은 성능도 좋지 않고 확장도 잘 되지 않을
+겁니다.
+
+그럼 이에 대해 뭘 할 수 있을까요?
+한가지 방법은 Chapter~\ref{chp:Counting} 에 나온 알고리즘 중 하나를 사용해
+근사치 카운터를 리턴하는 것입니다.
+또다른 방법은 항목 수 자체를 제공하지 않는 겁니다.
+
+어떤 방법이든, 왜 원소 추가와 제거 오퍼레이션이 정확한 카운트를 필요로 하는지
+해쉬 테이블의 사용처를 조사하는 것입니다.
+여기 몇가지 가능성이 있습니다:
+
+\iffalse
+
 Suppose that you were writing a single-threaded hash-table implementation.
 It is easy and fast to maintain an exact count of the total number of items
 in the hash table, and also easy and fast to return this exact count on each
@@ -4768,7 +4790,24 @@ Either way, it will be necessary to inspect uses of the hash table to see
 why the addition and deletion operations need the exact count.
 Here are a few possibilities:
 
+\fi
+
 \begin{enumerate}
+\item	언제 해쉬 테이블을 크기 조정할지 판단하기.
+	이 경우, 근사치 카운터는 무척 잘 동작할 겁니다.
+	잘 파티셔닝된 체인별 방법으로 계산되고 유지되는 가장 긴 체인의 길이에
+	기반해 크기 재조정을 하는 것도 유용할 수 있습니다.
+\item	전체 해쉬 테이블을 순회하는데 걸리는 시간의 예측치를 만들기.
+	이 경우에도 근사치 카운트는 잘 동작합니다.
+\item	분석 목적으로, 예를 들면 아이템을 해쉬테이블 사이에 이동시킬 때 없어진
+	아이템을 검사하기 위해.
+	이는 분명 정확한 카운트를 필요로 합니다.
+	하지만, 이 사용처가 분석이라는 기본에 비춰볼 때, 해쉬 체인의 길이만을
+	유지하고 추가와 제거 오퍼레이션을 락으로 막아둔 상태에서 가끔 그 값들의
+	합산을 구하는 것으로도 충분할 수도 있습니다.
+
+\iffalse
+
 \item	Determining when to resize the hash table.
 	In this case, an approximate count should work quite well.
 	It might also be useful to trigger the resizing operation from
@@ -4784,7 +4823,31 @@ Here are a few possibilities:
 	suffice to maintain the lengths of the hash chains, then to
 	infrequently sum them
 	up while locking out addition and deletion operations.
+
+\fi
+
 \end{enumerate}
+
+병렬 라이브러리 API 의 성능과 확장성에 존재하는 일부 제약들에 대한 강한 이론적
+기본들이 이제 존재하는 것으로
+드러났습니다~\cite{HagitAttiya2011LawsOfOrder,Attiya:2011:LOE:1925844.1926442,PaulEMcKenney2011SNC}.
+병렬 라이브러리를 설계하는 사람들은 모두 이 제약들에 주의를 기울여야 합니다.
+
+사실은 동시성에 친화적이지 못한 API 때문인 문제들에 대해 락킹을 비난하는 것은
+너무 쉽지만, 그러는게 도움이 되진 못합니다.
+다른 한편, (말하자면) 1985 년에 이 선택을 했던 불운한 개발자에 공감하는
+것밖에는 별다른 선택지가 없기도 합니다.
+그 당시에 병렬성을 예상한 개발자는 드물고 용기있는 경우였을 것이고, 실제로 좋은
+병렬성 친화적 API 를 만들어내기 위해선 총명성과 행운이라는 더욱 드문 조합이
+필요했을 겁니다.
+
+시간은 변합니다, 그리고 코드는 그와 함께 변화해야 합니다.
+그러나, 대중적 라이브러리에는 거대한 수의 사용자들이 있을 수 있는데, 이 API
+로의 호환성을 해치는 변화는 상당히 멍청한 일일 겁니다.
+이미 존재하는 많이 사용되는 순차적으로만 동작하는 API 를 보강하기 위해 병렬성에
+친화적인 API 를 추가하는 것은 일반적으로 최고의 행동입니다.
+
+\iffalse
 
 It turns out that there is now a strong theoretical basis for some of the
 constraints that performance and scalability place on a parallel library's
@@ -4807,9 +4870,19 @@ in which case an incompatible change to the API would be quite foolish.
 Adding a parallel-friendly API to complement the existing heavily used
 sequential-only API is usually the best course of action.
 
+\fi
+
+그러나, 사람의 본성이 그러한 만큼, 우리의 불운한 개발자가 그 또는 그녀의
+스스로의 불쌍한 (이해할 수는 있지만) API 설계 선택에 대해 불만을 표시할
+가능성이 높을 것으로 예상할 수 있습니다.
+
+\iffalse
+
 Nevertheless, human nature being what it is, we can expect our hapless
 developer to be more likely to complain about locking than about his
 or her own poor (though understandable) API design choices.
+
+\fi
 
 \subsubsection{Deadlock-Prone Callbacks}
 \label{sec:locking:Deadlock-Prone Callbacks}
