@@ -7,6 +7,21 @@
 \Epigraph{It is mine, I tell you. My own. My precious. Yes, my precious.}
 	 {\emph{Gollum in ``The Fellowship of the Ring'', J.R.R.~Tolkien}}
 
+락킹과 함께 나타나는 동기화 오버헤드를 막는 가장 간단한 한가지 방법은 데이터를
+쓰레드들 사이에 (또는, 커널의 경우라면, CPU 사이에) 배분해서 데이터의 특정
+부분은 하나의 쓰레드에 의해서만 액세스 되고 수정되게끔 하는 것입니다.
+흥미롭게도, 데이터 소유권은 병렬 설계 기술의 ``커다란 세가지'' 각각을
+커버합니다:
+쓰레드 사이로 (또는, 경우에 따라선 CPU 사이에) 파티셔닝을 하고,
+모든 로컬 오퍼레이션을 배치로 처리하며,
+동기화 오퍼레이션의 제거가 극한의 로직으로 이르는 것을 완화시킵니다.
+따라서 데이터 소유권이 널리 사용된다는 것은 놀라운 일이 아닙니다:
+심지어 초심자들도 본능적으로 이를 사용합니다.
+사실, 데이터 소유권은 워낙 널리 사용되어서 이 챕터에서는 새로운 예제를
+소개하지는 않고, 앞의 챕터들에서 다루었던 것들을 다시 한번 다뤄 보겠습니다.
+
+\iffalse
+
 One of the simplest ways to avoid the synchronization overhead that
 comes with locking is to parcel the data out among the threads (or,
 in the case of kernels, CPUs)
@@ -23,15 +38,52 @@ Even novices use it almost instinctively.
 In fact, it is so heavily used that this chapter will not introduce any
 new examples, but will instead refer back to those of previous chapters.
 
+\fi
+
 \QuickQuiz{
+	C 또는 C++ 로 공유 메모리 병렬 프로그램들을 (예를 들면, pthread 를
+	사용해서) 만들 때 어떤 형태의 데이터 소유권이 제거하기 엄청 어렵나요?
+
+	\iffalse
+
 	What form of data ownership is extremely difficult
 	to avoid when creating shared-memory parallel programs
 	(for example, using pthreads) in C or C++?
+
+	\fi
+
 }\QuickQuizAnswer{
+	함수에서의 auto 변수의 사용입니다.
+	기본적으로, 이것들은 현재 함수를 수행하는 쓰레드에 사유화 되어
+	있습니다.
+
+	\iffalse
+
 	Use of auto variables in functions.
 	By default, these are private to the thread executing the
 	current function.
+
+	\fi
+
 }\QuickQuizEnd
+
+데이터 소유권을 위한 여러 접근법들이 있습니다.
+Section~\ref{sec:owned:Multiple Processes} 은 데이터 소유권에서의 논리적 극한을
+선보이는데, 각 쓰레드가 각자의 사적 주소 공간을 갖는 경우입니다.
+Section~\ref{sec:owned:Partial Data Ownership and pthreads} 은 그 반대의 극한을
+보는데, 데이터가 공유되지만 다른 쓰레드들은 이 데이터로의 다른 접근 권한을
+갖습니다.
+Section~\ref{sec:owned:Function Shipping} 은 함수 배달을 설명하는데, 이는 다른
+쓰레드들이 특정 쓰레드에 의해 소유된 데이터로의 간접 액세스를 하게 허용하는
+방법입니다.
+Section~\ref{sec:owned:Designated Thread} 은 어떻게 지정된 쓰레드들이 특정
+함수와 연관 데이터의 소유권을 할당받을 수 있는지 설명합니다.
+Section~\ref{sec:owned:Privatization} 은 공유 데이터를 사용하는 알고리즘을
+데이터 소유권을 사용하도록 변화시킴으로써 성능을 개선시키는 과정을 논합니다.
+마지막으로, Section~\ref{sec:owned:Other Uses of Data Ownership} 은 데이터
+소유권을 일등시민으로 사용하는 소프트웨어 환경 몇가지를 보입니다.
+
+\iffalse
 
 There are a number of approaches to data ownership.
 Section~\ref{sec:owned:Multiple Processes} presents the logical extreme
@@ -50,6 +102,8 @@ by transforming algorithms with shared data to instead use data ownership.
 Finally, Section~\ref{sec:owned:Other Uses of Data Ownership} lists
 a few software environments that feature data ownership as a
 first-class citizen.
+
+\fi
 
 \section{Multiple Processes}
 \label{sec:owned:Multiple Processes}
