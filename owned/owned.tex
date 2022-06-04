@@ -312,6 +312,23 @@ parallel programs.
 \epigraph{Give thy mind more to what thou hast than to what thou hast not.}
 	 {\emph{Marcus Aurelius Antoninus}}
 
+동시적 카운팅 (\cref{chp:Counting} 을 참고하세요) 은 데이터 소유권을 무척 많이
+사용합니다만, 살짝 꼬여 있습니다.
+쓰레드들은 다른 쓰레드에 의해 소유된 데이터를 수정하지 못합니다만, 그걸 읽을 수
+있습니다.
+짧게 말해, 공유 메모리의 사용은 소유권과 접근 권한의 미묘한 차이가 있는 개념을
+허용합니다.
+
+예를 들어,
+page~\pageref{lst:count:Per-Thread Statistical Counters} 의
+Listing~\ref{lst:count:Per-Thread Statistical Counters}
+에서 보인 쓰레드별 통계적 카운터 구현을 생각해 봅시다.
+여기서, \co{inc_count()} 는 연관된 쓰레드의 \co{counter} 의 인스턴스만을
+업데이트하는 반면, \co{read_count()} 는 모든 쓰레드의 \co{counter} 의
+인스턴스를 접근하지만 수정하지는 않습니다.
+
+\iffalse
+
 Concurrent counting (see \cref{chp:Counting}) uses data ownership heavily,
 but adds a twist.
 Threads are not allowed to modify data owned by other threads,
@@ -328,11 +345,30 @@ instance of \co{counter},
 while \co{read_count()} accesses, but does not modify, all
 threads' instances of \co{counter}.
 
+\fi
+
 \QuickQuiz{
+	각 쓰레드가 각자의 쓰레드별 변수 인스턴스를 읽지만 다른 쓰레드의
+	인스턴스에 쓰기를 하는 부분적 데이터 소유권이 말이 되긴 할까요?
+
+	\iffalse
+
 	Does it ever make sense to have partial data ownership where
 	each thread reads only its own instance of a per-thread variable,
 	but writes to other threads' instances?
+
+	\fi
+
 }\QuickQuizAnswer{
+	놀랍게도, 그렇습니다.
+	한가지 예는 쓰레드들이 다른 쓰레드의 우편함에 메세지를 보내고 각
+	쓰레드는 그 메세지가 처리되고 나면 그 메세지를 제거할 책임을 갖는
+	경우와 같은 간단한 메세지 전달 시스템이 되겠습니다.
+	그런 알고리즘의 구현은 비슷한 소유권 패턴의 다른 알고리즘을 알아보는
+	것과 함께 독자 여러분의 연습문제로 남겨둡니다.
+
+	\iffalse
+
 	Amazingly enough, yes.
 	One example is a simple message-passing system where threads post
 	messages to other threads' mailboxes, and where each thread
@@ -341,7 +377,29 @@ threads' instances of \co{counter}.
 	Implementation of such an algorithm is left as an exercise for
 	the reader, as is identifying other algorithms with similar
 	ownership patterns.
+
+	\fi
+
 }\QuickQuizEnd
+
+부분적 데이터 소유권은 리눅스 커널 내에서도 흔합니다.
+예를 들어, 특정 CPU 는 자신의 CPU 별 변수를 인터럽트가 불능화 된 상태에서만
+읽는게 허용될 수도 있고, 다른 CPU 는 이 첫번째 CPU 의 CPU 별 변수를 연관된 CPU
+별 락을 잡은 샅태에서만 읽기가 허용될 수도 있습니다.
+그러면 이 CPU 는 자신이 소유한 CPU 별 변수의 집합을 인터럽트를 불능화 했고
+자신의 CPU 별 락을 잡고 있는 상태에서라면 업데이트 하는게 허용될 겁니다.
+이 조정은 각 CPU 의 매우 오버헤드가 낮은 스스로가 소유한 CPU 별 변수 집합으로의
+액세스를 허용하는 reader-writer 락으로 생각될 수 있습니다.
+이 테마에는 무척 많은 변종들이 있습니다.
+
+그 자신의 부분에서, 순수한 데이터 소유권은 또한 일반적이고 유용한데, 예를 들어
+Section~\ref{sec:SMPdesign:Resource Allocator Caches}
+의
+page~\pageref{sec:SMPdesign:Resource Allocator Caches} 에서부터 설명된 쓰레드별
+메모리 할당자 캐쉬가 한 예가 되겠습니다.
+이 알고리즘에서, 각 쓰레드의 캐쉬는 해당 쓰레드에 완전히 사유되어 있습니다.
+
+\iffalse
 
 Partial data ownership is also common within the Linux kernel.
 For example, a given CPU might be permitted to read a given set of its
@@ -362,6 +420,8 @@ starting on
 page~\pageref{sec:SMPdesign:Resource Allocator Caches}.
 In this algorithm, each thread's cache is completely private to that
 thread.
+
+\fi
 
 \section{Function Shipping}
 \label{sec:owned:Function Shipping}
