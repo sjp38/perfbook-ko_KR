@@ -653,6 +653,24 @@ as the name says, eventually converge on the actual value.
 	  and what he really possesses.}
 	 {\emph{Pearl S.~Buck}}
 
+공유 메모리 병렬 프로그램의 성능과 확장성을 개선하는 한가지 방법은 그것을 공유
+데이터를 특정 쓰레드가 소유하는 사적 데이터로 변환시키는 것입니다.
+
+이에 대한 완벽한 예 하나가
+Section~\ref{sec:SMPdesign:Dining Philosophers Problem} 의 Quick Quizz 중
+하나의 답에 있는데, Dining Philosophers 문제를 표준적 교재의 해법보다 훨씬 나은
+성능과 확장성을 제공하는 해법을 만들기 위해 사유화를 사용합니다.
+원래의 문제는 철학자들 한 쌍 사이에 하나의 포크만 존재하는 테이블에 앉아있는
+다섯명의 철학자들을 두어서, 최대 두명의 철학자들만이 동시에 식사를 할 수 있게
+합니다.
+
+우리는 추가적인 다섯개의 포크를 제공해서 각 철학자가 그 또는 그녀의 소유된 사적
+포크 한쌍을 가질 수 있게 해서 이 문제를 간단히 사유화 할 수 있습니다.
+이는 모든 다섯명의 철학자들이 동시에 식사를 할 수 있게 하며, 또한 특정 종류의
+질병의 확산을 크게 줄여줍니다.
+
+\iffalse
+
 One way of improving the performance and scalability of a shared-memory
 parallel program is to transform it so as to convert shared data to
 private data that is owned by a particular thread.
@@ -672,6 +690,23 @@ forks, so that each philosopher has his or her own private pair of forks.
 This allows all five philosophers to eat concurrently, and also offers
 a considerable reduction in the spread of certain types of disease.
 
+\fi
+
+다른 경우에는 사유화는 비용을 내포합니다.
+예를 들어,
+\cpageref{lst:count:Simple Limit Counter Add; Subtract; and Read}
+의
+\cref{lst:count:Simple Limit Counter Add; Subtract; and Read} 에 보여진 간단한
+한계 카운터를 생각해 봅시다.
+이는 쓰레드들이 다른 쓰레드의 데이터를 읽을 수 있는 알고리즘의 한 예입니다만,
+각자의 소유하고 있는 데이터만을 업데이트 할 수 있습니다.
+이 알고리즘의 빠른 리뷰는 쓰레드 사이를 가로지르는 액세스들만이
+\co{read_count()} 의 합산 반복문에 존재함을 보입니다.
+만약 이 반복문이 제거된다면, 우린 더 효율적인 순수한 데이터 소유권으로 넘어갈
+수 있습니다만, \co{read_count()} 의 덜 정확한 결과라는 비용을 치르게 됩니다.
+
+\iffalse
+
 In other cases, privatization imposes costs.
 For example, consider the simple limit counter shown in
 \cref{lst:count:Simple Limit Counter Add; Subtract; and Read} on
@@ -684,10 +719,37 @@ If this loop is eliminated, we move to the more-efficient pure
 data ownership, but at the cost of a less-accurate result
 from \co{read_count()}.
 
+\fi
+
 \QuickQuiz{
+	쓰레드별 데이터의 완전한 사유화를 유지하면서 높은 정확도를 유지하는게
+	가능할까요?
+
+	\iffalse
+
 	Is it possible to obtain greater accuracy while still
 	maintaining full privacy of the per-thread data?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그렇습니다.
+	한가지 방법은 \co{read_count()} 각 자신의 쓰레드별 변수의 값을 더하게
+	하는 겁니다.
+	이는 완전한 소유권과 성능을 유지하게 하지만 정확도에는 약간의 개선만을
+	가져다 주는데, 무척 커다란 수의 쓰레드를 갖는 시스템에서는 특히
+	그렇습니다.
+
+	또다른 방법은 \co{read_count()} 가 함수 보내기를 사용하게 하는 건데,
+	예를 들면 쓰레드별 시그널의 형태입니다.
+	이는 정확도를 크게 개선하지만 \co{read_count()} 에 심각한 성능 비용을
+	청구합니다.
+
+	하지만, 이 방법들 둘 다 카운터 업데이트라는 일반적인 경우에서의 캐쉬
+	쓰래싱을 제거하는 장점을 갖습니다.
+
+	\iffalse
+
 	Yes.
 	One approach is for \co{read_count()} to add the value
 	of its own per-thread variable.
@@ -702,7 +764,24 @@ from \co{read_count()}.
 
 	However, both of these methods have the advantage of eliminating
 	cache thrashing for the common case of updating counters.
+
+	\fi
+
 }\QuickQuizEnd
+
+부분적 사유화 또한 가능한데, 약간의 동기화 필요성을 갖긴 하지만 완전히 공유된
+경우보다는 덜합니다.
+\Cref{sec:toolsoftrade:Avoiding Data Races} 에 어떤 부분적 사유화 가능성이
+보여졌습니다.
+\Cref{chp:Deferred Processing} 는 안전하게 공적 데이터 구조를 사적인 것으로
+만드는 방법을 제공함으로써 임시적 데이터 소유권의 부분을 소개할 겁니다.
+
+요약해서, 사유화는 병렬 프로그래머의 도구상자의 강력한 도구입니다만, 주의와
+함께 사용되어야만 합니다.
+모든 다른 동기화 도구들과 마찬가지로, 성능과 확장성을 떨어뜨리는 동시에
+복잡도를 높일 가능성을 갖고 있습니다.
+
+\iffalse
 
 Partial privatization is also possible, with some synchronization
 requirements, but less than in the fully shared case.
@@ -716,6 +795,8 @@ In short, privatization is a powerful tool in the parallel programmer's
 toolbox, but it must nevertheless be used with care.
 Just like every other synchronization primitive, it has the potential
 to increase complexity while decreasing performance and scalability.
+
+\fi
 
 \section{Other Uses of Data Ownership}
 \label{sec:owned:Other Uses of Data Ownership}
