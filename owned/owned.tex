@@ -549,6 +549,24 @@ page~\pageref{lst:count:Signal-Theft Limit Counter Subtract Function}).
 \epigraph{Let a man practice the profession which he best knows.}
 	 {\emph{Cicero}}
 
+앞의 섹션들은 각 쓰레드가 각자의 복사본을 또는 각자의 데이터 일부를 가질 수
+있게 하는 방법들을 설명했습니다.
+대조적으로, 이 섹션은 함수적 해제 방법을 설명하는데, 특별한 특정 쓰레드가 그
+일을 하는데 필요한 데이터로의 권리를 갖는 형태입니다.
+\begin{fcvref}[ln:count:count_stat_eventual:whole:eventual]
+Section~\ref{sec:count:Eventually Consistent Implementation} 의 결과적으로
+일관적인 카운터 구현이 한 예를 제공합니다.
+이 구현은
+Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+의 \clnrefrange{b}{e} 에 보인 \co{eventual()} 함수를 수행하는 특별한 쓰레드를
+갖습니다.
+이 \co{eventual()} 쓰레드는 주기적으로 쓰레드별 카운트를 글로벌 카운터로
+끌어와서, 글로벌 카운터로의 액세스는 그 이름이 말하듯 결과적으로 실제 값으로
+수렴하게 만듭니다.
+\end{fcvref}
+
+\iffalse
+
 The earlier sections describe ways of allowing each thread to keep its
 own copy or its own portion of the data.
 In contrast, this section describes a functional-decomposition approach,
@@ -565,7 +583,19 @@ into the global counter, so that accesses to the global counter will,
 as the name says, eventually converge on the actual value.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:count:count_stat_eventual:whole:eventual]
+	하지만
+	Listing~\ref{lst:count:Array-Based Per-Thread Eventually Consistent Counters}
+	의 \clnrefrange{b}{e} 에 있는 \co{eventual()} 함수의 어느 부분도 실제로
+	\co{eventual()} 쓰레드에 소유되어 있지 않습니다!
+	이게 어떻게 데이터 소유권인가요???
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:count:count_stat_eventual:whole:eventual]
 	But none of the data in the \co{eventual()} function shown on
 	\clnrefrange{b}{e} of
@@ -573,7 +603,28 @@ as the name says, eventually converge on the actual value.
 	is actually owned by the \co{eventual()} thread!
 	In just what way is this data ownership???
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:count:count_stat_eventual:whole]
+	핵심 문구는 ``데이터로의 권한을 소유한다'' 입니다.
+	이 경우, 이 권한은 이 리스트의 \clnref{per_thr_cnt} 에 정의된 쓰레드별
+	\co{counter} 변수로의 접근 권한입니다.
+	이 상황은
+	Section~\ref{sec:owned:Partial Data Ownership and pthreads}
+	에서 설명한 것과 비슷합니다.
+
+	하지만, \co{eventual()} 에 소유되는 데이터가 실제로 있는데, 이 리스트의
+	\clnref{t,sum} 에 정의된 \co{t} 와 \co{sum} 변수들입니다.
+
+	특수 쓰레드의 다른 예들을 위해서는, 리눅스 커널의 커널 쓰레드들을 보실
+	수 있겠는데, 예를 들면 \co{kthread_create()} 와 \co{kthread_run()} 에
+	의해 만들어지는 것들입니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:count:count_stat_eventual:whole]
 	The key phrase is ``owns the rights to the data''.
 	In this case, the rights in question are the rights to access
@@ -590,6 +641,9 @@ as the name says, eventually converge on the actual value.
 	threads in the Linux kernel, for example, those created by
 	\co{kthread_create()} and \co{kthread_run()}.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Privatization}
