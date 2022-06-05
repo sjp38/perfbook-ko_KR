@@ -430,6 +430,25 @@ thread.
 	  go to the mountain.}
 	 {\emph{Essays, Francis Bacon}}
 
+앞의 섹션은 쓰레드들이 다른 쓰레드의 데이터에 접근하는 약화된 형태의 데이터
+소유권을 이야기 했습니다.
+이는 데이터를 그것을 필요로 하는 함수에게 가져다 주는 것으로 생각될 수
+있습니다.
+하나의 대안적 방법은 함수를 데이터에게 보내는 것입니다.
+
+그런 방법이
+page~\pageref{sec:count:Signal-Theft Limit Counter Design}
+에서 시작하는
+Section~\ref{sec:count:Signal-Theft Limit Counter Design}
+에 그려져 있는데, 특히
+page~\pageref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
+의
+Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
+에 있는 \co{flush_local_count_sig()} 와 \co{flush_local_count()} 함수가
+그것입니다.
+
+\iffalse
+
 The previous section described a weak form of data ownership where
 threads reached out to other threads' data.
 This can be thought of as bringing the data to the functions that
@@ -446,6 +465,21 @@ Listing~\ref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}
 on
 page~\pageref{lst:count:Signal-Theft Limit Counter Value-Migration Functions}.
 
+\fi
+
+\co{flush_local_count_sig()} 함수는 보내진 함수처럼 동작하는 시그널
+핸들러입니다.
+\co{flush_local_count()} 의 \co{pthread_kill()} 함수는 시그널을 보내고---함수를
+배송하고--- 이 보내진 함수가 수행될 때까지 기다립니다.
+이 보내진 함수는 동시에 수행되는 \co{add_count()} 나 \co{sub_count()} 들과의
+(page~\pageref{lst:count:Signal-Theft Limit Counter Add Function} 의
+Listing~\ref{lst:count:Signal-Theft Limit Counter Add Function} 와
+page~\pageref{lst:count:Signal-Theft Limit Counter Subtract Function} 의
+Listing~\ref{lst:count:Signal-Theft Limit Counter Subtract Function} 를
+참고하세요) 상호작요이라는 드물지만은 않은 추가적 복잡도를 갖습니다.
+
+\iffalse
+
 The \co{flush_local_count_sig()} function is a signal handler that
 acts as the shipped function.
 The \co{pthread_kill()} function in \co{flush_local_count()}
@@ -461,10 +495,35 @@ Listing~\ref{lst:count:Signal-Theft Limit Counter Subtract Function}
 on
 page~\pageref{lst:count:Signal-Theft Limit Counter Subtract Function}).
 
+\fi
+
 \QuickQuiz{
+	POSIX 시그널 외에 어떤 다른 메커니즘이 함수 보내기를 위해 사용될 수
+	있을까요?
+
+	\iffalse
+
 	What mechanisms other than POSIX signals may be used for function
 	shipping?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그런 메커니즘들이 매우 많은데, 다음을 포함합니다:
+	\begin{enumerate}
+	\item	System V 메세지 큐.
+	\item	공유 메모리 디큐
+		(Section~\ref{sec:SMPdesign:Double-Ended Queue} 를 참고하세요).
+	\item	공유 메모리 메일함.
+	\item	유닉스 도메인 소켓.
+	\item	TCP/IP 또는 UDP, 그리고 RPC, HTTP, XML, SOAP, 그 외에도 여러 더
+		높은 단계에서의 프로토콜과 결함된 형태의 것들.
+	\end{enumerate}
+	완전한 리스트를 만드는 것은 그 리스트는 굉장히 길 것이라 경고받은,
+	그럼에도 그것을 원하는 독자 여러분의 연습문제로 남겨둡니다.
+
+	\iffalse
+
 	There is a very large number of such mechanisms, including:
 	\begin{enumerate}
 	\item	System V message queues.
@@ -479,6 +538,9 @@ page~\pageref{lst:count:Signal-Theft Limit Counter Subtract Function}).
 	Compilation of a complete list is left as an exercise to
 	sufficiently single-minded readers, who are warned that the
 	list will be extremely long.
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Designated Thread}
