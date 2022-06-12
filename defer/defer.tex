@@ -58,6 +58,20 @@ algorithm that will be used to compare and contrast these approaches.
 \epigraph{An ounce of application is worth a ton of abstraction.}
 	 {\emph{Booker T.~Washington}}
 
+이 챕터는 이 방법들의 가치를 보이고 그것들을 비교할 수 있게끔 단순화된 패킷
+라우팅 알고리즘 하나를 사용하겠습니다.
+라우팅 알고리즘은 각각의 송신 TCP/IP 패킷들을 올바른 네트워크 인터페이스로
+전달하기 위해 운영체제 커널에서 사용됩니다.
+이 특정 알고리즘은 BSD UNIX 에서 사용된 1980년대의 고전 packet-train-optimized
+알고리즘의~\cite{VanJacobson88} 간략화된 버전으로, 간단한 링크드 리스트로
+구성됩니다.\footnote{
+	달리 말하자면, 이는 OpenBSD 도, NetBSD 도, 심지어 FreeBSD 도 아니고
+	그저 Pre-BSD 라 불릴 수 있습니다.}
+현대의 라우팅 알고리즘은 더 복잡한 데이터 구조를 사용합니다만, 간단한
+알고리즘은 간단한 세팅에서 병렬성만의 문제를 잘 볼 수 있게 도와줄 겁니다.
+
+\iffalse
+
 This chapter will use a simplified packet-routing algorithm to demonstrate
 the value of these approaches and to allow them to be compared.
 Routing algorithms are used in operating-system kernels to
@@ -70,6 +84,23 @@ consisting of a simple linked list.\footnote{
 Modern routing algorithms use more complex data structures, however a
 simple algorithm will help highlight issues specific to parallelism in
 a straightforward setting.
+
+\fi
+
+우리는 탐색 키를 출발지와 도착지 IP 주소와 포트들로 구성되는 네가지의 값에서
+간단한 정수 하나로 줄여서 이 알고리즘을 더욱 단순화 시킵니다.
+탐색되고 리턴되는 값 역시 단순한 정수 하나가 되며, 따라서 이 데이터 구조는
+주소~42 의 패킷을 인터페이스~1 로, 주소~56 을 인터페이스~3 으로, 그리고
+주소~17을 인터페이스~7 로 전달시키는
+Figure~\ref{fig:defer:Pre-BSD Packet Routing List} 에 보인 것과 같은 것이
+됩니다.
+이 리스트는 빈번하게 탐색되고 드물게 업데이트 됩니다.
+Chapter~\ref{chp:Hardware and its Habits} 에서 우리는 유한한 빛의 속도와 물질의
+원자성과 같은 불편한 물리 법칙을 피하기 위한 최선의 방법은 데이터를 쪼개거나
+읽기가 대부분인 공유에 의존하는 것임을 배웠습니다.
+이 챕터는 읽기가 대부분인 공유 기법을 Pre-BSD 패킷 라우팅에 적용해 봅니다.
+
+\iffalse
 
 We further simplify the algorithm by reducing the search key from
 a quadruple consisting of source and destination IP addresses and
@@ -87,6 +118,8 @@ either partition the data or to rely on read-mostly sharing.
 This chapter applies read-mostly sharing techniques to Pre-BSD packet
 routing.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{defer/RouteList}}
@@ -99,6 +132,32 @@ routing.
 \caption{Sequential Pre-BSD Routing Table}
 \label{lst:defer:Sequential Pre-BSD Routing Table}
 \end{listing}
+
+Listing~\ref{lst:defer:Sequential Pre-BSD Routing Table} (\path{route_seq.c})
+은
+Figure~\ref{fig:defer:Pre-BSD Packet Routing List} 에 연관되는 간단한
+싱글쓰레드 구현을 보입니다.
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:entry]
+\Clnrefrange{b}{e} 는 \co{route_entry} 구조를 정의하고 라인~\lnref{header} 는
+\co{route_list} 헤더를 정의합니다.
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:lookup]
+\Clnrefrange{b}{e} 는 \co{route_lookup()} 을 정의하는데, 이 함수는 순차적으로
+\co{route_list} 를 탐색하고 연관된 \co{->iface} 를 리턴하거나 해당 라우팅
+항목이 없으면 \co{ULONG_MAX} 를 리턴합니다.
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:add]
+\Clnrefrange{b}{e} 는 \co{route_add()} 를 정의하는데, 이 함수는
+\co{route_entry} 구조체를 할당받고, 초기화 한 후, 이 리스트에 그것을
+추가하는데, 메모리 할당 실패의 경우엔 \co{-ENOMEM} 을 리턴합니다.
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seq:lookup_add_del:del]
+마지막으로, \clnrefrange{b}{e} 는 \co{route_del()} 을 정의하는데, 이 함수는
+특정 \co{route_entry} 구조체를 만약 존재한다면 제거하고 메모리 해제하고, 그렇지
+않으면 \co{-ENOENT} 를 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 Listing~\ref{lst:defer:Sequential Pre-BSD Routing Table} (\path{route_seq.c})
 shows a simple single-threaded implementation corresponding to
@@ -124,9 +183,18 @@ frees the specified \co{route_entry} structure if it exists,
 or returns \co{-ENOENT} otherwise.
 \end{fcvref}
 
+\fi
+
+이 싱글쓰레드 구현은 이 챕터에서 다양한 동시적 구현들의 프로토타입 역할을 하게
+되며, 이상적인 확장성과 성능의 예측에도 사용됩니다.
+
+\iffalse
+
 This single-threaded implementation serves as a prototype for the various
 concurrent implementations in this chapter, and also as an estimate of
 ideal scalability and performance.
+
+\fi
 
 \input{defer/refcnt}
 \input{defer/hazptr}
