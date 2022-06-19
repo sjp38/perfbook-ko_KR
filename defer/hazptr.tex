@@ -7,6 +7,20 @@
 %
 \epigraph{If in doubt, turn it inside out.}{\emph{Zara Carpenter}}
 
+동시적 레퍼런스 카운팅의 문제를 막는 한가지 방법은 레퍼런스 카운터를 뒤집어
+구현하는 것으로, 즉, 데이터 원소에 저장된 정수의 값을 증가시키는 대신 CPU별
+(또는 쓰레드별) 리스트에 데이터 원소로의 포인터를 저장하는 것입니다.
+이 리스트의 각 원소는 \emph{해저드 포인터}~\cite{MagedMichael04a} 라고
+불립니다.\footnote{
+	독립적으로 다른 사람들에 의해서도 발명되었습니다~\cite{HerlihyLM02}.}
+그러면 주어진 데이터 원소의 ``가상 레퍼런스 카운터'' 의 값은 이 원소를 참조하는
+해저드 포인터의 갯수를 세는 것으로 구해질 수 있습니다.
+따라서, 이 원소가 읽기 쓰레드에 의해 액세스 될 수 없게 되다면, 해당 원소를
+참조하는 해저드 포인터가 더이상 존재하지 않게 되어서, 이 원소는 안전히 메모리
+해제될 수 있습니다.
+
+\iffalse
+
 One way of avoiding problems with concurrent reference counting
 is to implement the reference counters
 inside out, that is, rather than incrementing an integer stored in the
@@ -22,11 +36,32 @@ Therefore, if that element has been rendered inaccessible to readers,
 and there are no longer any hazard pointers referencing it, that element
 may safely be freed.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/defer/hazptr@record_clear.fcv}
 \caption{Hazard-Pointer Recording and Clearing}
 \label{lst:defer:Hazard-Pointer Recording and Clearing}
 \end{listing}
+
+물론, 이는 해저드 포인터 획득이 동시의 삭제와의 위험한 레이스를 막기 위해 아주
+조심스럽게 다뤄져야 함을 의미합니다.
+\begin{fcvref}[ln:defer:hazptr:record_clear]
+Listing~\ref{lst:defer:Hazard-Pointer Recording and Clearing}
+에 하나의 구현이 보여져 있는데, \clnrefrange{htr:b}{htr:e} 에
+\co{hp_try_record()} 가, \clnrefrange{hr:b}{hr:e} 에 \co{hp_record()} 가,
+그리고 \clnrefrange{hc:b}{hc:e} 에 \co{hp_clear()} 가 있습니다
+(\path{hazptr.h}).
+
+라인~\lnref{htr:e} 의 \co{hp_try_record()} 매크로는 \co{_h_t_r_impl()} 함수를
+위한 캐스팅 래퍼로, \co{p} 에 의해 참조되는 포인터를 \co{hp} 에 의해 참조되는
+해저드 포인터에 저장합니다.
+이게 성공하면, 저장된 포인터의 값을 리턴합니다.
+해당 포인터가 \co{NULL} 이 되는 관계로 여기 실패하면, \co{NULL} 을 리턴합니다.
+마지막으로, 업데이트와의 레이스 때문에 실패하면 특수한 \co{HAZPTR_POISON}
+토큰을 리턴합니다.
+
+\iffalse
 
 Of course, this means that hazard-pointer acquisition must be carried
 out quite carefully in order to avoid destructive races with concurrent
@@ -48,11 +83,34 @@ If it fails due to that pointer being \co{NULL}, it returns \co{NULL}.
 Finally, if it fails due to racing with an update, it returns a special
 \co{HAZPTR_POISON} token.
 
+\fi
+
 \QuickQuiz{
+	해저드 포인터 논문들은 삭제된 원소들을 표시하기 위해 각 포인터의 바닥
+	비트들을 사용하는데 \co{HAZPTR_POISON} 은 왜 사용되나요?
+
+	\iffalse
+
 	Given that papers on hazard pointers use the bottom bits
 	of each pointer to mark deleted elements, what is up with
 	\co{HAZPTR_POISON}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	해저드 포인트의 해당 공개된 구현은 삽입과 삭제에 non-blocking 동기화
+	기법을 사용했습니다.
+	이 기법들은 이 데이터 구조를 횡단하는 읽기 쓰레드가 업데이트 쓰레드가
+	업데이트를 완료하는 것을 ``도와줄'' 것을 필요로 하는데 이는 읽기
+	쓰레드들이 삭제된 원소의 다음 원소를 봐야 함을 의미합니다.
+
+	대조적으로, 우린 업데이트들을 동기화 하기 위해 락킹을 사용할텐데, 이는
+	읽기 쓰레드들이 업데이트 쓰레드들의 업데이트 완료를 도울 필요를
+	없애버려서 결국 우리가 포인터의 바닥 비트를 그대로 둘 수 있게 해줍니다.
+	이 방법은 읽기 쪽 코드를 더 간단하고 빠르게 해줍니다.
+
+	\iffalse
+
 	The published implementations of hazard pointers used
 	non-blocking synchronization techniques for insertion
 	and deletion.
@@ -66,7 +124,28 @@ Finally, if it fails due to racing with an update, it returns a special
 	complete their updates, which in turn allows us to leave
 	pointers' bottom bits alone.
 	This approach allows read-side code to be simpler and faster.
+
+	\fi
+
 }\QuickQuizEnd
+
+라인~\lnref{htr:ro1} 은 보호되어야 할 객체로의 포인터를 읽습니다.
+라인~\lnref{htr:race1} 이 이 포인터가 \co{NULL} 이거나 특수한 삭제된 객체
+토큰인 \co{HAZPTR_POISON} 이었음을 발견하게 되면, 호출자에게 실패를 알리기 위해
+이 포인터의 값을 리턴합니다.
+그렇지 않다면, 라인~\lnref{htr:store} 는 명시된 해저드 포인터에 이 포인터를
+저장하고, 라인~\lnref{htr:mb} 는 라인~\lnref{htr:ro2} 에서의 원래 포인터의 다시
+읽기와 이 저장 사이의 순서를 완전히 강제합니다.
+(메모리 순서 규칙에 대한 더 많은 내용을 위해선
+Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 를 참고하시기
+바랍니다.)
+원래 포인터의 값이 변경되지 않았다면, 이 해저드 포인터는 가리켜진 객체를
+보호하고, 이 경우 라인~\lnref{htr:success} 는 이 객체로의 포인터를 리턴하는데,
+이는 또한 호출자에게 성공을 알립니다.
+그렇지 않고, 이 포인터가 두개의 \co{READ_ONCE()} 사이에서 변경되었다면,
+라인~\lnref{htr:race2} 는 실패를 알립니다.
+
+\iffalse
 
 Line~\lnref{htr:ro1} reads the pointer to the object to be protected.
 If line~\lnref{htr:race1} finds that this pointer was either \co{NULL} or
@@ -84,37 +163,90 @@ indicates success to the caller.
 Otherwise, if the pointer changed between the two \co{READ_ONCE()}
 invocations, line~\lnref{htr:race2} indicates failure.
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:defer:Hazard-Pointer Recording and Clearing}
+	의 \co{hp_try_record()} 는 왜 데이터 원소로의 이중 간접 경로를 갖나요?
+	\co{void **} 대신 \co{void *} 를 쓰는게 어떻습니까?
+
+	\iffalse
+
 	Why does \co{hp_try_record()} in
 	Listing~\ref{lst:defer:Hazard-Pointer Recording and Clearing}
 	take a double indirection to the data element?
 	Why not \co{void *} instead of \co{void **}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\co{hp_try_record()} 는 동시의 수정을 검사해야만 하기 때문입니다.
+	이 일을 하기 위해선 이 원소로의 포인터로의 변경을 검사하기 위해 이
+	원소로의 포인터로의 포인터를 필요로 합니다.
+
+	\iffalse
+
 	Because \co{hp_try_record()} must check for concurrent modifications.
 	To do that job, it needs a pointer to a pointer to the element,
 	so that it can check for a modification to the pointer to the
 	element.
+
+	\fi
+
 }\QuickQuizEnd
+
+\co{hp_record()} 함수는 상당히 단순합니다: 리턴 값이 \co{HAZPTR_POISON} 이 아닌
+무엇인가일 때까지 반복적으로 \co{hp_try_record()} 를 호출합니다.
+
+\iffalse
 
 The \co{hp_record()} function is quite straightforward: It repeatedly
 invokes \co{hp_try_record()} until the return value is something other
 than \co{HAZPTR_POISON}.
 
+\fi
+
 \QuickQuiz{
+	왜 \co{hp_try_record()} 를 신경쓰죠?
+	그냥 실패에 내성 있는 \co{hp_record()} 함수를 그냥 사용하는게 더 쉽지
+	않나요?
+
+	\iffalse
+
 	Why bother with \co{hp_try_record()}?
 	Wouldn't it be easier to just use the failure-immune
 	\co{hp_record()} function?
+
+	\fi
+
 }\QuickQuizAnswer{
+	어떤 측면에선 그게 더 쉬울 수도 있습니다만, Pre-BSD 라우팅 예에서 곧
+	보겠지만, \co{hp_record()} 는 단순하게 동작하지 않는 상황이 있습니다.
+
+	\iffalse
+
 	It might be easier in some sense, but as will be seen in the
 	Pre-BSD routing example, there are situations for which
 	\co{hp_record()} simply does not work.
+
+	\fi
+
 }\QuickQuizEnd
+
+\co{hp_clear()} 함수는 심지어 더 간단한데, 이 해저드 포인터에 의해 보호되는
+객체의 호출자의 사용과 이 해저드 포인터를 \co{NULL} 로 만드는 것 사이의 완전한
+순서를 강제하기 위해 \co{smp_mb()} 가 사용됩니다.
+\end{fcvref}
+
+\iffalse
 
 The \co{hp_clear()} function is even more straightforward, with
 an \co{smp_mb()} to force full ordering between the caller's uses
 of the object protected by the hazard pointer and the setting of
 the hazard pointer to \co{NULL}.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/defer/hazptr@scan_free.fcv}
