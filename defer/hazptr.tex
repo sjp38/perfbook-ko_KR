@@ -255,6 +255,21 @@ the hazard pointer to \co{NULL}.
 \end{listing}
 
 \begin{fcvref}[ln:defer:hazptr:scan_free:free]
+해저드 포인터로 보호되는 객체가 연결된 데이터 구조에서 일단 제거되어서 미래의
+해저드 포인터 사용 읽기 쓰레드들에게 접근될 수 없게 되면, 그 객체는
+Listing~\ref{lst:defer:Hazard-Pointer Scanning and Freeing}
+(\path{hazptr.c}) 의 \clnrefrange{b}{e} 에 보인 \co{hazptr_free_later()} 로
+넘겨집니다.
+라인~\lnref{enq:b} 와~\lnref{enq:e} 는 이 객체를 쓰레드별 리스트 \co{rlist} 에
+넣고 라인~\lnref{count} 에서 \co{rcount} 에 이 객체의 수를 셉니다.
+라인~\lnref{check} 가 충분히 많은 수의 객체들이 이제 들어와 있다는 것을 보게
+되면, 라인~\lnref{scan} 은 그 중 일부를 메모리 해제하기 위해 \co{hazptr_scan()}
+을 호출합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:defer:hazptr:scan_free:free]
 Once a hazard-pointer-protected object has been removed from its
 linked data structure, so that it is now inaccessible to future
 hazard-pointer readers, it is passed to \co{hazptr_free_later()},
@@ -268,6 +283,28 @@ If line~\lnref{check} sees that a sufficiently large number of objects are now
 queued, line~\lnref{scan} invokes \co{hazptr_scan()} to attempt to
 free some of them.
 \end{fcvref}
+
+\fi
+
+\begin{fcvref}[ln:defer:hazptr:scan_free:scan]
+이 리스팅의 \clnrefrange{b}{e} 에 \co{hazptr_scan()} 함수가 보여져 있습니다.
+이 함수는 고정된 쓰레드의 최대 갯수 (\co{NR_THREADS}) 와 고정된 크기의 해저드
+포인터 배열이 사용될 수 있게끔 하는 쓰레드당 해저드 포인터의 고정된 최대 갯수
+(\co{K}) 에 의존하고 있습니다.
+어떤 쓰레드든 이 해저드 포인터들을 스캔해야 할 수 있으므로,  각 쓰레드는 각자의
+배열을 가지고 있는데, 이는 쓰레드별 변수 \co{gplist} 를 통해 참조됩니다.
+라인~\lnref{check} 가 이 쓰레드는 아직 자신의 \co{gplist} 를 할당받지 않았음을
+알게 되면, \clnrefrange{alloc:b}{alloc:e} 가 이 할당을 진행합니다.
+라인~\lnref{mb1} 에서의 메모리 배리어는 이 쓰레드에 의한 모든 객체의 제거가
+\clnrefrange{loop:b}{loop:e} 가 모든 해저드 포인터를 스캔하고 NULL 이 아닌
+포인터들을 \co{plist} 배열에 넣고 \co{psize} 에 그 수를 세기 전에 볼 수 있음을
+보장하게 합니다.
+라인~\lnref{mb2} 에서의 메모리 배리어는 이 해저드 포인터들의 읽기가 어떤 객체의
+메모리 해제보다도 먼저 일어날 것을 보장되게 합니다.
+라인~\lnref{sort} 는 이어서 이 배열을 정렬해서 아래의 바이너리 탐색이 가능하게
+합니다.
+
+\iffalse
 
 \begin{fcvref}[ln:defer:hazptr:scan_free:scan]
 The \co{hazptr_scan()} function is shown on \clnrefrange{b}{e}
@@ -290,6 +327,22 @@ the hazard pointers
 happen before any objects are freed.
 Line~\lnref{sort} then sorts this array to enable use of binary search below.
 
+\fi
+
+라인~\lnref{rem:b} 와~\lnref{rem:e} 는 이 쓰레드의 곧 메모리 해제할 객체들
+리스트의 모든 원소들을 제거하고, 그것들을 지역적인 \co{tmplist} 에 위치시킨 후
+라인~\lnref{zero} 에서 그 수를 0으로 만듭니다.
+\Clnrefrange{loop2:b}{loop2:e} 에 있는 반복문의 각 수행에서는 곧 메모리 해제될
+객체들 각각을 처리합니다.
+라인~\lnref{rem1st:b} 와~\lnref{rem1st:e} 는 \co{tmplist} 에서 첫번째 객체를
+제거하고, 라인~\lnref{chkhazp:b} 와~\lnref{chkhazp:e} 는 이 객체를 보호하는
+해저드 포인터가 있음을 확인하고, \clnrefrange{back:b}{back:e} 는 그것을
+\co{rlist} 에 되돌려 놓습니다.
+그렇지 않으면, 라인~\lnref{free} 는 이 객체를 메모리 해제합니다.
+\end{fcvref}
+
+\iffalse
+
 Lines~\lnref{rem:b} and~\lnref{rem:e}
 remove all elements from this thread's list of
 to-be-freed objects, placing them on the local \co{tmplist}
@@ -305,6 +358,8 @@ protecting this object, \clnrefrange{back:b}{back:e}
 place it back onto \co{rlist}.
 Otherwise, line~\lnref{free} frees the object.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/defer/route_hazptr@lookup.fcv}
