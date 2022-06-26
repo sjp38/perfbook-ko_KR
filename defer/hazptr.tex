@@ -367,6 +367,19 @@ Otherwise, line~\lnref{free} frees the object.
 \label{lst:defer:Hazard-Pointer Pre-BSD Routing Table Lookup}
 \end{listing}
 
+Pre-BSD 라우팅 예제는 데이터 구조와 \co{route_lookup()} 을 위해
+Listing~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Lookup}
+에 보인 것처럼, \co{route_add()} 와 \co{route_del()} 을 위해선
+Listing~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Add/Delete}
+에 보인 것처럼 해저드 포인터를 사용할 수 있습니다 (\path{route_hazptr.c}).
+레퍼런스 카운팅에서와 같이, 이 해저드 포인터 구현은
+page~\pageref{lst:defer:Sequential Pre-BSD Routing Table}
+의
+Listing~\ref{lst:defer:Sequential Pre-BSD Routing Table}
+에 보인 순차적 알고리즘과 상당히 비슷해서 여기선 차이점만 이야기 하겠습니다.
+
+\iffalse
+
 The Pre-BSD routing example can use hazard pointers as shown in
 Listing~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Lookup}
 for data structures and \co{route_lookup()}, and in
@@ -379,6 +392,35 @@ Listing~\ref{lst:defer:Sequential Pre-BSD Routing Table}
 on
 page~\pageref{lst:defer:Sequential Pre-BSD Routing Table},
 so only differences will be discussed.
+
+\fi
+
+\begin{fcvref}[ln:defer:route_hazptr:lookup]
+Listing~\ref{lst:defer:Hazard-Pointer Pre-BSD Routing Table Lookup}
+부터 시작하면, 라인~\lnref{hh} 는 해저드 포인터 해제를 기다리는 객체들을
+리스트에 넣는데 사용되는 \co{->hh} 필드를 보이며, 라인~\lnref{re_freed} 는
+미모리 해제 후 사용 버그를 감지하기 위한 \co{->re_freed} 필드를 보이고,
+라인~\lnref{tryrecord} 는 해저드 포인터 획득을 시도하기 위해
+\co{hp_try_record()} 를 호출합니다.
+리턴값이 \co{NULL} 이면, 라인~\lnref{NULL} 은 호출자에게 찾지 못했음을
+리턴합니다.
+\co{hp_try_record()} 호출이 삭제와 레이스 상태에 빠진다면, 라인~\lnref{deleted}
+는 라인~\lnref{retry} 의 \co{retry} 로 돌아와 이 리스트를 시작부터 다시
+순회합니다.
+\co{do}--\co{while} 루프는 희망한 원소가 찾아질 때까지 돌아가는데, 만약 이
+원소가 이미 메모리 해제되어 있다면 라인~\lnref{abort} 가 이 프로그램을
+종료시킵니다.
+그렇지 않다면, 이 원소의 \co{->iface} 필드가 호출자에게 리턴됩니다.
+
+라인~\lnref{tryrecord} 는 사용하기 더 쉬운 \co{hp_record()} 대신
+\co{hp_try_record()} 를 호출해서 \co{hp_try_record()} 의 실패 시에는 전체
+탐색을 재시작합니다.
+그리고 그런 재시작은 정확성을 위해 분명 필요합니다.
+이를 보기 위해, 원소~A, B, 그리고~C 를 담고 있으며 다음 이벤트를 겪는 해저드
+포인터로 보호되는 링크드 리스트를 생각해 봅시다:
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:route_hazptr:lookup]
 Starting with
@@ -406,7 +448,25 @@ consider a hazard-pointer-protected linked list containing elements~A,
 B, and~C that is subjected to the following sequence of events:
 \end{fcvref}
 
+\fi
+
 \begin{enumerate}
+\item	쓰레드~0 이 원소~B 로의 해저드 포인터를 저장합니다
+	(아마 원소~A 로부터 원소~B 로 순회했을 겁니다).
+\item	쓰레드~1 이 이 리스트에서 원소~B 를 제거하여, 원소~B 에서 원소~C 로의
+	포인터를 이 제거를 표시하기 위해 특별한 \co{HAZPTR_POISON} 값으로
+	설정합니다.
+	쓰레드~0 가 원소~B 로의 해저드 포인터를 가지고 있으므로, 아직 메모리
+	해제는 되지 않습니다.
+\item	쓰레드~1 이 이 리스트에서 원소~C 를 제거합니다.
+	원소~C 를 참조하는 해저드 포인터가 존재하지 않으므로 곧바로 메모리
+	해제됩니다.
+\item	쓰레드~0 이 이제 제거된 원소~B 의 다음 원소로의 해저드 포인터를
+	획득하려 합니다만 \co{hp_try_record()} 는 \co{HAZPTR_POISON} 값을
+	리턴하여, 호출자가 이 리스트의 시작으로부터 순회를 재시작하게 합니다.
+
+\iffalse
+
 \item	Thread~0 stores a hazard pointer to element~B
 	(having presumably traversed to element~B from element~A).
 \item	Thread~1 removes element~B from the list, which sets
@@ -421,6 +481,9 @@ B, and~C that is subjected to the following sequence of events:
 	element~B's successor, but \co{hp_try_record()} returns the
 	\co{HAZPTR_POISON} value, forcing the caller to restart its
 	traversal from the beginning of the list.
+
+\fi
+
 \end{enumerate}
 
 Which is a very good thing, because B's successor is the now-freed
