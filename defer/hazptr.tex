@@ -486,6 +486,19 @@ B, and~C that is subjected to the following sequence of events:
 
 \end{enumerate}
 
+이건 퍽이나 좋은 일인데, B 의 다음 원소는 이제는 메모리 해제된 원소~C 로, 이
+말은 쓰레드~0 의 다음 액세스는 임의의 끔찍한 메모리 오염을 초래할 것을
+의미하는데, 특히나 원소~C 의 메모리가 이후 어떤 다른 목적으로 재할당 되었다면
+그렇습니다.
+따라서, 해저드 포인터를 사용하는 읽기 쓰레드는 일반적으로 동시의 삭제를
+발견했을때 전체 순회를 재시작 해야 합니다.
+이런 재시작은 종종 어떤 전역의 (그리고 따라서 불변하는) 포인터로 되돌아가야
+합니다만, 가끔은 중간의 어떤 지점이 예를 들면 현재 쓰레드가 락을 잡고 있다던지
+레퍼런스 카운트를 잡고 있다던지 하는 이유로 여전히 살아 있을 것이 보장된다는
+전제 하에 그 중간 지점부터 시작될 수도 있습니다.
+
+\iffalse
+
 Which is a very good thing, because B's successor is the now-freed
 element~C, which means that Thread~0's subsequent accesses might have
 resulted in arbitrarily horrible memory corruption, especially if the
@@ -497,10 +510,31 @@ but it is sometimes possible to restart at some intermediate location
 if that location is guaranteed to still be live, for example, due to
 the current thread holding a lock, a reference count, etc.
 
+\fi
+
 \QuickQuiz{
+	읽기 쓰레드는 ``일반적으로'' 재시작해야만 한다구요?
+	그 예외는 어떤 것들인가요?
+
+	\iffalse
+
 	Readers must ``typically'' restart?
 	What are some exceptions?
+
+	\fi
+
 }\QuickQuizAnswer{
+	만약 그 포인터가 전역 변수로부터 나오거나 메모리 해제되지 않을
+	것이라면, \co{hp_record()} 는 동시의 삭제에도 불구하고 이 해저드
+	포인터를 기록하는 시도를 반복할 수 있습니다.
+
+	그런 경우, 재시작은 Folly 오픈소스 라이브러리에 구현된 UnboundedQueue
+	와 ConcurrentHashMap 데이터 구조에서 보여진 것처럼 연결 카운팅을 사용해
+	회피될 수 있습니다.\footnote{
+		\url{https://github.com/facebook/folly}}
+
+	\iffalse
+
 	If the pointer emanates from a global variable or is otherwise
 	not subject to being freed, then \co{hp_record()} may be
 	used to repeatedly attempt to record the hazard pointer,
@@ -510,7 +544,17 @@ the current thread holding a lock, a reference count, etc.
 	as exemplified by the UnboundedQueue and ConcurrentHashMap data
 	structures implemented in Folly open-source library.\footnote{
 		\url{https://github.com/facebook/folly}}
+
+	\fi
+
 }\QuickQuizEnd
+
+해저드 포인터를 사용하는 알고리즘은 연결된 데이터 구조를 통한 순회를 어떤
+단계에서든 재시작할 수도 있으며, 그런 알고리즘은 일반적으로 업데이트를 위해
+필요한 모든 해저드 포인터를 얻기 전에 데이터 구조에 어떠한 변경도 가하지
+않아야만 합니다.
+
+\iffalse
 
 Because algorithms using hazard pointers might be restarted at any
 step of their traversal through the linked data structure, such algorithms
@@ -518,14 +562,52 @@ must typically take care to avoid making any changes to the data
 structure until after they have acquired all the hazard pointers that
 are required for the update in question.
 
+\fi
+
 \QuickQuiz{
+	하지만 이런 해저드 포인터의 제약들은 다른 형태의 레퍼런스 카운팅에도
+	적용되지 않나요?
+
+	\iffalse
+
 	But don't these restrictions on hazard pointers also apply
 	to other forms of reference counting?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그렇기도 하고 아니기도 합니다.
+	이 제약들은 참조 획득이 실패할 수도 있는 레퍼런스 카운팅 메커니즘들에만
+	적용됩니다.
+
+	\iffalse
+
 	Yes and no.
 	These restrictions apply only to reference-counting mechanisms whose
 	reference acquisition can fail.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 해저드 포인터 제약은 해저드 포인터가 각 CPU 나 쓰레드에 지역적인 위치에
+저장되어 순회가 순회되는 데이터 구조로의 어떠한 쓰기도 없이 가능하게 하기
+때문에 읽기 쓰레드에게 큰 이득을 초래합니다.
+page~\pageref{fig:count:Optimization and the Four Parallel-Programming Tasks}
+의
+Figure~\ref{fig:count:Optimization and the Four Parallel-Programming Tasks}
+로 돌아가 보자면, 해저드 포인터는 CPU 캐쉬가 자원 복사를 하게 해서, 결국 병렬
+액세스 제어 메커니즘을 약화시키며 따라서 성능과 확장성을 증가시킵니다.
+
+해저드 포인터 순회를 재시작하는 것의 또다른 장점은 최소 메모리 사용량의
+감소입니다:
+해저드 포인터에 의해 현재 참조되지 않는 모든 객체는 곧바로 메모리 해제됩니다.
+대조적으로,
+Section~\ref{sec:defer:Read-Copy Update (RCU)}
+은 읽기 쪽의 재시도를 막는 (그리고 읽기쪽 오버헤드를 최소화시키는), 그러나 훨씬
+큰 메모리 사용량을 초래할 수 있는 메커니즘을 다룹니다.
+
+\iffalse
 
 These hazard-pointer restrictions result in great benefits to readers,
 courtesy of the fact that the hazard pointers are stored local to each
@@ -548,6 +630,8 @@ Section~\ref{sec:defer:Read-Copy Update (RCU)}
 will discuss a mechanism that avoids read-side retries (and minimizes
 read-side overhead), but which can result in a much larger memory
 footprint.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/defer/route_hazptr@add_del.fcv}
