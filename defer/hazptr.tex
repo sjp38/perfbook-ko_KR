@@ -718,9 +718,29 @@ and in other publications~\cite{ThomasEHart2007a,McKenney:2013:SDS:2483852.24838
 \QuickQuizSeries{%
 \QuickQuizB{
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	는 하이퍼쓰레드가 일으키는 224 쓰레드에서의 성능 하락의 기미를 보이지
+	않습니다.
+	왜 그런거죠?
+
+	\iffalse
+
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
 	shows no sign of hyperthread-induced flattening at 224 threads.
 	Why is that?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	현대의 마이크로프로세서는 복잡한 야수여서, 모든 간단한 답변에는 상당한
+	회의주의가 적당합니다.
+	그건 그렇다 치고, 가장 그럴싸한 이유는 해저드 포인터 읽기 쓰레드에게
+	완전한 메모리 배리어가 요구된다는 것입니다.
+	그런 메모리 배리어에서 기인하는 모든 지연은 해당 코어를 공유하는 다른
+	하드웨어 쓰레드에게 가용한 시간을 주어서 하드웨어 쓰레드당 성능의
+	비용으로 더 큰 확장성을 초래할 수 있습니다.
+
+	\iffalse
+
 	Modern microprocessors are complicated beasts, so significant
 	skepticism is appropriate for any simple answer.
 	That aside, the most likely reason is the full memory barriers
@@ -729,15 +749,47 @@ and in other publications~\cite{ThomasEHart2007a,McKenney:2013:SDS:2483852.24838
 	available to the other hardware thread sharing the core, resulting
 	in greater scalability at the expense of per-hardware-thread
 	performance.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	``Structured Deferral: Synchronization via
+	Procrastination''~\cite{McKenney:2013:SDS:2483852.2483867}
+	이라는 논문은 해저드 포인터가 이상에 가까운 성능을 보임을 이야기
+	했습니다.
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	에는 무슨 일이 벌어진 건가요???
+
+	\iffalse
+
 	The paper ``Structured Deferral: Synchronization via
 	Procrastination''~\cite{McKenney:2013:SDS:2483852.2483867}
 	shows that hazard pointers have near-ideal performance.
 	Whatever happened in
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}???
+
+	\fi
+
 }\QuickQuizAnswerE{
+	첫째로,
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	는 선형 y 축을 가지고 있는 반면
+	``Structured Deferral'' 논문의 그래프는 로그스케일 y 축을 가지고
+	있습니다.
+	다음으로, 해당 논문은 가벼운 부하의 해시 테이블을 사용하는 반면,
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	의 것은 10개 원소를 갖는 간단한 링크드 리스트를 사용하는데, 이는 해저드
+	포인터가 ``Structured Deferral'' 논문에서의 것보다 이 워크로드에서 더
+	큰 메모리 배리어 페널티를 받게 됨을 의미합니다.
+	마지막으로, 해당 논문은 오래된 작은 크기의 x86 시스템을 사용한 반면,
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
+	에 보인 데이터를 만드는데에는 훨씬 새롭고 커다란 시스템이
+	사용되었습니다.
+
+	\iffalse
+
 	First,
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}
 	has a linear y-axis, while most of the graphs in the
@@ -751,6 +803,23 @@ and in other publications~\cite{ThomasEHart2007a,McKenney:2013:SDS:2483852.24838
 	a much newer and larger system was used to generate the data
 	shown in
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Hazard Pointers}.
+
+	\fi
+
+	추가로, 비대칭 배리어의 짝을 맞춘
+	사용~\cite{Windows2008FlushProcessWriteBuffers,JonathanCorbet2010sys-membarrier,Linuxmanpage2018sys-membarrier}
+	이 이 방법을 지원하는 시스템에서 읽기 쪽 해저드 포인터 메모리 배리어를
+	제거하기 위해 제안되었는데~\cite{DavidGoldblatt2018asymmetricFences},
+	이는 이 그림에 보인 것보다 해저드 포인터의 성능을 더 개선할 수도
+	있습니다.
+
+	항상 그렇듯, 여러분의 이득은 다양할 수 있습니다.
+	성능 차이를 놓고 볼 때, 해저드 포인터는 (메모리 배리어 오버헤드가
+	최소한 캐시 미스 페널티를 넘어설 수 있는) 매우 커다란 데이터 구조와
+	탐색 오퍼레이션이 최소의 해저드 포인터를 필요로 하는 해시 테이블과 같은
+	데이터 구조에서는 여러분에게 최고의 성능을 제공할 것이 분명합니다.
+
+	\iffalse
 
 	In addition, use of pairwise asymmetric
 	barriers~\cite{Windows2008FlushProcessWriteBuffers,JonathanCorbet2010sys-membarrier,Linuxmanpage2018sys-membarrier}
@@ -766,9 +835,19 @@ and in other publications~\cite{ThomasEHart2007a,McKenney:2013:SDS:2483852.24838
 	will at least partially overlap cache-miss penalties) and
 	for data structures such as hash tables where a lookup
 	operation needs a minimal number of hazard pointers.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+다음 섹션에서는 읽기 쪽 쓰기와 객체별 메모리 배리어 사용을 제거하는 시퀀스 락을
+사용해 해저드 포인터를 개선해 봅니다.
+
+\iffalse
 
 The next section attempts to improve on hazard pointers by using
 sequence locks, which avoid both read-side writes and per-object memory
 barriers.
+
+\fi
