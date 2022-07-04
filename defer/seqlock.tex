@@ -7,6 +7,21 @@
 %
 \epigraph{It'll be just like starting over.}{\emph{John Lennon}}
 
+출간된 시퀀스 락 기록은~\cite{10.1145/800212.806505,10.1145/359863.359878}
+reader-writer 락킹의 그것만큼이나 오래 되었습니다만, 시퀀스 락은 상대적으로 덜
+알려져 있습니다.
+시퀀스 락은 리눅스 커널에서 읽기 쓰레드에게 일관적인 상태로 보여야만 하는
+읽기가 대부분인 데이터를 위해 사용됩니다.
+하지만, reader-writer 락킹과 달리, 읽기 쓰레드는 쓰기 쓰레드를 배제시키지
+않습니다.
+그 대신, 해저드 포인터처럼, 시퀀스 락은 읽기 쓰레드가 동시의 쓰기
+쓰레드로부터의 활동을 탐지한 경우 오퍼레이션을 \emph{재시도} 하게 합니다.
+Figure~\ref{fig:defer:Reader And Uncooperative Sequence Lock}
+에서 볼 수 있듯, 읽기 쓰레드들이 아주 가끔만 재시도를 해야 하게끔 코드를
+설계하는게 중요합니다.
+
+\iffalse
+
 The published sequence-lock
 record~\cite{10.1145/800212.806505,10.1145/359863.359878}
 extends back as far as that of reader-writer locking, but sequence locks
@@ -21,6 +36,8 @@ Figure~\ref{fig:defer:Reader And Uncooperative Sequence Lock},
 it is important to design code using sequence locks so that readers
 very rarely need to retry.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{cartoons/r-2014-Start-over}}
@@ -29,9 +46,35 @@ very rarely need to retry.
 \end{figure}
 
 \QuickQuiz{
+	이 시퀀스 락 이야기는 왜 Chapter~\ref{chp:Locking} 에 있지 않죠, 이건
+	\emph{락킹} 이잖아요?
+
+	\iffalse
+
 	Why isn't this sequence-lock discussion in Chapter~\ref{chp:Locking},
 	you know, the one on \emph{locking}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 시퀀스 락 메커니즘은 실제로 두개의 별개의 동기화 메커니즘인 시퀀스
+	카운트와 락킹의 조합입니다.
+	사실, 이 시퀀스 카운트 메커니즘은 리눅스 커널에서
+	\co{write_seqcount_begin()} 과 \co{write_seqcount_end()} 기능을 통해
+	사용할 수 있습니다.
+
+	하지만, \co{write_seqlock()} 과 \co{write_sequnlock()} 의 조합이 리눅스
+	커널에서는 훨씬 더 많이 사용됩니다.
+	더 중요하게, 많은 사람들이 ``시퀀스 카운트'' 보다는 ``시퀀스 락''
+	이라고 말할 때 더 잘 알아들을 겁니다.
+
+	따라서 이 섹션은 사람들이 제목으로부터 이게 무엇인지 이해할 수 있게끔
+	``Sequence Locks'' 라고 제목지어져 있으며, ``Deferred Processing'' 으로
+	표현되어 있는 이유는 (1) ``시퀀스 락'' 의 ``시퀀스 카운트'' 를 강조하고
+	(2) ``시퀀스 락'' 은 간단한 락 그 이상의 무엇이기 때문입니다.
+
+	\iffalse
+
 	The sequence-lock mechanism is really a combination of two
 	separate synchronization mechanisms, sequence counts and
 	locking.
@@ -53,6 +96,9 @@ very rarely need to retry.
 	emphasis on the ``sequence count'' aspect of ``sequence locks''
 	and (2) because a ``sequence lock'' is much more than merely
 	a lock.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[bp]
@@ -76,6 +122,30 @@ write_sequnlock(&test_seqlock);
 \label{lst:defer:Sequence-Locking Writer}
 \end{listing}
 
+시퀀스 락킹의 핵심 컴포넌트는 시퀀스 숫자로, 업데이트 쓰레드가 없을 때에는
+짝수가 되며 진행중인 업데이트가 있을 때에는 홀수가 됩니다.
+그럼 읽기 쓰레드는 각 액세스 전과 후에 값을 스냅샷 찍어둘 수 있습니다.
+두개의 스냅샷 중 어느 하나라도 홀수를 가지고 있다면, 또는 이 두 스냅샷이
+다르다면, 동시의 업데이트가 있었다는 말이 되며, 읽기 쓰레드는 이 액세스의
+결과를 폐기하고 재시도 해야 합니다.
+따라서 읽기 쓰레드는 시퀀스 락으로 보호되는 데이터에 접근할 때
+Listing~\ref{lst:defer:Sequence-Locking Reader} 에 보인 \co{read_seqbegin()} 과
+\co{read_seqretry()} 함수를 사용해야 합니다.
+스기 쓰레드는 각 업데이트 전과 후에 이 값을 증가시켜야만 하고 한번에 하나의
+쓰기 쓰레드만이 허용됩니다.
+따라서 쓰기 스레드는 시퀀스 락으로 보호되는 데이터를 업데이트 할 때
+Listing~\ref{lst:defer:Sequence-Locking Writer} 에 보인 \co{write_seqlock()} 과
+\co{write_sequnlock()} 을 사용해야 합니다.
+
+그 결과, 시퀀스 락으로 보호되는 데이터는 임의의 큰 수의 동시 읽기 쓰레드를 가질
+수 있지만, 한번에 하나의 쓰기 쓰레드만 가질 수 있습니다.
+시퀀스 락킹은 리눅스 커널에서 시간 계측에서 측정 정도를 보호하기 위해
+사용됩니다.
+시퀀스 락킹은 또한 경로명 순회 중 동시의 이름 변경 오퍼레이션을 감지하기 위해
+사용됩니다.
+
+\iffalse
+
 The key component of sequence locking is the sequence number, which has
 an even value in the absence of updaters and an odd value if there
 is an update in progress.
@@ -97,6 +167,8 @@ large number of concurrent readers, but only one writer at a time.
 Sequence locking is used in the Linux kernel to protect calibration
 quantities used for timekeeping.
 It is also used in pathname traversal to detect concurrent rename operations.
+
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/defer/seqlock@impl.fcv}
