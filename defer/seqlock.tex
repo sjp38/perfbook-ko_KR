@@ -176,6 +176,31 @@ It is also used in pathname traversal to detect concurrent rename operations.
 \label{lst:defer:Sequence-Locking Implementation}
 \end{listing}
 
+시퀀스 락의 간단한 구현이
+Listing~\ref{lst:defer:Sequence-Locking Implementation}
+(\path{seqlock.h}) 에 보여 있습니다.
+\begin{fcvref}[ln:defer:seqlock:impl:typedef]
+\co{seqlock_t} 데이터 구조는 \clnrefrange{b}{e} 에 보여져 있는데 시퀀스 숫자와
+함께 쓰기 쓰레드들을 순서짓기 위한 락을 포함하고 있습니다.
+\end{fcvref}
+\begin{fcvref}[ln:defer:seqlock:impl:init]
+\Clnrefrange{b}{e} 는 이름이 의미하듯 \co{seqlock_t} 를 초기화 하는
+\co{seqlock_init()} 를 보입니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:defer:seqlock:impl:read_seqbegin]
+\Clnrefrange{b}{e} 는 시퀀스 락 읽기 쪽 크리티컬 섹션을 시작하는
+\co{read_seqbegin()} 을 보입니다.
+라인~\lnref{fetch} 는 시퀀스 카운터의 스냅샷을 취하고, 라인~\lnref{mb} 는 이
+호출자의 크리티컬 섹션이 시작되기 전으로 이 스냅샷 오퍼레이션이 순서지어지도록
+합니다.
+마지막으로, 라인~\lnref{ret} 는 이 스냅샷의 값을 (least-significant bit 이
+지워진채로) 리턴하는데, 호출자는 이를 나중의 \co{read_seqretry()} 호출 시에
+넘길 겁니다.
+\end{fcvref}
+
+\iffalse
+
 A simple implementation of sequence locks is shown in
 Listing~\ref{lst:defer:Sequence-Locking Implementation}
 (\path{seqlock.h}).
@@ -200,12 +225,32 @@ bit cleared), which the caller
 will pass to a later call to \co{read_seqretry()}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	Listing~\ref{lst:defer:Sequence-Locking Implementation}
+	의 \co{read_seqbegin()} 은 왜 이미 망한 읽기가 시작되게 하는 대신
+	아래쪽 bit 이 셋 되었는지 검사하고 내부적으로 재시도 하지 않나요?
+
+	\iffalse
+
 	Why not have \co{read_seqbegin()} in
 	Listing~\ref{lst:defer:Sequence-Locking Implementation}
 	check for the low-order bit being set, and retry
 	internally, rather than allowing a doomed read to start?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그건 합법적인 구현이 될 겁니다.
+	하지만, 워크로드가 읽기가 대부분이라면, 일반적인 경우 성공적 읽기의
+	오버헤드를 증가시킬 수 있는데, 이는 생산적이지 못할 겁니다.
+	그러나, 충분히 큰 업데이트 쓰레드의 비율과 충분히 높은 읽기 쓰레드의
+	오버헤드가 주어진다면, \co{read_seqbegin()} 내부의 체크를 갖는 것이
+	선호될 수 있습니다.
+
+	\iffalse
+
 	That would be a legitimate implementation.
 	However, if the workload is read-mostly, it would likely
 	increase the overhead of the common-case successful read,
@@ -213,7 +258,21 @@ will pass to a later call to \co{read_seqretry()}.
 	However, given a sufficiently large fraction of updates
 	and sufficiently high-overhead readers, having the
 	check internal to \co{read_seqbegin()} might be preferable.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:defer:seqlock:impl:read_seqretry]
+\Clnrefrange{b}{e} 는 연관된 \co{read_seqbegin()} 호출 이후 최소 하나의 쓰기
+쓰레드가 존재했다면 true 를 리턴하는 \co{read_seqretry()} 를 보입니다.
+라인~\lnref{mb} 는 이 호출자의 라인~\lnref{fetch} 의 시퀀스 카운터의 새
+스냅샷을 읽어오기 전의 크리티컬 섹션을 순서짓습니다.
+라인~\lnref{ret} 는 이 시퀀스 카운터가 변화되었는지 검사하는데, 달리 말하면
+최소 하나의 쓰기 쓰레드가 있었는지 검사하고, 그렇다면 true 를 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:seqlock:impl:read_seqretry]
 \Clnrefrange{b}{e} show \co{read_seqretry()}, which returns true if there
@@ -226,25 +285,66 @@ in other words, whether there has been at least one writer, and returns
 true if so.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:defer:Sequence-Locking Implementation} 의
+	line~\ref{ln:defer:seqlock:impl:read_seqretry:mb}
+	의 \co{smp_mb()} 는 왜 필요한가요?
+
+	\iffalse
+
 	Why is the \co{smp_mb()} on
 	line~\ref{ln:defer:seqlock:impl:read_seqretry:mb} of
 	Listing~\ref{lst:defer:Sequence-Locking Implementation}
 	needed?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	그게 없다면, 컴파일러도 CPU 도 \co{read_seqretry()} 앞의 크리티컬
+	섹션을 이 함수 다음으로 재배치 할 권리를 갖습니다.
+	이는 이 시퀀스 락이 크리티컬 섹션을 보호하는 걸 방해할 겁니다.
+	\co{smp_mb()} 기능은 그런 재배치를 막습니다.
+
+	\iffalse
+
 	If it was omitted, both the compiler and the CPU would be
 	within their rights to move the critical section preceding
 	the call to \co{read_seqretry()} down below this function.
 	This would prevent the sequence lock from protecting the
 	critical section.
 	The \co{smp_mb()} primitive prevents such reordering.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	Listing~\ref{lst:defer:Sequence-Locking Implementation}
+	의 코드에서는 더 완화된 형태의 메모리 배리어를 사용할 순 없나요?
+
+	\iffalse
+
 	Can't weaker memory barriers be used in the code in
 	Listing~\ref{lst:defer:Sequence-Locking Implementation}?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	오래전 버전의 리눅스 커널에서는 안됩니다.
+
+	\begin{fcvref}[ln:defer:seqlock:impl]
+	매우 최신 버전의 리눅스 커널에서는
+	line~\lnref{read_seqbegin:fetch} 은 \co{READ_ONCE()} 대신
+	라인~\lnref{read_seqbegin:mb} 의 \co{smp_mb()} 를 없애도 되게 할 수
+	있는 \co{smp_load_acquire()} 를 사용할 수도 있습니다.
+	비슷하게, 라인~\lnref{write_sequnlock:inc} 는 예를 들면 다음과 같이
+	\co{smp_store_release()} 를 사용할 수 있습니다:
+
+	\iffalse
+
 	In older versions of the Linux kernel, no.
 
 	\begin{fcvref}[ln:defer:seqlock:impl]
@@ -257,26 +357,70 @@ true if so.
         \co{smp_store_release()}, for
 	example, as follows:
 
+	\fi
+
 \begin{VerbatimU}
 smp_store_release(&slp->seq, READ_ONCE(slp->seq) + 1);
 \end{VerbatimU}
 
+	이는 라인~\lnref{write_sequnlock:mb} 의 \co{smp_mb()} 를 제거할 수 있게
+	할 겁니다.
+	\end{fcvref}
+
+	\iffalse
+
 	This would allow the \co{smp_mb()} on
 	line~\lnref{write_sequnlock:mb} to be dropped.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	시퀀스 락킹 업데이트 쓰레드가 읽기 쓰레드를 starve 시키는 걸 무엇이
+	방지하나요?
+
+	\iffalse
+
 	What prevents sequence-locking updaters from starving readers?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	아무것도요.
+	이것은 시퀀스 락킹의 약점 중 하나이며, 그 결과, 여러분은 시퀀스 락킹을
+	읽기가 대부분인 환경에서만 사용해야 합니다.
+	그렇지 않다면 읽기 쪽의 starvation 은 여러분의 환경에서는 허용되는
+	것이니, 이 경우라면, 시퀀스 락킹 업데이트를 가지고 잘 놀아보시기
+	바랍니다!
+
+	\iffalse
+
 	Nothing.
 	This is one of the weaknesses of sequence locking, and as a
 	result, you should use sequence locking only in read-mostly
 	situations.
 	Unless of course read-side starvation is acceptable in your
 	situation, in which case, go wild with the sequence-locking updates!
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\begin{fcvref}[ln:defer:seqlock:impl:write_seqlock]
+\Clnrefrange{b}{e} 는 간단히 락을 획득하고 이 시퀀스 숫자를 증가시키며, 이 값
+즈가가 이 호출자의 크리티컬 섹션 전으로 순서 지어지게 보장하는 메모리 배리어를
+수행하는 \co{write_seqlock()} 을 보입니다.
+\end{fcvref}
+\begin{fcvref}[ln:defer:seqlock:impl:write_sequnlock]
+\Clnrefrange{b}{e} 는 이 호출자의 크리티컬 섹션이 라인~\lnref{inc} 에서의
+시퀀스 숫자 증가 전으로 순서 지어지게 하는 메모리 배리어를 수행하고 이 락을
+해제하는 \co{write_sequnlock()} 을 보입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:seqlock:impl:write_seqlock]
 \Clnrefrange{b}{e} show \co{write_seqlock()}, which simply acquires the lock,
@@ -289,23 +433,74 @@ to ensure that the caller's critical section is ordered before the
 increment of the sequence number on line~\lnref{inc}, then releases the lock.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	만약 뭔가 다른게 쓰기 쓰레드들을 직렬화 시켜서 이 락이 필요 없게 만들면
+	어떤가요?
+
+	\iffalse
+
 	What if something else serializes writers, so that the lock
 	is not needed?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 경우, \co{->lock} 필드는 없어질 수 있는데, 리눅스 커널의
+	\co{seqcount_t} 가 그렇습니다.
+
+	\iffalse
+
 	In this case, the \co{->lock} field could be omitted, as it
 	is in \co{seqcount_t} in the Linux kernel.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	Listing~\ref{lst:defer:Sequence-Locking Implementation} 의
+	라인~\ref{ln:defer:seqlock:impl:typedef:seq}
+	의 \co{seq} 는 왜 \co{unsigned long} 이 아니라 \co{unsigned} 인가요?
+	어쨌건, \co{unsigned} 가 리눅스 커널에 충분히 좋다면, 모두에게도 충분히
+	좋아야 하지 않나요?
+
+	\iffalse
+
 	Why isn't \co{seq} on
 	line~\ref{ln:defer:seqlock:impl:typedef:seq} of
 	Listing~\ref{lst:defer:Sequence-Locking Implementation}
 	\co{unsigned} rather than \co{unsigned long}?
 	After all, if \co{unsigned} is good enough for the Linux
 	kernel, shouldn't it be good enough for everyone?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	전혀 그렇지 않습니다.
+	리눅스 커널은 다음 순서의 이벤트들을 무시할 수 있게 하는 특별한 속성을
+	여럿 가지고 있습니다:
+	\begin{enumerate}
+	\item	쓰레드~0 이 \co{read_seqbegin()} 을 수행해서,
+		line~\ref{ln:defer:seqlock:impl:read_seqbegin:fetch} 에서
+		\co{->seq} 를 가져와 그 값이 짝수임을 알게 되고, 따라서
+		호출자에게 리턴합니다.
+	\item	쓰레드~0 이 자신의 읽기 쪽 크리티컬 섹션을 수행하기 시작하지만
+		이어서 오랫동안 preemption 당합니다.
+	\item	다른 쓰레드가 반복적으로 \co{write_seqlock()} 와
+		\co{write_sequnlock()} 을 호출해서 \co{->seq} 의 값이
+		오버플로우 되어 쓰레드~0 이 읽었던 값으로 되돌려집니다.
+	\item	쓰레드~0 이 수행을 재개해서, 비일관적인 데이터를 가지고 읽기
+		크리티컬 섹션을 완료합니다.
+	\item	쓰레드~0 이 \co{read_seqretry()} 를 호출하는데, 이는 쓰레드~0
+		이 이 시퀀스 락에 의해 보호되는 데이터의 일관적인 값만을
+		보았다고 잘못된 결론을 내립니다.
+	\end{enumerate}
+
+	\iffalse
+
 	Not at all.
 	The Linux kernel has a number of special attributes that allow
 	it to ignore the following sequence of events:
@@ -327,6 +522,22 @@ increment of the sequence number on line~\lnref{inc}, then releases the lock.
 		the data protected by the sequence lock.
 	\end{enumerate}
 
+	\fi
+
+	리눅스 커널은 시퀀스 락킹을 가끔만 업데이트 되는 것들을 위해
+	사용하는데, 하루 중 시간 정보가 그런 경우입니다.
+	이 정보는 최대 밀리세컨드마다 업데이트 되므로, 이 카운터를 오버플로우
+	시키려면 7주가 걸립니다.
+	만약 어떤 커널 쓰레드가 7주간 preemption 당한다면, 리눅스 커널의
+	soft-lockup 코드는 그 동안 매 2분마다 경고를 내보낼 겁니다.
+
+	반대로, 64 비트 카운터에서는 매 \emph{나노}세컨드마다 업데이트가 된다고
+	해서 오버플로우를 위해 5세기가 넘게 걸립니다.
+	따라서, 이 구현은 64 비트 시스템에서 \co{->seq} 를 위해 64 비트 타입을
+	사용합니다.
+
+	\iffalse
+
 	The Linux kernel uses sequence locking for things that are
 	updated rarely, with time-of-day information being a case
 	in point.
@@ -341,6 +552,9 @@ increment of the sequence number on line~\lnref{inc}, then releases the lock.
 	\emph{nano}second.
 	Therefore, this implementation uses a type for \co{->seq}
 	that is 64 bits on 64-bit systems.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
