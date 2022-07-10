@@ -570,6 +570,16 @@ increment of the sequence number on line~\lnref{inc}, then releases the lock.
 \label{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete}
 \end{listing}
 
+그래서 시퀀스 락킹이 Pre-BSD 라우팅 테이블에 적용되면 무슨 일이 벌어질까요?
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Lookup}
+은 데이터 구조와 \co{route_lookup()} 을,
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete}
+은 \co{route_add()} 와 \co{route_del()} (\path{route_seqlock.c}) 을 보입니다.
+이 구현은 또다시 앞의 섹션에서의 비슷했던 것과 비슷하므로, 차이점만
+들여다보겠습니다.
+
+\iffalse
+
 So what happens when sequence locking is applied to the Pre-BSD
 routing table?
 Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Lookup}
@@ -578,6 +588,24 @@ Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete}
 shows \co{route_add()} and \co{route_del()} (\path{route_seqlock.c}).
 This implementation is once again similar to its counterparts in earlier
 sections, so only the differences will be highlighted.
+
+\fi
+
+\begin{fcvref}[ln:defer:route_seqlock:lookup]
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Lookup} 에서,
+라인~\lnref{struct:re_freed} 는 라인~\lnref{lookup:chk_freed}
+와~\lnref{lookup:abort} 에서 검사되는 \co{->re_freed} 를 추가합니다.
+라인~\lnref{struct:sl} 은
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_seqlock:lookup:lookup]
+라인~\lnref{goto_retry1}
+과~\lnref{goto_retry2} 에서의 라인~\lnref{retry} 의 \co{retry} 라벨로 브랜칭
+되고 \co{route_lookup()} 의 라인~\lnref{r_sqbegin}, \lnref{r_sqretry1},
+그리고~\lnref{r_sqretry2} 에 의해서 사용되는 시퀀스 락을 추가합니다.
+그 영향은 업데이트와 동시에 수행되는 모든 탐색을 재시도 하는 것입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:route_seqlock:lookup]
 In
@@ -593,6 +621,19 @@ the \co{retry} label on line~\lnref{retry}.
 The effect is to retry any lookup that runs concurrently with an update.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:defer:route_seqlock:add_del]
+Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete} 에서,
+라인~\lnref{add:w_sqlock}, \lnref{add:w_squnlock}, \lnref{del:w_sqlock},
+\lnref{del:w_squnlock1}, 그리고~\lnref{del:w_squnlock2} 는 이 시퀀스 락을 잡고
+놓으며, 라인~\lnref{add:clr_freed} 과~\lnref{del:set_freed} 는 \co{->re_freed}
+을 다룹니다.
+따라서 이 구현은 상당히 단순합니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:defer:route_seqlock:add_del]
 In
 Listing~\ref{lst:defer:Sequence-Locked Pre-BSD Routing Table Add/Delete},
@@ -603,12 +644,25 @@ while lines~\lnref{add:clr_freed} and~\lnref{del:set_freed} handle \co{->re_free
 This implementation is therefore quite straightforward.
 \end{fcvref}
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{CodeSamples/defer/perf-seqlock}}
 \caption{Pre-BSD Routing Table Protected by Sequence Locking}
 \label{fig:defer:Pre-BSD Routing Table Protected by Sequence Locking}
 \end{figure}
+
+이것은 또한 읽기 전용 워크로드에서 여전히 이상적인 것에 비해선 떨어지지만 더 잘
+성능을 내는데,
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Sequence Locking} 에서
+이를 볼 수 있습니다.
+더 나쁜게, 메모리 해제 후 사용 문제에 취약합니다.
+문제는 읽기 쓰레드가 이미 메모리 해제된 구조체를 \co{read_seqretry()} 가 동시의
+업데이트를 경고하기 전에 액세스 함으로써 segmentation violation 을 일으킬 수도
+있다는 겁니다.
+
+\iffalse
 
 It also performs better on the read-only workload, as can be seen in
 Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by Sequence Locking},
@@ -618,12 +672,37 @@ The problem is that the reader might encounter a segmentation violation
 due to accessing an already-freed structure before \co{read_seqretry()}
 has a chance to warn of the concurrent update.
 
+\fi
+
 \QuickQuiz{
+	이 버그는 고쳐질 수 있나요?
+	달리 말하자면, 시퀀스 락을 동시의 추가, 삭제, 그리고 탐색을 지원하는
+	링크드 리스트를 보호하는 동기화 메커니즘 \emph{으로만} 시퀀스 락을
+	사용할 수 있나요?
+
+	\iffalse
+
 	Can this bug be fixed?
 	In other words, can you use sequence locks as the \emph{only}
 	synchronization mechanism protecting a linked list supporting
 	concurrent addition, deletion, and lookup?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이를 이루는 한가지 간단한 방법은 읽기 전용 액세스를 포함한 모든
+	액세스를 \co{write_seqlock()} 과 \co{write_sequnlock()} 으로 감싸는
+	것입니다.
+	물론, 이 해결책은 모든 읽기 쪽의 병렬성을 금지시키기도 해서 상당한 락
+	contention 을 초래할 수 있으며, 이는 간단한 락킹을 사용하는
+	구현만큼이나 쉬울 겁니다.
+
+	여러분이 읽기 쪽 액세스를 보호하기 위해 \co{read_seqbegin()} 과
+	\co{read_seqretry()} 를 사용하는 해결책을 내놓는다면, 여러분이 다음
+	순서의 이벤트들을 올바르게 처리함을 분명히 해 두십시오:
+
+	\iffalse
+
 	One trivial way of accomplishing this is to surround all
 	accesses, including the read-only accesses, with
 	\co{write_seqlock()} and \co{write_sequnlock()}.
@@ -636,7 +715,23 @@ has a chance to warn of the concurrent update.
 	and \co{read_seqretry()} to protect read-side accesses, make
 	sure that you correctly handle the following sequence of events:
 
+	\fi
+
 	\begin{enumerate}
+	\item	CPU~0 이 링크드 리스트를 순회하며, 이 리스트의 원소~A 로의
+		포인터를 집어듭니다.
+	\item	CPU~1 이 이 리스트로부터 원소~A 를 제거하고 메모리 해제합니다.
+	\item	CPU~2 가 연관되지 않은 데이터 구조를 메모리 할당하여, 원소~A 에
+		의해 앞서 사용되었던 메모리를 얻게 됩니다.
+		이 연관되지 않은 데이터 구조에서, 원소~A 에 의해 \co{->next}
+		포인터로 앞서 사용되었던 메모리는 이제 어떤 부동소수점 숫자를
+		저장합니다.
+	\item	CPU~0 이 원소~A 의 \co{->next} 포인터로 사용되던 것을 집어들어
+		무작위적 비트들을 갖게 되고, 따라서 segmentation fault 를
+		받습니다.
+
+	\iffalse
+
 	\item	CPU~0 is traversing the linked list, and picks up a pointer
 		to list element~A.
 	\item	CPU~1 removes element~A from the list and frees it.
@@ -648,7 +743,21 @@ has a chance to warn of the concurrent update.
 	\item	CPU~0 picks up what used to be element~A's \co{->next}
 		pointer, gets random bits, and therefore gets a
 		segmentation fault.
+
+	\fi
+
 	\end{enumerate}
+
+	이런 종류의 문제로부터의 보호는
+	Section~\ref{sec:defer:RCU Provides Type-Safe Memory}
+	에서 이야기 될 ``타입-안전 메모리 (type-safe memory'' 를 필요로 합니다.
+	대략적으로 비슷한 해결책이
+	Section~\ref{sec:defer:Hazard Pointers}
+	에서 이야기한 해저드 포인터를 사용하는 비슷한 해결책도 사용 가능합니다.
+	그러나 어느 경우든, 여러분은 시퀀스 락에 더해서 어떤 다른 동기화
+	메커니즘을 사용해야 할 겁니다!
+
+	\iffalse
 
 	One way to protect against this sort of problem requires use
 	of ``type-safe memory'', which will be discussed in
@@ -658,6 +767,9 @@ has a chance to warn of the concurrent update.
 	Section~\ref{sec:defer:Hazard Pointers}.
 	But in either case, you would be using some other synchronization
 	mechanism in addition to sequence locks!
+
+	\fi
+
 }\QuickQuizEnd
 
 Both the read-side and write-side critical sections of a sequence lock
