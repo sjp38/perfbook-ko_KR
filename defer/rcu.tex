@@ -7,6 +7,29 @@
 %
 \epigraph{``Free'' is a \emph{very} good price!}{\emph{Tom Peterson}}
 
+앞의 섹션들에서 다루어진 모든 메커니즘은 특정한 행동을 그것이 안전히 이루어질
+수 있을 때까지 미루는 여러 전략 중 하나를 사용했습니다.
+Section~\ref{sec:defer:Reference Counting}
+에서 다룬 레퍼런스 카운터는 읽기 쓰레드를 방해할 수 있는 행동을 뒤로 미루기
+위해 명시적 카운터를 사용했고 이는 읽기 쪽 컨텐션과 그로 인한 낮은 확장성의
+결과를 가져왔습니다.
+Section~\ref{sec:defer:Hazard Pointers}
+은 쓰레드별 포인터 리스트의 모습을 한 암시적 카운터를 사용했습니다.
+이는 읽기 쪽 컨텐션은 제거했으나, 읽기 쓰레드가 쓰기와 조건적 브랜치는 물론,
+읽기쪽 완전한 메모리 배리어 또는 리억타임에 친화적이지 않은 프로세서간 인터럽트
+(inter-processor interrupt) 기능을 사용해야 했습니다.\footnote{
+	어떤 중요한 특수 경우에는, 이 추가적 일이 Folly 오픈소스 라이브러리
+	(\url{https://github.com/facebook/folly}) 에 구현되어 있는
+	UnboundedQueue 와 ConcurrentHashMap 데이터 구조에서 보여지듯 연결
+	카운팅을 사용하는 것으로 제거될 수 있습니다.}
+Section~\ref{sec:defer:Sequence Locks}
+에서 선보인 시퀀스 락 또한 읽기 쪽 컨텐션은 제거하나, 포인터 순회를 보호하지
+않으며, 해저드 포인터와 같이, 읽기 쪽에서의 완전한 메모리 배리어 또는 업데이트
+쪽에서의 프로세서간 인터럽트를 필요로 합니다.
+이 방법들의 단점들은 더 나은 것은 불가능한지 질문을 던지게 합니다.
+
+\iffalse
+
 All of the mechanisms discussed in the preceding sections
 used one of a number of approaches to defer specific actions
 until they may be carried out safely.
@@ -35,6 +58,22 @@ primitives.
 These schemes' shortcomings raise the question of
 whether it is possible to do better.
 
+\fi
+
+이 섹션은 \emph{read-copy update} (RCU) 를 소개하는데, 자주 업데이트 되는 공유
+데이터로의 비싼 쓰기 없이 읽기 쓰레드가 소스 코드의 특정 영역과 연관지어지게
+하는 API 를 제공합니다.
+이 섹션의 나머지 부분은 여러 다른 관점에서 RCU 를 알아봅니다.
+\Cref{sec:defer:Introduction to RCU} 는 고전적 RCU 소개를 제공하고,
+\cref{sec:defer:RCU Fundamentals} 는 기본적인 RCU 컨셉을 다루며,
+\cref{sec:defer:RCU Linux-Kernel API} 는 RCU 의 리눅스 커널 API 를 선보이고,
+\cref{sec:defer:RCU Usage} 는 흔한 RCU 사용 예를 소개하고,
+\cref{sec:defer:RCU Related Work} 는 RCU 와 연관된 최근의 작업들을 다루고,
+\cref{sec:defer:RCU Exercises} 는 일부 RCU 연습문제를 제공하고, 마지막으로
+\cref{sec:defer:What About Updates?} 는 업데이트를 다룹니다.
+
+\iffalse
+
 This section introduces \emph{read-copy update} (RCU), which provides
 an API that allows readers to be associated with regions in the source code,
 rather than with expensive updates to frequently updated shared data.
@@ -53,6 +92,8 @@ to RCU,
 and finally
 \cref{sec:defer:What About Updates?}
 discusses updates.
+
+\fi
 
 \input{defer/rcuintro}
 \input{defer/rcufundamental}
