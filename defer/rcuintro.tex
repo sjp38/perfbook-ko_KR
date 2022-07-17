@@ -43,6 +43,24 @@ questions, but we cannot possibly succeed if we don't even try!
 \label{fig:defer:Insertion With Concurrent Readers}
 \end{figure}
 
+구현이 가능하긴 한지에 대한 걱정을 최소화 하기 위해, \co{NULL} 이거나 하나의
+구조체로의 참조일 하나의 글로벌 포인터로 존재하는 최소한의 데이터 구조에 집중해
+봅니다.
+이 데이터 구조는 최소한의 것이긴 하지만, 제품 단계에서 상당히 많이 사용되는
+것이기도 합니다~\cite{GeoffRomer2018C++DeferredReclamationP0561R4}.
+삽입을 위한 고전적 방법이
+Figure~\ref{fig:defer:Insertion With Concurrent Readers}
+에 보여져 있는데, 위에서 아래로 시간이 흐름에 따라 달라지는 네개의 상태를
+보입니다.
+첫번째 열은 최초의 상태를 보이는데, \co{gptr} 이 \co{NULL} 입니다.
+두번째 열에서, 우리는 물음표로 보여지듯 초기화 되지 않은 이 구조체를
+할당합니다.
+세번째 열에서, 우린 이 구조체를 초기화 합니다.
+마지막으로, 네번째 열에서 우린 \co{gptr} 을 이 새로 할당되고 초기화 된 원소를
+참조하도록 업데이트 합니다.
+
+\iffalse
+
 To minimize implementability concerns, we focus on a minimal
 data structure, which consists of a single global pointer that is either
 \co{NULL} or references a single structure.
@@ -57,6 +75,32 @@ as indicated by the question marks.
 In the third row, we have initialized the structure.
 Finally, in the fourth and final row, we have updated \co{gptr} to
 reference the newly allocated and initialized element.
+
+\fi
+
+우린 이 \co{gptr} 로의 값 할당이 간단한 C-언어의 할당문을 사용할 수 있길 바랄
+겁니다.
+불행히도,
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+이 이 바람을 가로막습니다.
+따라서, 업데이트 쓰레드는 간단한 C-언어 할당문 대신 이 그림에 보여진 것처럼
+\co{smp_store_release()} 또는 뒤에서 보이겠지만 \co{rcu_assign_pointer()} 를
+사용해야 합니다.
+
+비슷하게, 어떤 사람들은 읽기 쓰레드가 \co{gptr} 의 값을 얻어오기 위해 하나의
+C-언어 할당문을 사용할 수 있기를, 그리고 과거의 값인 \co{NULL} 이나 새로이
+설치된 포인터를 읽어와 어떤 경우든 유효한 값을 읽올 것이 보장되기를 바랄
+겁니다.
+불행히도,
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+은 이 바람 역시 가로막습니다.
+이 보장을 얻기 위해선, 읽기 쓰레드는 그 대신 \co{READ_ONCE()}, 또는, 뒤에서
+보이겠지만 \co{rcu_dereference()} 를 사용해야 합니다.
+하지만, 대부분의 현대 컴퓨터 시스템에서, 이 읽기 쪽 기능들은 싱글 쓰레드 기반
+코드에서 일반적으로 사용될 것과 동일한 하나의 로드 인스트럭션으로 구현될 수
+있습니다.
+
+\iffalse
 
 We might hope that this assignment to \co{gptr} could use a simple
 C-language assignment statement.
@@ -79,6 +123,24 @@ However, on most modern computer systems, each of these read-side primitives
 can be implemented with a single load instruction, exactly the instruction
 that would normally be used in single-threaded code.
 
+\fi
+
+\Cref{fig:defer:Insertion With Concurrent Readers}
+를 읽기 쓰레드의 시점에서 다시 보면, 앞의 세개 상태에서 모든 읽기 쓰레드는
+\co{gptr} 을 \co{NULL} 값을 갖는 것으로 봅니다.
+네번째 상태에 진입하면서, 일부 읽기 쓰레드는 \co{gptr} 이 여전히 \co{NULL} 값을
+갖는다고 볼 수 있는 반면 다른 쓰레드들은 새로 설치된 원소를 참조하고 있는
+것으로 볼 수 있지만, 어떤 시점 이후로는 모든 읽기 쓰레드가 이 새 원소를 보게 될
+겁니다.
+항상, 모든 읽기 쓰레드는 \co{gptr} 을 유효한 포인터를 담고 있다고 볼 겁니다.
+따라서, 동시의 읽기 쓰레드들이 싱글 쓰레드 기반 코드에서 일반적으로 사용할 것과
+동일한 기계 인스트럭션들을 수행하면서 새로운 데이터를 연결된 데이터 구조에
+추가하는 것이 정말 가능합니다.
+이 동시 읽기에의 비용이 없는 방법은 훌륭한 성능과 확장성을 제공하며, 리얼타임
+사용처에서 뛰어나게 잘 사용될 수 있습니다.
+
+\iffalse
+
 Reviewing \cref{fig:defer:Insertion With Concurrent Readers}
 from the viewpoint of readers, in the first three states all readers
 see \co{gptr} having the value \co{NULL}.
@@ -93,12 +155,29 @@ instructions that is normally used in single-threaded code.
 This no-cost approach to concurrent reading provides excellent performance
 and scalability, and also is eminently suitable for real-time use.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{defer/RCUListDeleteClassic}}
 \caption{Deletion With Concurrent Readers}
 \label{fig:defer:Deletion With Concurrent Readers}
 \end{figure}
+
+삽입은 물론 상당히 유용합니다만, 금방이든 더 나중이든, 데이터를 지워야 하기도
+할 겁니다.
+Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+에 보이듯, 첫번째 단계는 쉽습니다.
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+에서의 교훈을 다시 상기해 보면, \co{smp_store_release()} 가 이 포인터를
+\co{NULL} 로 만들기 위해 사용되어, 이 그림의 첫번째 열에서 두번째 열로
+넘어갑니다.
+이 시점에서, 기존부터 존재하던 읽기 쓰레드는 \co{->addr} 는 42 값을 그리고
+\co{->iface} 는 1 값을 갖는 것으로 볼 수 있지만, 새로 시작된 읽기 쓰레드는
+\co{NULL} 포인터를 볼 것으로, 즉 동시의 읽기 쓰레드들이 이 그림의 ``2
+Versions'' 로 표시된 것처럼 현 상태에 대해 다른 의견을 가질 수 있습니다.
+
+\iffalse
 
 Insertion is of course quite useful, but sooner or later, it will also
 be necessary to delete data.
@@ -113,6 +192,8 @@ At this point, pre-existing readers see the old structure with
 \co{->addr} of 42 and \co{->iface} of 1, but new readers will see
 a \co{NULL} pointer, that is, concurrent readers can disagree on
 the state, as indicated by the ``2 Versions'' in the figure.
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
