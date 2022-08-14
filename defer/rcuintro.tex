@@ -197,6 +197,14 @@ the state, as indicated by the ``2 Versions'' in the figure.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+	는 \co{NULL} 포인터를 저장하는데 왜 \co{smp_store_release()} 를
+	사용하나요?
+	\co{NULL} 포인터 저장에 대해 순서지을 구조체 초기화가 없다는 점을
+	감안하면 \co{WRITE_ONCE()} 만으로도 이 경우에는 괜찮지 않을까요?
+
+	\iffalse
+
 	Why does
 	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
 	use \co{smp_store_release()} given that it is storing
@@ -204,7 +212,26 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	Wouldn't \co{WRITE_ONCE()} work just as well in this case,
 	given that there is no structure initialization to order
 	against the store of the \co{NULL} pointer?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	맞아요, 그럴 겁니다.
+
+	\co{NULL} 포인터가 할당되고 있을 뿐, 순서지을 것이 존재하지 않으므로,
+	\co{smp_store_release()} 를 사용할 필요는없습니다.
+	대조적으로, \co{NULL} 이 아닌 포인터를 할당할 때에는 그 포인터로
+	가리켜지는 구조체의 초기화가 이 포인터의 할당 전에 행해졌음을 분명히
+	하기 위해 \co{smp_store_release()} 가 사용되어야 합니다.
+
+	짧게 말해서, \co{WRITE_ONCE()} 는 동작할 것이고, 어떤 아키텍쳐에서는
+	약간의 CPU 시간을 아낄 겁니다.
+	하지만, 뒤에서 보게 되겠지만, 소프투에어 엔지니어링 관점의 걱정은
+	\co{smp_store_release()} 와 상당히 유사한 \co{rcu_assign_pointer()}
+	라는 특수한 기능의 사용을 장려할 겁니다.
+
+	\iffalse
+
 	Yes, it would.
 
 	Because a \co{NULL} pointer is being assigned, there is nothing
@@ -219,15 +246,46 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	However, as we will see, software-engineering concerns
 	will motivate use of a special \co{rcu_assign_pointer()}
 	that is quite similar to \co{smp_store_release()}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	동시에 수행되는 읽기 쓰레드는
+	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+	에 그려진 수행 순서에 따르면 \co{gptr} 의 값에 대해 동의하지 않을 수
+	있습니다.
+	이건 뭔가 문제있지 않나요???
+
+	\iffalse
+
 	Readers running concurrently each other and with the procedure
 	outlined in
 	Figure~\ref{fig:defer:Deletion With Concurrent Readers}
 	can disagree on the value of \co{gptr}.
 	Isn't that just a wee bit problematic???
+
+	\fi
+
 }\QuickQuizAnswerE{
+	꼭 그렇진 않습니다.
+
+	Section~\ref{sec:cpu:Hardware Optimizations}
+	와~\ref{sec:cpu:Hardware Free Lunch?}
+	에서 힌트가 주어진 것처럼, 빛의 속도의 지연은 컴퓨터의 데이터는 그
+	데이터가 실제로 모델링 하고자 의도된 바깥의 사실에 비교해서는 항상
+	오래되어 있습니다.
+
+	따라서 실제 세계의 알고리즘은 외부의 현실과 그 현실을 반영하는 컴퓨터
+	내부 데이터의 비일관성을 감내해야만 합니다.
+	이런 알고리즘들 여럿은 컴퓨터 내부 데이터에서의 비일관성도 어느정도는
+	감내할 수 있습니다.
+	Section~\ref{sec:datastruct:RCU-Protected Hash Table Discussion}
+	이 이 점을 더 자세히 다룹니다.
+
+	\iffalse
+
 	Not necessarily.
 
 	As hinted at in Sections~\ref{sec:cpu:Hardware Optimizations}
@@ -244,6 +302,25 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	Section~\ref{sec:datastruct:RCU-Protected Hash Table Discussion}
 	discusses this point in more detail.
 
+	\fi
+
+	이런 비일관적이고 오래된 데이터를 감내해야 하는 필요성은 RCU 에만
+	국한되지 않는다는 점을 알아두시기 바랍니다.
+	이는 레퍼런스 카운팅, 해저드 포인터, 시퀀스 락, 그리고 심지어 일부 락킹
+	사용 예에도 적용됩니다.
+	예를 들어, 여러분이 락을 잡은 채 어떤 값을 계산하지만 그 값을 해당 락을
+	해제한 후 사용한다면, 여러분은 오래된 데이터를 사용하고 있을 수
+	있습니다.
+	어쨌건, 그 값이 기반하고 있는 데이터는 그 락이 해제되는 순간 어떻게든
+	변할 수도 있습니다.
+
+	그러니, 그렇습니다, RCU 읽기 쓰레드는 오래되고 비일관적인 데이터를 볼
+	수 있습니다, 하지만 아니요, 이게 문제여야만 할 이유는 없어요.
+	그리고 필요하다면 그런 오래되고 비일관적인 데이터 문제를 막을 수 있는
+	RCU 사용 패턴도 있습니다~\cite{Arcangeli03}.
+
+	\iffalse
+
 	Please note that this need to tolerate inconsistent and stale
 	data is not limited to RCU\@.
 	It also applies to reference counting, hazard pointers, sequence
@@ -258,8 +335,30 @@ the state, as indicated by the ``2 Versions'' in the figure.
 	this is not necessarily problematic.
 	And, when needed, there are RCU usage patterns that avoid both
 	staleness and inconsistency~\cite{Arcangeli03}.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+우린 열~3 에서 볼 수 있듯 모든 기존부터 존재한 읽기 쓰레드들이 완료하길
+기다리는 것만으로 단일 버전으로 돌아올 수 있습니다.
+이 지점에서, 모든 기존부터 존재하던 읽기 쓰레드는 종료되었고, 뒤따르는 읽기
+쓰레드는 어느 것도 기존 데이터 아이템으로의 경로를 갖지 못하므로, 그걸 참조하는
+어떤 읽기 쓰레드도 존재할 수 없습니다.
+따라서 그 아이템은 열~4 에서 보여지듯 안전히 메모리 해제될 수 있습니다.
+
+따라서, 기존부터 존재한 읽기 쓰레드들이 완료되길 기다릴 방법이 존재한다면
+읽기 쓰레드들이 싱글 쓰레드 수행 시에나 적합할 것과 동일한 기계
+인스트럭션들만을 수행하면서도 연결된 데이터 구조에 데이터를 추가할 수도 삭제할
+수도 있습니다.
+그러니 앞서 했던 것들이 너무 멀리 간 것만은 아닐수도 있습니다!
+
+하지만 어떻게 기존부터 존재한 읽기 쓰레드들이 실제로 완료되었다고 이야기 할 수
+있을까요?
+이 질문이 다음 섹션의 주제입니다.
+
+\iffalse
 
 We get back to a single version simply by waiting for all the
 pre-existing readers to complete, as shown in row~3.
@@ -278,6 +377,8 @@ So perhaps going all the way was not too far after all!
 But how can we tell when all of the pre-existing readers have in
 fact completed?
 This question is the topic of the next section.
+
+\fi
 
 \subsubsection{Waiting for Readers}
 \label{sec:defer:Waiting for Readers}
