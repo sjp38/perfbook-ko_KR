@@ -523,6 +523,19 @@ However, if your environment lacks a garbage collector, read on!
 
 \fi
 
+다섯번째 접근법은 전통적 세상을-멈추기 (stop-the-world) garbage collector 에
+의해 예시되는 주기적으로 ``세상을 멈추기'' 를 사용해 주기적 고장내기를
+막습니다.
+이 방법은 또한 각 일하는 날의 끝마다 시스템의 전원을 끄는게 일반적 행동이었던,
+어디나 있는 연결성 전의 수십년간 많이 사용되었습니다.
+하지만, 오늘날의 항상 연결되어 있고 항상 켜져있는 세상에서는, 세상을 멈추기는
+응답 시간을 크게 악화시킬 수 있는데, 이는 동시적 garbage collector 의 개발의
+모티베이션 중 하나가 되었습니다~\cite{DavidFBacon2003RTGC}.
+더 나아가, 우린 모든 앞서서부터 존재하고 있는 읽기 쓰레드가 모두 완료되기를
+기다려야 하기는 하지만, 그것들이 동시에 완료되어야 할 필요는 없습니다.
+
+\iffalse
+
 A fifth approach avoids the period crashes in favor of periodically
 ``stopping the world'', as exemplified by the traditional stop-the-world
 garbage collector.
@@ -534,6 +547,32 @@ can gravely degrade response times, which has been one motivation for the
 development of concurrent garbage collectors~\cite{DavidFBacon2003RTGC}.
 Furthermore, although we need all pre-existing readers to complete, we do
 not need them all to complete at the same time.
+
+\fi
+
+이 발견은 여섯번째 접근법을 이끌어내는데, 한번에 한 CPU 또는 쓰레드를 멈추는
+것입니다.
+이 방법은 읽기 쓰레드의 응답 시간을 전혀 악화시키지 않는다는 장점을 갖습니다.
+더 나아가서, 많은 어플리케이션들이 이미 앞의 앞서서부터 존재하고 있는 읽기
+스레드들이 모두 완료된 후에만 도달할 수 있는 상태 (\emph{quiescent state} 라
+불립니다) 를 갖습니다.
+트랜잭션 처리 시스템에서는, 한쌍의 연속된 트랜잭션 사이의 시간이 quiescent
+state 일 수 있습니다.
+반응형 시스템에서는, 연속된 한 쌍의 이벤트 사이의 상태가 quiescent state 일
+겁니다.
+Preemption 기반이지 않은 운영체제 커널에서는, 컨텍스트 스위치가 quiescent state
+가 될 수 있습니다~\cite{McKenney98}.
+어떤 형태든, 모든 CPU 그리고/또는 쓰레드가 하나의 quiescent state 를 지난다면,
+이 시스템은 하나의 \emph{grace period} 를 완료했다고 이야기 되며, 이 지점에서는
+이 grace period 의 시작 시점에서 존재했던 모든 읽기 쓰레드는 완료되었다는게
+보장됩니다.
+그 결과, 이 grace period 의 시작 전에 제거된 데이터 항목들은 메모리 해제되기에
+안전합니다.\footnote{
+	RCU 는 단순히 메모리 회수 미루기보다 훨씬 많은 걸 할 수 있으나, 
+	회수 미루기는 RCU 의 가장 흔한 사용예이며, 따라서 시작하기에 훌륭한
+	지점입니다.}
+
+\iffalse
 
 This observation leads to the sixth approach, which is stopping
 one CPU or thread at a time.
@@ -558,6 +597,25 @@ items that were removed prior to the start of that grace period.\footnote{
 	reclamation of memory, but deferred reclamation is RCU's most
 	common use case, and is therefore an excellent place to start.}
 
+\fi
+
+Preemption 이 없는 운영체제 커널에서 컨텍스트 스위치가 유효한 quiescent state 가 되려면 읽기 쓰레드는
+Figure~\ref{fig:defer:Insertion With Concurrent Readers}
+와~\ref{fig:defer:Deletion With Concurrent Readers}
+의 \co{gptr} 포인터에 의해 얻어지는 데이터 구조 인스턴스를 참조하는 동안은
+블록킹 되는 걸 방지해야만 합니다.
+이 블록킹 방지 제약은 순수 스핀락에서도 비슷한 제약으로 존재하는데, 여기선 CPU
+는 스핀락을 잡고 있는 동안 블록킹 되는게 금지됩니다.
+이 제약이 없다면, 모든 CPU 는 블록된 쓰레드에 의해 잡혀 있는 스핀락을 획득하려
+스핀하는 쓰레드들에 의해 소모될 수 있습니다.
+이 스핀하는 쓰레드들은 그것들이 이 락을 획득하기 전까지는 CPU 를 놓지 않을
+것이지만, 이 락을 쥐고 있는 쓰레드는 이 스핀하고 있는 쓰레드들 중 하나가 CPU 를
+하나라도 놓기 전까지는 이 락을 놓아주지 못할 겁니다.
+이는 고전적 데드락 환경이며, 이 데드락은 스핀락을 잡고 있는 동안은 블록킹을
+방지하는 것으로 막아집니다.
+
+\iffalse
+
 Within a non-preemptive operating-system kernel, for context switch to be
 a valid quiescent state, readers must be prohibited from blocking while
 referencing a given instance data structure obtained via the \co{gptr}
@@ -574,6 +632,26 @@ the lock, but the thread holding the lock cannot possibly release it
 until one of the spinning threads relinquishes a CPU\@.
 This is a classic deadlock situation, and this deadlock is avoided
 by forbidding blocking while holding a spinlock.
+
+\fi
+
+다시, 이 동일한 제약이 \co{gptr} 을 역참조하는 읽기 쓰레드에게도 적용됩니다:
+그런 쓰레드는 그것들이 이 가리켜진 데이터 항목을 사용하는 것을 마무리 하기
+전까지는 블록되지 않아야 합니다.
+업데이트 쓰레드가 막 \co{smp_store_release()} 를 수행하는 것을 완료한
+Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+의 두번째 열로 돌아와서, CPU~0 이 컨텍스트 스위치를 했다고 생각해 봅시다.
+읽기 쓰레드는 이 링크드 리스트를 순회하는 동안은 블록되는 것이 허용되지
+않았으므로, 우린 CPU~0 에서 수행되었을 수도 있는 모든 앞의 읽기 쓰레드들이
+완료되었다고 보장됩니다.
+이 논리를 다른 CPU 들로 확장하면, 각 CPU 가 모두 컨텍스트 스위치 수행을
+목격했다면, 모든 앞의 읽기 쓰레드가 완료되었음이, 새로이 제거된 데이터 원소를
+참조하고 있는 어떤 읽기 쓰레드도 더이상 존재하지 않음이 보장됩니다.
+그럼 이 업데이트 쓰레드는 안전하게 이 데이터 원소를 메모리 해제할 수 있어,
+Figure~\ref{fig:defer:Deletion With Concurrent Readers}
+의 가장 아래에 보인 상태에 도달합니다.
+
+\iffalse
 
 Again, this same constraint is imposed on reader threads dereferencing
 \co{gptr}: such threads are not allowed to block until after
@@ -593,12 +671,34 @@ The updater can then safely free that data element, resulting in the
 state shown at the bottom of
 Figure~\ref{fig:defer:Deletion With Concurrent Readers}.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{defer/QSBRGracePeriod}}
 \caption{QSBR: Waiting for Pre-Existing Readers}
 \label{fig:defer:QSBR: Waiting for Pre-Existing Readers}
 \end{figure}
+
+이 방법은 \emph{quiescent state based reclamation}
+(QSBR)~\cite{ThomasEHart2006a} 라고 명명되었습니다.
+하나의 QSBR 방법이
+Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers}
+에 시간이 이 그림의 꼭대기에서 아래로 흐르는 모습으로 그려져 있습니다.
+CPU~1 은 현재 데이터 항목을 제거하는 \co{WRITE_ONCE()} 를 수행하고 (아마도 이
+포인터 값을 앞서 읽었고 자신을 적절한 동기화를 하고 있게 했을 겁니다), 읽기
+쓰레드를 기다립니다.
+이 대기 오퍼레이션은 즉각적인 컨텍스트 스위치를 초래하는데, 이는 quiescent
+state 로 (핑크색 원으로 표시되어 있습니다), CPU~1 에서의 모든 앞선 읽기는
+완료되었음을 의미합니다.
+이어서, CPU~2 가 컨텍스트 스위치를 하여, CPU~1 과~2 의 모든 읽기 쓰레드는 이제
+완료되었음이 알려집니다.
+마지막으로, CPU~3 이 컨텍스트 스위치를 합니다.
+이 지점에서, 전체 시스템의 모든 읽기 쓰레드는 완료되었음이 알려지며, 따라서
+grace period 가 종료되어 CPU~1 이 오래된 데이터 항목을 메모리 해제하는 것을
+허용합니다.
+
+\iffalse
 
 This approach is termed \emph{quiescent state based reclamation}
 (QSBR)~\cite{ThomasEHart2006a}.
@@ -619,20 +719,42 @@ At this point, all readers throughout the entire system are known to
 have completed, so the grace period ends, permitting CPU~1 to free
 the old data item.
 
+\fi
+
 \QuickQuiz{
+	Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers} 에서,
+	CPU~3 의 이 오래된 데이터 항목으로의 액세스를 했을 수 있는 읽기
+	쓰레드는 이 grace period 가 시작하기도 전에 이미 완료되었어요!
+	그런데 왜 CPU~3 의 마지막 컨텍스트 스위치를 신경쓰나요???
+
+	\iffalse
+
 	In Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers},
 	the last of CPU~3's readers that could possibly have
 	access to the old data item ended before the grace period
 	even started!
 	So why would anyone bother waiting until CPU~3's later context
 	switch???
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 대기는 읽기 쓰레드들이 싱글쓰레드 상황에서나 적절한 것과 똑같은
+	인스트럭션들을 사용할 수 있게 해주기 때문입니다.
+	달리 말하자면, 이 추가적인 ``과잉의'' 대기가 읽기 쪽의 훌륭한 성능,
+	확장성, 그리고 리얼타임 응답을 가능하게 합니다.
+
+	\iffalse
+
 	Because that waiting is exactly what enables readers to use
 	the same sequence of instructions that is appropriate for
 	single-theaded situations.
 	In other words, this additional ``redundant'' waiting enables
 	excellent read-side performance, scalability, and real-time
 	response.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Toy Implementation}
