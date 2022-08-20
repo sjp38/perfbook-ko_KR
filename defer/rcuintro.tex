@@ -383,6 +383,21 @@ This question is the topic of the next section.
 \subsubsection{Waiting for Readers}
 \label{sec:defer:Waiting for Readers}
 
+읽기 쓰레드의 기다리기를 레퍼런스 카운팅 기반으로 하고 싶을 수 있겠습니다만,
+Chapter~\ref{chp:Counting}
+의
+Figure~\ref{fig:count:Atomic Increment Scalability on x86}
+는 현재의 레퍼런스 카운팅은
+Section~\ref{sec:defer:Reference Counting}
+에서 이미 보았듯 굉장한 오버헤드를 초래함을 보았습니다.
+해저드 포인터는 이 오버헤드를 상당히 줄입니다만, 우리가
+Section~\ref{sec:defer:Hazard Pointers}
+에서 보았듯이, 완전히 없애진 못합니다.
+그렇다고는 하나, 많은 RCU 구현이 매우 주의 깊은 캐시 지역적 카운터의 사용을
+합니다.
+
+\iffalse
+
 It is tempting to base reader waiting on reference counting, but
 Figure~\ref{fig:count:Atomic Increment Scalability on x86}
 in
@@ -394,6 +409,25 @@ Hazard pointers profoundly reduce this overhead, but, as we saw in
 Section~\ref{sec:defer:Hazard Pointers}, not to zero.
 Nevertheless, many RCU implementations make very careful cache-local
 use of counters.
+
+\fi
+
+두번째 접근법은 메모리 동기화가 비쌈을 파악하고, 따라서 레지스터를 대신
+사용하는데, 이는 각 CPU 또는 쓰레드의 프로그램 카운터 (PC) 로, 따라서 읽기
+쓰레드에게는 적어도 동시의 업데이트의 부재 시에는 오버헤드를 일으키지 않습니다.
+업데이트 쓰레드는 각 적절한 PC 를 반복적으로 살펴보고, 그 PC 가 읽기 쪽 코드
+내에 위치해 있지 않다면, 연관된 CPU 또는 쓰레드는 조용한 상태 (quiescent state)
+에 있는 것이며, 따라서 이는 새로이 제거된 데이터 원소로의 액세스를 할수도 있는
+읽기 쓰레드는 모두 완료되었다는 신호가 됩니다.
+모든 CPU 또는 쓰레드의 PC 가 모두 모든 읽기 쓰레드의 바깥에 있음이 확인된다면,
+이 유예 기간 (grace period) 가 완료됩니다.
+이 방법은 몇가지 심각한 기술적 어려움도 가지고 있는데, 메모리 순서 맞추기, 읽기
+쓰레드에 의해 \emph{가끔} 호출되는 함수들, 그리고 항상 신나는 코드 모습
+최적화가 포함됩니다.
+그러나, 이 방법은 제품 단계에서 사용되었다고 이야기
+됩니다~\cite{MikeAsh2015Apple}.
+
+\iffalse
 
 A second approach observes that memory synchronization is expensive,
 and therefore uses registers instead, namely each CPU's or thread's
@@ -411,6 +445,23 @@ and ever-exciting code-motion optimizations.
 Nevertheless, this approach is said to be used in
 production~\cite{MikeAsh2015Apple}.
 
+\fi
+
+세번째 접근법은 모든 합리적 읽기 쓰레드의 수명을 충분히 넘어설 정도로 긴 고정된
+시간동안 그냥 기다리는 것입니다~\cite{Jacobson93,AjuJohn95}.
+이는 하드 리얼타임 시스템에서는 잘 동작합니다만~\cite{YuxinRen2018RTRCU},
+그보다 덜 진귀한 환경에서라면, Murphy 는 비합리적일 정도로 오래 살아있는 읽기
+쓰레드에도 준비해야 하는게 무척 중요하다고 말합니다.
+이를 자세히 보기 위해, 그러는데 실패했을 때의 결과를 생각해 봅시다:
+어떤 데이터 항목은 이 비합리적인 읽기 쓰레드가 여전히 그것을 참조하고 있는 동안
+메모리 해제될 수 있고, 그 항목은 곧바로 재할당되어 심지어 다른 타입의 데이터
+항목으로 사용되고 있을 수 있습니다.
+그러면 이 비합리적 읽기 쓰레드와 부주의한 재할당자는 같은 메모리를 두개의 매우
+다른 목적으로 사용하려 할 것입니다.
+그 결과는 디버깅 하기에 무척 어려울 것입니다.
+
+\iffalse
+
 A third approach is to simply wait for a fixed period of time that is
 long enough to comfortably exceed the lifetime of any reasonable
 reader~\cite{Jacobson93,AjuJohn95}.
@@ -425,6 +476,30 @@ possibly even as a data item of some other type.
 The unreasonable reader and the unwitting reallocator would then
 be attempting to use the same memory for two very different purposes.
 The ensuing mess will at best be exceedingly difficult to debug.
+
+\fi
+
+네번째 접근법은 영원히 기다리는 것으로, 그렇게 하는게 가장 비합리적인 읽기
+쓰레드조차도 처리해 줄 것이라는 점에서 안전합니다.
+이 접근법은 또한 ``메모리 누출'' 이라고도 불리며, 메모리 누출은 시기 상조의
+그리고 불편한 리부팅을 요구한다는 사실 때문에 나쁜 평판을 가지고 있습니다.
+그러나, 이는 업데이트 비율과 시스템 가동시간이 모두 꽤 정확히 그 한계가 정해져
+있을 때라면 사용될 수 있는 전략입니다.
+예를 들어, 이 방법은 시스템이 높은 가용성을 가진 클러스터여서 이 클러스터가
+정말로 높은 가용성을 유지한다는 것을 분명히 하기 위해 주기적으로 고장나는
+것이라면 잘 동작할 수 있습니다.\footnote{
+	이 주기적 고장을 강제하는 프로그램은 가끔 ``chaos monkey'' 라고
+	불립니다:
+	\url{https://netflix.github.io/chaosmonkey/}.
+	하지만, 너무 오래 수행되는 시스템에 의해 야기되는 혼란을 무시하는 것도
+	실수가 될수도 있습니다.}
+메모리를 누출하는 것은 또한 garbage collector 를 가진 경우에도 사용될 수
+있을텐데, 이 경우는 garbage collector 가 이 누출을 막는 것으로 생각될 수
+있습니다~\cite{Kung80}.
+하지만, 여러분의 환경이 garbage collector 를 지원하지 않는다면, 마저
+읽으십시오!
+
+\iffalse
 
 A fourth approach is to wait forever, secure in the knowledge that
 doing so will accommodate even the most unreasonable reader.
@@ -445,6 +520,8 @@ Leaking the memory is also a viable strategy in environments having
 garbage collectors, in which case the garbage collector can be thought
 of as plugging the leak~\cite{Kung80}.
 However, if your environment lacks a garbage collector, read on!
+
+\fi
 
 A fifth approach avoids the period crashes in favor of periodically
 ``stopping the world'', as exemplified by the traditional stop-the-world
