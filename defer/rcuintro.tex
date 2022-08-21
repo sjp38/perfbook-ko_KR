@@ -970,6 +970,26 @@ Section~\ref{sec:defer:RCU for Pre-BSD Routing}.)
 }\QuickQuizEndE
 }
 
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+으로 돌아가서, \co{route_lock} 이 \co{ins_route()} 와 \co{del_route()} 를
+호출하는 동시의 업데이트들 사이의 동기화를 위해 사용되었음을 알아두시기
+바랍니다.
+하지만, 이 락은 \co{access_route()} 를 호출하는 읽기 쓰레드에 의해서는 획득되지
+않습니다:
+읽기 쓰레드들은 그대신
+\cref{sec:defer:Waiting for Readers} 에서 이야기 된 QSBR 기법을 통해
+보호됩니다.
+
+\co{ins_route()} 는
+Figure~\ref{fig:defer:Insertion With Concurrent Readers} 가 항상 \co{NULL} 일
+거라고 가정하는 \co{gptr} 의 기존 값을 리턴할 뿐임을 알아 두시기 바랍니다.
+이는 \co{NULL} 이 아닌 값을 가지고 뭘 할지 알아내는 건 호출자의 책임이며, 읽기
+쓰레드들이 확정되지 않은 기간동안 그에 대한 참조를 하고 있을 수도 있다는 사실에
+의해 복잡해지는 일입니다.
+호출자는 다음 접근법 중 하나를 사용할 수도 있을 겁니다:
+
+\iffalse
+
 Referring back to
 Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers},
 note that \co{route_lock} is used to synchronize between concurrent updaters
@@ -986,6 +1006,23 @@ do with a non-\co{NULL} value, a task complicated by the fact that
 readers might still be referencing it for an indeterminate period of time.
 Callers might use one of the following approaches:
 
+\fi
+
+\begin{enumerate}
+\item	가리켜진 구조체의 안전한 메모리 해제를 위해 \co{synchronize_rcu()} 를
+	사용합니다.
+	이 방법은 RCU 관점에서는 올바르지만, 소프트웨어 엔지니어링 관점에서는
+	새기 쉬운 API 문제를 갖는다고 논쟁될 수도 있습니다.
+\item	리턴된 포인터가 \co{NULL} 이 아닌지 단정을 짓습니다.
+\item	이전의 값을 복원하기 위해 \co{ins_route()} 의 다음 호출로 리턴된
+	포인터를 넘깁니다.
+\end{enumerate}
+
+대조적으로, \co{del_route()} 는 새로 삭제된 데이터 항목을 안전하게 메모리
+해제하기 위해 \co{synchronize_rcu()} 와 \co{free()} 를 사용합니다.
+
+\iffalse
+
 \begin{enumerate}
 \item	Use \co{synchronize_rcu()} to safely free the pointed-to structure.
 	Although this approach is correct from an RCU perspective, it
@@ -998,16 +1035,47 @@ Callers might use one of the following approaches:
 In contrast, \co{del_route()} uses \co{synchronize_rcu()} and
 \co{free()} to safely free the newly deleted data item.
 
+\fi
+
 \QuickQuiz{
+	하지만 기존 구조체가 메모리 해제되어야 하지만 \co{ins_route()} 의
+	호출자가 성능에 대한 고려 때문 또는 이 호출자가 RCU 읽기 크리티컬 섹션
+	내에서 수행되고 있다던지 해서 블록될 수 없다면 어떻게 하죠?
+
+	\iffalse
+
 	But what if the old structure needs to be freed, but the caller
 	of \co{ins_route()} cannot block, perhaps due to performance
 	considerations or perhaps because the caller is executing within
 	an RCU read-side critical section?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Section~\ref{sec:defer:Wait For Pre-Existing RCU Readers}
+	에서 이야기되는 \co{call_rcu()} 함수가 비동기적 grace period 대기를
+	허용합니다.
+
+	\iffalse
+
 	A \co{call_rcu()} function, which is described in
 	Section~\ref{sec:defer:Wait For Pre-Existing RCU Readers},
 	permits asynchronous grace-period waits.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 예는 RCU 로 보호되는 데이터 구조를 읽고 업데이트 하는 하나의 일반적 접근법을
+보이고 있습니다만, 매우 다양한 사용 예가 존재하며, 많은 것들이
+Section~\ref{sec:defer:RCU Usage} 에서 다뤄집니다.
+
+요약하자면, 싱글쓰레드 기반 읽기 함수에 의해 수행될 것과 동일한 구성의 기계
+인스트럭션을 수행하는 읽기 쓰레드에 의해 순회될 수 있는 연결된 동시적 데이터
+구조들을 만드는게 정말 가능합니다.
+다음 섹션은 RCU 의 고수준 특성들을 요약합니다.
+
+\iffalse
 
 This example shows one general approach to reading and updating
 RCU-protected data structures, however, there is quite a variety
@@ -1018,6 +1086,8 @@ In summary, it is in fact possible to create concurrent linked data
 structures that can be traversed by readers executing the same sequence
 of machine instructions that would be executed by single-threaded readers.
 The next section summarizes RCU's high-level properties.
+
+\fi
 
 \subsubsection{RCU Properties}
 \label{sec:defer:RCU Properties}
