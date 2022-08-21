@@ -760,8 +760,15 @@ the old data item.
 \subsubsection{Toy Implementation}
 \label{sec:defer:Toy Implementation}
 
+제품 수준 QSBR 구현은 무척 복잡할 수 있지만, preemption 기반이 아닌 리눅스
+커널에서의 장난감 수준 구현은 굉장히 간단합니다:
+
+\iffalse
+
 Although production-quality QSBR implementations can be quite complex,
 a toy non-preemptive Linux-kernel implementation is exceedingly simple:
+
+\fi
 
 \begin{VerbatimN}[samepage=true]
 void synchronize_rcu(void)
@@ -773,6 +780,15 @@ void synchronize_rcu(void)
 }
 \end{VerbatimN}
 
+\co{for_each_online_cpu()} 기능은 모든 CPU 를 순회하고,
+\co{sched_setaffinity()} 함수는 현재 쓰레드가 명시된 CPU 에서 수행되게 하는데,
+이는 이 대상 CPU 가 컨텍스트 스위치를 수행하게끔 강제합니다.
+따라서, \co{for_each_online_cpu()} 가 완료되고 나면, 각 CPU 는 한번의 컨텍스트
+스위치는 수행한 것인데, 이는 곧 모든 앞서서부터 존재해온 읽기 쓰레드가 모두
+완료되었음을 보장합니다.
+
+\iffalse
+
 The \co{for_each_online_cpu()} primitive iterates over all CPUs, and
 the \co{sched_setaffinity()} function causes the current thread to
 execute on the specified CPU, which forces the destination CPU to execute
@@ -780,6 +796,8 @@ a context switch.
 Therefore, once the \co{for_each_online_cpu()} has completed, each CPU
 has executed a context switch, which in turn guarantees that
 all pre-existing reader threads have completed.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:defer:Insertion and Deletion With Concurrent Readers]
@@ -828,6 +846,30 @@ int del_route(void)
 \label{lst:defer:Insertion and Deletion With Concurrent Readers}
 \end{listing}
 
+이 방법은 제품 수준이 \emph{아님을} 알아 두시기 바랍니다.
+여러개의 특수 상황에 대한 처리와 여러개의 강력한 최적화의 필요는 제품 수준
+구현이 무척 복잡함을 의미합니다.
+이에 더해, preemption 기반 환경을 위한 RCU 구현은 읽기 쓰레드가 실제로 무언가를
+더할 것을 필요로 하는데, 리얼타임이 아닌 리눅스 커널 환경에서는
+\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을 각각 \co{preempt_disable()}
+과 \co{preempt_enable()} 로 간단히 정의하는 것으로 될 수 있습니다.\footnote{
+	Preemption 되는 읽기쪽 크리티컬 섹션을 다루는 어떤 장난감 수준 RCU
+	구현들이 Appendix~\ref{chp:app:``Toy'' RCU Implementations} 에 보여져
+	있습니다.}
+그러나, 이 간단한 preemption 불가 방법은 이론적으로 완벽하며, 읽기 쪽 동기화를
+동시의 업데이트가 있음에도 불구하고 비용 없이 제공하는게 가능함을 보입니다.
+실제로,
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+은 어떻게 읽기 (\co{access_route()}),
+Figure~\ref{fig:defer:Insertion With Concurrent Readers} 의 삽입,
+(\co{ins_route()})
+Figure~\ref{fig:defer:Deletion With Concurrent Readers} 의 삭제가
+(\co{del_route()} 구현될 수 있는지 보입니다.
+(약간 더 그럴싸한 라우팅 테이블은
+Section~\ref{sec:defer:RCU for Pre-BSD Routing} 에 보여져 있습니다.)
+
+\iffalse
+
 Please note that this approach is \emph{not} production quality.
 Correct handling of a number of corner cases and the need for a number
 of powerful optimizations mean that production-quality implementations
@@ -854,12 +896,32 @@ be implemented.
 (A slightly more capable routing table is shown in
 Section~\ref{sec:defer:RCU for Pre-BSD Routing}.)
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+	의 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 의 요점이 뭔가요?
+	이 quiescent state 들이 스스로 자신을 이야기하게 하는건 어떤가요?
+
+	\iffalse
+
 	What is the point of \co{rcu_read_lock()} and \co{rcu_read_unlock()} in
 	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}?
 	Why not just let the quiescent states speak for themselves?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	읽기 쓰레드들은 quiescent state 를 가로지를 수 없음을 기억하세요.
+	예를 들어, 리눅스 커널에서 RCU 읽기 쓰레드는 컨텍스트 스위치를 수행할
+	수 없습니다.
+	\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 의 사용은 올바르지 않게
+	위치된 quiescent state 들을 디버깅 할 수 있게 하고, 그러지 않으면 찾기
+	어렵고 간헐적으로 나타나며 무척 파괴적인 버그를 찾기 쉽게 해줍니다.
+
+	\iffalse
+
 	Recall that readers are not permitted to pass through a quiescent
 	state.
 	For example, within the Linux kernel, RCU readers are not permitted
@@ -868,19 +930,43 @@ Section~\ref{sec:defer:RCU for Pre-BSD Routing}.)
 	debug checks for improperly placed quiescent states, making it
 	easy to find bugs that would otherwise be difficult to find,
 	intermittent, and quite destructive.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}
+	의 \co{rcu_dereference()}, \co{rcu_assign_pointer()}, 그리고
+	\co{RCU_INIT_POINTER()} 의 요점이 뭔가요?
+	그냥 \co{READ_ONCE()}, \co{smp_store_release()}, 그리고
+	\co{WRITE_ONCE()} 를 각각 대신 사용하는 건 어떤가요?
+
+	\iffalse
+
 	What is the point of \co{rcu_dereference()}, \co{rcu_assign_pointer()}
 	and \co{RCU_INIT_POINTER()} in
 	Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers}?
 	Why not just use \co{READ_ONCE()}, \co{smp_store_release()}, and
 	\co{WRITE_ONCE()}, respectively?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	RCU 특정 API 들은 제안된 교체와 실제로 비슷한 의미를 가집니다만, RCU
+	특정 API 가 RCU 포인터가 아닌 것들에 대해 호출되었을 때, 그리고 그
+	거꾸로인 상황에 문제를 제기하는 정적 분석 디버깅 검사를 가능하게
+	합니다.
+
+	\iffalse
+
 	The RCU-specific APIs do have similar semantics to the suggested
 	replacements, but also enable static-analysis debugging checks
 	that complain if an RCU-specific API is invoked on a non-RCU
 	pointer and vice versa.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
