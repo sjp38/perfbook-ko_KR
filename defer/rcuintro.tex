@@ -1092,6 +1092,18 @@ The next section summarizes RCU's high-level properties.
 \subsubsection{RCU Properties}
 \label{sec:defer:RCU Properties}
 
+RCU 의 핵심 속성은 읽기가 업데이트를 기다릴 필요 없다는 것입니다.
+이 속성은 RCU 구현이 낮은, 또는 심지어 전혀 없는 비용을 읽기 쓰레드에게 제공할
+수 있게 하여, 낮은 오버헤드와 훌륭한 확장성을 가능하게 합니다.
+이 속성은 RCU 읽기 쓰레드들과 업데이트 쓰레드들이 유용한 동시의 진행을 할 수
+있게 합니다.
+대비적으로, 전통적인 동기화 기능들은 비용이 높은 명령들을 사용해 엄격한
+상호배제를 강요해야만 하여 오버헤드를 높이고 확장성을 떨어뜨리지만 또한
+일반적으로 읽기 쓰레드들과 업데이트 쓰레드들이 유용한 동시의 진행을 할 수 없게
+만듭니다.
+
+\iffalse
+
 A key RCU property is that reads need not wait for updates.
 This property enables RCU implementations to provide low-cost or even
 no-cost readers, resulting in low overhead and excellent scalability.
@@ -1102,11 +1114,45 @@ mutual exclusion using expensive instructions, thus increasing overhead
 and degrading scalability, but also typically prohibiting readers and
 updaters from making useful concurrent forward progress.
 
+\fi
+
 \QuickQuiz{
+	Section~\ref{sec:defer:Sequence Locks} 의 seqlock 또한 읽기 쓰레드들과
+	업데이트 쓰레드들이 유용한 동시의 진행을 할 수 있게 하지 않나요?
+
+	\iffalse
+
 	Doesn't Section~\ref{sec:defer:Sequence Locks}'s seqlock
 	also permit readers and updaters to make useful concurrent
 	forward progress?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그렇기도 하고 아니기도 합니다.
+	Seqlock 읽기 쓰레드들이 seqlock 쓰기 쓰레드들과 동시에 수행될 수 있기는
+	하지만 이게 일어날 때마다 \co{read_seqretry()} 기능은 이 읽기 쓰레드가
+	일을 다시 하게 강제합니다.
+	이 말은 seqlock 업데이트 쓰레드와 동시에 수행되는 seqlock 읽기 쓰레드에
+	의해 행해진 모든 일은 폐기되고 재시도에서 다시 수행될 것을 의미합니다.
+	따라서 seqlock 읽기 쓰레드들은 업데이트 쓰레드들과 동시에 \emph{수행}
+	될 수 있지만, 이 경우에는 실제 일은 전혀 하지 못합니다.
+
+	대비적으로 RCU 읽기 쓰레드들은 동시의 RCU 업데이트 쓰레드들의 존재에도
+	불구하고 의미있는 일을 행할 수 있습니다.
+
+	하지만, 레퍼런스 카운터와
+	(Section~\ref{sec:defer:Reference Counting})
+	해저드 포인터는
+	(Section~\ref{sec:defer:Hazard Pointers})
+	정말로 의미있는 동시의 진행을 업데이트 쓰레드와 읽기 쓰레드 모두에게
+	가능하게 하지만, 어떤 더 큰 비용을 요구할 뿐입니다.
+	이런 지연된 메모리 회수 문제의 다른 해결책들을 비교하기 위해선
+	Section~\ref{sec:defer:Which to Choose?}
+	을 참고하시기 바랍니다.
+
+	\iffalse
+
 	Yes and no.
 	Although seqlock readers can run concurrently with
 	seqlock writers, whenever this happens, the \co{read_seqretry()}
@@ -1129,7 +1175,29 @@ updaters from making useful concurrent forward progress.
 	Section~\ref{sec:defer:Which to Choose?}
 	for a comparison of these different solutions to the
 	deferred-reclamation problem.
+
+	\fi
+
 }\QuickQuizEnd
+
+RCU 는 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 기능을 이용해 읽기
+쓰레드들의 범위를 지정하고 객체들의 여러 버전을 관리해 각 읽기 쓰레드가 각
+객체의 일관적인 모습을 볼 것을 보장해 주고 \co{synchronize_rcu()} 와 같은
+업데이트 쪽 기능들을 이용해  객체들이 그것들을 사용하고 있을 수 있는 모든 읽기
+쓰레드들이 완료되기 전까지는 메모리 해제되지 않게 보장합니다.
+RCU 는 객체의 새로운 버전을 게재하고 읽기 위한 효율적이고 확장성 있는
+메커니즘을 제공하기 위해 \co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 를
+사용합니다.
+이 메커니즘들은 해저드 포인터와 유사한 복사와 규칙 완화 최적화를 사용하지만
+읽기 쪽 재시도는 없게 하여 읽기 경로는 극단적으로 빠르게 하면서 일거리를 읽기
+쪽과 쓰기쪽으로 나눕니다.
+\co{CONFIG_PREEMPT=n} 리눅스 커널을 포함한 어떤 경우에는 RCU 의 읽기 쪽
+기능들은 오버헤드를 아예 갖지 않습니다.
+
+하지만 이 속성이 실제 상황에서도 유용할까요?
+이 질문이 다음 섹션에서 답해집니다.
+
+\iffalse
 
 RCU delimits readers with \co{rcu_read_lock()} and \co{rcu_read_unlock()},
 and ensures that each reader has a coherent view of each object
@@ -1149,6 +1217,8 @@ RCU's read-side primitives have zero overhead.
 
 But are these properties actually useful in practice?
 This question is taken up by the next section.
+
+\fi
 
 \subsubsection{Practical Applicability}
 \label{sec:defer:Practical Applicability}
