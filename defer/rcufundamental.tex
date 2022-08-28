@@ -53,6 +53,18 @@ summarizes RCU fundamentals.
 \subsubsection{Publish-Subscribe Mechanism}
 \label{sec:defer:Publish-Subscribe Mechanism}
 
+RCU 읽기 쓰레드들은 RCU 업데이트 쓰레드들로부터 배제되지 않기 때문에, RCU 로
+보호되는 데이터 구조는 읽기 쓰레드가 그것을 액세스 하고 있는 동안에도 변경될
+수도 있습니다.
+이 액세스된 데이터 항목은 옮겨졌거나, 삭제되었거나, 교체되었을 수도 있습니다.
+이 데이터 구조는 읽기 쓰레드가 존재하는 동안 ``기다려주지'' 않기 때문에, 각
+읽기 쓰레드의 액세스는 이 RCU 로 보호되는 데이터 항목의 현재 버전을 구독하고
+있는 것으로 생각될 수 있습니다.
+이에 대해 업데이트 쓰레드의 동작은 새로운 버전을 게재하는 것으로 생각될 수
+있습니다.
+
+\iffalse
+
 Because RCU readers are not excluded by RCU updaters, an RCU-protected
 data structure might change while a reader accesses it.
 The accessed data item might be moved, removed, or replaced.
@@ -60,6 +72,8 @@ Because the data structure does not ``hold still'' for the reader,
 each reader's access can be thought of as subscribing to the current
 version of the RCU-protected data item.
 For their part, updaters can be thought of as publishing new versions.
+
+\fi
 
 % @@@ Merge usage section into "Which to Choose?" and suggest choices.
 % @@@ Should "RCU Exercises" move to "RCU Rescues"?
@@ -70,6 +84,29 @@ For their part, updaters can be thought of as publishing new versions.
 \caption{Publication/Subscription Constraints}
 \label{fig:defer:Publication/Subscription Constraints}
 \end{figure}
+
+불행히도,
+Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
+에서 이야기 되었고
+Section~\ref{sec:defer:Minimal Insertion and Deletion}
+에서 반복해 이야기 되었듯, 이런 게재와 구독 오퍼레이션에 평범한 액세스를
+사용하는 것은 현명치 못합니다.
+그 대신 컴파일러와 CPU 모두에게 주의를 요함을 알릴 필요가 있는데,
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers} 의
+\co{ins_route()} (와 그 호출자) 와 \co{read_gptr()} 이 동시에 수행될 때의
+상호작용을 그린
+Figure~\ref{fig:defer:Publication/Subscription Constraints} 이 이를 잘 보이고
+있습니다.
+
+Figure~\ref{fig:defer:Publication/Subscription Constraints}
+의 \co{ins_route()} 행은 초기화 전의 쓰레기 값을 갖는 새 \co{route} 구조체를
+메모리 할당하는, \co{ins_route()} 의 호출자를 보입니다.
+이 호출자는 이어서 새로 할당된 구조체를 초기화 하고, 이 새로운 \co{route}
+구조체로의 포인터를 게재하는 \co{ins_route()} 를 호출합니다.
+게재는 이 구조체의 내용에 영향을 끼치지 않으며, 따라서 게재 후에도 유효한 것이
+됩니다.
+
+\iffalse
 
 Unfortunately, as laid out in
 Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans}
@@ -94,6 +131,26 @@ structure.
 Publication does not affect the contents of the structure, which
 therefore remain valid after publication.
 
+\fi
+
+이 그림의 \co{access_route()} 행은 구독되고 역참조되는 포인터를 보입니다.
+이 역참조 오퍼레이션은 당연히 초기화 전의 쓰레기값이 아닌 유효한 \co{route}
+구조체를 봐야 하는데 쓰레기 값을 역참조 하는 것은 메모리 오염, 시스템 깨짐,
+그리고 시스템 정지를 유발할 수 있기 때문입니다.
+앞에서 이야기 되었듯, 그런 쓰레기 값을 방지하는 것은 게재와 구독 오퍼레이션이
+컴파일러와 CPU 모두에게 필요한 순서를 지켜줄 것을 알려야 함을 의미합니다.
+
+게재는 \co{ins_route()} 의 호출자의 초기화가 실제 게재 오퍼레이션의 포인터 저장
+전으로 순서지어질 것을 보장하는 \co{rcu_assign_pointer()} 에 의해 수행됩니다.
+또한, \co{rcu_assign_pointer()} 는 동시의 읽기 쓰레드가 이 포인터의 기존 값이나
+새 값만 보지, 이 두 값의 어떤 결합된 형태를 보지는 않는다는 의미로 어토믹해야만
+합니다.
+이 요구사항들은 C11 의 store-release 오퍼레이션에 의해 지켜지며, 실제로 리눅스
+커널에서 \co{rcu_assign_pointer()} 는 C11 의 store-release 와 비슷한
+\co{smp_store_release()} 를 사용해 정의됩니다.
+
+\iffalse
+
 The \co{access_route()} column from this same figure shows
 the pointer being subscribed to and dereferenced.
 This dereference operation absolutely must see a valid \co{route}
@@ -112,6 +169,8 @@ value of the pointer, but not some mash-up of these two values.
 These requirements are met by the C11 store-release operation, and in
 fact in the Linux kernel, \co{rcu_assign_pointer()} is defined in terms
 of \co{smp_store_release()}, which is similar to C11 store-release.
+
+\fi
 
 Note that if concurrent updates are required, some sort of synchronization
 mechanism will be required to mediate among multiple concurrent
