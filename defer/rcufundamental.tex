@@ -172,6 +172,18 @@ of \co{smp_store_release()}, which is similar to C11 store-release.
 
 \fi
 
+동시의 업데이트들이 필요하다면 같은 포인터로의
+동시적인\co{rcu_assign_pointer()} 호출을 중재하기 위해 어떤 종류의 동기화
+메커니즘이 필요함을 알아두시기 바랍니다.
+리눅스 커널에서, 락킹은 그러기 위해 선택됩니다만, 어떤 동기화 메커니즘이든
+사용될 수 있습니다.
+특히 가벼운 동기화 메커니즘의 예는
+Chapter~\ref{chp:Data Ownership} 의 데이터 소유권입니다: 각 포인터가 특정
+쓰레드에 의해 소유된다면, 해당 쓰레드는 해당 포인터로의
+\co{rcu_assign_pointer()} 를 추가적인 동기화 오버헤드 없이 수행할 수 있습니다.
+
+\iffalse
+
 Note that if concurrent updates are required, some sort of synchronization
 mechanism will be required to mediate among multiple concurrent
 \co{rcu_assign_pointer()} calls on the same pointer.
@@ -183,11 +195,31 @@ owned by a particular thread, then that thread may execute
 \co{rcu_assign_pointer()} on that pointer with no additional
 synchronization overhead.
 
+\fi
+
 \QuickQuiz{
+	RCU 업데이트 쓰레드를 위한 데이터 소유권의 사용은 이 업데이트들이
+	연관된 단일쓰레드 기반 코드의 것과 정확히 같은 명령들을 사용해 수행될
+	수 있음을 의미하지 않나요?
+
+	\iffalse
+
 	Wouldn't use of data ownership for RCU updaters mean that
 	the updates could use exactly the same sequence of instructions
 	as would the corresponding single-threaded code?
+
+	\fi
+
 }\QuickQuizAnswer{
+	어떤 경우들, 예를 들면 x86 이나 IBM 메인프레임과 같이 store-release
+	오퍼레이션이 하나의 스토어 명령만을 만들어내는 TSO 시스템에서라면요.
+	하지만, 완화된 순서 규칙의 시스템들은 메모리 배리어나 어쩌면
+	store-releae 명령을 수행해야 합니다.
+	또한, 데이터를 제거하는 것은 이 데이터 제거 전에 앞서서부터 존재해온
+	읽기 쓰레드들을 기다려야 하므로 상당한 추가적 일을 필요로 합니다.
+
+	\iffalse
+
 	Sometimes, for example, on TSO systems such as x86 or the IBM
 	mainframe where a store-release operation emits a single store
 	instruction.
@@ -196,7 +228,37 @@ synchronization overhead.
 	In addition, removing data requires quite a bit of additional
 	work because it is necessary to wait for pre-existing readers
 	before freeing the removed data.
+
+	\fi
+
 }\QuickQuizEnd
+
+구독은 해당 포인터의 읽기가 역참조보다 먼저 수행될 것을 순서잡는
+\co{rcu_dereference()} 에 의해 수행됩니다.
+\co{rcu_assign_pointer()} 와 비슷하게, \co{rcu_dereference()} 는 읽혀진 값이
+하나의 스토어에 의해서 만들어진 것이어야 한다는 점에서 원자적이어야 하는데,
+예를 들어, 컴파일러는 이 읽기를 쪼개 수행하지 않아야 합니다.\footnote{
+	즉, 컴파일러는 이 로드를
+	Section~\ref{sec:toolsoftrade:Shared-Variable Shenanigans} 의 ``load
+	tearing (로드 찢기)'' 로 설명된 것처럼 여러개의 작은 로드로 쪼개선
+	안됩니다.}
+불행히도, 컴파일러의 \co{rcu_dereference()} 지원은 여전히
+작업중입니다~\cite{PaulEMcKennneyConsumeP0190R4,PaulEMcKenney2017markconsumeP0462R1,JFBastien2018P0750R1consume}.
+그 중에는 리눅스 커널은 volatile 로드, 다양한 CPU 아키텍쳐의 세부 사항, 코딩
+제약~\cite{PaulEMcKenney2014rcu-dereference} 에, 그리고 DEC
+Alpha~\cite{ALPHA2002} 의 경우에는 메모리 배리어 인스트럭션에 의존해야 합니다.
+하지만, 다른 아키텍쳐에서는 \co{rcu_dereference()} 가 하나의 로드
+인스트럭션만을 만들어 내어서, 동일한 단일쓰레드 기반 코드와 같아집니다.
+코딩 제약은
+Section~\ref{sec:memorder:Address- and Data-Dependency Difficulties}
+에서 자세히 다루어집니다만, 필드 선택 (\qtco{->}) 의 흔한 경우가 잘 동작합니다.
+읽기 쪽 궁극적 성능을 필요로 하지 않는 소프트웨어라면 그 대신 비용이 있긴
+하지만 필요한 순서 규칙을 제공하는 C11 acquire load 를 대신 사용할 수도
+있습니다.
+조만간 \co{rcu_dereference()} 의 더 가벼운 컴파일러 지원이 나오길 많은 사람들이
+바라고 있습니다.
+
+\iffalse
 
 Subscription is carried out by \co{rcu_dereference()}, which orders
 the subscription operation's load from the pointer is before the
@@ -225,6 +287,17 @@ more, albeit at a cost.
 It is hoped that lighter-weight compiler support for \co{rcu_dereference()}
 will appear in due course.
 
+\fi
+
+요약하자면, 포인터의 게재를 위한 \co{rcu_assign_pointer()} 의 사용과 그것을
+구독하기 위한 \co{rcu_dereference()} 의 사용은
+Figure~\ref{fig:defer:Publication/Subscription Constraints}
+에 그려진 ``Not OK'' 쓰레기 읽기를 방지합니다.
+따라서 이 두개의 기능은 동기의 읽기를 망치지 않으면서 연결된 구조체들에 새
+데이터를 추가할 수 있습니다.
+
+\iffalse
+
 In short, use of \co{rcu_assign_pointer()} for publishing pointers and
 use of \co{rcu_dereference()} for subscribing to them successfully avoids the
 ``Not OK'' garbage loads depicted in
@@ -232,7 +305,22 @@ Figure~\ref{fig:defer:Publication/Subscription Constraints}.
 These two primitives can therefore be used to add new data to linked
 structures without disrupting concurrent readers.
 
+\fi
+
 \QuickQuiz{
+	하지만 어떤 읽기 쓰레드가 어떤 링크드 리스트를 순회하는 동안 업데이트
+	쓰레드들이 여러 데이터 아이템들을 이 리스트에 넣고 빼고 있다고 생각해
+	봅시다.
+	특히, 이 리스트가 초기에는 원소 A, B, 그리고~C 를 가지고 있고 어느
+	업데이트 쓰레드가 원소 A 를 삭제하고 이어서 새 원소 D 를 이 리스트의
+	끝에 추가했다고 해 봅시다.
+	읽기 쓰레드는 \{A, B, C, D\} 를 볼 수 있는데, 그런 원소의 연속은 실제로
+	존재한 적이 없는 것입니다!
+	어떤 대안적 우주에서는 그게 ``동시의 읽기 쓰레드를 방해하지 않는다''
+	라고 여겨집니까???
+
+	\iffalse
+
 	But suppose that updaters are adding and removing multiple data
 	items from a linked list while a reader is iterating over that
 	same list.
@@ -243,7 +331,25 @@ structures without disrupting concurrent readers.
 	elements never actually ever existed!
 	In what alternate universe would that qualify as ``not disrupting
 	concurrent readers''???
+
+	\fi
+
 }\QuickQuizAnswer{
+	순회하는 읽기 쓰레드가 순회의 전체 기간을 통틀어 존재한 원소들만 순회할
+	필요가 있는 우주에서요.
+	이 예에서, 그건 원소 B 와~C 일 겁니다.
+	원소 A 와~D 는 이 순회의 각 부분에서만 존재했으므로, 이 읽기 쓰레드는
+	그것들을 순회할 수 있게 허용되지만, 강요당하지는 않습니다.
+	이는 읽기 쓰레드가 그저 단일 항목을 탐색하고 있는, 다른 항목들의 존재나
+	부재를 신경쓰지 않는 일반적인 경우를 지원함을 알아두시기 바랍니다.
+
+	더 강력한 일관성이 필요하다면, 더 높은 비용의 동기화 메커니즘들이
+	필요한데, 예를 들면 sequence 락킹이나 reader-writer 락킹입니다.
+	하지만 더 강한 일관성이 필요하지 \emph{않다면} (그리고 아주 많은 경우에
+	그렇습니다), 왜 더 높은 비용을 냅니까?
+
+	\iffalse
+
 	In the universe where an iterating reader is only required to
 	traverse elements that were present throughout the full duration
 	of the iteration.
@@ -260,13 +366,25 @@ structures without disrupting concurrent readers.
 	locking or reader-writer locking.
 	But if stronger consistency is \emph{not} required (and it very often
 	is not), then why pay the higher cost?
+
+	\fi
+
 }\QuickQuizEnd
+
+읽기 쓰레드들을 방해하지 않으면서 연결된 구조에 데이터를 추가하는 것은 좋은
+일입니다, 이는 싱글쓰레드 기반 읽기 쓰레드에 비해 추가적인 읽기쪽 비용을 높이지
+않으면서도 행해질 수 있으니까요.
+하지만, 많은 경우에 데이터의 삭제도 필요한데, 이게 다음 섹션의 주제입니다.
+
+\iffalse
 
 Adding data to a linked structure without disrupting readers is a good thing,
 as are the cases where this can be done with no added read-side cost compared
 to single-threaded readers.
 However, in most cases it is also necessary to remove data, and this is the
 subject of the next section.
+
+\fi
 
 \subsubsection{Wait For Pre-Existing RCU Readers}
 \label{sec:defer:Wait For Pre-Existing RCU Readers}
