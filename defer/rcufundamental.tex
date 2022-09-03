@@ -389,6 +389,16 @@ subject of the next section.
 \subsubsection{Wait For Pre-Existing RCU Readers}
 \label{sec:defer:Wait For Pre-Existing RCU Readers}
 
+그 가장 기본적인 형태에서, RCU 는 일이 끝나길 기다리는 방법입니다.
+물론, 일이 끝나길 기다리기 위한 수많은 다른 방법들이 존재하는데, 레퍼런스
+카운팅, reader-writer 락, 디벤트, 등등이 포함됩니다.
+RCU 의 큰 장점은 (대충 말하자면) 20,000 개의 다른 것들을 명시적으로 그것들
+각자를 추적할 필요 없이, 그리고 명시적 추적 방식에서는 피할 수 없는 성능 하락,
+확장성 한계, 복잡한 데드락 시나리오, 그리고 메모리 누수 문제 없이 할 수 있다는
+것입니다.
+
+\iffalse
+
 In its most basic form, RCU is a way of waiting for things to finish.
 Of course, there are a great many other ways of waiting for things to
 finish, including reference counts, reader-writer locks, events, and so on.
@@ -398,6 +408,25 @@ track each and every one of them, and without having to worry about
 the performance degradation, scalability limitations, complex deadlock
 scenarios, and memory-leak hazards that are inherent in schemes
 using explicit tracking.
+
+\fi
+
+RCU 의 경우, 기다려야 하는 것들 각각은 \emph{RCU 읽기 크리티컬 섹션} 이라고
+불립니다.
+Section~\ref{sec:defer:Toy Implementation} 에서 힌트가 주어진 것처럼, RCU 읽기
+크리티컬 섹션은 \co{rcu_read_lock()} 기능으로 시작하고 연관된
+\co{rcu_read_unlock()} 기능으로 완료됩니다.
+RCU 읽기 크리티컬 섹션은 중첩될 수 있고, quiescent state 를 포함하지
+않는다면 얼만큼의 코드든 포함할 수 있는데, 예를 들어 리눅스 커널에서는 컨텍스트
+스위치가 하나의 quiescent state 이기 때문에 RCU 읽기 크리티컬 섹션 내에서
+잠드는 게 불법입니다.\footnote{
+	하지만, SRCU~\cite{PaulEMcKenney2006c} 라 불리는 특수한 형태의 RCU 는
+	RCU 읽기 크리티컬 섹션 내에서의 일반적 잠들기를 허용합니다.}
+여러분이 이 규칙을 따른다면, 여러분은 앞서서부터 존재해온 RCU 읽기 크리티컬
+섹션을 \emph{얼마든지} 완료되길 기다릴 수 있으며, \co{synchronize_rcu()} 의
+사용이그런 실제 기다림을 합니다.
+
+\iffalse
 
 In RCU's case, each of the things waited on is called an
 \emph{RCU read-side critical section}.
@@ -417,12 +446,29 @@ pre-existing RCU read-side critical section to complete, and
 \co{synchronize_rcu()} uses indirect means to do the actual
 waiting~\cite{MathieuDesnoyers2012URCU,McKenney:2013:SDS:2483852.2483867}.
 
+\fi
+
 \begin{figure}[tbp]
 \centering
 \resizebox{3in}{!}{\includegraphics{defer/RCUGuaranteeFwd}}
 \caption{RCU Reader and Later Grace Period}
 \label{fig:defer:RCU Reader and Later Grace Period}
 \end{figure}
+
+RCU 읽기 크리티컬 섹션과 뒤따르는 RCU grace period 사이의 관계는
+Figure~\ref{fig:defer:RCU Reader and Later Grace Period} 에 그려진 것처럼
+만약-그렇다면 관계입니다.
+어떤 크리티컬 섹션의 어떤 부분이든 주어진 grace period 의 시작을 앞섰다면, RCU
+는 그 크리티컬 섹션 전체가 이 grace period 의 끝을 앞설 것을 보장합니다.
+이 그림에서, \co{P0()} 의 \co{x} 로의 액세스는 \co{P1()} 의 이 변수로의
+액세스를 앞서며, 따라서 이 \co{P1()} 의 \co{synchronize_rcu()} 호출로 만들어진
+grace period 역시 앞섭니다.
+따라서 \co{P0()} 의 \co{y} 로의 액세스 역시 \co{P1()} 의 액세스를 앞설 것이
+보장됩니다.
+이 경우, \co{r1} 의 마지막 값이 0이라면, \co{r2} 의 마지막 값은 0일 것이
+보장됩니다.
+
+\iffalse
 
 The relationship between an RCU read-side critical section and a later
 RCU grace period is an if-then relationship, as illustrated by
@@ -438,15 +484,32 @@ It is therefore guaranteed that \co{P0()}'s access to \co{y} will precede
 In this case, if \co{r1}'s final value is 0, then \co{r2}'s final value
 is guaranteed to also be 0.
 
+\fi
+
 \QuickQuiz{
+	\co{r1} 과 \co{r2} 의 어떤 다른 마지막 값이
+	Figure~\ref{fig:defer:RCU Reader and Later Grace Period} 에서
+	가능한가요?
+
 	What other final values of \co{r1} and \co{r2} are possible in
 	Figure~\ref{fig:defer:RCU Reader and Later Grace Period}?
 }\QuickQuizAnswer{
+	\co{r1 == 0 && r2 == 0} 가능성이 책에서 이야기 되었습니다.
+	\co{r1 == 0} 가 \co{r2 == 0} 를 의미함을 생각하면, \co{r1 == 0 && r2 ==
+	1} 은 불가함을 알 수 있습니다.
+	뒤이은 부분에선 \co{r1 == 1 && r2 == 1} 과 \co{r1 == 1 && r2 == 0} 가
+	가능함을 보이겠습니다.
+
+	\iffalse
+
 	The \co{r1 == 0 && r2 == 0} possibility was called out in the text.
 	Given that \co{r1 == 0} implies \co{r2 == 0}, we know that
 	\co{r1 == 0 && r2 == 1} is forbidden.
 	The following discussion will show that both
 	\co{r1 == 1 && r2 == 1} and \co{r1 == 1 && r2 == 0} are possible.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -455,6 +518,21 @@ is guaranteed to also be 0.
 \caption{RCU Reader and Earlier Grace Period}
 \label{fig:defer:RCU Reader and Earlier Grace Period}
 \end{figure}
+
+RCU 읽기 크리티컬 섹션과 그 앞의 RCU grace period 사이의 관계 또한
+Figure~\ref{fig:defer:RCU Reader and Earlier Grace Period} 에 그려진 것과 같은
+만약-그렇다면 관계입니다.
+특정 크리티컬 섹션의 어떤 부분이든 특정 grace period 의 종료를 뒤따른다면, RCU
+는 이 크리티컬 섹션 전체가 이 grace period 의 시작을 뒤따를 것을 보장합니다.
+이 그림에서, \co{P0} 의 \co{y} 로의 액세스는 \co{P1()} 의 해당 변수로의
+액세스를 뒤따르며, 따라서 \co{P1()} 의 \co{synchronize_rcu()} 호출로 생성된
+grace period 를 뒤따릅니다.
+따라서 \co{P0()} 의 \co{x} 로의 액세스는 \co{P1()} 의 액세스를 뒤따를 것이
+보장됩니다.
+이 경우, \co{r2} 의 마지막 값이 1이라면, \co{r1} 의 마지막 값은 1이 될 것이
+보장됩니다.
+
+\iffalse
 
 The relationship between an RCU read-side critical section and an earlier
 RCU grace period is also an if-then relationship, as illustrated by
@@ -469,15 +547,35 @@ It is therefore guaranteed that \co{P0()}'s access to \co{x} will follow
 \co{P1()}'s access.  In this case, if \co{r2}'s final value is 1, then
 \co{r1}'s final value is guaranteed to also be 1.
 
+\fi
+
 \QuickQuiz{
+	\Cref{fig:defer:RCU Reader and Earlier Grace Period} 에서 \co{P0()} 의
+	두 액세스가 반대 순서로 이루어지면 어떻게 될까요?
+
+	\iffalse
+
 	What would happen if the order of \co{P0()}'s two accesses was
 	reversed in
 	\cref{fig:defer:RCU Reader and Earlier Grace Period}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	분명 아무 일도 일어나지 않습니다.
+	\co{P0()} 의 \co{x} 와 \co{y} 의 로드가 같은 RCU 읽기 크리티컬 섹션에서
+	이루어진다는 것으로 충분합니다;
+	그것들 사이의 순서는 관계없습니다.
+
+	\iffalse
+
 	Absolutely nothing would change.
 	The fact that \co{P0()}'s loads from \co{x} and \co{y} are
 	in the same RCU read-side critical section suffices;
 	their order is irrelevant.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -486,6 +584,29 @@ It is therefore guaranteed that \co{P0()}'s access to \co{x} will follow
 \caption{RCU Reader Within Grace Period}
 \label{fig:defer:RCU Reader Within Grace Period}
 \end{figure}
+
+마지막으로,
+Figure~\ref{fig:defer:RCU Reader Within Grace Period} 에 보인 것과 같이, RCU
+읽기 크리티컬 섹션은 RCU grace period 에 완전히 겹쳐질 수 있습니다.
+이 경우, \co{r1} 의 마지막 값은 1 이고 \co{r2} 의 마지막 값은 0일 수 있습니다.
+
+하지만, \co{r1} 의 마지막 값은 0 인데 \co{r2} 의 마지막 값은 1일 수는 없습니다.
+이는 RCU 읽기 크리티컬 섹션이 하나의 grace period 를 완전히 겹쳤다는 것인데,
+이는 불가능합니다 (또는 최소한 RCU 의 버그를 의미합니다).
+RCU 의 읽기 쓰레드 기다리기 보장은 따라서 두개의 부분으로 이루어집니다:
+(1)~만약 어떤 RCU 읽기 크리티컬 섹션의 어떤 부분이든 특정 grace period 의
+시작을 앞선다면, 이 크리티컬 섹션의 모든 부분이 이 grace period 의 종료를
+앞서게 된다.
+(2)~만약 어떤 RCU 읽기 크리티컬 섹션의 어떤 부분이든 어떤 grace period 의 끝을
+뒤따른다면, 이 크리티컬 섹션의 모든 부분이 이 grace period 의 시작을 뒤따른다.
+이 정의는 거의 모든 RCU 기반 알고리즘에 충분합니다만 이보다 더 많은 걸 원하는
+분을 위해 RCU 의 수행 가능한 정형적 모델이 리눅스 커널 v4.17 과 그 다음
+버전들에서 가능한데, 
+Section~\ref{sec:formal:Axiomatic Approaches and RCU} 에서 다뤄집니다.
+또한, RCU 의 순서 강제 기능들이 훨씬 자세하게 Section~\ref{sec:memorder:RCU}
+에서 다뤄집니다.
+
+\iffalse
 
 Finally, as shown in
 Figure~\ref{fig:defer:RCU Reader Within Grace Period},
@@ -512,6 +633,8 @@ as part of Linux kernel v4.17 and later, as discussed in
 Section~\ref{sec:formal:Axiomatic Approaches and RCU}.
 In addition, RCU's ordering properties are examined in much
 greater detail in Section~\ref{sec:memorder:RCU}.
+
+\fi
 
 \QuickQuiz{
 	What would happen if \co{P0()}'s accesses in
