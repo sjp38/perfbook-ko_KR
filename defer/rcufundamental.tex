@@ -637,10 +637,40 @@ greater detail in Section~\ref{sec:memorder:RCU}.
 \fi
 
 \QuickQuiz{
+	\Crefrange{fig:defer:RCU Reader and Later Grace Period}{fig:defer:RCU Reader Within Grace Period}
+	의 \co{P0()} 의 액세스들이 스토어였다면 무슨 일이 일어날까요?
+
+	\iffalse
+
 	What would happen if \co{P0()}'s accesses in
 	\crefrange{fig:defer:RCU Reader and Later Grace Period}{fig:defer:RCU Reader Within Grace Period}
 	were stores?
+
+	\fi
+
 }\QuickQuizAnswer{
+	정확히 동일한 순서 규칙이 적용되는데, 즉, (1)~만약 \co{P0()} 의 RCU
+	읽기 크리티컬 섹션이 \co{P1()} 의 grace priod 의 시작을 앞섰다면,
+	\co{P0()} 의 RCU 읽기 크리티컬 섹션의 모든 부분이 \co{P1()} 의 grace
+	period 의 끝을 앞서게 되며, (2)~만약 \co{P0()} 의 RCU 읽기 크리티컬
+	섹션의 어떤 부분이 \co{P1()} 의 grace period 의 종료를 뒤따랐다면,
+	\co{P0()} 의 RCU 읽기 크리티컬 섹션의 모든 부분이 \co{P1()} 의 grace
+	period 의 시작을 뒤따릅니다.
+
+	쓰기를 포함하는 RCU 읽기 크리티컬 섹션은 좀 이상해 보일수도 있겠지만,
+	RCU 는 그래도 괜찮습니다.
+	이 능력은 리눅스 커널에서 빈번하게 사용되는데, 예를 들면 데이터
+	구조로의 레퍼런스나 락을 잡기 위해서입니다.
+	락이나 레퍼런스를 획득하는것은 메모리로의 어떤 쓰기를 초래하며, 이걸
+	RCU 읽기 크리티컬 섹션 내에서 해도 됩니다.
+
+	RCU 읽기 크리티컬 섹션이 쓰기를 갖는 것이 여전히 이상해 보인다면,
+	reader-writer 락킹의 읽기 크리티컬 섹션에서의 쓰기 사용 경우를 선보인
+	\cref{sec:count:Applying Exact Limit Counters}
+	를 다시 읽어보시기 바랍니다.
+
+	\iffalse
+
 	The exact same ordering rules would apply, that is,
 	(1)~If any part of \co{P0()}'s RCU read-side critical section
 	preceded the beginning of \co{P1()}'s grace period, all of
@@ -664,7 +694,28 @@ greater detail in Section~\ref{sec:memorder:RCU}.
 	\cref{sec:count:Applying Exact Limit Counters},
 	which presented a use case for writes in reader-writer locking
 	read-side critical sections.
+
+	\fi
+
 }\QuickQuizEnd
+
+RCU 의 읽기 쓰레드 기다리기 능력이
+\crefrange{fig:defer:RCU Reader and Later Grace Period}
+{fig:defer:RCU Reader Within Grace Period}
+에 보인 것처럼 변수에 값 할당을 하기 위해 정말로 사용된다고 해도,
+Section~\ref{sec:defer:Introduction to RCU} 에서 보인 것처럼 연결된
+구조체들에서 제거된 데이터 항목을 안전하게 메모리 해제하기 위해 더 빈번히
+사용됩니다.
+일반적인 프로세스는 다음의 수도코드로 그려집니다:
+
+\begin{enumerate}
+\item	변경을 가하는데, 예를 들면 링크드 리스트에서 원소를 제거합니다.
+\item	모든 앞서서부터 존재해온 RCU 읽기 크리티컬 섹션이 완료되기를 기다립니다
+	(예를 들면, \co{synchronize_rcu()} 를 통해서).
+\item	정리를 하는데, 예를 들면 앞서서 교체된 원소를 메모리 해제합니다.
+\end{enumerate}
+
+\iffalse
 
 Although RCU's wait-for-readers capability really is sometimes used to
 order the assignment of values to variables as shown in
@@ -683,12 +734,28 @@ The general process is illustrated by the following pseudocode:
 \item	Clean up, for example, free the element that was replaced above.
 \end{enumerate}
 
+\fi
+
 \begin{figure}[tbp]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{defer/RCUGPorderingSummary}}
 \caption{Summary of RCU Grace-Period Ordering Guarantees}
 \label{fig:defer:Summary of RCU Grace-Period Ordering Guarantees}
 \end{figure}
+
+이 더욱 추상화 된 절차는
+\crefrange{fig:defer:RCU Reader and Later Grace Period}
+{fig:defer:RCU Reader Within Grace Period} 보다 더욱 추상화 된 다이어그램을
+필요로 하는데, 특정 리트머스 테스트가 됩니다.
+어쨌건, RCU 구현은 RCU 업데이트와 RCU 읽기 크리티컬 섹션의 형태와 무관하게
+정확히 동작해야만 합니다.
+Figure~\ref{fig:defer:Summary of RCU Grace-Period Ordering Guarantees}
+가 네개의 가능한 시나리오를 시간이 위에서 아래로 흐르는 형태로 보이며 이 필요를
+충족합니다.
+각 시나리오에서, RCU 읽기 쓰레드는 왼쪽의 박스 더미로 표현되며 RCU 업데이트
+쓰레드는 오른쪽 더비로 표현됩니다.
+
+\iffalse
 
 This more abstract procedure requires a more abstract diagram than
 \crefrange{fig:defer:RCU Reader and Later Grace Period}
@@ -701,6 +768,29 @@ fills this need, showing the four possible scenarios, with time
 advancing from top to bottom within each scenario.
 Within each scenario, an RCU reader is represented by the left-hand
 stack of boxes and RCU updater by the right-hand stack.
+
+\fi
+
+첫번째 시나리오에서 읽기 쓰레드는 업데이트 쓰레드가 삭제를 시작하기 전에 수행을
+시작하며, 따라서 이 읽기 쓰레드가 제거된 데이터 원소로의 레퍼런스를 가질 수
+있습니다.
+따라서, 이 업데이트 쓰레드는 이 원소를 이 읽기 쓰레드가 완료되기 전까지 메모리
+해제하지 않아야 합니다.
+두번째 시나리오에서 읽기 쓰레드는 이 제거가 완료되기 전까지 시작하지 않습니다.
+이 읽기 쓰레드는 이미 제거된 데이터 원소로의 레퍼런스를 얻을 수 없으며, 따라서
+이 원소는 이 읽기 쓰레드가 완료되기 전에 메모리 해제되어도 됩니다.
+세번째 시나리오는 두번째와 같지만 언제 이 읽기 쓰레드가 이 원소로의 레퍼런스를
+얻을 수 없는지, 여전이 이 읽기 쓰레드가 완료될 때까지 이 원소의 메모리 해제를
+미뤄도 괜찮은지 보입니다.
+네번째 마지막 시나리오에서는 이 읽기 쓰레드가 업데이트 쓰레드가 이 데이터
+원소를 제거하기 전에 시작하지만 이 원소는 이 읽기 쓰레드가 완료되기 전에
+(올바르지 못하게) 메모리 해제됩니다.
+이 다이어그램은 따라서 RCU 의 읽기 쓰레드 기다리기 기능을 그립니다:
+grace period 가 주어졌을 때, 각 읽기 쓰레드는 이 grace period 의 종료 전에
+종료되며, 이 grace period 의 시작 후에 시작되거나 둘 다인데 이 grace period
+내에 전체 크리티컬 섹션이 포함되는 경우입니다.
+
+\iffalse
 
 In the first scenario, the reader starts execution before the
 updater starts the removal, so it is possible that this reader
@@ -725,9 +815,19 @@ Given a grace period, each reader ends before the end of that grace
 period, starts after the beginning of that grace period, or both, in
 which case it is wholly contained within that grace period.
 
+\fi
+
+RCU 읽기 쓰레드는 업데이트가 진행중인 동안에도 진행을 할 수 있으므로, 다른 읽기
+쓰레드는 이 데이터 구조의 상태에 대해 다른 해석을 할 수 있는데, 다음 섹션에서
+이 주제를 다룹니다.
+
+\iffalse
+
 Because RCU readers can make forward progress while updates
 are in progress, different readers might disagree about the state
 of the data structure, a topic taken up by the next section.
+
+\fi
 
 \subsubsection{Maintain Multiple Versions of Recently Updated Objects}
 \label{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
