@@ -832,6 +832,29 @@ of the data structure, a topic taken up by the next section.
 \subsubsection{Maintain Multiple Versions of Recently Updated Objects}
 \label{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
 
+이 섹션은 RCU 가 여러 버전의 데이터를 관리함으로써 어떻게 동기화로부터 자유로운
+읽기 쓰레드를 수용하는지 이야기 합니다.
+이 이야기는 \co{del_route()} 와 동시에 수행되는 읽기 쓰레드들이
+(Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers} 을
+참고하세요) 오래된 \co{route} 구조체 또는 빈 리스트를 볼 수도 있지만 어느 쪽이든
+유효한 결과를 얻게 되는,
+Section~\ref{sec:defer:Minimal Insertion and Deletion} 의
+Figure~\ref{fig:defer:Deletion With Concurrent Readers} 에 의한 복수 버전의
+소개로부터 시작합니다.
+물론,
+Figure~\ref{fig:defer:Insertion With Concurrent Readers}
+를 자세히 보면 \co{ins_route()} 호출은 역시 동시의 읽기 쓰레드들이 다른
+버전들을 보게 할 수 있음을 알 수 있습니다: 초기의 빈 리스트 또는 새로이 삽입된
+\co{route} 구조체.
+레퍼런스 카운팅
+(Section~\ref{sec:defer:Reference Counting})
+과 해저드 포인터
+(Section~\ref{sec:defer:Hazard Pointers})
+둘 다 동시의 읽기 쓰레드들이 다른 버전을 보게 할 수 있지만, RCU 의 가벼운 읽기
+쓰레드는 이를 더욱 그럴 수 있게 합니다.
+
+\iffalse
+
 This section discusses how RCU accommodates synchronization-free readers
 by maintaining multiple versions of data.
 This discussion builds on the introduction of multiple versions by
@@ -854,12 +877,38 @@ and hazard pointers
 can also cause concurrent readers to see different versions, but
 RCU's lightweight readers make this more likely.
 
+\fi
+
 \begin{figure}[tbp]
 \centering
 \resizebox{3in}{!}{\includegraphics{defer/multver}}
 \caption{Multiple RCU Data-Structure Versions}
 \label{fig:defer:Multiple RCU Data-Structure Versions}
 \end{figure}
+
+하지만, 복수의 버전을 유지하는 것은 더욱 놀라울 수 있습니다.
+예를 들어,
+읽기 쓰레드가 동시에 업데이트 되는 링크드 리스트를 순회하는 읽기 쓰레드가 있는
+Figure~\ref{fig:defer:Multiple RCU Data-Structure Versions} 를 생각해
+봅시다.\footnote{
+	RCU 링크드 리스트 API 는
+	Section~\ref{sec:defer:RCU Linux-Kernel API} 에서 찾을 수 있습니다.}
+이 그림의 첫번째 열에서, 읽기 쓰레드는 데이터 아이템~A 를 참조하고, 두번째
+줄에서는 B 로 넘어가서, 지금까지 B 가 뒤따르는 A 를 봤습니다.
+세번째 줄에서는, 업데이트 쓰레드가 원소~A 를 제거하고 네번째 줄에서 업데이트
+쓰레드가 이 리스트의 끝에 원소~E 를 추가합니다.
+마지막 다섯번째 줄에서는 읽기 쓰레드가 순회를 완료해서 원소~A 부터~E 까지를
+모두 봤습니다.
+
+그런 리스트가 존재한 적은 없었다는 제외하면 말입니다.
+이 상황은 다른 동시의 읽기 쓰레드가 다른 버전들을 보게 되는
+Figure~\ref{fig:defer:Deletion With Concurrent Readers} 에 보인 상황보다도 더
+놀라울 수도 있습니다.
+대조적으로,
+Figure~\ref{fig:defer:Multiple RCU Data-Structure Versions}
+에서 읽기 쓰레드는 실제로는 존재한 적이 없는 버전을 보는 것입니다!
+
+\iffalse
 
 However, maintaining multiple versions can be even more surprising.
 For example, consider
@@ -883,6 +932,22 @@ In contrast, in
 Figure~\ref{fig:defer:Multiple RCU Data-Structure Versions}
 the reader sees a version that never actually existed!
 
+\fi
+
+이 이상한 상황을 해결하는 한가지 방법은 완화된 의미론을 사용하는 것입니다.
+읽기 쓰레드의 순회는 전체 순회 동안 존재한 모든 데이터 항목을 만날 수 있어야
+하며 (B, C, 그리고~D), 그 순회의 한 부분 동안에만 존재한 데이터 항목은 볼수도
+못볼수도 있습니다.
+따라서, 이 특정 경우에는, 읽기 쓰레드의 순회가 이 모든 다섯개 원소를 만나는 게
+완전히 합법적입니다.
+이 결과가 문제시 되다면, 이 상황을 해결하는 또다른 방법은 더 강력한 동기화
+메커니즘, 예를 들면 reader-writer 락킹이나 타임스탬프 또는 버저닝의 영리한
+사용을 사용하는 것입니다.
+물론, 더 강력한 메커니즘은 더 비용이 높을 것이지만, 그러면 또다시 이야기 하지만
+엔지니어링 삶은 모두 선택과 트레이드오프에 대한 것입니다.
+
+\iffalse
+
 One way to resolve this strange situation is via weaker semanitics.
 A reader traversal must encounter any data item that was present
 during the full traversal (B, C, and~D), and might or might not
@@ -895,6 +960,22 @@ through use of stronger synchronization mechanisms, such as reader-writer
 locking or clever use of timestamps or versioning.
 Of course, stronger mechanisms will be more expensive, but then again
 the engineering life is all about choices and tradeoffs.
+
+\fi
+
+이 상황은 이상하게 보일 수도 있겠으나, 이는 실제 세계와 완전하게 일관적입니다.
+Section~\ref{sec:cpu:Overheads} 에서 보았듯이, 빛의 유한한 속도는 컴퓨터
+시스템에서도 무시될 수 없으며, 이 시스템 바깥에서도 무시될 수 없는 것이 거의
+분명합니다.
+이는 결국 시스템 바깥의 실제 세계의 상태를 나타내는 시스템의 모든 데이터는 항상
+그리고 영원히 시간이 지나있을 것이며, 따라서 실제 세계와는 비일관적일 것임을
+의미합니다.
+그 결과, 실제 세계 데이터를 다루는 알고리즘은 비일관된 데이터를 처리해야만
+합니다.
+많은 경우, 이런 알고리즘은 시스템 내부의 비일관성을 처리하는 데에도 완전히
+기능할 것입니다.
+
+\iffalse
 
 Strange though this situation might seem, it is entirely consistent with
 the real world.
@@ -910,6 +991,20 @@ inconsistent data.
 In many cases, these algorithms are also perfectly capable of dealing
 with inconsistencies within the system.
 
+\fi
+
+Section~\ref{sec:defer:Running Example}
+에서 이야기 된 pre-BSD 패킷 라우팅 예가 그런 경우입니다.
+라우팅 리스트의 내용물은 라우팅 프로토콜에 의해 설정되며, 이 프로토콜은 라우팅
+비안정성을 막기 위해 상당한 지연을 (몇초 또는 심지어 몇분) 일으킵니다.
+따라서, 일단 라우팅 업데이트가 특정 시스템에 일단 가해지면, 패킷들을 한동안은
+잘못된 길로 보낼 수 있습니다.
+이 업데이트가 진행되는 중의 몇 마이크로세컨드 동안 패킷 몇개를 더 잘못된 길로
+보내는 것은 지연된 라우팅 업데이트를 처리하는 더 높은 단계의 똑같은 프로토콜
+동작이 내부의 비일관성도 처리할 것이기 때문에 분명 문제가 안됩니다.
+
+\iffalse
+
 The pre-BSD packet routing example laid out in
 Section~\ref{sec:defer:Running Example}
 is a case in point.
@@ -922,6 +1017,26 @@ Sending a few more packets the wrong way for the few microseconds during
 which the update is in flight is clearly not a problem because the same
 higher-level protocol actions that deal with delayed routing updates
 will also deal with internal inconsistencies.
+
+\fi
+
+비일관성을 감내해야 하는 것은 인터넷 라우팅만의 상황이 아닙니다.
+반복하지만, 시스템 바깥의 상태를 추적하는 시스템 내의 데이터를 처리하는 모든
+알고리즘은 비일관성을 감내해야 하는데, 보안 정책 (종종 사람으로 구성된 위원회에
+의해 설정됩니다), 저장장치 구성, WiFi 액세스 포인트, 마이크로폰, 헤드셋,
+카메라, 마우스, 프린터를 포함한 제거될 수 있는 하드웨어, 그 외에도 수많은
+것들이 포함됩니다.
+더욱이,
+Figure~\ref{fig:defer:RCU Usage in the Linux Kernel} 에 보인 많은 수의 리눅스
+커널 RCU API 사용은 리눅스 커널의 레퍼런스 카운팅의 많은 사용과 다른
+프로젝트에서의 증가되는 해저드 포인터 사용과 엮여서 그런 비일관성에 대한 감내는
+누군가가 상상할 수 있는 것보다 훨씬 더 일반적임을 보입니다.
+이는 특히 단일 항목 탐색이 순회보다 훨씬 더 흔하다는 것을 놓고 보면 그렇습니다:
+어쨌건, (1)~동시의 업데이트는 전체 순회보다는 단일 항목 탐색에 영향을 덜 끼칠
+것입니다, 그리고 (2)~고립된 단일 항목 탐색은 그런 비일관성을 알아낼 수
+없습니다.
+
+\iffalse
 
 Nor is Internet routing the only situation tolerating inconsistencies.
 To repeat, any algorithm in which data within a system tracks
@@ -939,6 +1054,25 @@ This is especially the case given that single-item lookups are much more
 common than traversals:  After all, (1)~concurrent updates are less likely
 to affect a single-item lookup than they are a full traversal, and
 (2)~an isolated single-item lookup cannot detect such inconsistencies.
+
+\fi
+
+더 이론적인 시점에서 보면, RCU 읽기 쓰레드가 싱글 쓰레드 기반 프로그램에서
+수행될 것과 정확히 동일한 기계 명령들을 수행함에도 불구하고 업데이트 쓰레드들과
+완전하게 순서가 지어진 것으로 여겨지는 일부 특수한 경우도 존재합니다.
+예를 들어,
+페이지~\pageref{lst:defer:Insertion and Deletion With Concurrent Readers} 의
+Listing~\ref{lst:defer:Insertion and Deletion With Concurrent Readers} 으로
+돌아가, 각 읽기 쓰레드가 평생 정확히 한번 \co{access_route()} 를 수행하며, 그
+외에는 읽기 쓰레드와 업데이트 쓰레드 사이에 어떤 소통도 없다고 해봅시다.
+\begin{fcvref}[ln:defer:Insertion and Deletion With Concurrent Readers]
+그러면 \co{access_route()} 의 호출 각각은 이 코드 리스트의 \co{access_route()}
+의 \clnref{access_rp} 에서 액세스 되는 \co{route} 구조체를 만들어낸
+\co{ins_route()} 호출 뒤로 순서지어지고 모든 뒤따르는 \co{ins_route()} 나
+\co{del_route()} 호출의 앞으로 순서지어질 수 있습니다.
+\end{fcvref}
+
+\iffalse
 
 From a more theoretical viewpoint, there are even some special cases where
 RCU readers can be considered to be fully ordered with updaters, despite
@@ -958,6 +1092,17 @@ and ordered before any subsequent
 \co{ins_route()} or \co{del_route()} invocation.
 \end{fcvref}
 
+\fi
+
+요약하자면, 복수의 버전을 유지하는 것이 바로 RCU 읽기 쓰레드의 극단적으로 낮은
+오버헤드를 가능하게 하는 것이며, 앞에서 이야기 되었듯 많은 알고리즘은 복수의
+버전들로 인해 당황하지 않습니다.
+하지만, 복수의 버전을 처리할 수 없는 알고리즘도 분명 존재합니다.
+그런 알고리즘이 RCU 를 사용할 수 있게 조정하는 기술들도
+존재합니다만~\cite{PaulEdwardMcKenneyPhD}, 이는 이 섹션의 범위 밖입니다.
+
+\iffalse
+
 In summary, maintaining multiple versions is exactly what enables the
 extremely low overheads of RCU readers, and as noted earlier, many
 algorithms are unfazed by multiple versions.
@@ -965,6 +1110,8 @@ However, there are algorithms that absolutely cannot handle multiple versions.
 There are techniques for adapting such algorithms to
 RCU~\cite{PaulEdwardMcKenneyPhD},
 but these are beyond the scope of this section.
+
+\fi
 
 \paragraph{Exercises}
 \label{sec:defer:Exercises}
