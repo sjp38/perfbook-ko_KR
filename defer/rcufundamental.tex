@@ -1290,10 +1290,26 @@ else {
 \subsubsection{Summary of RCU Fundamentals}
 \label{sec:defer:Summary of RCU Fundamentals}
 
+이 섹션은 RCU 기반 알고리즘의 기본 토대적 컴포턴트들을 설명했습니다:
+
+\iffalse
+
 This section has described the three fundamental components of RCU-based
 algorithms:
 
+\fi
+
 \begin{enumerate}
+\item	새로운 데이터 추가를 위한 발행-구독 메커니즘,
+
+\item	앞서서부터 존재해온 RCU 읽기 쓰레드의 종료를 기다리기 위한 방법 (자세한
+	내용은 Section~\ref{sec:memorder:RCU} 을 참조하세요), 그리고
+
+\item	동시의 RCU 읽기 쓰레드를 무심히 기다리게 하거나 피해 끼치지 않고 변경을
+	허용하기 위해 여러 버전을 관리하는 방법.
+
+\iffalse
+
 \item	a publish-subscribe mechanism for adding new data,
 
 \item	a way of waiting for pre-existing RCU readers to finish
@@ -1302,13 +1318,34 @@ algorithms:
 
 \item	a discipline of maintaining multiple versions to permit
 	change without harming or unduly delaying concurrent RCU readers.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	\co{rcu_read_lock()} 도 \co{rcu_read_unlock()} 도 스핀이나 블록을 하지
+	않는데 어떻게 RCU 읽기 쓰레드들을 RCU 업데이트 쓰레드가 지연시킬 수
+	있죠?
+
+	\iffalse
+
 	How can RCU updaters possibly delay RCU readers, given that
 	neither \co{rcu_read_lock()} nor \co{rcu_read_unlock()}
 	spin or block?
+
+	\fi
+
 }\QuickQuizAnswer{
+	특정 RCU 업데이트 쓰레드에 의해 가해진 수정은 연관된 CPU 가 이 데이터를
+	가지고 있는 캐쉬 라인을 무효화 시키게 하여, 동시의 RCU 읽기 쓰레드가
+	수행되고 있는 CPU 가 비싼 캐쉬 미스를 일으키게 만듭니다.
+	(데이터 구조를 동시의 읽기 쓰레드에 비용이 높은 캐쉬 미스를 일으키지
+	\emph{않으면서} 변경시키는 알고리즘을 설계할 수 있겠습니까?
+	뒤따르는 읽기 쓰레드에게도?)
+
+	\iffalse
+
 	The modifications undertaken by a given RCU updater will cause the
 	corresponding CPU to invalidate cache lines containing the data,
 	forcing the CPUs running concurrent RCU readers to incur expensive
@@ -1317,7 +1354,21 @@ algorithms:
 	\emph{without}
 	inflicting expensive cache misses on concurrent readers?
 	On subsequent readers?)
+
+	\fi
+
 }\QuickQuizEnd
+
+이 세개의 RCU 컴포넌트는 데이터가 싱글 쓰레드 기반 구현의 읽기 쓰레드가 사용할
+것과 동일한 기계 인스트럭션을 수행하는 동시의 읽기 쓰레드에도 불구하고 데이터를
+업데이트 할 수 있게 합니다.
+이 RCU 컴포넌트는 놀랍도록 다양한 RCU 기반 알고리즘을 구현하는데 다른 방법들로
+조합될 수 있습니다.
+하지만, 더 높은 수준의 추상화에서 작업하는게 보통은 낫습니다.
+그러므로, 다음 섹션은 리스트와 같이 간단한 데이터 구조를 포함하는 리눅스 커널
+API 를 설명합니다.
+
+\iffalse
 
 These three RCU components allow data to be updated in face of concurrent
 readers that might be executing the same sequence of machine instructions
@@ -1327,3 +1378,5 @@ surprising variety of different types of RCU-based algorithms.
 However, it is usually better to work at higher levels of abstraction.
 To this end, the next section describes the Linux-kernel API, which
 includes simple data structures such as lists.
+
+\fi
