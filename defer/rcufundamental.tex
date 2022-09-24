@@ -1116,17 +1116,39 @@ but these are beyond the scope of this section.
 \paragraph{Exercises}
 \label{sec:defer:Exercises}
 
+이 예들은 전체 업데이트 오퍼레이션 동안 mutex 가 잡혀 있음을 가정했는데, 이는
+한번에 최대 두개의 버전의 리스트만 존재함을 의미합니다.
+
+\iffalse
+
 These examples assumed that a mutex was held across the entire
 update operation, which would mean that there could be at most two
 versions of the list active at a given time.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	리스트의 두개 이상의 버전이 존재할 수 있게 하기 위해 삭제 예제를 어떻게
+	수정하시겠습니까?
+
+	\iffalse
+
 	How would you modify the deletion example to permit more than two
 	versions of the list to be active?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이를 위한 한가지 방법이
+	Listing~\ref{lst:defer:Concurrent RCU Deletion} 에 보여져 있습니다.
+
+	\iffalse
+
 	One way of accomplishing this is as shown in
 	Listing~\ref{lst:defer:Concurrent RCU Deletion}.
+
+	\fi
 
 \begin{listing}[htbp]
 \begin{VerbatimL}
@@ -1145,14 +1167,46 @@ else {
 \label{lst:defer:Concurrent RCU Deletion}
 \end{listing}
 
+	이는 여러개의 동시 삭제들이 \co{synchronize_rcu()} 에서 기다리고 있을
+	수 있음을 의미함을 알아두시기 바랍니다.
+
+	\iffalse
+
 	Note that this means that multiple concurrent deletions might be
 	waiting in \co{synchronize_rcu()}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	리스트의 RCU 버전은 한번에 몇개까지 존재할 수 있나요?
+
+	\iffalse
+
 	How many RCU versions of a given list can be
 	active at any given time?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	이는 동기화 설계에 달려 있습니다.
+	업데이트를 보호하는 세마포어가 grace period 내내 잡혀 있다면, 전과 후,
+	최대 두개의 버전만이 존재할 수 있습니다.
+
+	하지만, 탐색, 업데이트, 그리고 \co{list_replace_rcu()} 만이 락으로
+	보호되어서
+	Listing~\ref{lst:defer:Concurrent RCU Deletion} 에서 보인 코드와
+	비슷하게 \co{synchronize_rcu()} 가 락 바깥에 있다고 가정해 봅시다.
+	더 나아가서 매우 많은 수의 쓰레드가 거의 동시에 RCU 교체를 수행했으며
+	읽기 쓰레드들은 지속적으로 데이터 구조를 순회한다고 생각해 봅시다.
+
+	그러면
+	Figure~\ref{fig:defer:Multiple RCU Data-Structure Versions}
+	의 마지막 상태부터 시작해서 다음의 이벤트들이 일어날 수 있습니다:
+
+	\iffalse
+
 	That depends on the synchronization design.
 	If a semaphore protecting the update is held across the grace period,
 	then there can be at most two versions, the old and the new.
@@ -1170,7 +1224,24 @@ else {
 	the end state of
 	Figure~\ref{fig:defer:Multiple RCU Data-Structure Versions}:
 
+	\fi
+
 	\begin{enumerate}
+	\item	쓰레드~A 가 리스트를 순회하여 원소~C 로의 참조를 얻습니다.
+	\item	쓰레드~B 가 원소~C 를 새로운 원소~F 로 대체하고
+		자신의 \co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
+	\item	쓰레드~C 가 리스트를 순회하여 원소~F 로의 참조를 얻습니다.
+	\item	쓰레드~D 가 원소~F 를 새로운 원소~G 로 대체하고 자신의
+		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
+	\item	쓰레드~E 가 리스트를 순회하여 원소~G 로의 참조를 얻습니다.
+	\item	쓰레드~F 가 원소~G 를 새로운 원소~H 로 대체하고, 자신의
+		\co{synchronize_rcu()} 호출이 리턴하길 기다립니다.
+	\item	쓰레드~G 가 리스트를 순회하여 원소~H 로의 참조를 얻습니다.
+	\item	그리고 앞의 두 단계가 추가적인 새 원소와 함께 빠르게 반복되어
+		그 모든 것이 \co{synchronize_rcu()} 호출 리턴 전에 일어납니다.
+
+	\iffalse
+
 	\item	Thread~A traverses the list, obtaining a reference to
 		Element~C.
 	\item	Thread~B replaces Element~C with a new
@@ -1191,7 +1262,18 @@ else {
 	\item	And the previous two steps repeat quickly with additional
 		new elements, so that all of them happen before any of
 		the \co{synchronize_rcu()} calls return.
+
+	\fi
+
 	\end{enumerate}
+
+	따라서, 임의의 수의 버전이 존재할 수 있는데, 메모리와 하나의 grace
+	period 내에 얼마나 많은 업데이트가 완료될 수 있느냐에만 제한됩니다.
+	하지만 그렇게 빈번하게 업데이트 되는 데이터 구조는 RCU 를 사용하기 좋은
+	후보가 아닐 가능성이 높음을 알아두시기 바랍니다.
+	그러나, RCU 는 필요할 때에는 높은 업데이트 비율을 처리할 수 있습니다.
+
+	\iffalse
 
 	Thus, there can be an arbitrary number of versions active,
 	limited only by memory and by how many updates could be completed
@@ -1199,6 +1281,9 @@ else {
 	But please note that data structures that are updated so frequently
 	are not likely to be good candidates for RCU\@.
 	Nevertheless, RCU can handle high update rates when necessary.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
