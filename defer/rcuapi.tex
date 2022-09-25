@@ -24,7 +24,7 @@ Section~\ref{sec:defer:So, What is RCU Really?}
 은 결론적 요약을 제공합니다.
 
 커널 내부에 큰 관심이 없는 독자 여러분은 이 섹션을 건너뛰어
-page~\pageref{sec:defer:RCU Usage} 의 
+page~\pageref{sec:defer:RCU Usage} 의
 \cref{sec:defer:RCU Usage} 으로 넘어가실 수도 있겠습니다.
 
 \iffalse
@@ -55,6 +55,19 @@ on page~\pageref{sec:defer:RCU Usage}.
 \subsubsection{RCU has a Family of Wait-to-Finish APIs}
 \label{sec:defer:RCU has a Family of Wait-to-Finish APIs}
 
+``RCU 란 무엇인가'' 에 대한 가장 간단한 답은 RCU 는 API 라는 것입니다.
+예를 들어, 리눅스 커널에서 사용되는 RCU 구현이 RCU, ``잠들 수 있는'' RCU
+(SRCU), 태스크 기반 RCU (Tasks RCU) 의 읽기 쓰레드 기다리기 부분과 일반적 API
+를 각각 보이고 있는 Table~\ref{tab:defer:RCU Wait-to-Finish APIs} 로, 그리고
+이 API 의 발행-구독 부분을 보이는
+Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
+로 요약되어 있습니다.\footnote{
+	이 인용은 v4.20 과 이후 버전을 다룹니다.
+	그 전 버전의 리눅스 커널 RCU API 에 대한 문서는 다른 곳에서 찾을 수
+	있습니다~\cite{PaulEMcKenney2008WhatIsRCUAPI,PaulEMcKenney2014RCUAPI}.}
+
+\iffalse
+
 The most straightforward answer to ``what is RCU'' is that RCU is
 an API\@.
 For example, the RCU implementation used in the Linux kernel is
@@ -69,6 +82,8 @@ API~\cite{PaulEMcKenney2019RCUAPI}.\footnote{
 	This citation covers v4.20 and later.
 	Documetation for earlier versions of the Linux-kernel RCU API may
 	be found elsewhere~\cite{PaulEMcKenney2008WhatIsRCUAPI,PaulEMcKenney2014RCUAPI}.}
+
+\fi
 
 \begin{sidewaystable*}[tbp]
 \rowcolors{1}{}{lightgray}
@@ -173,6 +188,21 @@ API~\cite{PaulEMcKenney2019RCUAPI}.\footnote{
 \end{tabularx}
 \end{sidewaystable*}
 
+RCU 를 처음 접하신다면,
+각각 리눅스 커널의 RCU API 집합 중 하나의 멤버를 요약하는
+Table~\ref{tab:defer:RCU Wait-to-Finish APIs} 의 열 중 하나에만 집중하는 걸
+고려해 보시기 바랍니다.
+예를 들어, 리눅스 커널에서 RCU 가 어떻게 사용되는지 이해하는게 주요 관심사라면,
+``RCU'' 가 가장 빈번하게 사용되므로 시작하기 좋을 겁니다.
+다른 한편, RCU 를 그 자체만으로 이해하고자 한다면, ``Tasks RCU'' 가 가장 간단한
+API 를 가졌습니다.
+나중에 언제든 다른 열로 돌아오셔도 됩니다.
+
+만약 여러분이 RCU 와 친숙하다면, 이 표들은 유용한 레퍼런스로 사용될 수 있을
+겁니다.
+
+\iffalse
+
 If you are new to RCU, you might consider focusing on just one
 of the columns in
 Table~\ref{tab:defer:RCU Wait-to-Finish APIs},
@@ -187,18 +217,65 @@ You can always come back for the other columns later.
 If you are already familiar with RCU, these tables can
 serve as a useful reference.
 
+\fi
+
 \QuickQuiz{
+	Table~\ref{tab:defer:RCU Wait-to-Finish APIs}
+	의 일부 셀들은 왜 느낌표를 (``!'') 가지고 있나요?
+
+	\iffalse
+
 	Why do some of the cells in
 	Table~\ref{tab:defer:RCU Wait-to-Finish APIs}
 	have exclamation marks (``!'')?
+
+	\fi
+
 }\QuickQuizAnswer{
+	느낌표를 가지고 있는 API 멤버들 (\co{rcu_read_lock()},
+	\co{rcu_read_unlock()}, 그리고 \co{call_rcu()}) 은 Paul E. McKenney 가
+	90년대 중반에 인지하고 있던 리눅스 RCU API 멤버의 전부였습니다.
+	이 시간 동안, 그는 그가 RCU 에 대해 알아야 할 걸 모두 알고 있다는
+	잘못된 느낌을 가지고 있었습니다.
+
+	\iffalse
+
 	The API members with exclamation marks (\co{rcu_read_lock()},
 	\co{rcu_read_unlock()}, and \co{call_rcu()}) were the
 	only members of the Linux RCU API that Paul E. McKenney was aware
 	of back in the mid-90s.
 	During this timeframe, he was under the mistaken impression that
 	he knew all that there is to know about RCU\@.
+
+	\fi
+
 }\QuickQuizEnd
+
+``RCU'' 열은 세가지 리눅스 커널 RCU
+구현의~\cite{PaulEMcKenney2019RCUCVE,McKenney:2019:CRS:3319647.3325836} 집합에
+연관되는데, RCU read-side 크리티컬 섹션이 \co{rcu_read_lock()},
+\co{rcu_read_lock_bh()}, 또는 \co{rcu_read_lock_sched()} 로 시작하여
+\co{rcu_read_unlock()}, \co{rcu_read_unlock_bh()}, 또는
+\co{rcu_read_unlock_sched()} 로 각각 종료됩니다.
+Bottom halves, 인터럽트, 또는 preemption 을 불능화 시키는 모든 코드 영역 또한
+RCU read-side 크리티컬 섹션으로 동작합니다.
+연관된 동기 update-side 기능들은 \co{synchronize_rcu()} 와
+\co{synchronize_rcu_expedited()}, 그리고 그와 유사한 \co{synchronize_net()}
+으로, 현재 수행 중인 모든 종류의 RCU read-side 크리티컬 섹션들이 완료되기를
+기다립니다.
+이 기다림의 길이가 ``grace period'' 라고 알려져 있으며,
+\co{synchronize_rcu_expedited()} 는 증가된 CPU 오버헤드와 IPI 를 댓가로 grace
+period 응답시간을 줄이게끔 설계되었습니다.
+비동기적 update-side 기능인 \co{call_rcu()} 는 다음 grace period 후에 특정
+함수를 특정 인자와 함께 수행합니다.
+예를 들어, \co{call_rcu(p,f);} 는 다음 grace period 후에 ``RCU callback''
+\co{f(p)} 이 호출되게 할 겁니다.
+\co{call_rcu()} 를 사용하는 리눅스 커널 모듈이 언로딩 될 때라던지와 같이 모든
+RCU callback 들이 완료되기를 기다려야 하는 상황도
+있습니다~\cite{PaulEMcKenney2007rcubarrier}.
+\co{rcu_barrier()} 기능이 그 일을 합니다.
+
+\iffalse
 
 The ``RCU'' column corresponds to the consolidation of the
 three Linux-kernel RCU
@@ -229,12 +306,31 @@ when it is necessary to wait for all
 outstanding RCU callbacks to complete~\cite{PaulEMcKenney2007rcubarrier}.
 The \co{rcu_barrier()} primitive does this job.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	엄청나게 많은 RCU read-side 크리티컬 섹션이 무한정
+	\co{synchronize_rcu()} 호출을 기다리게 하는 것은 어떻게 예방하나요?
+
+	\iffalse
+
 	How do you prevent a huge number of RCU read-side critical
 	sections from indefinitely blocking a \co{synchronize_rcu()}
 	invocation?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	RCU read-side 크리티컬 섹션들이 무한정 \co{synchronize_rcu()} 를
+	기다리게 하는걸 막기 위해 어떤 일도 할 필요가 없는데,
+	\co{synchronize_rcu()} 는 \emph{앞서서부터 존재해온} RCU read-side
+	크리티컬 섹션들만을 기다리면 되기 때문입니다.
+	따라서 각 RCU read-side 크리티컬 섹션이 한정된 길이인 한, RCU grace
+	period 역시 한정적이게 됩니다.
+
+	\iffalse
+
 	There is no need to do anything to prevent RCU read-side
 	critical sections from indefinitely blocking a
 	\co{synchronize_rcu()} invocation, because the
@@ -243,12 +339,38 @@ The \co{rcu_barrier()} primitive does this job.
 	So as long as each RCU read-side critical section is
 	of finite duration, RCU grace periods will also remain
 	finite.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\co{synchronize_rcu()} API 는 모든 앞서서부터 존재해온 인터럽트
+	핸들러가 완료되길 기다립니다, 맞죠?
+
+	\iffalse
+
 	The \co{synchronize_rcu()} API waits for all pre-existing
 	interrupt handlers to complete, right?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	v4.20 이후의 리눅스 커널에서는
+	그렇습니다~\cite{PaulEMcKenney2019RCUCVE,McKenney:2019:CRS:3319647.3325836}.
+
+	하지만 그 전의 커널에서는, 특히 preemption 가능한 RCU 를 사용할 때는
+	아닙니다!
+	여러분은 그대신 \co{synchronize_irq()} 를 원할 겁니다.
+	대안적으로, 여러분은 여러분이 \co{synchronize_rcu()} 로 하여금 기다리게
+	하고 싶은 특정 인터럽트 핸들러 내에 \co{rcu_read_lock()} 과
+	\co{rcu_read_unlock()} 을 넣을 수 있습니다.
+	하지만 그럴 때에도, preemption 가능한 RCU 는 \co{rcu_read_lock()} 앞의,
+	또는 \co{rcu_read_lock()} 뒤의 부분은 기다린다는 보장이 없으니
+	조심하세요.
+
+	\iffalse
+
 	In v4.20 and later Linux kernels,
 	yes~\cite{PaulEMcKenney2019RCUCVE,McKenney:2019:CRS:3319647.3325836}.
 
@@ -261,8 +383,21 @@ The \co{rcu_barrier()} primitive does this job.
 	But even then, be careful, as preemptible RCU will not be guaranteed
 	to wait for that portion of the interrupt handler preceding the
 	\co{rcu_read_lock()} or following the \co{rcu_read_unlock()}.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+마지막으로, RCU 는
+Section~\ref{sec:defer:RCU Provides Type-Safe Memory} 에서 이야기 되었듯
+type-safe 메모리~\cite{Cheriton96a} 를 제공하기 위해 사용될 수 있습니다.
+RCU 의 맥락에서, type-safe 메모리는 특정 데이터 원소의 타입이 그 원소에
+접근하는 RCU read-side 크리티컬 섹션 내에서는 바뀌지 않음을 보장합니다.
+RCU 기반 type-safe 메모리의 사용을 위해선, \co{kmem_cache_create()} 에
+\co{SLAB_TYPESAFE_BY_RCU} 를 넘기면 됩니다.
+
+\iffalse
 
 Finally, RCU may be used to provide
 type-safe memory~\cite{Cheriton96a}, as described in
@@ -272,6 +407,28 @@ data element will not change type during any RCU read-side critical section
 that accesses it.
 To make use of RCU-based type-safe memory, pass
 \co{SLAB_TYPESAFE_BY_RCU} to \co{kmem_cache_create()}.
+
+\fi
+
+Table~\ref{tab:defer:RCU Wait-to-Finish APIs}
+의 ``SRCU'' 열은 \co{srcu_read_lock()} 과 \co{srcu_read_unlock()} 으로
+구분지어지는 SRCU read-side 크리티컬 섹션 내에서 일반적인 잠들기를 허용하는
+특수화된 RCU API 를 보입니다~\cite{PaulEMcKenney2006c}
+하지만, RCU 와 달리, SRCU 의 \co{srcu_read_lock()} 은 연관된
+\co{srcu_read_unlock()} 에 넘겨져야만 하는 값을 리턴합니다.
+이 차이점은 SRCU 사용자는 각 SRCU 사용을 위해 \co{srcu_struct} 를 하나 할당해야
+하는 사실 때문입니다.
+이 개별의 \co{srcu_struct} 구조체는 SRCU read-side 크리티컬 섹션이 연관되지
+않은 \co{synchronize_srcu()} 와 \co{synchronize_srcu_expedited()} 수행을
+블록되게 하는 것을 방지합니다.
+물론, SRCU read-side 크리티컬 섹션 내에서의 \co{synchronize_srcu()} 나
+\co{synchronize_srcu_expedited()} 호출은 스스로의 데드락을 초래할 수 있으므로,
+방지되어야 합니다.
+RCU 에서와 같이, SRCU 의 \co{synchronize_srcu_expedited()} 는
+\co{synchronize_srcu()} 에 비해 grace period 응답시간을 줄여 줍니다만, 증가된
+CPU 오버헤드를 댓가로 치룹니다.
+
+\iffalse
 
 The ``SRCU'' column in
 Table~\ref{tab:defer:RCU Wait-to-Finish APIs}
@@ -292,6 +449,8 @@ section can result in self-deadlock, so should be avoided.
 As with RCU, SRCU's \co{synchronize_srcu_expedited()} decreases
 grace-period latency compared to \co{synchronize_srcu()}, but at
 the expense of increased CPU overhead.
+
+\fi
 
 \QuickQuiz{
 	Under what conditions can \co{synchronize_srcu()} be safely
