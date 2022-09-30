@@ -453,9 +453,28 @@ the expense of increased CPU overhead.
 \fi
 
 \QuickQuiz{
+	어떤 조건에서 \co{synchronize_srcu()} 는 SRCU read-side 크리티컬 섹션
+	내에서 안전하게 사용될 수 있나요?
+
+	\iffalse
+
 	Under what conditions can \co{synchronize_srcu()} be safely
 	used within an SRCU read-side critical section?
+
+	\fi
+
 }\QuickQuizAnswer{
+	원칙적으로, 여러분은 특정 \co{srcu_struct} 를 가지고 다른
+	\co{srcu_struct} 를 사용하는 SRCU read-side 크리티컬 섹션 내에서
+	\co{synchronize_srcu()} 나 \co{synchronize_srcu_expedited()} 를 사용할
+	수 있습니다.
+	하지만, 실제로는 이러는 건 거의 분명 나쁜 생각입니다.
+	특히,
+	Listing~\ref{lst:defer:Multistage SRCU Deadlocks}
+	에 보인 코드는 여전히 데드락을 초래할 수 있습니다.
+
+	\iffalse
+
 	In principle, you can use either \co{synchronize_srcu()} or
 	\co{synchronize_srcu_expedited()} with a given \co{srcu_struct}
 	within an SRCU read-side critical section that uses some other
@@ -464,6 +483,8 @@ the expense of increased CPU overhead.
 	In particular, the code shown in
 	Listing~\ref{lst:defer:Multistage SRCU Deadlocks}
 	could still result in deadlock.
+
+	\fi
 
 \begin{listing}[htbp]
 \begin{VerbatimL}
@@ -482,6 +503,23 @@ srcu_read_unlock(&ssb, idx);
 \end{listing}
 }\QuickQuizEnd
 
+일반적인 RCU 와 비슷하게, 비동기적 \co{call_srcu()} 함수를 통해 스스로 데드락
+걸리는 것을 막을 수 있습니다.
+하지만, 단일 태스크가 SRCU 콜백들을 매우 빠르게 등록할 수 있으므로
+\co{call_srcu()} 를 사용할 때에는 특별한 주의가 필요합니다.
+SRCU 가 읽기 쓰레드들이 임의의 기간동안 블록할 수 있다는 점을 두고 볼 때, 이는
+임의의 커다란 양의 메모리를 소모할 수 있습니다.
+대조적으로, 동기적인 \co{synchronous_srcu()} 인터페이스에서 태스크는 다음 grace
+period 를 기다리기 시작하기 전에 현재 grace period 대기를 완료해야만 합니다.
+
+또한 RCU 와 비슷하게, 모든 앞서 호출된 \co{call_srcu()} 콜백이 완료되기를
+기다리는 \co{srcu_barrier()} 함수도 있습니다.
+
+달리 말하면, SRCU 는 개발자들이 그 범위를 제한할 수 있게 허용함으로써 자신의
+극단적으로 완화된 진행 보장을 보상합니다.
+
+\iffalse
+
 Similar to normal RCU, self-deadlock can be avoided using the
 asynchronous \co{call_srcu()} function.
 However, special care must be taken when using \co{call_srcu()} because
@@ -498,6 +536,31 @@ for all prior \co{call_srcu()} callbacks to be invoked.
 In other words, SRCU compensates for its extremely weak
 forward-progress guarantees by permitting the developer to restrict
 its scope.
+
+\fi
+
+\cref{tab:defer:RCU Wait-to-Finish APIs} 의 ``Tasks RCU'' 열은 리눅스 커널
+트레이싱 (tracing) 에서 사용되는 trampoline 들의 메모리 해제를 중재하는데
+특수화된 RCU API 를 보입니다.
+이 trampoline 들은 트레이싱 되는 코드의 한 지점에서 실제 트레이싱을 하는 코드로
+제어를 전환하는 데 사용됩니다.
+특정 trampoline 에서 수행되는 모든 코드가 이 trampoline 을 메모리 해제하기 전에
+종료되었음을 보장할 것이 당연히 필요합니다.
+
+Tracing 되는 코드에의 변화는 일반적으로 하나의 jump 또는 call 인스트럭션으로
+제한되며, 따라서 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을 구현하는데
+필요한 코드를 수용할 수 없습니다.
+이 trampoline 은 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 호출을 담을
+수도 없습니다.
+이를 이해하기 위해, 특정 trampoline 을 이제 수행하기 시작하려는 CPU 를 생각해
+봅시다.
+이 CPU 는 아직 \co{rcu_read_lock()} 을 수행하지 않았으므로, 언제든 메모리
+해제될 수 있어서 이 CPU 에게 치명적 놀라움을 안겨줄 수 있습니다.
+따라서, trampoline 은 traceing 된 코드 또는 trampoline 자신에 의해 수행되는
+동기화 기능으로 보호될 수 없습니다.
+이는 어떻게 trampoline 이 보호되어야 하는지 질문을 떠오르게 합니다.
+
+\iffalse
 
 The ``Tasks RCU'' column in
 \cref{tab:defer:RCU Wait-to-Finish APIs} displays a specialized
@@ -523,6 +586,31 @@ executed in either the traced code or in the trampoline itself.
 Which does raise the question of exactly how the trampoline is to be
 protected.
 
+\fi
+
+이 질문에 대답하기 위한 열쇠는 trampoline 코드가 직접적으로도 간접적으로도
+자발적 컨텍스트 스위치를 하는 코드를 결코 포함하지 않는다는 것을 파악하는
+것입니다.
+이 코드는 preemption 당할 수 있지만, 직접적으로든 간접적으로든 \co{schedule()}
+을 결코 호출하지 않습니다.
+이는 자발적 컨텍스트 스위치와 idle 수행을 유일한 quiescent state 로 간주하는
+RCU 변종을 제안합니다.
+이 변종이 Tasks RCU 입니다.
+
+Tasks RCU 는 read-side 마킹 기능이 없다는 점에서 일반적이지 않은데, 그 주요
+사용 케이스가 어디에도 그런 마킹을 할 수 없는 경우라는 걸 생각하면 좋은
+일입니다.
+대신, \co{schedule()} 호출이 곧 quiescent state 로 동작합니다.
+업데이트는 모든 앞서서부터 존재해온 trampoline 수행이 완료되기를 기다리기 위해
+\co{synchronize_rcu_tasks()} 를, 또는 그 비동기 버전인 \co{call_rcu_tasks()} 를
+사용할 수 있습니다.
+또한 모든 앞서 호출된 \co{call_rcu_tasks()} 에 연관된 콜백들의 완료를 기다리기
+위한 \co{rcu_barrier_tasks()} 도 존재합니다.
+아직 요구가 없었기 때문에 \co{synchronize_rcu_tasks_expedited()} 함수는
+존재하지 않습니다만, 그것의 유용한 변종을 구현하는 건 도전해볼만 할 것입니다.
+
+\iffalse
+
 The key to answering this question is to note that trampoline code
 never contains code that either directly or indirectly does a
 voluntary context switch.
@@ -544,17 +632,62 @@ There is no \co{synchronize_rcu_tasks_expedited()} because there has
 not yet been a request for it, though implementing a useful variant of
 it would not be free of challenges.
 
+\fi
+
 \QuickQuiz{
+	\co{CONFIG_PREEMPT_NONE=y} 로 빌드된 커널에서라면 preemption 이 불능화
+	되었고 trampoline 은 직접적으로든 간접적으로든 \co{schedule()} 을
+	호출하지 않으니  \co{synchronize_rcu()} 는 모든 trampoline 을 기다리지
+	않나요?
+
+	\iffalse
+
 	In a kernel built with \co{CONFIG_PREEMPT_NONE=y}, won't
 	\co{synchronize_rcu()} wait for all trampolines, given
 	that preemption is disabled and that trampolines never
 	directly or indirectly invoke \co{schedule()}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	바로 그렇습니다!
+
+	실제로, nonpreemptible 커널에서, \co{synchronize_rcu_tasks()} 는
+	\co{synchronize_rcu()} 의 wrapper 입니다.
+
+	\iffalse
+
 	You are quite right!
 
 	In fact, in nonpreemptible kernels, \co{synchronize_rcu_tasks()}
 	is a wrapper around \co{synchronize_rcu()}.
+
+	\fi
+
 }\QuickQuizEnd
+
+``Tasks RCU Rude'' 열은
+\cref{sec:defer:Toy Implementation} 에서 선보인 장난감 구현의 보다 효과적인
+변종을 제공합니다.
+이 변종은 각 CPU 가 컨텍스트 스위치를 수행해서 모든 자발적 컨텍스트 스위치나
+모든 preemption 가능한 코드 영역이 quiescent state 로 동작하게 합니다.
+Tasks RCU Rude 변종은 리눅스 커널의 workqueue 기능을 동시적 컨텍스트 스위치를
+강제하기 위한 장치로 사용하는데, 그 장난감 구현에서는 CPU 하나씩 순차적으로
+사용하는 접근법과 대조됩니다.
+이 API 는 Tasks RCU 의 것과 대칭되는데, 명시적 read-side 마커의 부재 또한
+그렇습니다.
+
+마지막으로, ``Tasks RCU Trace'' 열은 SRCU 의 그것과 비슷한 기능을 갖지만 훨씬
+빠른 read-side 마커는 예외입니다.\footnote{
+	그리고 따라서 Tasks RCU 계열에서 명시적 read-side 마커를 갖는게
+	비일상적입니다!}
+하지만, 이 속도는 이 마커들이 메모리 배리어 인스트럭션을 수행하지 않는다는
+사실에서 기인하는 것으로, Tasks RCU Trace grace period 는 종종 모든 CPU 에게
+IPI 를 보내야 하고 항상 전체 태스크 리스트를 스캔해야 함을 의미합니다.
+그러나, 그로 인한 grace period 응답시간은 무척 짧아서 RCU 의 그것과 라이벌이
+될만 합니다.
+
+\iffalse
 
 The ``Tasks RCU Rude'' column provides a more effective variant
 of the toy implementation presented in
@@ -579,6 +712,8 @@ Trace grace periods must often send IPIs to all CPUs and must always
 scan the entire task list.
 Nevertheless, the resulting grace-period latency is reasonably short,
 rivaling that of RCU\@.
+
+\fi
 
 \subsubsection{RCU has Publish-Subscribe and Version-Maintenance APIs}
 \label{sec:defer:RCU has Publish-Subscribe and Version-Maintenance APIs}
