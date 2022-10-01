@@ -718,6 +718,18 @@ rivaling that of RCU\@.
 \subsubsection{RCU has Publish-Subscribe and Version-Maintenance APIs}
 \label{sec:defer:RCU has Publish-Subscribe and Version-Maintenance APIs}
 
+다행히,
+Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
+에 보인 RCU 발행-구독과 버전 관리 기능은 앞서 이야기한 모든 RCU 변종에
+적용됩니다.
+이 동일성이 더 많은 코드가 공유되고 API 증식을 줄일 수 있게 합니다.
+RCU 발행-구독 API 의 원래 목적은 메모리 배리어를 이 API 내로 묻어버려서 리눅스
+커널 프로그래머가 리눅스가 지원하는 20+ CPU 군~\cite{Spraul01} 각각의 메모리
+순서 규칙 모델에 대한 전문가가 될 필요 없이 RCU 를 사용할 수 있게 하는
+것이었습니다.
+
+\iffalse
+
 Fortunately, the RCU publish-subscribe and version-maintenance
 primitives shown in
 Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
@@ -729,6 +741,8 @@ bury memory barriers into these APIs, so that Linux kernel
 programmers could use RCU without needing to become expert on
 the memory-ordering models of each of the 20+ CPU families
 that Linux supports~\cite{Spraul01}.
+
+\fi
 
 \begin{table*}[tb]
 \renewcommand*{\arraystretch}{1.15}
@@ -780,6 +794,24 @@ Pointer subscribe (traveral) &
 \label{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
 \end{table*}
 
+이 기능들은 포인터에 직접 동작하며, RCU 로 보호되는 배열과 트리 같은 연결된
+데이터 구조들을 생성하는데 유용합니다.
+링크드 리스트의 특수한 경우는
+Section~\ref{sec:defer:RCU has List-Processing APIs}
+에 설명된 별도의 API 집합으로 처리됩니다.
+
+첫번째 카테고리는 새 데이터 항목으로의 포인터를 발행합니다.
+\co{rcu_assign_pointer()} 기능은 모든 앞의 초기화가 완화된 순서 규칙 기계에서도
+포인터 할당 전에 행해졌을 것을 보장합니다.
+\co{rcu_replace_pointer()} 기능은 \co{rcu_assign_pointer()} 가 하는 것과 똑같이
+이 포인터를 업데이트 합니다만, 기존의 값을 리턴하는데,
+\co{rcu_dereference_protected()} 가 하는 것과 동일한데 (아래를 보시기
+바랍니다), lockdep 표현 역시 포함합니다.
+이 교체는 업데이트 쓰레드가 새 포인터를 발행하면서 기존 포인터에 의해 참조되는
+구조체를 해제해야 할 때 유용합니다.
+
+\iffalse
+
 These primitives operate directly on pointers, and are useful for
 creating RCU-protected linked data structures, such as RCU-protected
 arrays and trees.
@@ -798,15 +830,45 @@ the lockdep expression.
 This replacement is convenient when the updater must both publish a new
 pointer and free the structure referenced by the old pointer.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	일반적으로, \co{rcu_dereference()} 에 넘겨지는 포인터는 항상
+	Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs}
+	의 포인터 발행 함수 중 하나, 예를 들면 \co{rcu_assign_pointer()} 를
+	사용해 업데이트 \emph{되어야만} 합니다.
+
+	이 규칙에서 예외는 무엇이겠습니까?
+
+	\iffalse
+
 	Normally, any pointer subject to \co{rcu_dereference()} \emph{must}
 	always be updated using one of the pointer-publish functions in
 	Table~\ref{tab:defer:RCU Publish-Subscribe and Version Maintenance APIs},
 	for example, \co{rcu_assign_pointer()}.
 
 	What is an exception to this rule?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	그런 예외 중 하나는 여러 원소를 갖는 연결된 데이터 구조가 다른 CPU 들에
+	의한 액세스가 불가능한 동안 하나의 단위로 초기화 되었고 이어서 이
+	데이터 구조에 하나의 전역 포인터를 넣기 위해 \co{rcu_assign_pointer()}
+	가 사용되었을 때입니다.
+	이 초기화 시점 포인터 할당은 \co{rcu_assign_pointer()} 를 사용할 필요가
+	없습니다, 그런 구조체가 전역적으로 보여질 수 있게 된 후의 그런 할당은
+	\co{rcu_assign_pointer()} 를 \emph{사용해야만} 하지만말입니다.
+
+	하지만, 이 초기화 코드가 상당히 자주 수행되는 코드 경로에 있지 않다면,
+	\co{rcu_assign_pointer()} 가 이론상으론 필요치 않더라도 이 함수를
+	사용하는게 현명합니다.
+	``사소한'' 변경이 초기화가 사적으로 일어난다는 여러분의 소중한 가정을
+	바꿔놓기는 너무 쉽습니다.
+
+	\iffalse
+
 	One such exception is when a multi-element linked
 	data structure is initialized as a unit while inaccessible to other
 	CPUs, and then a single \co{rcu_assign_pointer()} is used
@@ -821,18 +883,40 @@ pointer and free the structure referenced by the old pointer.
 	anyway, even though it is in theory unnecessary.
 	It is all too easy for a ``minor'' change to invalidate your cherished
 	assumptions about the initialization happening privately.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	이 순회와 업데이트 기능들이 모든 RCU API 집합 멤버들과 사용될 수 있다는
+	데에 어떤 단점은 없습니까?
+
+	\iffalse
+
 	Are there any downsides to the fact that these traversal and update
 	primitives can be used with any of the RCU API family members?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	``sparse'' 와 같은 자동화된 코드 검사기가 (또는 실제 사람이) 특정 RCU
+	순회 기능이 어떤 종류의 RCU read-side 크리티컬 섹션에 연관되어 있는지
+	알기 어렵습니다.
+	예를 들어,
+	Listing~\ref{lst:defer:Diverse RCU Read-Side Nesting}
+	에 보인 코드를 생각해 봅시다.
+
+	\iffalse
+
 	It can sometimes be difficult for automated
 	code checkers such as ``sparse'' (or indeed for human beings) to
 	work out which type of RCU read-side critical section a given
 	RCU traversal primitive corresponds to.
 	For example, consider the code shown in
 	Listing~\ref{lst:defer:Diverse RCU Read-Side Nesting}.
+
+	\fi
 
 \begin{listing}[htbp]
 \begin{VerbatimL}
@@ -849,14 +933,43 @@ rcu_read_unlock();
 \label{lst:defer:Diverse RCU Read-Side Nesting}
 \end{listing}
 
+	여기서의 \co{rcu_dereference()} 기능은 바닐라 RCU 크리티컬 섹션 안에
+	있나요, RCU Sched 크리티컬 섹션 안에 있나요?
+	이걸 알기 위해 여러분은 뭘 해야 합니까?
+
+	하지만 v4.20 리눅스 커널에서의 RCU 변종들의 통합 이후부터는 더이상
+	신경쓸 필요 없습니다!
+
+	\iffalse
+
 	Is the \co{rcu_dereference()} primitive in a vanilla RCU critical
 	section or an RCU Sched critical section?
 	What would you have to do to figure this out?
 
 	But perhaps after the consolidation of the RCU flavors in
 	the v4.20 Linux kernel we no longer need to care!
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+\co{rcu_pointer_handoff()} 기능은 간단히 그것의 전체 인자를 리턴합니다만, RCU
+read-side 크리티컬 섹션 밖으로 새어나가는 포인터들을 검사하는 도구를 만드는 데
+유용합니다.
+\co{rcu_pointer_handoff()} 의 사용은 그런 도구에게 이 구조체의 보호가 RCU 에서
+예를 들면 락킹이나 레퍼런스 카운팅 같은 어떤 다른 메커니즘으로 넘겨졌음을
+알립니다.
+
+\co{RCU_INIT_POINTER()} 매크로는 아직 읽기 쓰레드에게 노출되지 않은 RCU 로
+보호되는 포인터를 초기화 하기 위해, 또는 RCU 로 보호되는 포인터를 \co{NULL} 로
+만들기 위해 사용될 수 있습니다.
+이 제한된 경우들에서, \co{rcu_assign_pointer()} 에 의해 제공되는 메모리 배리어
+인스트럭션은 필요치 않습니다.
+비슷하게, \co{RCU_POINTER_INITIALIZER()} 는 데이터 구조들 내의 RCU 로 보호되는
+포인터들의 쉬운 초기화를 허용하기 위한 \GCC 스타일 구조체 초기화를 제공합니다.
+
+\iffalse
 
 The \co{rcu_pointer_handoff()} primitive simply returns its sole argument,
 but is useful to tooling checking for pointers being leaked from
@@ -873,6 +986,28 @@ In these restricted cases, the memory-barrier instructions provided by
 Similarly, \co{RCU_POINTER_INITIALIZER()} provides a \GCC-style
 structure initializer to allow easy initialization of RCU-protected
 pointers in structures.
+
+\fi
+
+두번째 카테고리는 데이터 항목으로의 포인터를 구독하거나, 또는 대안적으로,
+안전하게 RCU 로 보호되는 포인터들을 순회합니다.
+다시 말하지만, 단순히 C 언어 액세스를 사용한 포인터 로딩은 가리켜지는 데이터의
+초기화 전 쓰레기 값을 볼 수 있게 할 수 있습니다.
+비슷하게, 이 포인터를 어떤 수단을 사용해서든 RCU read-side 크리티컬 섹션
+바깥에서 읽는 행위는 가리켜진 객체가 언제든 메모리 해제되게 할 수 있습니다.
+하지만, 이 포인터가 그저 테스트 되고 역참조 되지 않을 것이라면, 가리켜진 객체의
+메모리 해제는 문제가 아닐 겁니다.
+이 경우, \co{rcu_access_pointer()} 가 사용될 수 있습니다.
+하지만, 보통 RCU read-side 보호가 필요하며, 따라서 \co{rcu_dereference()}
+기능은 이 \co{rcu_dereference()} 호출이 \co{rcu_read_lock()},
+\co{srcu_read_lock()}, 또는 어떤 다른 RCU read-side 마커의 보호 아래
+이루어졌음을 검증하기 위해 리눅스 커널의 \co{lockdep}
+기능~\cite{JonathanCorbet2006lockdep} 을 사용합니다.
+대조적으로, \co{rcu_access_pointer()} 기능은 \co{lockdep} 과 연관되지 않으며,
+따라서 RCU read-side 크리티컬 섹션 외부에서 사용되어도 \co{lockdep} 의 불평을
+일으키지 않을 겁니다.
+
+\iffalse
 
 The second category subscribes to pointers to data items, or,
 alternatively, safely traverses RCU-protected pointers.
@@ -893,6 +1028,32 @@ marker.
 In contrast, the \co{rcu_access_pointer()} primitive does not involve
 \co{lockdep}, and thus will not provoke \co{lockdep} complaints when
 used outside of an RCU read-side critical section.
+
+\fi
+
+보호가 필요치 않은 또다른 상황은 업데이트 쪽 코드가 RCU 로 보호되는 포인터를
+업데이트 쪽 락을 잡은 채 액세스 하는 경우입니다.
+\co{rcu_dereference_protected()} API 멤버가 이 상황을 위해 제공됩니다.
+이것의 첫번째 패러미터는 RCU 로 보호되는 포인터이며, 두번째 패러미터는 이
+액세슥 ㅏ안전하기 위해 어떤 락이 잡혀져 있어야만 하는지를 설명하는 lockdep
+표현입니다.
+읽기 쓰레드와 업데이트 쓰레드 양쪽에서 수행되는 코드는 역시 lockdep 표현을
+받지만 이 락을 잡지 않는 읽기 쪽 코드에서도 호출될 수 있는
+\co{rcu_dereference_check()} 를 사용할 수 있습니다.
+어떤 경우에, 이 lockdep 표현은 매우 복잡할 수 있는데, 예를 들어 세밀한 락킹을
+사용할 때에는, 큰 수의 락들 중 어떤 것도 잡혀 있을 수 있고, 그 중 어떤 것이
+적용되는지 파악하기 무척 어려울 수도 있습니다.
+이러한 (바라건대 드문) 경우, \co{rcu_dereference_raw()} 는 보호를 제공하지만
+읽기 쓰레드 또는 특수한 락이 잡힌 상태에서 호출되는지를 검사하지는 않습니다.
+\co{rcu_dereference_raw_notrace()} API 멤버는 비슷하게 동작하지만 추적될 수
+없으며, 따라서 트레이싱 코드에서 안전히 사용될 수 있습니다.
+
+어떤 연결된 구조든 포인터를 사용해 액세스 될 수 있지만, 더 높은 수준의 구조가
+도움될 수 있습니다.
+따라서 다음 섹션은 다양한 종류의 RCU 로 보호되며 리눅스 커널에서 사용되는
+링크드 리스트들을 알아봅니다.
+
+\iffalse
 
 Another situation where protection is not required is when update-side code
 accesses the RCU-protected pointer while holding the update-side lock.
@@ -917,6 +1078,8 @@ Although pretty much any linked structure can be accessed by manipulating
 pointers, higher-level structures can be quite helpful.
 The next section therefore looks at various sorts of RCU-protected
 linked lists used by the Linux kernel.
+
+\fi
 
 \subsubsection{RCU has List-Processing APIs}
 \label{sec:defer:RCU has List-Processing APIs}
