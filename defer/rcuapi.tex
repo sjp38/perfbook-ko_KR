@@ -1098,6 +1098,25 @@ linked lists used by the Linux kernel.
 \label{fig:defer:Linux Linked List Abbreviated}
 \end{figure}
 
+\co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 가 이론상으로는 모든 상상할
+수 있는 RCU 로 보호되는 데이터 구조를 만들 수 있지만, 실제로는 더 높은 단계의
+것을 쓰는게 종종 낫습니다.
+따라서, \co{rcu_assign_pointer()} 와 \co{rcu_dereference()} 는 리눅스의 리스트
+조작 API 의 특수한 RCU 변종에 내포되어 있습니다.
+리눅스는 네개의 양방향 링크드 리스트 변종을 갖는데, 순환형 \co{struct
+list_head} 와 선형 \co{struct hlist_head}/\co{struct hlist_node}, \co{struct
+hlist_nulls_head}/\co{struct hlist_nulls_node}, 그리고 \co{struct
+hlist_bl_head}/\co{struct hlist_bl_node} 쌍들입니다.
+앞의 것은
+Figure~\ref{fig:defer:Linux Circular Linked List (list)} 에 보여져 있는 형태를
+띄는데, (가장 왼쪽의) 녹색 상자가 리스트 헤더를 표현하며 (오른쪽 세개의) 파란
+상자들은 이 리스트의 원소들을 표현합니다.
+이 표기법은 다루기 성가시며 따라서 헤더가 아닌 (파랑) 원소들만 보이는
+Figure~\ref{fig:defer:Linux Linked List Abbreviated} 에 보인 것처럼 간략화 할
+겁니다.
+
+\iffalse
+
 Although \co{rcu_assign_pointer()} and
 \co{rcu_dereference()} can in theory be used to construct any
 conceivable RCU-protected data structure, in practice it is often better
@@ -1120,12 +1139,29 @@ This notation is cumbersome, and will therefore be abbreviated as shown in
 Figure~\ref{fig:defer:Linux Linked List Abbreviated},
 which shows only the non-header (blue) elements.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{defer/Linux_hlist}}
 \caption{Linux Linear Linked List (\tco{hlist})}
 \label{fig:defer:Linux Linear Linked List (hlist)}
 \end{figure}
+
+리눅스의 \co{hlist}\footnote{
+	``h'' 는 해쉬테이블을 의미하는데, 리눅스의 양방향 포인터 순환형 링크드
+	리스트에 비해 메모리 사용량을 절반으로 줄입니다.}
+는 선형 리스트로, 이는
+Figure~\ref{fig:defer:Linux Linear Linked List (hlist)}
+에 보이듯헤더에  순환형 리스트에 필요한 두개의 포인터가 아니라 한개의 포인터만
+필요합니다.
+따라서, \co{hlist} 의 사용은 커다란 해쉬 테이블의 해쉬 버킷 배열을 위한 메모리
+사용량을 절반으로 줄일 수 있습니다.
+앞에서와 같이, 이 표기법은 다루기 귀찮으므로, \co{hlist} 구조는
+Figure~\ref{fig:defer:Linux Linked List Abbreviated}
+에 보인 것과 같은 \co{list_head} 스타일 리스트로 간략화 해 표기하겠습니다.
+
+\iffalse
 
 Linux's \co{hlist}\footnote{
 	The ``h'' stands for hashtable, in which it reduces memory
@@ -1140,6 +1176,30 @@ arrays of large hash tables.
 As before, this notation is cumbersome, so \co{hlist} structures will
 be abbreviated in the same way \co{list_head}-style lists are, as shown in
 Figure~\ref{fig:defer:Linux Linked List Abbreviated}.
+
+\fi
+
+\co{hlist_nulls} 라 이름지어진 리눅스의 \co{hlist} 의 한 변종은 여러 구별된
+\co{NULL} 포인터들을 제공합니다만, 그것 외에는
+Figure~\ref{fig:defer:Linux Linear Linked List (hlist)}
+에 보인것과 같은 레이아웃을 갖습니다.
+이 변종에서, 0 값의 낮은 위치 비트를 갖는 \co{->next} 포인터는 \co{NULL} 포인터
+타입을 의미합니다.
+이 타입의 리스트는 lockless 읽기 쓰레드들이 어떤 노드가 한 리스트에서 다른
+리스트로 옮겨진 것을 파악할 수 있게 하기 위해 사용됩니다.
+예를 들어, 해쉬 테이블의 각 버킷은 그것의 \co{NULL} 포인터를 마킹하기 위해 그
+인덱스를 사용할 수도 있습니다.
+읽기 쓰레드가 자신이 시작한 버킷의 인덱스와 맞지 않는 \co{NULL} 포인터를
+마주치면, 이 읽기 쓰레드는 자신이 순회하고 있는 원소가 순회 사이에 다른
+버킷으로 옮겨졌음을 알게 됩니다.
+이 읽기 쓰레드는 리스트의 끝에 도달했는지 알기 위해 \co{is_a_nulls()} 함수
+(\co{hlist_nulls} \co{NULL} 포인터를 받으면 true 를 리턴합니다) 를, \co{NULL}
+포인터의 타입을 가져오기 위해 \co{get_nulls_value()} (이 함수는 인자의
+\co{NULL} 포인터 식별자를 리턴합니다) 를 사용할 수 있습니다.
+\co{get_nulls_value()} 가 예상치 않은 값을 리턴하면, 읽기 쓰레드는 올바른
+행동을 취할 수 있는데, 예를 들면 시작부터 순회를 재시작 하는 것입니다.
+
+\iffalse
 
 A variant of Linux's \co{hlist}, named \co{hlist_nulls}, provides multiple
 distinct \co{NULL} pointers, but otherwise uses the same layout as shown in
@@ -1165,10 +1225,41 @@ When \co{get_nulls_value()} returns an unexpected value, the reader
 can take corrective action, for example, restarting its traversal from
 the beginning.
 
+\fi
+
 \QuickQuiz{
+	하지만 \co{hlist_nulls} 읽기 쓰레드가 다른 버킷으로 갔다가 다시
+	돌아오면 어떻게 하죠?
+
+	\iffalse
+
 	But what if an \co{hlist_nulls} reader gets moved to some other
 	bucket and then back again?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이를 제어하기 위한 한가지 방법은 항상 노드를 목적 버켓의 시작점으로
+	옮겨서 읽기 쓰레드가 매치 되는 \co{NULL} 포인터를 갖는 리스트의 끝에
+	닿았을 때에는 이 쓰레드가 이 리스트 전체를 탐색했음을 보장하는
+	것입니다.
+
+	물론, 해쉬 테이블에 버킷당 많은 원소가 있고 너무 많은 옮기기
+	오퍼레이션이 존재한다면 읽기 쓰레드는 영영 리스트의 끝에 도달할 수 없을
+	수도 있을 겁니다.
+	평범한 경우에 이를 막는 한가지 방법은 해쉬 테이블을 잘 튜닝되어서 짧은
+	리스트들만을 갖게 하는 것입니다.
+	이 문제를 파악하고 처리하는 한가지 방법은 읽기 쓰레드가 어떤 많은 수의
+	노드를 순회한 다음에는 탐색을 종료하고 update-side 락을 잡은 후 탐색을
+	다시 하는 것이지만 이는 데드락을 초래할 수 있습니다.
+	이 문제를 완전히 막는 또다른 방법은 읽기 쓰레드가 RCU read-side
+	크리티컬 섹션 내에서 탐색을 하고, 이어지는 업데이트들 사이의 RCU grace
+	period 하나를 기다리는 겁니다.
+	중간의 위치는 어떤 적당한 $N$ 값을 가지고 매 $N$ 업데이트마다 RCU grace
+	period 를 하나 기다릴 겁니다.
+
+	\iffalse
+
 	One way to handle this is to always move nodes to the beginning
 	of the destination bucket, ensuring that when the reader reaches
 	the end of the list having a matching \co{NULL} pointer, it will
@@ -1188,7 +1279,25 @@ the beginning.
 	an RCU grace period between successive updates.
 	An intermediate position might wait for an RCU grace period
 	every $N$ updates, for some suitable value of $N$.
+
+	\fi
+
 }\QuickQuizEnd
+
+\co{hlist_nulls} 에 대한 더 많은 정보는 \path{rculist_nulls.rst} 파일 (오래된
+커널에선 \path{rculist_nulls.txt}) 에서 제공되는 도움 될만한 예제 코드들과 함께
+리눅스 커널의 소스 트리에서 얻을 수 있습니다.
+
+리눅스의 \co{hlist} 의 또다른 변종은 비트 락킹을 결합하며, \co{hlist_bl} 이라
+이름지어졌습니다.
+이 변종은
+Figure~\ref{fig:defer:Linux Linear Linked List (hlist)}
+에 보인 것과 동일한 레이아웃을 사용하지만, 헤드 포인터의 (그림의 ``첫번째'')
+낮은 위치 비트를 이 리스트를 잠그기 위해 사용됩니다.
+이 방법 또한 메모리 사용량을 줄이는데, 이게 아니면 포인터 자체와 함께 별도의
+스핀락이 저장되어야 하기 때문입니다.
+
+\iffalse
 
 More information on \co{hlist_nulls} is available in the Linux-kernel
 source tree, with helpful example code provided in the
@@ -1202,6 +1311,8 @@ but reserves the low-order bit of the head pointer (``first'' in the
 figure) to lock the list.
 This approach also reduces memory usage, as it allows what would otherwise
 be a separate spinlock to be stored with the pointer itself.
+
+\fi
 
 \begin{sidewaystable*}[htbp]
 \rowcolors{1}{}{lightgray}
