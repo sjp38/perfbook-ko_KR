@@ -1415,6 +1415,26 @@ be a separate spinlock to be stored with the pointer itself.
 \end{tabular}
 \end{sidewaystable*}
 
+이 링크드 리스트 변종을 위한 API 멤버들이
+Table~\ref{tab:defer:RCU-Protected List APIs}
+에 요약되어 있습니다.
+더 많은 정보는 리눅스 커널 소스 트리의 \path{Documentation/RCU} 디렉토리와
+Linux Weekly News~\cite{PaulEMcKenney2019RCUAPI} 에서 얻을 수 있습니다.
+
+하지만, 이 섹션의 나머지 부분은 \co{list_replace_rcu()} 의 사용에 대해 확장해
+보는데, 이 API 멤버가 RCU 에게 그 이름을 주었기 때문입니다.
+이 API 멤버는 여러 필드를 가지는 이 리스트의 중간에 있는 원소가 원자적으로
+업데이트 되어서 어떤 읽기 쓰레드든 기존의 값들의 집합 또는 새로운 값들의 집합을
+봐야 하지, 그 두 집합의 섞인 값을 보지는 않아야 하는 복잡한 업데이트를 행하기
+위해 사용됩니다.
+예를 들어, 링크드 리스트의 각 노드는 정수 필드 \co{->a}, \co{->b},
+그리고~\co{->c} 를 가질 수도 있으며, 그 값을 5, 6, 그리고~7 에서 5, 2, 그리고~3
+으로 각각 업데이트 해야 할 수도 있습니다.
+
+이 원자적 업데이트를 행하는 코드 구현은 단순합니다:
+
+\iffalse
+
 The API members for these linked-list variants are summarized in
 Table~\ref{tab:defer:RCU-Protected List APIs}.
 More information is available in the \path{Documentation/RCU}
@@ -1432,6 +1452,8 @@ For example, each node of a linked list might have integer fields
 a given node's fields from 5, 6, and~7 to 5, 2, and~3, respectively.
 
 The code implementing this atomic update is straightforward:
+
+\fi
 
 \begin{fcvlabel}[ln:defer:Canonical RCU Replacement Example (2nd)]
 \begin{VerbatimN}[samepage=true,commandchars=\\\[\],firstnumber=15]
@@ -1452,6 +1474,23 @@ kfree(p);				\lnlbl[kfree]
 \label{fig:defer:RCU Replacement in Linked List}
 \end{figure}
 
+다음 이야기는 이 코드를 따라가는데, 그 상태 변화를 그리기 위해
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 를 사용합니다.
+각 원소의 세 값은 필드 \co{->a}, \co{->b}, 그리고~\co{->c} 를 각각 나타냅니다.
+빨간 색으로 칠해진 원소들은 읽기 쓰레드에 의해 참조될 수도 있으며, 읽기
+쓰레드는 업데이트 쓰레드와 직접적으로 동기화 하지 않기 때문에, 읽기 쓰레드는 이
+전체 교체 과정과 동시에 수행될 수도 있습니다.
+뒤쪽으로의 포인터와 tail 로부터 head 로의 링크는 간략화를 위해 생략되었음을
+알아두시기 바랍니다.
+
+포인터 \co{p} 를 포함해 이 리스트의 처음 상태는 앞의 삭제 예와 동일한데, 이
+그림의 첫번째 행에 보여져 있습니다.
+
+다음의 텍스트는 어떤 읽기 쓰레드든 이 두 값들 중 하나만을 보게 하는 방식으로
+\co{5,6,7} 원소를 \co{5,2,3} 으로 교체하는지 설명합니다.
+
+\iffalse
+
 The following discussion walks through this code, using
 Figure~\ref{fig:defer:RCU Replacement in Linked List} to illustrate
 the state changes.
@@ -1470,6 +1509,29 @@ first row of the figure.
 The following text describes how to replace the \co{5,6,7} element
 with \co{5,2,3} in such a way that any given reader sees one of these
 two values.
+
+\fi
+
+\begin{fcvref}[ln:defer:Canonical RCU Replacement Example (2nd)]
+라인~\lnref{kmalloc} 은 교체 원소를 할당하여,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 두번째 행에 이릅니다.
+이 지점에서, 어떤 읽기 쓰레드도 새로 할당된 원소로의 참조를 잡지 못하며 (초록색
+색깔로 표시되어 있습니다), 초기화 되어 있지 않습니다 (물음표로 표시되어
+있습니다).
+
+라인~\lnref{copy} 는 기존 원소를 새 원소로 복사하여,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 세번째 행의 상태에
+이릅니다.
+새로 할당된 원소는 여전히 읽기 쓰레드에 의해 참조될 수 없지만, 이제 초기화
+되었습니다.
+
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 네번째 행에 보여져
+있듯 라인~\lnref{update1} 은 \co{q->b} 의 값을 ``2'' 로, 그리고
+라인~\lnref{update2} 는 \co{q->c} 의 값을 ``3'' 으로 업데이트 합니다.
+새로 할당된 구조체는 여전히 읽기 쓰레드에게 액세스 될 수 없음을 생각해 주시기
+바랍니다.
+
+\iffalse
 
 \begin{fcvref}[ln:defer:Canonical RCU Replacement Example (2nd)]
 Line~\lnref{kmalloc} allocates a replacement element,
@@ -1491,6 +1553,21 @@ as shown on the fourth row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 Note that the newly allocated structure is still inaccessible to readers.
 
+\fi
+
+이제, 라인~\lnref{replace} 는 새 원소가 마침내 읽기 쓰레드에게 보여질 수 있게끔
+교체를 행하며, 따라서
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 다섯번째 행에 보여져
+있듯 빨갛게 칠해집니다.
+이 시점에서는 아래에서 보여지듯 우리는 이 리스트의 두 버전을 갖게 됩니다.
+기존부터 존재해온 읽기 쓰레드는 \co{5,6,7} 원소를 볼 수도 있지만 (따라서
+노란색으로 칠해져 있습니다), 새로운 읽기 쓰레드는 \co{5,2,3} 원소를 볼
+것입니다.
+하지만 모든 읽기 쓰레드는 이 값들 중 하나만 보지, 두 값들의 혼합된 것을 보지는
+못할 것이 보장됩니다.
+
+\iffalse
+
 Now, line~\lnref{replace} does the replacement, so that the new element is
 finally visible to readers, and hence is shaded red, as shown on
 the fifth row of
@@ -1501,6 +1578,28 @@ therefore now shaded yellow), but
 new readers will instead see the \co{5,2,3} element.
 But any given reader is guaranteed to see one set of values or the
 other, not a mixture of the two.
+
+\fi
+
+라인~\lnref{sync_rcu} 의 \co{synchronize_rcu()} 가 리턴한 후에는 하나의 grace
+period 가 지나갔을 것이며, 따라서 \co{list_replace_rcu()} 전에 시작된 모든
+읽기는 완료되었을 것입니다.
+특히, \co{5,6,7} 원소로의 참조를 가지고 있던 모든 읽기 쓰레드는 그들의 RCU
+read-side 크리티컬 섹션이 종료되었을 것이 보장되며, 따라서 참조를 계속 쥐고
+있는 것이 금지됩니다.
+따라서, 더이상 기존 값으로의 참조를 쥐고 있는 읽기 쓰레드는 더이상 존재하지
+않는데,
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 여섯번째 행에
+초록색으로 칠함으로써 표시되어 있습니다.
+읽기 쓰레드들의 관점에서, 우린 이제 새 원소가 기존 원소를 교체한, 리스트의
+단일한 버전으로 돌아왔습니다.
+
+라인~\lnref{kfree} 의 \co{kfree()} 가 완료된 후, 이 리스트는
+Figure~\ref{fig:defer:RCU Replacement in Linked List} 의 마지막 행에 보여진
+것과 같아질 것입니다.
+\end{fcvref}
+
+\iffalse
 
 After the \co{synchronize_rcu()} on line~\lnref{sync_rcu} returns,
 a grace period will have elapsed, and so all reads that started before the
@@ -1520,6 +1619,20 @@ appear as shown on the final row of
 Figure~\ref{fig:defer:RCU Replacement in Linked List}.
 \end{fcvref}
 
+\fi
+
+RCU 가 이 교체의 경우 후에 이름지어지긴 했으나, 리눅스 커널에서의 주요하고 많은
+RCU 사용 예는
+Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}
+의
+Figure~\ref{fig:defer:Multiple RCU Data-Structure Versions}
+에 보여진 것처럼 간단하고 비의존적인 삽입과 삭제에 기반해 있습니다.
+
+다음 섹션은 RCU 를 사용하는 코드의 디버깅을 하는 개발자들을 돕는 API 들을
+봅니다.
+
+\iffalse
+
 Despite the fact that RCU was named after the replacement case,
 the vast majority of RCU usage within the Linux kernel relies on
 the simple independent insertion and deletion, as was shown in
@@ -1528,6 +1641,8 @@ Section~\ref{sec:defer:Maintain Multiple Versions of Recently Updated Objects}.
 
 The next section looks at APIs that assist developers in debugging
 their code that makes use of RCU\@.
+
+\fi
 
 \subsubsection{RCU Has Diagnostic APIs}
 \label{sec:defer:RCU Has Diagnostic APIs}
