@@ -1688,6 +1688,20 @@ lockdep support &
 \end{table}
 
 Table~\ref{tab:defer:RCU Diagnostic APIs}
+은 RCU 의 진단 API 들을 보입니다.
+
+\co{__rcu} 는 RCU 로 보호된 포인터를 표시하는데, 예를 들면 \qtco{struct foo
+__rcu *p;} 와 같은 형태입니다.
+\co{rcu_dereference()} 로 넘겨질 수도 있는 포인터들이 그렇게 표시될 수
+있습니다만, \co{rcu_dereference()} 로부터 리턴된 값을 잡고 있는 포인터들은
+그러지 않아야 합니다.
+변수들에 이 표시를 제공함으로써, 구조체 필드, 함수 패러미터, 그리고 리턴 값들은
+리눅스 커널의 \co{sparse} 툴이 RCU 로 보호되는 포인터들이 평범한 C 언어 로드와
+스토어를 통해 부적절하게 액세스 되는 상황을 파악할 수 있게 합니다.
+
+\iffalse
+
+Table~\ref{tab:defer:RCU Diagnostic APIs}
 shows RCU's diagnostic APIs.
 
 The \co{__rcu} marks an RCU-protected pointer, for example,
@@ -1699,6 +1713,28 @@ Providing these markings on variables, structure fields, function
 parameters, and return values allow the Linux kernel's \co{sparse}
 tool to detect situtations where RCU-protected pointers are
 incorrectly accessed using plain C-language loads and stores.
+
+\fi
+
+객체 디버깅 지원은 리눅스 커널의 메모리 할당자로부터 얻어진 구조체의 부분인
+모든 \co{rcu_head} 구조체에 대해 자동적입니다만, 각자의 특수 목적 메모리
+할당자를 사용하는 경우에는 할당과 해제 시에 각각 \co{init_rcu_head()} 와
+\co{destroy_rcu_head()} 를 사용할 수 있습니다.
+함수 호출 스택에서 할당된 \co{rcu_head} 구조체를 사용하는 경우엔 (그런 경우가
+있습니다!) 첫번째 사용 전에 \co{init_rcu_head_on_stack()} 을, 마지막 사용 후,
+그러나 해당 함수에서 리턴하기 전에 \co{destroy_rcu_head_on_stack()} 을 사용할
+수 있습니다.
+객체 디버깅 지원은 동일한 \co{rcu_head} 구조체를 \co{call_rcu()} 와 그
+친구들에게 빠르게 잇달아 보냄으로써 이중 메모리 해제 종류의 메모리 할당 버그의
+\co{call_rcu()} 버전의 버그를 감지할 수 있게 합니다.
+
+Stall 경고 제어는 \co{rcu_cpu_stall_reset()} 을 통해 제공되는데, 호출자가 현재
+grace period 의 남은 시간 동안 RCU CPU stall 경고를 멈출 수 있게 합니다.
+RCU CPU stall 경고는 어떤 RCU read-side 크리티컬 섹션이 지나치게 긴 시간 동안
+수행되는 상황을 집어낼 수 있게 하며, 커널 디버거와 같은 것들이 예를 들면
+breakpoint 를 만났거나 하는 경우엔 이 경고를 끌 수 있게 하는게 유용합니다.
+
+\iffalse
 
 Debug-object support is automatic for any \co{rcu_head} structures
 that are part of a structure obtained from the Linux kernel's
@@ -1722,6 +1758,23 @@ critical section runs for an excessive length of time, and it is useful
 for things like kernel debuggers to be able to suppress them, for example,
 when encountering a breakpoint.
 
+\fi
+
+Callback 검사는 \co{rcu_head_init()} 와 \co{rcu_head_after_call_rcu()} 를 통해
+제공됩니다.
+앞의 것은 \co{rcu_head} 구조체가 \co{call_rcu()} 에 넘겨지기 전에 호출되며,
+그러면 \co{rcu_head_after_call_rcu()} 는 해당 callback 이 명시된 함수와 함께
+수행되었는지 검사할 겁니다.
+
+Lockdep~\cite{JonathanCorbet2006lockdep} 지원은
+\co{rcu_read_lock_held()},
+\co{rcu_read_lock_bh_held()},
+\co{rcu_read_lock_sched_held()}, 그리고
+\co{srcu_read_lock_held()} 를 포함하는데, 이것들 각각은 연관된 종류의 RCU
+read-side 크리티컬 섹션 내에서 호출되었다면 \co{true} 를 리턴합니다.
+
+\iffalse
+
 Callback checking is provided by \co{rcu_head_init()} and
 \co{rcu_head_after_call_rcu()}.
 The former is invoked on an \co{rcu_head} structure before it is passed
@@ -1737,13 +1790,57 @@ Support for lockdep~\cite{JonathanCorbet2006lockdep} includes
 each of which returns \co{true} if invoked within the corresponding
 type of RCU read-side critical section.
 
+\fi
+
 \QuickQuiz{
+	Tasks RCU 를 위한 \co{rcu_read_lock_tasks_held()} 는 왜 존재하지
+	않나요?
+
+	\iffalse
+
 	Why isn't there a \co{rcu_read_lock_tasks_held()} for Tasks RCU?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Tasks RCU 는 read-side 마커가 존재하지 않기 때문입니다.
+	대신, Tasks RCU read-side 크리티컬 섹션은 자발적 컨텍스트 스위치 사이로
+	제한됩니다.
+
+	\iffalse
+
 	Because Tasks RCU does not have read-side markers.
 	Instead, Tasks RCU read-side critical sections are
 	bounded by voluntary context switches.
+
+	\fi
+
 }\QuickQuizEnd
+
+\co{rcu_read_lock()} 은 idle 루프 내에서 사용될 수 없으며 전력 효율에 대한
+고민이 idle 루프를 상당히 화려하게 만든 이유로, \co{rcu_is_watching()} 은
+\co{rcu_read_lock()} 의 사용이 허용되는 컨텍스트에서 호출되었을 때 \co{true} 를
+리턴합니다.
+\co{srcu_read_lock()} 은 idle 에서도, 심지어 오프라인된 CPU 에서도 사용될 수
+있으며, 이는 \co{rcu_is_watching()} 이 SRCU 에는 적용되지 않음을 의미함을 다시
+주의하시기 바랍니다.
+
+\co{RCU_LOCKDEP_WARN()} 은 lockdep 이 활성화 되어 있으며 그 인자가 \co{true} 로
+평가될 때 경고를 냅니다.
+예를 들어, \co{RCU_LOCKDEP_WARN(!rcu_read_lock_held())} 는 RCU read-side
+크리티컬 섹션 바깥에서 호출되었을 때 경고를 낼 겁니다.
+
+\co{RCU_NONIDLE()} 은 RCU 를 완전한 인자로 전달된 명령문이 수행될 때를 보게
+강제할 수 있습니다.
+예를 들어, \co{RCU_NONIDLE(WARN_ON(!rcu_is_watching()))} 은 결코 경고를 내지
+않을 겁니다.
+하지만, 2020--2021 사이의 변화는 RCU 의 범위를 idle 루프 내까지 확장시켰으며,
+이는 \co{RCU_NONIDLE()} 의 필요를 크게 줄이거나 심지어 제거할 수 있을 겁니다.
+
+마지막으로, \co{rcu_sleep_check()} 는 RCU, RCU-bh, 또는 RCU-sched read-side
+크리티컬 섹션 내에서 호출되었을 때 경고를 냅니다.
+
+\iffalse
 
 Because \co{rcu_read_lock()} cannot be used from the idle loop,
 and because energy-efficiency concerns have caused the idle loop
@@ -1768,6 +1865,8 @@ need for \co{RCU_NONIDLE()}.
 
 Finally,  \co{rcu_sleep_check()} emits a warning if invoked within
 an RCU, RCU-bh, or RCU-sched read-side critical section.
+
+\fi
 
 \subsubsection{Where Can RCU's APIs Be Used?}
 \label{sec:defer:Where Can RCU's APIs Be Used?}
