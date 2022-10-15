@@ -59,12 +59,23 @@ Section~\ref{sec:defer:RCU Usage Summary} provides a summary.
 \subsubsection{RCU for Pre-BSD Routing}
 \label{sec:defer:RCU for Pre-BSD Routing}
 
+Listing~\ref{lst:defer:RCU Pre-BSD Routing Table Lookup}
+과~\ref{lst:defer:RCU Pre-BSD Routing Table Add/Delete}
+는 RCU 로 보호되는 Pre-BSD 라우팅 테이블의 코드를 보입니다
+(\path{route_rcu.c}).
+앞의 것은 데이터 구조와 \co{route_lookup()} 을, 뒤의 것은 \co{route_add()} 와
+\co{route_del()} 을 보입니다.
+
+\iffalse
+
 Listings~\ref{lst:defer:RCU Pre-BSD Routing Table Lookup}
 and~\ref{lst:defer:RCU Pre-BSD Routing Table Add/Delete}
 show code for an RCU-protected Pre-BSD routing table
 (\path{route_rcu.c}).
 The former shows data structures and \co{route_lookup()},
 and the latter shows \co{route_add()} and \co{route_del()}.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/defer/route_rcu@lookup.fcv}
@@ -77,6 +88,26 @@ and the latter shows \co{route_add()} and \co{route_del()}.
 \caption{RCU Pre-BSD Routing Table Add/Delete}
 \label{lst:defer:RCU Pre-BSD Routing Table Add/Delete}
 \end{listing}
+
+\begin{fcvref}[ln:defer:route_rcu:lookup]
+Listing~\ref{lst:defer:RCU Pre-BSD Routing Table Lookup} 에서, 라인~\lnref{rh}
+는 RCU 교체에 사용되는 \co{->rh} 필드를 더하고 라인~\lnref{re_freed} 는
+use-after-free 검사 필드인 \co{->re_freed} 를 더하며, 라인~\lnref{lock},
+\lnref{unlock1}, 그리고~\lnref{unlock2} 는 RCU read-side 보호를,
+라인~\lnref{chk_freed} 와~\lnref{abort} 는 use-after-free 검사를 더합니다.
+\end{fcvref}
+\begin{fcvref}[ln:defer:route_rcu:add_del]
+Listing~\ref{lst:defer:RCU Pre-BSD Routing Table Add/Delete} 에서,
+라인~\lnref{add:lock}, \lnref{add:unlock}, \lnref{del:lock},
+라인~\lnref{del:unlock1}, 그리고~\lnref{del:unlock2} 는 update-side 락킹을
+더하고 라인~\lnref{add:add_rcu} 와~\lnref{del:del_rcu} 는 RCU update-side
+보호를 더하고, 라인~\lnref{del:call_rcu}  는 \co{route_cb()} 가 하나의 grace
+period 가 지난 후 호출되게 하며 \clnrefrange{cb:b}{cb:e} 는 \co{route_cb()} 를
+정의합니다.
+이는 동작하는 동시적 구현을 위한 최소한의 추가된 코드입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:route_rcu:lookup]
 In Listing~\ref{lst:defer:RCU Pre-BSD Routing Table Lookup},
@@ -97,12 +128,36 @@ and \clnrefrange{cb:b}{cb:e} define \co{route_cb()}.
 This is minimal added code for a working concurrent implementation.
 \end{fcvref}
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{CodeSamples/defer/perf-rcu}}
 \caption{Pre-BSD Routing Table Protected by RCU}
 \label{fig:defer:Pre-BSD Routing Table Protected by RCU}
 \end{figure}
+
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU}
+는 읽기 전용 워크로드에서의 성능을 보입니다.
+RCU 는 상당히 잘 확장되며 거의 이상적인 성능을 제공합니다.
+하지만, 이 데이터는 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 에 작은 양의
+코드를 생성하는 userspace
+RCU~\cite{MathieuDesnoyers2009URCU,PaulMcKenney2013LWNURCU} 의 \co{RCU_SIGNAL}
+버전을 사용해 만들어졌습니다.
+\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 에 어떤 코드도 생성하지 않는
+QSBR 버전의 RCU 를 사용하면 어떻게 될까요?
+(RCU QSBR 에 대한 논의를 위해선
+Section~\ref{sec:defer:Introduction to RCU},
+그리고 특히
+Figure~\ref{fig:defer:QSBR: Waiting for Pre-Existing Readers} 를 보시기
+바랍니다.)
+
+이에 대한 답이 RCU QSBR 의 성능과 확장성은 실제로 이상적인 동기화 없는
+워크로드의 것을 넘어섬을 보이는
+Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR}
+에 보여져 있습니다.
+
+\iffalse
 
 Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU}
 shows the performance on the read-only workload.
@@ -124,13 +179,44 @@ Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR},
 which shows that RCU QSBR's performance and scalability actually exceeds
 that of the ideal synchronization-free workload.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	잠깐요, 뭐라고요???
+	어떻게 RCU QSBR 이 이상적인 것보다 나을 수 있죠?
+	어떤 쓰레기 같은 이상에 대한 정의가 그것이 모든 가능한 결과 중 최선이
+	아니게 할 수 있죠???
+
+	\iffalse
+
 	Wait, what???
 	How can RCU QSBR possibly be better than ideal?
 	Just what rubbish definition of ideal would fail to be the best
 	of all possible results???
+
+	\fi
+
 }\QuickQuizAnswerB{
+	훌륭한 질문이고, 이에 대한 답은 현대의 CPU 와 컴파일러는 굉장히
+	복잡하다는 것입니다.
+	하지만 거기까지 가기 전에, RCU QSBR 의 성능 이득은 코어당 하나의
+	하드웨어 쓰레드가 제공되는 세계에서만 나타남을 알아둘 가치가 있습니다.
+	시스템에 부하가 완전히 걸리고 나면, RCU QSBR 의 성능은 이상적인 것의
+	수준으로 떨어집니다.
+
+	RCU 버전의 \co{route_lookup()} 탐색 반복문은 실제 순차적 버전의 것보다
+	x86 명령을 하나더 가지는데, 이는 \co{cmp}, \co{je}, \co{mov}, \co{cmp},
+	\co{lea}, and \co{jne} 순서에서의 \co{lea} 입니다.
+	이 추가된 명령은 RCU 버전의 \co{route_entry} 구조체의 시작지점에 있는
+	\co{rcu_head} 구조체 때문으로, 이 때문에 순차적 버전과 달리 RCU 버전의
+	\co{->re_next.next} 포인터는 0이 아닌 오프셋을 갖습니다.
+	1980년대로 돌아가 보면, 이 추가적인 \co{lea} 명령은 RCU 버전이 느려지는
+	결과를 낼 수도 있었습니다만, 우린 지금 21세기에 있으며, 1980년대는 한참
+	지났습니다.
+
+	\iffalse
+
 	This is an excellent question, and the answer is that modern
 	CPUs and compilers are extremely complex.
 	But before getting into that, it is well worth noting that
@@ -152,6 +238,25 @@ that of the ideal synchronization-free workload.
 	are now in the 21\textsuperscript{st} century, and the 1980s
 	are long gone.
 
+	\fi
+
+	하지만
+	\cref{sec:cpu:Pipelined CPUs}
+	를 주의 깊게 읽은 여러분들은 이미 이 모든 걸 알고 있을 겁니다!
+
+	이런 반직관적인 결과는 물론 현대 마이크로프로세서에서의 모든 성능
+	결과는 약간 회의적으로 보아져야 함을 의미합니다.
+	이론상, 이상적인 것보다 나은 성능을 얻는다는 것은 정말 말이 안됩니다만,
+	현대의 마이크로프로세서에서는 정말로 일어날 수 있는 일입니다.
+	그런 결과는 축복받은 초선형적 성능향상 (그런 예 중 하나를 위해
+	Section~\ref{sec:SMPdesign:Beyond Partitioning} 을 보세요) 비슷한 걸로
+	생각 될 수 있는데, 즉, 흥미롭지만 또한 실용적 중요도는 제한된다는
+	것입니다.
+	그러나, RCU 의 강점 중 하나는 그 읽기 쪽 오버헤드가 무척 낮아서 이와
+	같은 작은 효과가 실제 성능 측정에도 보여질 수 있다는 것입니다.
+
+	\iffalse
+
 	But those of you who read
 	\cref{sec:cpu:Pipelined CPUs}
 	carefully already knew all of this!
@@ -171,12 +276,24 @@ that of the ideal synchronization-free workload.
 	overhead is so low that tiny effects such as this one are visible
 	in real performance measurements.
 
+	\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{CodeSamples/defer/perf-rcu-qsbr-qq}}
 \caption{Pre-BSD Routing Table Protected by RCU QSBR With Non-Initial \tco{rcu_head}}
 \label{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR With Non-Initial rcu-head}
 \end{figure}
+
+	이는 \co{rcu_head} 구조체가 \co{->re_next.next} 포인터가 0 오프셋을
+	갖게끔 옮겨져서 순차적 버전과 동일하게 되면 어떻게 되는지 질문을 하게
+	만듭니다.
+	그에 대한 답은
+	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR With Non-Initial rcu-head}
+	에 보여져 있듯, RCU QSBR 의 성능이 여전히 이상적인 것에 근접하지만
+	이상적인 것을 넘어서지는 않게 한다는 것입니다.
+
+	\iffalse
 
 	This raises the question as to what would happen if the
 	\co{rcu_head} structure were to be moved so that RCU's
@@ -186,12 +303,32 @@ that of the ideal synchronization-free workload.
 	Figure~\ref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR With Non-Initial rcu-head},
 	is that this causes RCU QSBR's performance to decrease to where
 	it is still very nearly ideal, but no longer super-ideal.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	RCU QSBR 의 읽기 성능이 그렇게 좋은데, 왜 다른 userspace 버전을
+	신경쓰죠?
+
+	\iffalse
+
 	Given RCU QSBR's read-side performance, why bother with any
 	other flavor of userspace RCU?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	RCU QSBR 은 허용될 수 없을 수도 있는 어플리케이션 전체의 제약을
+	요구하기 때문인데, 예를 들면 어플리케이션 내의 모든 각각의 쓰레드가
+	정기적으로 quiescent state 를 지나야 한다는 것입니다.
+	다른 것들 중에서도, 이는 RCU QSBR 이 다른 종류의 userspace
+	RCU~\cite{PaulMcKenney2013LWNURCU} 에 의해 더 잘 도움받을 수도 있는
+	라이브러리 작성자에게는 도움이 될 수 있다는 것을 의미합니다.
+
+	\iffalse
+
 	Because RCU QSBR places constraints on the overall application
 	that might not be tolerable,
 	for example, requiring that each and every thread in the
@@ -199,6 +336,9 @@ that of the ideal synchronization-free workload.
 	Among other things, this means that RCU QSBR is not helpful
 	to library writers, who might be better served by other
 	flavors of userspace RCU~\cite{PaulMcKenney2013LWNURCU}.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
