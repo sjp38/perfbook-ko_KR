@@ -352,6 +352,27 @@ that of the ideal synchronization-free workload.
 \subsubsection{RCU is a Reader-Writer Lock Replacement}
 \label{sec:defer:RCU is a Reader-Writer Lock Replacement}
 
+리눅스 커널에서의 RCU 의 가장 흔한 사용처는 아마도 읽기가 집중적인 상황에서의
+reader-writer 락킹 대체일 겁니다.
+그러나, 이런 RCU 사용은 처음에 제게 즉각적으로 적절하게 느껴지지 않았고, 실제로
+저는 1990년대 초에 범용 RCU 구현을 만들기 전에 가벼운 reader-writer 락을
+구현하기로 했습니다~\cite{WilsonCHsieh92a}.\footnote{
+	2.4 리눅스 커널의 \co{brlock} 과, 더 최신의 리눅스 커널의 \co{lglock}
+	과 비슷합니다.}
+이 가벼운 reader-writer 락으로 제가 하고자 했던 모든 것은 결국 RCU 를 이용해
+구현되었습니다.
+사실, 그건 이 가벼운 reader-writer 락이 처음 사용되기 3년이나 전의
+일이었습니다.
+정말 바보가 된 것 같았죠!
+
+RCU 와 reader-writer 락킹 사이의 핵심 유사성은 둘 다 병렬로 구생될 수 있는
+read-side 크리티컬 섹션을 갖는다는 것입니다.
+실제로, 어떤 경우에는 RCU API 멤버들을 연관된 reader-writer 락 API 멤버들로
+대체하는게 가능합니다.
+하지만 무엇보다, 왜 그런걸 신경쓰죠?
+
+\iffalse
+
 Perhaps the most common use of RCU within the Linux kernel is as
 a replacement for reader-writer locking in read-intensive situations.
 Nevertheless, this use of RCU was not immediately apparent to me
@@ -373,6 +394,17 @@ In fact, in some cases, it is possible to mechanically substitute RCU API
 members for the corresponding reader-writer lock API members.
 But first, why bother?
 
+\fi
+
+RCU 의 장점은 성능, 데드락 내성, 그리고 리얼타임 응답시간을 포함합니다.
+물론, RCU 의 제한점들도 존재하는데 읽기 쓰레드와 업데이트 쓰레드가 동시에
+수행된다는 사실, 낮은 우선순위 RCU 읽기 쓰레드가 높은 우선순위 쓰레드를 grace
+period 하나가 지나갈 때까지 블록시킨다는 것, 그리고 grace period 응답시간이 수
+밀리세컨드까지 길어질 수 있다는 점이 포함됩니다.
+이런 장점과 한계점들이 다음 문단들에서 논의됩니다.
+
+\iffalse
+
 Advantages of RCU include performance,
 deadlock immunity, and realtime latency.
 There are, of course, limitations to RCU, including the fact that
@@ -380,6 +412,8 @@ readers and updaters run concurrently, that low-priority RCU readers
 can block high-priority threads waiting for a grace period to elapse,
 and that grace-period latencies can extend for many milliseconds.
 These advantages and limitations are discussed in the following paragraphs.
+
+\fi
 
 \paragraph{Performance}
 
