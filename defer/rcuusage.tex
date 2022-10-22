@@ -751,6 +751,26 @@ The error bars span the full range of data.
 \label{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}
 \end{figure}
 
+물론,
+\cref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking,%
+fig:defer:Performance Advantage of Preemptible RCU Over Reader-Writer Locking}
+의 reader-writer 락킹의 낮은 성능은 비현실적인 0의 길이를 갖는 크리티컬 섹션에
+의해 과장된 것입니다.
+RCU 의 성능 이득은 크리티컬 섹션의 길이가 길어질수록 줄어듭니다.
+이런 감소가 앞의 그림과 같은 시스템에서 수행된
+Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}
+에 보여져 있습니다.
+여기서, y 축은 read-side 기능의 오버헤드와 크리티컬 섹션의 오버헤드의 합을, x
+축은 크리티컬 섹션의 오버헤드를 나노세컨드 단위로 표현합니다.
+하지만 y 축이 로그스케일이어서 이 그림에서의 작은 차이가 여전히 상당한 차이를
+표현함을 기억해 두시기 바랍니다.
+이 그림은 non-preemptible RCU 를 보입니다만, preemptible RCU 의 read-side
+오버헤드가 3 나노세컨드란 점을 놓고 보면, 그 그림은
+Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}
+와 거의 같을 겁니다.
+
+\iffalse
+
 Of course, the low performance of reader-writer locking in
 \cref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking,%
 fig:defer:Performance Advantage of Preemptible RCU Over Reader-Writer Locking}
@@ -770,10 +790,30 @@ read-side overhead is only about three nanoseconds, its plot would be
 nearly identical to
 Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}.
 
+\fi
+
 \QuickQuiz{
+	Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}
+	의 마이크로세컨드 미만 기간에서의 더 큰 에러 범위는 왜 그런거죠?
+
+	\iffalse
+
 	Why the larger error ranges for the submicrosecond durations in
 	Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of Critical-Section Duration}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	더 작은 거리는 더 작은 측정에서 더 큰 상대적 에러를 초래하기
+	때문입니다.
+	또한, 리눅스 커널의 \co{ndelay()} 나노세컨드 단위 기능은 (2020년
+	기준으로) 마이크로세컨드 이상의 시간단위 데이터를 위해 사용되는
+	\co{udelay()} 보다 덜 정확합니다.
+	Figure~\ref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking}
+	에 보인 0 의 길이의 경우와 비교해 보는게 유익할 겁니다.
+
+	\iffalse
+
 	Because smaller disturbances result in greater relative errors
 	for smaller measurements.
 	Also, the Linux kernel's \co{ndelay()} nanosecond-scale primitive
@@ -781,7 +821,23 @@ Figure~\ref{fig:defer:Comparison of RCU to Reader-Writer Locking as Function of 
 	used for the data for durations of a microsecond or more.
 	It is instructive to compare to the zero-length case shown in
 	Figure~\ref{fig:defer:Performance Advantage of RCU Over Reader-Writer Locking}.
+
+	\fi
+
 }\QuickQuizEnd
+
+Reader-writer 락킹을 위한 세개의 선이 있는데, 위의 것은 100~CPU, 그
+다음은 10~CPU, 그리고 아래의 것은 1~CPU 에서의 것입니다.
+따라서 CPU 의 수가 커지고 크리티컬 섹션이 짧아질수록 RCU 의 성능 이득은
+커집니다.
+이런 성능 이득은 100-CPU 시스템이 더이상 드물지 않고 여러 시스템 콜이 (그리고
+그것들이 내포하는 RCU read-side 크리티컬 섹션이) 마이크로세컨드 내에 완료된다는
+사실에 의해 과소평가되었습니다.
+
+첨언하자면, 다음 문단에서 이야기 되듯, RCU read-side 기능은 거의 완전히
+데드락에 내성을 가지고 있습니다.
+
+\iffalse
 
 There are three traces for reader-writer locking, with the upper trace
 being for 100~CPUs, the next for 10~CPUs, and the lowest for 1~CPU\@.
@@ -794,6 +850,8 @@ within a microsecond.
 
 In addition, as is discussed in the next paragraph,
 RCU read-side primitives are almost entirely deadlock-immune.
+
+\fi
 
 
 \paragraph{Deadlock Immunity}
