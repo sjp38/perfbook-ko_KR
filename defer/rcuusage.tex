@@ -856,6 +856,14 @@ RCU read-side primitives are almost entirely deadlock-immune.
 
 \paragraph{Deadlock Immunity}
 
+RCU 가 읽기가 대부분인 워크로드에 상당한 성능 이득을 제공하지만, RCU 를 만든
+주요 이유는 사실 그것의 read-side 데드락 내성을 위함이었습니다.
+이 내성은 RCU read-side 기능이 블록하거나 스핀하거나 뒤쪽으로 브랜칭하지 않아서
+그 수행시간이 정해져있다는 사실에서 기인합니다.
+따라서 그것들은 데드락 사이클에 참여될 수가 없습니다.
+
+\iffalse
+
 Although RCU offers significant performance advantages for
 read-mostly workloads, one of the primary reasons for creating
 RCU in the first place was in fact its immunity to read-side
@@ -866,19 +874,59 @@ do backwards branches, so that their execution time is deterministic.
 It is therefore impossible for them to participate in a deadlock
 cycle.
 
+\fi
+
 \QuickQuiz{
+	이 데드락 내성에 예외가 있나요?  만약 그렇다면 어떤 이벤트들의 연속이
+	데드락을 이르게 할 수 있나요?
+
+	\iffalse
+
 	Is there an exception to this deadlock immunity, and if so,
 	what sequence of events could lead to deadlock?
+
+	\fi
+
 }\QuickQuizAnswer{
+	RCU read-side 기능이 관여된 데드락 사이클을 만드는 한가지 방법은 다음의
+	(불법적인) 선언문의 연속입니다:
+
+	\iffalse
+
 	One way to cause a deadlock cycle involving
 	RCU read-side primitives is via the following (illegal) sequence
 	of statements:
+
+	\fi
 
 \begin{VerbatimU}
 rcu_read_lock();
 synchronize_rcu();
 rcu_read_unlock();
 \end{VerbatimU}
+
+	이 \co{synchronize_rcu()} 는 앞서서부터 존재한 모든 RCU read-side
+	크리티컬 섹션이 완료되기 전까지 리턴할 수 없지만,
+	\co{synchronize_rcu()} 가 리턴하기 전까지는 완료될 수 없는 RCU
+	read-side 크리티컬 섹션에 감싸여 있습니다.
+	그 결과는 고전적인 스스로에 대한 데드락입니다---reader-writer 락의
+	경우에도 읽기 락을 쥐고 있는 상태에서 쓰기 락을 쥐려고 시도하면 똑같은
+	결과를 얻을 겁니다.
+
+	이 스스로에 대한 데드락 시나리오는 RCU QSBR 에 적용되지 않는데,
+	\co{synchronize_rcu()} 에 의해 수행되는 컨텍스트 스위치는 이 CPU 를
+	위한 quiescent state 로 동작하여 grace period 가 종료되게 할 것이기
+	때문임을 알아두시기 바랍니다.
+	하지만, 이는 심지어 더 나쁜 것일 뿐일텐데, 이 RCU read-side 크리티컬
+	섹션에 의해 사용되는 데이터는 이 grace period 완료로 인해 메모리
+	해제되었을 수도 있기 때문입니다.
+
+	요약하자면,
+	\cref{tab:defer:RCU Wait-to-Finish APIs} 에 나열된
+	synchronous RCU update-side 기능을 RCU read-side 크리티컬 섹션 내에서
+	사용하지 마십시오.
+
+	\iffalse
 
 	The \co{synchronize_rcu()} cannot return until all
 	pre-existing RCU read-side critical sections complete, but
@@ -900,7 +948,17 @@ rcu_read_unlock();
 	are listed in
 	\cref{tab:defer:RCU Wait-to-Finish APIs},
 	from within an RCU read-side critical section.
+
+	\fi
+
 }\QuickQuizEnd
+
+RCU 의 read-side 데드락 내성의 한가지 흥미로운 결론은 RCU 읽기 쓰레드를
+무조건적으로 RCU 업데이트 쓰레드로 업그레이드 할 수 있다는 것입니다.
+Reader-writer 락킹에서 그런 업그레이드를 시도하는 것은 데드락을 초래합니다.
+RCU read-to-update 업그레이드를 하는 코드 조각은 다음과 같을겁니다:
+
+\iffalse
 
 An interesting consequence of RCU's read-side deadlock immunity is
 that it is possible to unconditionally upgrade an RCU
@@ -908,6 +966,8 @@ reader to an RCU updater.
 Attempting to do such an upgrade with reader-writer locking results
 in deadlock.
 A sample code fragment that does an RCU read-to-update upgrade follows:
+
+\fi
 
 \begin{VerbatimN}[samepage=true]
 rcu_read_lock();
@@ -922,6 +982,18 @@ list_for_each_entry_rcu(p, &head, list_field) {
 rcu_read_unlock();
 \end{VerbatimN}
 
+\co{do_update()} 는 락의 보호, \emph{그리고} RCU read-side 보호 아래 수행됨에
+주의하십시오.
+
+RCU 의 데드락 내성의 또다른 흥미로운 결론은 커다란 범주의 우선순위 역전 문제에
+대한 내성입니다.
+예를 들어, 낮은 우선순위 RCU 읽기 쓰레드가 높은 우선순위 RCU 업데이트 쓰레드가
+update-side 락을 잡는걸 방지하지 못합니다.
+비슷하게, 낮은 우선순위 RCU 업데이트 쓰레드는 높은 우선순위 RCU 읽기 쓰레드가
+RCU read-side 크리티컬 섹션에 들어가는 것을 막지 못합니다.
+
+\iffalse
+
 Note that \co{do_update()} is executed under
 the protection of the lock \emph{and} under RCU read-side protection.
 
@@ -932,13 +1004,32 @@ RCU updater from acquiring the update-side lock.
 Similarly, a low-priority RCU updater cannot prevent high-priority
 RCU readers from entering an RCU read-side critical section.
 
+\fi
+
 \QuickQuiz{
+	데드락과 우선순위 역전에 모두 내성이 있다???
+	사실이라기엔 너무 좋아보이는데요.
+	이게 가능하다는 걸 제가 왜 믿어야 하죠?
+
+	\iffalse
+
 	Immunity to both deadlock and priority inversion???
 	Sounds too good to be true.
 	Why should I believe that this is even possible?
+
+	\fi
+
 }\QuickQuizAnswer{
+	진짜 동작합니다.
+	어쨌건, 그렇지 않다면 리눅스 커널은 동작하지 못할겁니다.
+
+	\iffalse
+
 	It really does work.
 	After all, if it didn't work, the Linux kernel would not run.
+
+	\fi
+
 }\QuickQuizEnd
 
 \paragraph{Realtime Latency}
