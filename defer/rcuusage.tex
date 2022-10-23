@@ -1260,6 +1260,17 @@ situations.
 
 \paragraph{Code: Reader-Writer Locking vs. RCU Code}
 
+최선의 경우, reader-writer 락킹에서 RCU 로의 전환은
+Listing~\ref{lst:defer:Converting Reader-Writer Locking to RCU: Data},
+\ref{lst:defer:Converting Reader-Writer Locking to RCU: Search},
+그리고
+\ref{lst:defer:Converting Reader-Writer Locking to RCU: Deletion}
+에 보인 것처럼 상당히 단순할 수 있는데, 이것들은 모두
+Wikipedia~\cite{WikipediaRCU} 에서 가져온 것들입니다.
+
+\iffalse
+
+
 In the best case, the conversion from reader-writer locking to RCU
 is quite simple, as shown in
 Listings~\ref{lst:defer:Converting Reader-Writer Locking to RCU: Data},
@@ -1268,6 +1279,8 @@ and
 \ref{lst:defer:Converting Reader-Writer Locking to RCU: Deletion},
 all taken from
 Wikipedia~\cite{WikipediaRCU}.
+
+\fi
 
 \begin{listing*}[htbp]
 { \scriptsize
@@ -1343,6 +1356,27 @@ Wikipedia~\cite{WikipediaRCU}.
 \label{lst:defer:Converting Reader-Writer Locking to RCU: Deletion}
 \end{listing*}
 
+하지만, 이런 전환이 항상 단순하지는 않습니다.
+이는
+\cref{lst:defer:Converting Reader-Writer Locking to RCU: Deletion}
+의 \co{spin_lock()} 도 \co{synchronize_rcu()} 도
+\cref{lst:defer:Converting Reader-Writer Locking to RCU: Search}
+의 읽기 쓰레드를 배제시키지 않기 때문입니다.
+첫째로, \co{spin_lock()} 은 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 과
+상호작용하지 않으며 따라서 그것들을 배제하지 않습니다.
+둘째로, \co{write_lock()} 과 \co{synchronize_rcu()} 가 앞서서부터 존재한 읽기
+쓰레드를 기다리지만 \co{write_lock()} 만이 뒤따르는 읽기 쓰레드의 시작을
+방지합니다.\footnote{
+	누구였든 이걸 Paul 에게 지적해준 분에게 감사를.}
+따라서, \co{synchronize_rcu()} 는 읽기 쓰레드를 배제하지 못합니다.
+따라서 reader-writer 락킹을 사용하는 많은 상황이 RCU 로 쉽게 바뀔 수 있다는
+사실은 놀랍습니다.
+
+Reader-writer 락킹을 RCU 로 교체하는 더 자세한 경우들이 다른 곳에서도 발견될 수
+있을 겁니다~\cite{NeilBrown2015PathnameLookup,NeilBrown2015RCUwalk}.
+
+\iffalse
+
 However, the transformation is not always this straightforward.
 This is because neither the \co{spin_lock()} nor the
 \co{synchronize_rcu()} in
@@ -1362,6 +1396,8 @@ using reader-writer locking can be easily converted to RCU\@.
 More-elaborate cases of replacing reader-writer locking with RCU
 may be found
 elsewhere~\cite{NeilBrown2015PathnameLookup,NeilBrown2015RCUwalk}.
+
+\fi
 
 \paragraph{Semantics: Reader-Writer Locking vs. RCU Semantics}
 
