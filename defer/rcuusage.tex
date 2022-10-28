@@ -1401,6 +1401,20 @@ elsewhere~\cite{NeilBrown2015PathnameLookup,NeilBrown2015RCUwalk}.
 
 \paragraph{Semantics: Reader-Writer Locking vs. RCU Semantics}
 
+Reader-writer 락킹 semantic 은 거칠고 비정규적으로 다음의 세가지 임시적 제약으로
+요약될 수 있습니다:
+
+\begin{enumerate}
+\item	쓰기 락 획득은 모든 읽기 락을 잡은 쓰레드들이 그 락을 놓기를
+	기다립니다.
+\item	쓰기 락 획득은 모든 쓰기 락을 잡은 쓰레드들이 그 락을 놓기를
+	기다립니다.
+\item	읽기 락 획득은 모든 쓰기 락을 잡은 쓰레드들이 그 락을 놓기를
+	기다립니다.
+\end{enumerate}
+
+\iffalse
+
 Reader-writer locking semantics can be roughly and informally summarized
 by the following three temporal constraints:
 
@@ -1412,6 +1426,33 @@ by the following three temporal constraints:
 \item	Read-side acquisitions wait for any write-holder to release
 	the lock.
 \end{enumerate}
+
+\fi
+
+RCU 는 제약~\#3 을 완전히 사라지게 하고 나머지 두개도 다음과 같이 완화시킵니다:
+
+\begin{enumerate}
+\item	쓰기 쓰레드는 모든 앞서서부터 존재해온 읽기 락을 잡은 쓰레드들을
+	업데이트의 파괴적인 단계를 (일반적으로 메모리 해제) 처리하기 전에
+	기다립니다.
+\item	쓰기 쓰레드는 서로간에 필요한 바에 맞춰 동기화 합니다.
+\end{enumerate}
+
+물론 이 완화가 RCU 구현이 훌륭한 성능과 확장성을 얻을 수 있게 합니다.
+RCU 사용처들은 이 완화를 놀랄만큼 많은 방법으로 보상합니다만 일반적으로 공간적
+제약을 사용합니다:
+
+\begin{enumerate}
+\item	새 데이터는 새로 할당된 메모리에 위치합니다.
+\item	오래된 데이터는 메모리 해제되지만, 다음의 조건이 충족된 후에만 합니다:
+	\begin{enumerate}
+	\item	데이터가 뒤의 읽기 쓰레드에 의해선 접근 불가능하게끔 링크
+		삭제되었을 것, 그리고
+	\item	뒤따르는 RCU grace period 가 지났을 것.
+	\end{enumerate}
+\end{enumerate}
+
+\iffalse
 
 RCU dispenses entirely with constraint~\#3 and weakens the other two
 as follows:
@@ -1438,8 +1479,17 @@ of ways, but most commonly by imposing spatial constraints:
 	\end{enumerate}
 \end{enumerate}
 
+\fi
+
+요약해서, RCU 는 자신의 쓰기 성능과 확장성을 시공간적 제약에 기반한 semantic 을
+통해 얻습니다.
+
+\iffalse
+
 In short, RCU attains its read-side performance and scalability by
 constructing semantics based on combined temporal and spatial constraints.
+
+\fi
 
 \subsubsection{RCU is a Restricted Reference-Counting Mechanism}
 \label{sec:defer:RCU is a Restricted Reference-Counting Mechanism}
