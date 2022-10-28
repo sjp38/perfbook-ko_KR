@@ -1494,11 +1494,20 @@ constructing semantics based on combined temporal and spatial constraints.
 \subsubsection{RCU is a Restricted Reference-Counting Mechanism}
 \label{sec:defer:RCU is a Restricted Reference-Counting Mechanism}
 
+Grace period 는 진행중인 RCU read-side 크리티컬 섹션이 있는 동안은 완료될 수
+없으므로, RCU read-side 기능들은 제한된 레퍼런스 카운팅 메커니즘으로 사용될 수
+있습니다.
+예를 들어, 다음 코드 조각을 생각해 봅시다:
+
+\iffalse
+
 Because grace periods are not allowed to complete while
 there is an RCU read-side critical section in progress,
 the RCU read-side primitives may be used as a restricted
 reference-counting mechanism.
 For example, consider the following code fragment:
+
+\fi
 
 \begin{VerbatimN}
 rcu_read_lock();  /* acquire reference. */
@@ -1506,6 +1515,18 @@ p = rcu_dereference(head);
 /* do something with p. */
 rcu_read_unlock();  /* release reference. */
 \end{VerbatimN}
+
+\co{rcu_read_lock()} 기능은 \co{p} 로의 레퍼런스를 얻는 것으로 생각될 수도
+있는데, \co{rcu_dereference()} 가 \co{p} 에 값을 할당한 뒤에 시작되는 grace
+period 는 우리가 매칭되는 \co{rcu_read_unlock()} 전까지는 종료될 수 없기
+때문입니다.
+이 레퍼런스 카운팅 방법은 우리가 RCU read-side 크리티컬 섹션 내에서는 블록될 수
+없으며 RCU read-side 크리티컬 섹션을 한 태스크에서 다른 태스크로 넘길 수도
+없다는 사실로 제약이 됩니다.
+
+이런 제약과 무관하게, 다음 코드는 안전하게 \co{p} 를 삭제합니다:
+
+\iffalse
 
 The \co{rcu_read_lock()} primitive can be thought of as
 acquiring a reference to \co{p}, because a grace period
@@ -1520,6 +1541,8 @@ from one task to another.
 Regardless of these restrictions,
 the following code can safely delete \co{p}:
 
+\fi
+
 \begin{VerbatimN}
 spin_lock(&mylock);
 p = head;
@@ -1530,16 +1553,46 @@ synchronize_rcu();
 kfree(p);
 \end{VerbatimN}
 
+\co{head} 로의 할당은 미래의 \co{p} 로의 레퍼런스가 얻어지는 것을 방지하고,
+\co{synchronize_rcu()} 는 모든 앞서 획득된 레퍼런스가 해제되기를 기다립니다.
+
+\iffalse
+
 The assignment to \co{head} prevents any future references
 to \co{p} from being acquired, and the \co{synchronize_rcu()}
 waits for any previously acquired references to be released.
 
+\fi
+
 \QuickQuiz{
+	하지만 잠시만요!
+	이건 RCU 를 reader-writer 락킹의 대체제로 생각할 때 사용될 수 있는 것과
+	완전히 똑같은 코드예요!
+	뭐죠?
+
+	\iffalse
+
 	But wait!
 	This is exactly the same code that might be used when thinking
 	of RCU as a replacement for reader-writer locking!
 	What gives?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이건 장난감 예제의 법칙의 효과입니다:
+	어떤 지점 이후부터는 코드 조각들은 똑같이 보입니다.
+	유일한 차이점은 우리가 그 코드를 어떻게 생각하느냐에 있습니다.
+	하지만, 이 차이점은 무척 중요할 수 있습니다.
+	그 중요성에 대해 한가지만 예를 들어보자면, 우리가 RCU 를 제한된
+	레퍼런스 카운팅 방법으로 생각한다면, 우린 업데이트가 RCU read-side
+	크리티컬 섹션을 배제시킬 거라는 바보스러운 생각에 빠지진 않을 겁니다.
+
+	그러나 RCU 를 reader-writer 락킹의 대체제로 생각하는 것도 종종
+	유용한데, 예를 들면 reader-writer 락킹을 RCU 로 대체할 때 그렇습니다.
+
+	\iffalse
+
 	This is an effect of the Law of Toy Examples:
 	beyond a certain point, the code fragments look the same.
 	The only difference is in how we think about the code.
@@ -1552,11 +1605,22 @@ waits for any previously acquired references to be released.
 	It nevertheless is often useful to think of RCU as a replacement
 	for reader-writer locking, for example, when you are replacing
 	reader-writer locking with RCU\@.
+
+	\fi
+
 }\QuickQuizEnd
+
+물론, RCU 는
+Section~\ref{sec:together:Refurbish Reference Counting}
+에서 이야기 된 것처럼 전통적인 레퍼런스 카운팅과 결합될 수도 있습니다.
+
+\iffalse
 
 Of course, RCU can also be combined with traditional reference counting,
 as discussed in
 Section~\ref{sec:together:Refurbish Reference Counting}.
+
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -1572,6 +1636,19 @@ Section~\ref{sec:together:Refurbish Reference Counting}.
 \label{fig:defer:Performance of Preemptible RCU vs. Reference Counting}
 \end{figure}
 
+그런데 이걸 왜 신경씁니까?
+다시 말하지만, 답은 성능으로, 448-CPU 2.1\,GHz Intel x86 시스템에서
+non-preemptible 과 preemtible 리눅스 커널 RCU 를 사용해 각각 얻어진
+Figure~\ref{fig:defer:Performance of RCU vs. Reference Counting}
+와~\ref{fig:defer:Performance of Preemptible RCU vs. Reference Counting}
+에서 보인 것과 같습니다.
+Non-preemptible RCU 의 레퍼런스 카운팅 대비 장점은 단일 CPU 에서 수십배를
+넘으며 192~CPU 에서는 수만배까지 달합니다.
+Preemptible RCU 의 장점은 단일 CPU 에서 약 세배에서 192~CPU 에서 수천배까지
+이릅니다.
+
+\iffalse
+
 But why bother?
 Again, part of the answer is performance, as shown in
 Figures~\ref{fig:defer:Performance of RCU vs. Reference Counting}
@@ -1584,12 +1661,31 @@ magnitude at 192~CPUs.
 Preemptible RCU's advantage ranges from about a factor of three at
 one CPU up to about three orders of magnitude at 192~CPUs.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{defer/refRCUperfwt}}
 \caption{Response Time of RCU vs. Reference Counting, 192 CPUs}
 \label{fig:defer:Response Time of RCU vs. Reference Counting}
 \end{figure}
+
+하지만, reader-writer 락킹에서와 같이, RCU 의 이 성능 이득은 같은 시스템에서
+Figure~\ref{fig:defer:Response Time of RCU vs. Reference Counting}
+에 보인 것처럼 대부분 큰 수의 CPU 와 짧은 기간의 크리티컬 섹션으로부터
+나왔습니다.
+더해서, reader-writer 락킹에서와 같이, 많은 시스템 콜은 (그리고 따라서 그것들이
+포함하는 모든 RCU read-side 크리티컬 섹션은) 수 마이크로세컨드 내에 완료됩니다.
+
+그러나, RCU 에 의해 발생하는 제약들은 상당히 귀찮을 수 있습니다.
+예를 들어, 많은 경우, RCU read-side 크리티컬 섹션 내에서의 잠자는 것의 금지는
+그 목표를 의미없게 할 수도 있습니다.
+다음 섹션은 이 문제를 해결하는 동시에 적어도 일부 경우에서는 전통적 레퍼런스
+카운팅의 복잡도를 줄이는 방법들을 살펴봅니다.\footnote{
+	다른 경우들은 \cref{sec:defer:Hazard Pointers} 에서 설명된 해저드
+	포인터 메커니즘을 통해 더 잘 처리될 수도 있습니다.}
+
+\iffalse
 
 However, as with reader-writer locking, the performance advantages of
 RCU are most pronounced for short-duration critical sections and for
@@ -1608,6 +1704,8 @@ reducing the complexity of traditional reference counting, at least in
 some cases.\footnote{
 	Other cases might be better served by the hazard pointers
 	mechanism described in \cref{sec:defer:Hazard Pointers}.}
+
+\fi
 
 \subsubsection{RCU is a Bulk Reference-Counting Mechanism}
 \label{sec:defer:RCU is a Bulk Reference-Counting Mechanism}
