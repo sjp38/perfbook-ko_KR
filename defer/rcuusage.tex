@@ -2192,6 +2192,24 @@ Section~\ref{sec:locking:Lock-Based Existence Guarantees}.
 \subsubsection{RCU Provides Type-Safe Memory}
 \label{sec:defer:RCU Provides Type-Safe Memory}
 
+많은 수의 lockless 알고리즘들이 특정 데이터 원소가 그것을 참조하는 특정 RCU
+read-side 크리티컬 섹션 내에서 동일한 정체를 유지할 것을 요구하지
+않습니다---하지만 그 데이터 원소가 동일한 타입을 유지한다는 조건
+하에서만입니다.
+달리 말하자면, 이 lockless 알고리즘들은 주어진 데이터 원소가 그것이 참조되고
+있는 사이에 메모리 해제되고 동일한 타입의 구조로 재할당 되는 것을 감내할 수
+있지만, 그 타입의 변경은 금지됩니다.
+학계에서는 ``type-safe memory'' 라 불리는~\cite{Cheriton96a} 이 보장은 앞의
+섹션에서의 존재 보장보다 약하며, 따라서 이걸 가지고 작업하기는 많이 힘듭니다.
+리눅스 커널 내에서의 type-safe memory 알고리즘은 slab 캐쉬의 사용을 가능하게
+하는데, 이 캐쉬들을 \co{SLAB_TYPESAFE_BY_RCU} 로 표시하여 메모리 해제된 slab 을
+시스템 메모리로 반환할 때 RCU 가 사용되게 합니다.
+이런 RCU 의 사용은 그런 slab 의 어떤 사용중인 원소든 그 slab 내에 존재할 것을,
+따라서 모든 앞서서부터 존재한 RCU read-side 크리티컬 섹션의 기간 동안 그 타입이
+유지될 것을 보장합니다.
+
+\iffalse
+
 A number of lockless algorithms do not require that a given data
 element keep the same identity through a given RCU read-side critical
 section referencing it---but only if that data element retains the
@@ -2211,7 +2229,17 @@ This use of RCU guarantees that any in-use element of
 such a slab will remain in that slab, thus retaining its type,
 for the duration of any pre-existing RCU read-side critical sections.
 
+\fi
+
 \QuickQuiz{
+	하지만 여러 쓰레드에 임의의 긴 RCU read-side 크리티컬 섹션들이 존재하여
+	어느 시점에서든 시스템 내에 최소 하나의 RCU read-side 크리티컬 섹션을
+	수행하는 쓰레드가 존재하면 어떻게 되죠?
+	그건 \co{SLAB_TYPESAFE_BY_RCU} slab 의 어떤 데이터든 시스템에 반환되는
+	것을 막아서 OOM 상황에 이르지 않을까요?
+
+	\iffalse
+
 	But what if there is an arbitrarily long series of RCU
 	read-side critical sections in multiple threads, so that at
 	any point in time there is at least one thread in the system
@@ -2219,7 +2247,29 @@ for the duration of any pre-existing RCU read-side critical sections.
 	Wouldn't that prevent any data from a \co{SLAB_TYPESAFE_BY_RCU}
 	slab ever being returned to the system, possibly resulting
 	in OOM events?
+
+	\fi
+
 }\QuickQuizAnswer{
+	최소 하나의 쓰레드가 RCU read-side 크리티컬 섹션에 있는 무한정 긴
+	시간이 분명 존재할 수 있습니다.
+	하지만,
+	Section~\ref{sec:defer:RCU Provides Type-Safe Memory}
+	의 설명 중 핵심 단어는 ``사용중'' 그리고 ``앞서서부터 존재한'' 입니다.
+	특정 RCU read-side 크리티컬 섹션은 이론상 그 크리티컬 섹션의 시작
+	시점에 사용 중이던 데이터 원소로의 참조만을 얻을 수 있습니다.
+	더 나아가, slab 은 그 데이터 원소가 모두 메모리 해제되기 전까지는
+	시스템에 반환 될 수 없으며, 실제로 RCU grace period 는 그것들이 모두
+	메모리 해제되기 전까지는 시작될 수 없음을 기억하십시오.
+
+	따라서, slab cache 는 해당 slab 의 마지막 원소가 메모리 해제되기 시작된
+	RCU read-side 크리티컬 섹션들만을 기다려야 합니다.
+	이는 결국 이 마지막 원소가 메모리 해제된 후 시작된 모든 RCU grace
+	period 만 카운트 됨을 의미합니다---이 slab 은 그 grace period 가 종료된
+	후 시스템으로 반환될 수 있을 겁니다.
+
+	\iffalse
+
 	There could certainly be an arbitrarily long period of time
 	during which at least one thread is always in an RCU read-side
 	critical section.
@@ -2240,7 +2290,26 @@ for the duration of any pre-existing RCU read-side critical sections.
 	This in turn means that any RCU grace period that begins after
 	the freeing of the last element will do---the slab may be returned
 	to the system after that grace period ends.
+
+	\fi
+
 }\QuickQuizEnd
+
+\co{SLAB_TYPESAFE_BY_RCU} 는 \co{kmem_cache_alloc()} 이 \co{kmem_cache_free()}
+로 메모리 해제된 메모리가 즉시 재할당 되는 것을 \emph{막지 않음} 을 알아두는
+것이 중요합니다!
+실제로, \co{rcu_dereference()} 로 막 반환된, \co{SLAB_TYPESAFE_BY_RCU} 로
+보호되는 데이터 구조는 임의의 많은 횟수동안 메모리 해제되고 재할당 되었을 수
+있는데, \co{rcu_read_lock()} 의 보호 아래에서도 그렇습니다.
+그 대신, \co{SLAB_TYPESAFE_BY_RCU} 는 \co{kmem_cache_free()} 가 완전히 메모리
+해제된 데이터 구조들의 slab 을 RCU grace period 가 지나기 전에 시스템에
+반환하는 것을 막습니다.
+요약하자면, 주어진 RCU read-side 크리티컬 섹션이 특정 \co{SLAB_TYPESAFE_BY_RCU}
+데이터 원소가 무한정 빈번하게 메모리 해제되고 재할당 되는 것을 볼 수 있더라도,
+그 원소의 타입은 그 크리티컬 섹션이 종료되기 전까지 바뀌지 않을 것을
+보장합니다.
+
+\iffalse
 
 It is important to note that \co{SLAB_TYPESAFE_BY_RCU} will
 \emph{in no way}
@@ -2259,6 +2328,22 @@ given \co{SLAB_TYPESAFE_BY_RCU} data element being freed and reallocated
 arbitrarily often, the element's type is guaranteed not to change until
 that critical section has completed.
 
+\fi
+
+따라서 이 알고리즘은 일반적으로 새로 참조된 데이터 구조가 정말로 원했던 것인지
+검사하는 검증 단계를 갖습니다~\cite[Section~2.5]{LaninShasha1986TSM}.
+이 검증 단계는 이 데이터 구조의 특정 부분이 메모리 해제-재할당 프로세스에 의해
+수정되지 않았을 것을 요구합니다.
+그런 검증은 일반적으로 똑바로 하기가 무척 어려우며, 복잡하고 어려운 버그를 숨길
+수 있습니다.
+
+따라서, type-safe 기반의 lockless 알고리즘이 매우 적은 수의 어려운 상황에선
+무척 도움이 될 수 있지만, 여러분은 가능한 곳에는 존재 보장을 대신 사용해야
+합니다.
+어쨌든 더 간단한 게 거의 항상 더 낫습니다!
+
+\iffalse
+
 These algorithms therefore typically use a validation step that checks
 to make sure that the newly referenced data structure really is the one
 that was requested~\cite[Section~2.5]{LaninShasha1986TSM}.
@@ -2271,6 +2356,8 @@ Therefore, although type-safety-based lockless algorithms can be extremely
 helpful in a very few difficult situations, you should instead use existence
 guarantees where possible.
 Simpler is after all almost always better!
+
+\fi
 
 \subsubsection{RCU is a Way of Waiting for Things to Finish}
 \label{sec:defer:RCU is a Way of Waiting for Things to Finish}
