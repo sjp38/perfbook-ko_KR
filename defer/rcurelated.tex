@@ -78,6 +78,19 @@ of RCU and its uses.
 \subsubsection{RCU Uses}
 \label{sec:defer:RCU Uses}
 
+Portland State University (PSU) 의 \ppl{Phil}{Howard} 와 \ppl{Jon}{Walpole} 는
+RCU 를 소프트웨어 transactional memory 를 사용해 업데이트를 동기화하며
+red-black tree 에 적용했습니다~\cite{PhilHowardPhD,PhilHoward2011RCUTMRBTree}.
+\ppl{Josh}{Triplett} 와 \ppl{Jon}{Walpole} (PSU 소속) 는 RCU 를 크기 재조정
+가능한 해쉬 테이블에
+적용했습니다~\cite{JoshTriplettPhD,Triplett:2011:RPHash,JonCorbet2014RCUhash1,JonCorbet2014RCUhash2}.
+다른 RCU 로 보호되는 resizable 해쉬 테이블이
+\ppl{Herbert}{Xu}~\cite{HerbertXu2010RCUResizeHash} 와
+\ppl{Mathieu}{Desnoyers}~\cite{PaulMcKenney2013LWNURCUhash} 에 의해 만들어진 바
+있습니다.
+
+\iffalse
+
 \ppl{Phil}{Howard} and \ppl{Jon}{Walpole} of Portland State University
 (PSU) have
 applied RCU to red-black
@@ -89,6 +102,29 @@ hash tables~\cite{JoshTriplettPhD,Triplett:2011:RPHash,JonCorbet2014RCUhash1,Jon
 Other RCU-protected resizable hash tables have been created by
 \ppl{Herbert}{Xu}~\cite{HerbertXu2010RCUResizeHash} and by
 \ppl{Mathieu}{Desnoyers}~\cite{PaulMcKenney2013LWNURCUhash}.
+
+\fi
+
+MIT 의 \ppl{Austin}{Clements}, \ppl{Frans}{Kaashoek}, 그리고
+\ppl{Nickolai}{Zeldovich} 는 RCU 로 최적화된 balanced binary tree
+(Bonsai)~\cite{AustinClements2012RCULinux:mmapsem} 을 만들고 이 tree 를 리눅스
+커널의 VM 서브시스템에 리눅스 커널의 \co{mmap_sem} read-side contention 을
+줄이려 적용했습니다.
+이것은 많은 minor page fault 를 일으키는 마이크로벤치마크를 가지고 수십배의
+속도 상승과 최소 80개 CPU 까지의 확장성을 보였습니다.
+이는
+\ppl{Peter}{Zijlstra}~\cite{PeterZijlstra2014SpeculativePageFault} 에 의해 더
+일찍 개발된 패치와 유사하며, 둘 다 파일시스템 데이터 구조는 RCU 읽기 쓰레드에
+안전하지 않다는 사실에 의해 제한되었습니다.
+\pplsur{Austin}{Clements} 등은 이 제한을 page fault 코드 경로를 anonymous page
+에 한해최적화 하는 것으로 회피했습니다.
+더 최근에는, 파일시스템 데이터 구조가 RCU 읽기 쓰레드에 안전하게
+되어서~\cite{JonathanCorbet2010dcacheRCU,JonathanCorbet2011dcacheRCUbug},
+어쩌면 이 작업이 anonymous page 만이 아니라 모든 종류의 page 를 위해 구현될
+수도 있을 겁니다---\ppl{Peter}{Zijlstra} 는 실제로 최근에 이것의 프로토타입을
+만들었으며 \ppl{Laurent}{Dufour} 는 이 일을 계속했습니다.
+
+\iffalse
 
 \ppl{Austin}{Clements}, \ppl{Frans}{Kaashoek}, and \ppl{Nickolai}{Zeldovich}
 of MIT created an RCU-optimized balanced binary tree
@@ -110,6 +146,32 @@ readers~\cite{JonathanCorbet2010dcacheRCU,JonathanCorbet2011dcacheRCUbug},
 so perhaps this work can be implemented for all page types, not just
 anonymous pages---\ppl{Peter}{Zijlstra} has, in fact, recently prototyped
 exactly this, and \ppl{Laurent}{Dufour} has continued work along these lines.
+
+\fi
+
+MIT 의 \ppl{Yandong}{Mao} 와 \ppl{Robert}{Morris}, 그리고 Harvard 대학의
+\ppl{Eddie}{Kohler} 는 B+ tree 와 trie 의 아이디어를 결함한,
+Masstree~\cite{Mao:2012:CCF:2168836.2168855} 라는 이름의 또다른 RCU 로 보호되는
+tree 를 만들었습니다.
+이 tree 는 RCU 로 보호되는 해쉬 테이블보다 2.5배 느리긴 하지만, 해쉬 테이블과
+달리 key range 오퍼레이션을 제공합니다.
+또한, Masstree 는 긴 공유 키 접두어와 함께 효율적인 객체 저장을 지원하며, 더
+나아가 대용량 저장장치로의 로깅을 통해 영구성을 제공합니다.
+
+그 논문은 Masstree 는 업데이트를 영구히 저장하고 memcached 는 그러지 않음에도
+Masstree 의 성능이 memcached 의 그것과 견줄만 하다고 이야기 합니다.
+이 논문은 또한 Masstree 의 성능을 영구 데이터 저장기인 MongoDB, VoltDB, 그리고
+Redis 와 비교하고 Masstree 의 상당한 성능 이득을 보고하는데, 어떤 경우에는
+수백배에 달합니다.
+MIT 의 \ppl{Stephen}{Tu}, \ppl{Wenting}{Zheng}, \ppl{Barbara}{Liskov}, 그리고
+\ppl{Samuel}{Madden} 와 \pplsur{Eddie}{Kohler} 의 또다른
+논문은~\cite{Tu:2013:STM:2517349.2522713} Masstree 를 Silo 라는 이름의
+in-memory 데이터베이스에 적용하여 널리 알려진 트랜잭션 처리 벤치마크에서 초당
+700K 트랜잭션 (분당 42M 트랜잭션) 을 달성했습니다.
+흥미롭게도, Silo 는 락을 잡고 있는 동안 grace period 의 오버헤드 없이도
+linearizability 를 보장합니다.
+
+\iffalse
 
 \ppl{Yandong}{Mao} and \ppl{Robert}{Morris} of MIT and \ppl{Eddie}{Kohler} of
 Harvard University created another RCU-protected tree named
@@ -135,6 +197,27 @@ transaction-processing benchmark.
 Interestingly enough, Silo guarantees linearizability without incurring
 the overhead of grace periods while holding locks.
 
+\fi
+
+Technion 의
+\ppl{Maya}{Arbel} 과 \ppl{Hagit}{Attiya} 는 RCU 로 보호되는 탐색 트리에
+Masstree 와 같이 동시의 업데이트를 가능하게 하는 좀 더 정밀한 접근을
+취했습니다~\cite{MayaArbel2014RCUtree}.
+이 논문은 이 tree 에서의 모든 오퍼레이션이 linearizable 하다는 증명을 포함한
+정확도의 증명을 포함합니다.
+불행히도, 이 구현은 락을 잡고 있는 동안 grace period 의 전체 응답시간을
+일으키는 것으로 linearizability 를 달성하는데, 이는 업데이트만 있는
+워크로드에서는 확장성을 떨어뜨립니다.
+이 문제를 해결하는 한가지 방법은 linearizability 를 포기하는
+것입니다만~\cite{AndreasHaas2012FIFOisnt,PaulEMcKennneyAtomicTreeN4037},
+Arbel 과 Attiya 는 그 대신 grace period 응답시간을 줄이는 RCU 변종을
+만들었습니다.
+물론, 공짜는 없으며 이 RCU 변종은 32 CPU 정도에서 확장성 한계를 보입니다.
+Linearizability 를 포기해서 성능과 확장성을 모두 얻는 것에 대해서도 이야기 해야
+할 게 많지만, 학계가 대안적 RCU 구현을 탐구하는 것은 무척 보기 좋습니다.
+
+\iffalse
+
 \ppl{Maya}{Arbel} and \ppl{Hagit}{Attiya} of Technion took a more rigorous
 approach~\cite{MayaArbel2014RCUtree} to an RCU-protected search tree that,
 like Masstree, allows concurrent updates.
@@ -152,6 +235,8 @@ a scalability limit at about 32 CPUs.
 Although there is much to be said for dropping linearizability, thus
 gaining both performance and scalability, it is very good to see academics
 experimenting with alternative RCU implementations.
+
+\fi
 
 \subsubsection{RCU Implementations}
 \label{sec:defer:RCU Implementations}
