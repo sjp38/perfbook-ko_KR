@@ -339,6 +339,15 @@ readers~\cite{PaulEMcKenney2015ReadMostly}.
 
 \fi
 
+
+\ppl{Maya}{Arbel} 과 \ppl{Adam}{Morrison}~\cite{Arbel:2015:PRR:2858788.2688518}
+는 update-side 락을 grace period 사이에 잡는 알고리즘들을 효율적으로 지원하기
+위해 grace-period 를 줄이려 하는 ``Predicate RCU'' 라는 걸 만들었습니다.
+이는 grace period 내로 batching 되는 update 들을 줄였으며 확장성을
+줄였습니다만, 짧은 grace period 를 제공하는데에는 성공했습니다.
+
+\iffalse
+
 \ppl{Maya}{Arbel} and \ppl{Adam}{Morrison}~\cite{Arbel:2015:PRR:2858788.2688518}
 produced ``Predicate RCU'', which works hard to reduce grace-period
 duration in order to efficiently support algorithms that hold
@@ -347,11 +356,32 @@ This results in reduced batching of updates into grace periods
 and reduced scalability, but does succeed in providing short
 grace periods.
 
+\fi
+
 \QuickQuiz{
+	그냥 grace period 를 기다리기 전에 락을 놓거나 grace period 를 기다리는
+	대신 \co{call_rcu()} 같은 걸 사용하지 않죠?
+
+	\iffalse
+
 	Why not just drop the lock before waiting for the grace
 	period, or using something like \co{call_rcu()}
 	instead of waiting for a grace period?
+
+	\fi
+
 }\QuickQuizAnswer{
+	저자들은 linearizable 한 tree 오퍼레이션을 지원해서 동시적인 항목 추가,
+	제거, 그리고 탐색이 어떤 전역적인 합의된 순서로 수행되는 것처럼 보이길
+	바랬습니다.
+	그들의 탐색 tree 에서, 이는 grace period 에 걸쳐 락을 잡을 것을 필요로
+	했습니다.
+	(대부분의 경우 linearizability 를 요구사항에서 제거하는게 아마 더
+	낫겠습니다만, linearizability 는 놀랍도록 대중적인 (그리고 비싼!)
+	요구사항입니다.)
+
+	\iffalse
+
 	The authors wished to support linearizable tree
 	operations, so that concurrent additions to, deletions
 	from, and searches of the tree would appear to execute
@@ -361,7 +391,33 @@ grace periods.
 	(It is probably better to drop linearizability as a
 	requirement in most cases, but linearizability is a
 	surprisingly popular (and costly!) requirement.)
+
+	\fi
+
 }\QuickQuizEnd
+
+\ppl{Alexander}{Matveev} (MIT), \ppl{Nir}{Shavit} (MIT and Tel-Aviv University),
+\ppl{Pascal}{Felber} (University of Neuch\^{a}tel), 그리고 \ppl{Patrick}{Marlier}
+(역시 University of Neuch\^{a}tel)~\cite{Matveev:2015:RLS:2815400.2815406}
+는 명시적으로 read-only 트랜잭션을 표시하는 소프트웨어 transactional memory 라
+생각될 수 있는 RCU 비슷한 메커니즘을 만들었습니다.
+그들의 사용처는 grace period 를 거쳐 락을 잡을 것을 필요로 했는데, 이는
+확장성을
+제한했습니다~\cite{PaulEMcKenney2015ReadMostly,PaulEMcKenney2015ReadMostlySidebar}.
+이는 \co{rcutorture} 테스트 수트를 잘 상요한 첫번째 학계의 RCU 관련
+작품이었으며, 또한 v4.4 에 받아들여진, 리눅스 커널 RCU 로의 성능 향상을 제출한
+첫번째 사례였습니다.
+
+\ppl{Alexander}{Matveev} 의 RLU 는 \ppl{Jaeho}{Kim}
+등의~\cite{Kim:2019:MSR:3297858.3304040} MV-RLU 로 이어졌습니다.
+이 작업은 grace period 전반의 락을 잡지 않아도 되게 하고 비동기적 period 를
+허용함으로써, 예를 들면 \co{synchronize_rcu()} 대신 \co{call_rcu()} 를 사용하여
+동시적 업데이트를 허용함으로써 RLU 의 확장성을 개선했습니다.
+이 논문은 또한 page~\ref{sec:future:Deferred Reclamation} 의
+\cref{sec:future:Deferred Reclamation} 에서 더 다루게 될 ㅎ으미로운 성능 측정
+선택을 했습니다.
+
+\iffalse
 
 \ppl{Alexander}{Matveev} (MIT), \ppl{Nir}{Shavit} (MIT and Tel-Aviv University),
 \ppl{Pascal}{Felber} (University of Neuch\^{a}tel), and \ppl{Patrick}{Marlier} (also
@@ -388,6 +444,29 @@ are discussed further in
 on
 page~\ref{sec:future:Deferred Reclamation}.
 
+\fi
+
+
+\ppl{Adam}{Belay} 등은 IX 운영체제에서 TCP/IP 의 address-resolution protocol
+(ARP) 에서 사용되는 데이터 구조들을 보호하는 RCU 구현을
+만들었습니다~\cite{Belay:2016:IOS:3014162.2997641}.
+
+\ppl{Geoff}{Romer} 와 \ppl{Andrew}{Hunter} (둘 다 Google 소속) 는 singleton
+데이터 구조의 RCU 보호를 위한 cell 기반 API 를 C++ 표준에 추가하려
+하였습니다~\cite{GeoffRomer2018C++DeferredReclamationP0561R4}.
+
+\ppl{Dimitrios}{Siakavaras} 등은 HTM 과 RCU 를 탐색 tree 에
+적용하였고~\cite{Siakavaras2017CombiningHA,DimitriosSiakavaras2020RCU-HTM-B+Trees},
+\ppl{Christina}{Giannoula} 등은 HTM 과 RCU 를 color graph 에
+사용했으며~\cite{ChristinaGiannoula2018HTM-RCU-graphcoloring},
+\ppl{SeongJae}{Park} 등은 HTM 과 RCU 를 NUMA 시스템에서의 높은 락킹 contention
+을 최적화 하는데 사용했습니다.
+
+\ppl{Alex}{Kogan} 등은 RCU 를 확장성 있는 주소 공간을 위한 range 락킹의 토대에
+적용했습니다~\cite{AlexKogan2020RCUrangelocks}.
+
+\iffalse
+
 \ppl{Adam}{Belay} et al.~created an RCU implementation that guards the
 data structures used by TCP/IP's address-resolution protocol (ARP)
 in their IX operating system~\cite{Belay:2016:IOS:3014162.2997641}.
@@ -407,6 +486,8 @@ locking on NUMA systems.
 
 \ppl{Alex}{Kogan} et al.~applied RCU to the construction of range locking
 for scalable address spaces~\cite{AlexKogan2020RCUrangelocks}.
+
+\fi
 
 \subsubsection{RCU Validation}
 \label{sec:defer:RCU Validation}
