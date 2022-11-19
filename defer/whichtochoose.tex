@@ -374,6 +374,27 @@ But those wishing more detail should continue on to the next section.
 \end{table*}
 
 Table~\ref{tab:defer:Which Deferred Technique to Choose? (Details)}
+은 이 챕터에서 소개된 네개의 deferred-processing 기법들 중 하나를 선택해야 할
+때 도움을 줄 수 있는 더 자세한 경험상의 법칙을 제공합니다.
+
+``Existence Guarantee'' 열에 보이듯, 여러분이 연결된 데이터 원소들에 대한 존재
+보장을 해야 한다면, 여러분은 레퍼런스 카운팅, 해저드 포인터, 또는 RCU 를
+사용해야만 합니다.
+시퀀스 락은 존재 보장을 제공하지 않는 대신 업데이트 탐자와 업데이트를 마주친
+read-side 크리티컬 섹션의 재시도를 제공합니다.
+
+물론, ``Updates and Readers Progress Concurrently'' 열에서 보였듯 이 업데이트
+탐지는 시퀀스 락킹이 업데이트 쓰레드와 읽기 쓰레드가 동시에 진행을 내는 것을
+허용하지 않음을 암시합니다.
+어쨌건, 그런 진행을 방지하는 것이 시퀀스 락킹을 상요하는 첫번째 이유입니다!
+이 상황은 시퀀스 락킹을 레퍼런스 카운팅, 해저드 포인터, 또는 RCU 와 결합해 존재
+보장과 업데이트 탐지를 제공하는 방법들을 가리킵니다.
+실제로, 리눅스 커널은 pathname 탐색 시에 RCU 와 시퀀스 락킹을 이 방법으로
+결합해 사용합니다.
+
+\iffalse
+
+Table~\ref{tab:defer:Which Deferred Technique to Choose? (Details)}
 provides more-detailed rules of thumb that can help you choose among the
 four deferred-processing techniques presented in this chapter.
 
@@ -396,6 +417,24 @@ both existence guarantees and update detection.
 In fact, the Linux kernel combines RCU and sequence locking in
 this manner during pathname lookup.
 
+\fi
+
+``Contention Among Readers'', ``Reader Per-Critical-Section Overhead'',
+그리고 ``Reader Per-Object Traversal Overhead'' 열은 이 기법들의 read-side
+오버헤드에 대한 대략적 느낌을 제공합니다.
+레퍼런스 카운팅의 오버헤드는 상당히 클 수 있는데, 각 객체 순회마다 필요한
+완전히 순서잡힌 read-modify-write 어토믹 오퍼레이션을 포함합니다.
+해저드 포인터는 각 데이터 원소 순회마다 메모리 배리어 오버헤드를 일으키며,
+시퀀스 락은 크리티컬 섹션을 수행하려 할 때마다 한 상의 메모리 배리어 오버헤드를
+일으킵니다.
+RCU 구현체들의 오버헤드는 제로부터 각 read-side 크리티컬 섹션마다의 한 쌍의
+메모리 배리어까지 다양하며, 따라서 RCU 를 특히 많은 데이터 원소를 순회하는
+read-side 크리티컬 섹션을 가진 경우에 대해 최고의 성능을 제공할 수 있게 합니다.
+물론, 모든 deferred-processing 변종들의 read-side 오버헤드는 각 read-side
+오퍼레이션이 더 많은 데이터를 처리하게끔 batching 을 사용해 줄일 수 있습니다.
+
+\iffalse
+
 The ``Contention Among Readers'', ``Reader Per-Critical-Section Overhead'',
 and ``Reader Per-Object Traversal Overhead'' rows give a rough sense of
 the read-side overhead of these techniques.
@@ -411,6 +450,8 @@ with the best performance, particularly for read-side critical sections
 that traverse many data elements.
 Of course, the read-side overhead of all deferred-processing variants can
 be reduced by batching, so that each read-side operation covers more data.
+
+\fi
 
 \QuickQuiz{
 	But didn't the answer to one of the quick quizzes in
