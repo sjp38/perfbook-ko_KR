@@ -454,11 +454,41 @@ be reduced by batching, so that each read-side operation covers more data.
 \fi
 
 \QuickQuiz{
+	하지만
+	Section~\ref{sec:defer:Hazard Pointers} 의 quick quiz 들의 답 중 하나는
+	짝을 이룬 비대칭적 배리어로 해저드 포인터의 읽기 쪽 \co{smp_mb()} 를
+	제거할 수 있다고 하지 않았던가요?
+
+	\iffalse
+
 	But didn't the answer to one of the quick quizzes in
 	Section~\ref{sec:defer:Hazard Pointers}
 	say that pairwise asymmetric barriers could eliminate the
 	read-side \co{smp_mb()} from hazard pointers?
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞아요, 그랬습니다.
+	하지만, 그렇게 하는 것은 해저드 포인터의 ``Reclamation Forward
+	Progress'' 열 (나중에 설명합니다) 을 lock-free 에서 blocking 으로 바꿀
+	수 있는데, 커널 내에서 인터럽트를 불능화 시킨 채 spin 하고 있는 CPU 는
+	업데이트 쪽 비대칭 배리어를 완료되지 못하게 할 수 있기 때문입니다.
+	리눅스 커널에서, 그런 블록킹은 커널을 \co{CONFIG_NO_HZ_FULL} 와 함께
+	빌드하고 부팅 시점에서 연관된 CPU 들을 \co{nohz_full} 로 지정하고,
+	한번에 단 하나의 쓰레드만이 하나의 CPU 에서 수행될 수 있음을 보장하며,
+	커널 내로 들어가는 것을 막음으로써 방지할 수 있습니다.
+	대안적으로, 여러분은 커널이 CPU 들이 인터럽트가 불능화 된 채 spin 하게
+	될수도 있는 어떤 버그로부터도 그 커널이 자유로움을 보장할 수 있을
+	겁니다.
+
+	리눅스 커널에서 인터럽트를 불능화 한 채 spin 하는 CPU 가 드물어 보임을
+	놓고 보면, 어떤 사람은 비대칭적 배리어 기반 해저드 포인터 업데이트가
+	이론적으로는 그렇지 않지만 실질적으로는 non-blocking 이라고 주장할 수도
+	있겠습니다.
+
+	\iffalse
+
 	Yes, it did.
 	However, doing this could be argued to change hazard-pointers
 	``Reclamation Forward Progress'' row (discussed later) from
@@ -477,7 +507,25 @@ be reduced by batching, so that each read-side operation covers more data.
 	disabled seems to be rather rare, one might counter-argue that
 	asymmetric-barrier hazard-pointer updates are non-blocking
 	in practice, if not in theory.
+
+	\fi
+
 }\QuickQuizEnd
+
+``Reader Forward Progress Guarantee'' 열은 RCU 만이 제한된 wait-free 진행
+보장을 가짐을 보이는데, 이는 RCU 가 제한된 수의 인스트럭션을 수행함으로써 끝이
+정해져 있는 순회를 해낼 수 있음을 의미합니다.
+
+``Reader Reference Acquisition'' 열은 RCU 만이 무조건적으로 참조 획득을 할 수
+있음을 보입니다.
+시퀀스 락을 위한 항목은 ``Unsafe'' 인데, 다시 말하지만 시퀀스 락은 참조를
+획득하는게 아니라 업데이트를 탐지하기 때문입니다.
+레퍼런스 카운팅과 해저드 포인터는 둘 다 해당 획득이 실패하면 순회를 재시작 해야
+합니다.
+이를 자세히 보기 위해, 객체~A, B, C, 그리고~D 를 그 순서대로 가지고 있는 링크드
+리스트가 다음 사건들을 겪는다고 생각해 봅시다:
+
+\iffalse
 
 The ``Reader Forward Progress Guarantee'' row shows that only RCU
 has a bounded wait-free forward-progress guarantee, which means that
@@ -493,7 +541,25 @@ restarted from the beginning if a given acquisition fails.
 To see this, consider a linked list containing objects~A, B, C, and~D,
 in that order, and the following series of events:
 
+\fi
+
 \begin{enumerate}
+\item	한 읽기 쓰레드가 객체~B 로의 참조를 획득합니다.
+\item	어느 업데이트 쓰레드가 객체~B 를 제거하지만 앞의 읽기 쓰레드가 참조를
+	가지고 있으므로 메모리 해제는 하지 않습니다.
+	이 리스트는 이제 객체~A, C, 그리고~D 를 가지고 있으며, 객체~B 의
+	\co{->next} 포인터는 \co{HAZPTR_POISON} 으로 설정되어 있습니다.
+\item	이 업데이트 쓰레드는 객체~C 를 제거해서 이 리스트는 객체~A 와~D 만
+	가지게 됩니다.
+	객체~C 로의 참조는 존재하지 않으므로 즉각 메모리 해제됩니다.
+\item	앞의 읽기 쓰레드는 지금은 제거된 객체~B 의 다음 객체로 넘어가려 하지만
+	오염된 \co{->next} 포인터가 이를 막습니다.
+	이는 좋은 일인데, 그러지 않는다면 객체~B 의 \co{->next} 포인터는
+	freelist 를 가리킬 것이기 때문입니다.
+\item	따라서 이 읽기 쓰레드는 리스트의 시작부터 순회를 재시작해야만 합니다.
+
+\iffalse
+
 \item	A reader acquires a reference to object~B.
 \item	An updater removes object~B, but refrains from freeing it because
 	the reader holds a reference.
@@ -509,7 +575,28 @@ in that order, and the following series of events:
 	would otherwise point to the freelist.
 \item	The reader must therefore restart its traversal from the head
 	of the list.
+
+\fi
+
 \end{enumerate}
+
+따라서, 참조를 획득하는데 실패했을 때, 해저드 포인터나 레퍼런스 카운터 순회는
+그 순회를 처음부터 재시작 해야만 합니다.
+예를 들자면 링크드 리스트를 갖는 트리와 같은 중첩된 연결 기반 데이터 구조체의
+경우, 이 순회는 가장 바깥의 데이터 구조로부터 재시작 되어야만 합니다.
+이 상황은 RCU 에게 상당한 사용하기 쉬운 장점을 부여합니다.
+
+하지만, RCU 의 사용하기 쉬운 장점은 공짜로 오지 않는데, ``Memory Footprint''
+열에서 볼 수 있습니다.
+RCU 의 무조건적 참조 획득 지원은 어떤 RCU 읽기 쓰레드가 완료되기 전까지는 그
+쓰레드에 의해 접근될 수 있는 모든 객체를 메모리 해제하지 않아야만 함을
+의미합니다.
+그래서 RCU 는 제한되지 않은 메모리 사용량을 가지는데, 최소한 업데이트가 그걸
+제한하지 않는다면 그렇습니다.
+반대로, 레퍼런스 카운팅과 해저드 포인터는 그 데이터 원소들을 동시의 읽기
+쓰레드들이 정말로 참조하는 만큼만 유지하면 됩니다.
+
+\iffalse
 
 Thus, when failing to acquire a reference, a hazard-pointer or
 reference-counter traversal must restart that traversal from the
@@ -529,6 +616,23 @@ are throttled.
 In contrast, reference counting and hazard pointers need to retain only
 those data elements actually referenced by concurrent readers.
 
+\fi
+
+이 메모리 사용량과 참조 획득 실패 사이의 갈등이 리눅스 커널에서는 RCU 와
+레퍼런스 카운터의 조합으로 해결되었습니다.
+RCU 는 짧은 수명을 갖는 것들의 참조를 위해 사용되는데, 이는 RCU read-side
+크리티컬 섹션이 짧아질 수 있음을 의미합니다.
+이 짧은 RCU read-side 크리티컬 섹션은 결국 연관된 RCU grace period  역시 짧아질
+수 있어서, 메모리 사용량을 제한하게 됩니다.
+긴 수명을 갖는 소수의 데이터 원소를 위해선 레퍼런스 카운팅이 사용됩니다.
+이는 레퍼런스 획득 실패의 복잡도는 그런 적은 데이터 원소를 위해서만 처리되면
+됨을 의미합니다:  대용량 참조 획득은 무조건적인데, RCU 덕입니다.
+레퍼런스 카운팅을 다른 동기화 메커니즘과 조합하는 것에 대한 더 많은 정보를
+위해선
+Section~\ref{sec:together:Refurbish Reference Counting} 을 보시기 바랍니다.
+
+\iffalse
+
 This tension between memory footprint and acquisition
 failures is sometimes resolved within the Linux kernel by combining use
 of RCU and reference counters.
@@ -544,6 +648,29 @@ the reference acquisitions are unconditional, courtesy of RCU\@.
 See Section~\ref{sec:together:Refurbish Reference Counting}
 for more information on combining reference counting with other
 synchronization mechanisms.
+
+\fi
+
+``Reclamation Forward Progress'' 열은 해저드 포인터가 non-blocking 업데이트를
+제공할 수 있음을~\cite{MagedMichael04a,HerlihyLM02} 보입니다.
+레퍼런스 카운팅은 구현에 따 그럴수도 안그럴수도 있습니다.
+하지만, 시퀀스 락킹은 non-blocking 업데이트를 제공할 수 없는데, 그것의
+update-side 락 때문입니다.
+RCU 업데이트 쓰레드는 읽기 쓰레드를 기다려야만 하는데, 이 역시 완벽한
+non-blocking update 에 속하지 않습니다.
+하지만, 그 유일한 블록킹 오퍼레이션은 메모리 해제를 위한 기다림인데, 이는 많은
+목적에 있어 non-blocking 만큼이나 좋은~\cite{MathieuDesnoyers2012URCU} 상황에
+이르게 합니다.
+
+``Automatic Reclamation'' 열에서 보였듯, 레퍼런스 카운팅만이 메모리 해제를
+자동화 할 수 있으며, 그렇다 하더라도 순회하지 않는 데이터 구조에 대해서만
+그렇습니다.
+해저드 포인터와 RCU 를 위한 몇몇 사용 예는 \emph{link count} 를 사용한 자동화된
+메모리 회수를 제공할 수 있는데, 레퍼런스 카운트와 비슷하지만 데이터 구조의 다른
+부분으로부터 들어오는 연결에 대해서만 적용되는 것으로 생각될 수
+있습니다~\cite{MagedMichael2018FollyHazptr}.
+
+\iffalse
 
 The ``Reclamation Forward Progress'' row shows that hazard pointers
 can provide non-blocking updates~\cite{MagedMichael04a,HerlihyLM02}.
@@ -564,6 +691,23 @@ reclamation using \emph{link counts}, which can be thought of as
 reference counts, but applying only to incoming links from other
 parts of the data structure~\cite{MagedMichael2018FollyHazptr}.
 
+\fi
+
+마지막으로, ``Lines of Code'' 열은 Pre-BSD Routing Table 구현의 크기를
+보이는데, 상대적 사용의 쉬움에 대한 대략적 느낌을 제공합니다.
+그렇다고는 하나, 레퍼런스 카운팅과 세퀀스 락킹 구현은 버그가 많으며, 올바른
+레퍼런스 카운팅 구현은 복잡한 것으로 여겨짐을~\cite{Valois95a,MagedMichael95a}
+알아 두시기 바랍니다.
+올바른 시퀀스 락킹 구현은 시퀀스 락킹이 동시의 업데이트를 탐지하기 위한, 또한
+안전한 참조 획득을 위한, 예를 들면 해저드 포인터나 RCU 와 같은 어떤 다른 동기화
+메커니즘을 추가로 필요로 합니다.
+
+이 기법들을 별도로 또는 조합해서 이용하는 더 많은 경험을 얻게 될수록 이
+섹션에서 소개한 이 경험적 법칙은 더 다듬어져야 할 겁니다.
+그러나, 이 섹션은 현재의 최선의 결과를 반영하고 있습니다.
+
+\iffalse
+
 Finally, the ``Lines of Code'' row shows the size of the Pre-BSD
 Routing Table implementations, giving a rough idea of relative ease of use.
 That said, it is important to note that the reference-counting and
@@ -579,6 +723,8 @@ As more experience is gained using these techniques, both separately
 and in combination, the rules of thumb laid out in this section will
 need to be refined.
 However, this section does reflect the current state of the art.
+
+\fi
 
 \subsection{Which to Choose? (Production Use)}
 \label{sec:defer:Which to Choose? (Production Use)}
