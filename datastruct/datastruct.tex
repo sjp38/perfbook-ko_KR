@@ -175,6 +175,21 @@ discusses the resulting performance and scalability.
 \label{sec:datastruct:Hash-Table Design}
 
 Chapter~\ref{cha:Partitioning and Synchronization Design}
+는 괜찮은 성능과 확장성을 얻기 위해 파티셔닝을 적용해야 하는 필요를
+강조했으므로, 파티셔닝 가능성은 데이터 구조를 고를 때 첫번째 고려사항이
+되어야만 합니다.
+이 고려사항은 병렬성에서 널리 사용되는 해쉬 테이블에 의해 잘 만족됩니다.
+해쉬 테이블은 컨셉상으로 간단하여, \emph{해쉬 버킷} 의 배열로 구성됩니다.
+하나의 \emph{해쉬 함수} 가 주어진 원소의 \emph{키} 를 이 원소가 저장되어 있는
+해쉬 버킷으로 매핑합니다.
+따라서 각 해쉬 버킷은 \emph{해쉬 체인} 이라 불리는 원소들의 링크드 리스트를
+갖습니다.
+올바르게 구성되었을 경우, 이 해쉬 체인은 상당히 짧아서, 해쉬 테이블이 그
+원소들에 굉장히 효율적으로 접근할 수 있게 합니다.
+
+\iffalse
+
+Chapter~\ref{cha:Partitioning and Synchronization Design}
 emphasized the need to apply partitioning in order to attain
 respectable performance and scalability, so partitionability
 must be a first-class criterion when selecting data structures.
@@ -189,23 +204,54 @@ called a \emph{hash chain}.
 When properly configured, these hash chains will be quite short,
 permitting a hash table to access its elements extremely efficiently.
 
+\fi
+
 \QuickQuiz{
+	하지만 체인으로 연결된 해쉬 테이블은 많은 종류 중 하나입니다.
+	왜 체인으로 연결된 해쉬 테이블에 집중하죠?
+
+	\iffalse
+
 	But chained hash tables are but one type of many.
 	Why the focus on chained hash tables?
+
+	\fi
+
 }\QuickQuizAnswer{
+	체인으로 연결된 해쉬 테이블은 완벽히 파티셔닝 가능하며 따라서 동시성
+	사용에 잘 맞습니다.
+	예를 들어 split-ordered list~\cite{OriShalev2006SplitOrderListHash}
+	같은 다른 완벽하게 파티셔닝 가능한 해쉬 테이블도 존재하지만, 상당히 더
+	복잡합니다.
+	그러므로 우리는 체인으로 연결된 해쉬 테이블에서 시작하겠습니다.
+
+	\iffalse
+
 	Chained hash tables are completely partitionable, and thus
 	well-suited to concurrent use.
 	There are other completely-partitionable hash tables, for
 	example, split-ordered list~\cite{OriShalev2006SplitOrderListHash},
 	but they are considerably more complex.
 	We therefore start with chained hash tables.
+
+	\fi
+
 }\QuickQuizEnd
+
+추가적으로, 각 버킷은 각자의 락을 가지고 있어서 이 해쉬 테이블에서의 다른
+버킷의 원소들은 완전히 독립적으로 더해지고 삭제되고 탐색될 수 있습니다.
+따라서 큰 수의 버킷을 (그리고 따라서 락들을) 가지며 각 버킷은 작은 수의 원소를
+갖는 커다란 해쉬 테이블은 훌륭한 확장성을 제공합니다.
+
+\iffalse
 
 In addition, each bucket has its own lock, so that elements in different
 buckets of the hash table may be added, deleted, and looked up completely
 independently.  A large hash table with a large number of buckets (and
 thus locks), with each bucket containing a small number of elements
 should therefore provide excellent scalability.
+
+\fi
 
 \subsection{Hash-Table Implementation}
 \label{sec:datastruct:Hash-Table Implementation}
