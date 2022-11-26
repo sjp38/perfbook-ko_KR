@@ -552,6 +552,17 @@ The \co{hashtab_free()} function on
 \label{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo}
 \end{figure}
 
+버킷 락킹 기반 해쉬 테이블을 262,144 버킷을 가지고 사용한 2.1\,GHz 28 코어 싱글
+소켓 Intel Xeon 시스템에서의 성능 결과는
+Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo}
+에 보인 것과 같습니다.
+이 성능은 거의 선형으로 확장됩니다만, 이상적인 성능 수준에는 다다르지 못하는데,
+겨우 28~CPU 에서조차 그렇습니다.
+이는 부분적으로는 락 획득과 해제가 단일 CPU 에서는 캐쉬 미스를 내지 않지만 두개
+이상의 CPU 에서는 그러기 때문입니다.
+
+\iffalse
+
 The performance results for a single 28-core socket of a 2.1\,GHz
 Intel Xeon system using a bucket-locked hash table
 with 262,144 buckets are shown in
@@ -562,12 +573,27 @@ Part of this shortfall is due to the fact that the lock acquisitions and
 releases incur no cache misses on a single CPU, but do incur misses
 on two or more CPUs.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{CodeSamples/datastruct/hash/data/hps.perf.2020.11.26a/zoocpubktlin}}
 \caption{Read-Only Hash-Table Performance For Schr\"odinger's Zoo, 448 CPUs}
 \label{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo; 448 CPUs}
 \end{figure}
+
+그리고 더 많은 CPU 에서는 상황이 더 나빠질 뿐인데,
+Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo; 448 CPUs}
+에 보인 것과 같습니다.
+우린 이상적 성능을 보일 필요는 없습니다: 29~CPU 와 그 뒤에서의 성능은
+지옥보다도 나쁠 것이 너무 분명합니다.
+이는 적은 수의 CPU 에서의 성능만 사용한 외삽의 위험성을 분명히 강조합니다.
+
+물론, 이 성능 추락의 한가지 가능한 이유는 더 많은 해쉬 버킷이 필요해서일 수도
+있습니다.
+우린 해쉬 버킷의 수를 늘림으로써 이를 테스트 할 수 있습니다.
+
+\iffalse
 
 And things only get worse with more CPUs, as can be seen in
 Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo; 448 CPUs}.
@@ -580,10 +606,29 @@ Of course, one possible reason for the collapse in performance might be
 that more hash buckets are needed.
 We can test this by increasing the number of hash buckets.
 
+\fi
+
 \QuickQuiz{
+	단순히 해쉬 버킷의 수를 늘리는 대신, 존재하는 해쉬 버킷을 캐쉬 얼라인
+	시키는게 낫지 않을까요?
+
+	\iffalse
+
 	Instead of simply increasing the number of hash buckets,
 	wouldn't it be better to cache-align the existing hash buckets?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그에 대한 답은 많은 것에 의존적입니다.
+	이 해쉬 테이블이 버킷마다 많은 수의 원소를 가지고 있다면, 해쉬 버킷의
+	갯수를 늘리는게 분명 나을 겁니다.
+	반면에, 이 해쉬 테이블이 큰 로드를 가지고 있지 않다면, 그 답은
+	하드웨어, 해쉬 함수의 효율성, 그리고 워크로드에 종속적일 겁니다.
+	흥미 있는 독자 여러분은 실험해 보시기 바랍니다.
+
+	\iffalse
+
 	The answer depends on a great many things.
 	If the hash table has a large number of elements per bucket, it
 	would clearly be better to increase the number of hash buckets.
@@ -591,6 +636,9 @@ We can test this by increasing the number of hash buckets.
 	the answer depends on the hardware, the effectiveness of the
 	hash function, and the workload.
 	Interested readers are encouraged to experiment.
+
+	\fi
+
 }\QuickQuizEnd
 
 
@@ -601,12 +649,44 @@ We can test this by increasing the number of hash buckets.
 \label{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets}
 \end{figure}
 
+하지만,
+Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets}
+에서 볼 수 있듯이, 여러 버킷을 연결하는 것은 거의 효과가 없습니다:
+확장성은 여전히 끔찍합니다.
+특히, 29~CPU 를 넘어서는 순간 상당한 하락을 보입니다.
+분명 무언가가 있습니다.
+
+\iffalse
+
 However, as can be seen in
 Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets},
 changing the number of buckets has almost no effect:
 Scalability is still abysmal.
 In particular, we still see a sharp dropoff at 29~CPUs and beyond.
 Clearly something else is going on.
+
+\fi
+
+문제는 이 멀티 소켓 시스템에서, CPU~0--27 과 225--251 은
+Figure~\ref{fig:datastruct:NUMA Topology of System Under Test}
+에 보인 것처럼 같은 소켓에 매핑되어 있다는 것입니다.
+테스트 수행은 처음 28~CPU 에 국한되어 있으므로 성능이 상당히 잘 나오지만,
+소켓~0 의 CPU~0--27 과 소켓~1 의 CPU~28 이 사용되는 테스트에서는 데이터를 소켓
+경계 안팎으로 보내는 오버헤드를 일으킵니다.
+이는
+Section~\ref{sec:cpu:Hardware System Architecture} 
+에서 이야기 했듯 상당히 성능을 하락시킬 수 있습니다.
+짧게 말해서, 커다란 멀티 소켓 시스템은 완전한 파티셔닝에 더해 참조의 좋은
+지역성을 필요로 합니다.
+이 챕터의 나머지 부분은 해쉬 테이블 자체 내에서 좋은 참조 지역성을 제공하는
+방법들을 이야기 할 것입니다만, 그 사이 좋은 참조 지역성을 제공하는 한가지 다른
+방법은 해쉬 테이블에 많은 데이터 원소를 넣는 것임을 알아두시기 바랍니다.
+예를 들어, Schr\"odinger 는 그의 동물들의 사진이나 심지어 비디오를 이 해쉬
+테이블의 각 원소에 넣음으로써 훌륭한 캐쉬 지역성을 얻을 수도 있을 겁니다.
+하지만 해쉬 테이블이 작은 데이터 원소를 가져야 하는 경우를 위해선, 계속
+읽으세요!
+
+\iffalse
 
 The problem is that this is a multi-socket system, with CPUs~0--27
 and~225--251 mapped to the first socket as shown in
@@ -630,12 +710,36 @@ the hash table.
 But for those needing hash tables containing small data elements,
 please read on!
 
+\fi
+
 \QuickQuiz{
+	소켓을 가로지르는 경우의 Schr\"odinger 의 동물원의 나쁜 확장성을
+	생각하면, 이 어플리케이션의 여러 복사본을 각 복사본은 동물들의
+	부분집합만을 가지고 각 복사본을 단일 소켓으로 가둬서 수행시키는 건
+	어떤가요?
+
+	\iffalse
+
 	Given the negative scalability of the Schr\"odinger's
 	Zoo application across sockets, why not just run multiple
 	copies of the application, with each copy having a subset
 	of the animals and confined to run on a single socket?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그럴 수 있습니다!
+	실제로, 여러분은 이 아이디어를 이 어플리케이션의 한 복사본을 클러스터의
+	각 노드에서 수행시키는 커다란 클러스터 시스템으로 확장시킬 수 있습니다.
+	이 방법은 ``sharding'' 이라 불리며, 커다란 웹 기반 상점들에서 많이
+	사용되고 있습니다~\cite{DeCandia:2007:DAH:1323293.1294281}.
+
+	하지만, 여러분이 멀티소켓 시스템에서 소켓별 방식으로 sharding 을
+	할거라면, 분리된 더 작고 저렴한 싱글 소켓 시스템을 여럿 사서 이 데이터
+	베이스의 한shard 를 각 시스템에서 돌리는게 어떻습니까?
+
+	\iffalse
+
 	You can do just that!
 	In fact, you can extend this idea to large clustered systems,
 	running one copy of the application on each node of the cluster.
@@ -647,6 +751,9 @@ please read on!
 	a multisocket system, why not buy separate smaller and cheaper
 	single-socket systems, and then run one shard of the database
 	on each of those systems?
+
+	\fi
+
 }\QuickQuizEnd
 
 One key property of the Schr\"odinger's-zoo runs discussed thus far is that
