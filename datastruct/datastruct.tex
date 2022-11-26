@@ -259,6 +259,31 @@ should therefore provide excellent scalability.
 \begin{fcvref}[ln:datastruct:hash_bkt:struct]
 Listing~\ref{lst:datastruct:Hash-Table Data Structures}
 (\path{hash_bkt.c})
+은 간단한 체이닝과 해쉬 버킷별 락킹을 사용하는 고정 크기 해쉬 테이블에 사용되는
+데이터 구조 집합을 보이며,
+Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram}
+는 그것들이 어떻게 같이 동작하는지 보입니다.
+\co{hashtab} 구조체는
+(Listing~\ref{lst:datastruct:Hash-Table Data Structures} 의
+\clnrefrange{tab:b}{tab:e}) 네개의 \co{ht_bucket} 구조체를
+(Listing~\ref{lst:datastruct:Hash-Table Data Structures} 의
+\clnrefrange{bucket:b}{bucket:e}) 가지며, \co{->ht_nbuckets} 필드는 버킷의
+갯수를 제어하고 \co{->ht_cmp} 필드는 키 비교 함수로의 포인터를 갖습니다.
+그런 각 버킷은 리스트 헤더 \co{->htb_head} 와 하나의 락 \co{->htb_lock} 을
+갖습니다.
+그것들의 \co{->hte_next} 필드를 통한 이 리스트 헤더는 \co{ht_elem} 구조체를
+(Listing~\ref{lst:datastruct:Hash-Table Data Structures} 의
+\clnrefrange{elem:b}{elem:e}) 연결하며, 각 \co{ht_elem} 구조체는 또한 연관된
+원소의 해쉬 값을 \co{->hte_hash} 필드에 캐쉬해 둡니다.
+\co{ht_elem} 구조체는 복잡한 키를 가지고 있을수도 있는 더 커다란 구조체에
+포함됩니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:datastruct:hash_bkt:struct]
+Listing~\ref{lst:datastruct:Hash-Table Data Structures}
+(\path{hash_bkt.c})
 shows a set of data structures used in a simple fixed-sized hash
 table using chaining and per-hash-bucket locking, and
 Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram}
@@ -283,6 +308,8 @@ The \co{ht_elem} structure is included in a larger structure
 which might contain a complex key.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_bkt@struct.fcv}
 \caption{Hash-Table Data Structures}
@@ -295,6 +322,22 @@ which might contain a complex key.
 \caption{Hash-Table Data-Structure Diagram}
 \label{fig:datastruct:Hash-Table Data-Structure Diagram}
 \end{figure}
+
+Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram}
+는 두개의 원소를 갖는 버킷~0 과 하나의 원소를 갖는 버킷~2 를 보입니다.
+
+\begin{fcvref}[ln:datastruct:hash_bkt:map_lock:map]
+Listing~\ref{lst:datastruct:Hash-Table Mapping and Locking}
+은 매핑과 락킹 함수들을 보입니다.
+라인~\lnref{b} 와~\lnref{e} 는 \co{HASH2BKT()} 매크로를 보이는데, 이 매크로는
+해쉬 값을 연관된 \co{ht_bucket} 구조체로 매핑합니다.
+이 매크로는 간단한 모듈로 연산을 사용합니다: 더 강력한 해싱이 필요하다면,
+호출자는 키에서 해쉬 값으로의 매핑 시에 그것을 구현해야 합니다.
+남아있는 두 함수는 명시된 해쉬 값에 연관된 \co{->htb_lock} 을 획득하고
+해제합니다.
+\end{fcvref}
+
+\iffalse
 
 Figure~\ref{fig:datastruct:Hash-Table Data-Structure Diagram}
 shows bucket~0 containing two elements and bucket~2 containing one.
@@ -311,11 +354,33 @@ The remaining two functions acquire and release the \co{->htb_lock}
 corresponding to the specified hash value.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_bkt@map_lock.fcv}
 \caption{Hash-Table Mapping and Locking}
 \label{lst:datastruct:Hash-Table Mapping and Locking}
 \end{listing}
+
+\begin{fcvref}[ln:datastruct:hash_bkt:lookup]
+Listing~\ref{lst:datastruct:Hash-Table Lookup}
+은 \co{hashtab_lookup()} 을 보이는데, 이 함수는 명시된 해쉬와 키를 가지고 그에
+연관된 원소가 존재한다면 그 원소로의 포인터를, 아니라면 \co{NULL} 을
+리턴합니다.
+이 함수는 해쉬 값과 키로의 포인터를 둘 다 받는데 이는 이 함수의 사용자들이
+임의의 키와 임의의 해쉬 함수를 사용할 수 있게 하기 위함입니다.
+라인~\lnref{map} 은 이 해쉬 값에서 연관된 해쉬 버킷으로의 포인터로의 매핑을
+합니다.
+\Clnrefrange{loop:b}{loop:e} 의 루프의 각 패스는 이 버킷의 해쉬 체인의 원소를
+하나씩 검사합니다.
+라인~\lnref{hashmatch} 는 이 해쉬 값이 맞는지 검사하고, 그렇지 않다면
+라인~\lnref{next} 에서 다음 원소로 넘어갑니다.
+라인~\lnref{keymatch} 는 실제 키가 들어맞는지 확인하고, 그렇다면
+라인~\lnref{return} 에서 이 맞는 원소로의 포인터를 리턴합니다.
+어떤 원소도 들어맞지 않으면, 라인~\lnref{ret_NULL} 이 \co{NULL} 을 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:datastruct:hash_bkt:lookup]
 Listing~\ref{lst:datastruct:Hash-Table Lookup}
@@ -338,6 +403,8 @@ line~\lnref{return} returns a pointer to the matching element.
 If no element matches, line~\lnref{ret_NULL} returns \co{NULL}.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_bkt@lookup.fcv}
 \caption{Hash-Table Lookup}
@@ -346,12 +413,32 @@ If no element matches, line~\lnref{ret_NULL} returns \co{NULL}.
 
 \QuickQuiz{
 	\begin{fcvref}[ln:datastruct:hash_bkt:lookup]
+	하지만
+	Listing~\ref{lst:datastruct:Hash-Table Lookup} 의
+	\clnrefrange{hashmatch}{return} 에서의 두번의 비교는 키가 unsigned long
+	에 들어갈 때에는 비효율적이지 않나요?
+	\end{fcvref}
+
+	\iffalse
+
+	\begin{fcvref}[ln:datastruct:hash_bkt:lookup]
 	But isn't the double comparison on
 	\clnrefrange{hashmatch}{return} in
 	Listing~\ref{lst:datastruct:Hash-Table Lookup} inefficient
 	in the case where the key fits into an unsigned long?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그렇습니다!
+	그렇지만, 해쉬 테이블은 상당히 자주 unsinged long 에 들어맞지는 않는
+	문자열과 같은 키를 사용해 정보를 저장합니다.
+	이 해쉬 테이블 구현을 키가 항상 unsinged long 에 들어가는 경우를 위해
+	단순화 하는 것은 독자 여러분의 연습으로 남겨두겠습니다.
+
+	\iffalse
+
 	Indeed it is!
 	However, hash tables quite frequently store information with
 	keys such as character strings that do not necessarily fit
@@ -359,6 +446,9 @@ If no element matches, line~\lnref{ret_NULL} returns \co{NULL}.
 	Simplifying the hash-table implementation for the case where
 	keys always fit into unsigned longs is left as an exercise
 	for the reader.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tb]
@@ -366,6 +456,22 @@ If no element matches, line~\lnref{ret_NULL} returns \co{NULL}.
 \caption{Hash-Table Modification}
 \label{lst:datastruct:Hash-Table Modification}
 \end{listing}
+
+Listing~\ref{lst:datastruct:Hash-Table Modification}
+은 해쉬 테이블로부터 원소를 각각 더하고 빼는 \co{hashtab_add()} 와
+\co{hashtab_del()} 함수들을 보입니다.
+
+\begin{fcvref}[ln:datastruct:hash_bkt:add_del:add]
+\co{hashtab_add()} 함수는 단순히 원소의 해쉬 값을 라인~\lnref{set} 에서
+설정하고, 라인~\lnref{add:b} 와~\lnref{add:e} 에서 연관된 버킷에 이를 더합니다.
+\end{fcvref}
+\co{hashtab_del()} 함수는 단순히 명시된 원소를 그것이 어디였든 연결되어 있던
+곳에서 제거하는데, 해쉬 체인 리스트의 양방향 링크드 리스트 덕입니다.
+이 두 함수를 호출하기 전에, 호출자는 어떤 다른 쓰레드도 이 같은 버킷을
+접근하거나 수정하고 있지 않다는 것을 분명히 해야 하는데, 예를 들면
+\co{hashtab_lock()} 을 호출할 수 있습니다.
+
+\iffalse
 
 Listing~\ref{lst:datastruct:Hash-Table Modification}
 shows the \co{hashtab_add()} and \co{hashtab_del()} functions
@@ -384,11 +490,33 @@ ensure that no other thread is accessing
 or modifying this same bucket, for example, by invoking
 \co{hashtab_lock()} beforehand.
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_bkt@alloc_free.fcv}
 \caption{Hash-Table Allocation and Free}
 \label{lst:datastruct:Hash-Table Allocation and Free}
 \end{listing}
+
+Listing~\ref{lst:datastruct:Hash-Table Allocation and Free}
+은 \co{hashtab_alloc()} 과 \co{hashtab_free()} 를 보이는데, 이것들은 각각 해쉬
+테이블 메모리 할당과 해제를 합니다.
+\begin{fcvref}[ln:datastruct:hash_bkt:alloc_free:alloc]
+할당은 \clnrefrange{alloc:b}{alloc:e} 에서 메모리 할당과 함께 시작됩니다.
+라인~\lnref{chk_NULL} 이 메모리가 부족함을 확인하면, 라인~\lnref{ret_NULL} 이
+호출자에게 \co{NULL} 을 리턴합니다.
+그렇지 않다면, 라인~\lnref{set_nbck} 와~\lnref{set_cmp} 가 버킷의 갯수와 키
+비교 함수로의 포인터를 초기화 하며, \clnrefrange{loop:b}{loop:e} 의 루프는 버킷
+자체를 초기화 하는데, 라인~\lnref{init_head} 의 체인 리스트 헤더와
+라인~\lnref{init_lock} 의 락 초기화를 포함합니다.
+마지막으로, 라인~\lnref{return} 은 새로 할당된 해쉬 테이블로의 포인터를
+리턴합니다.
+\end{fcvref}
+\begin{fcvref}[ln:datastruct:hash_bkt:alloc_free:free]
+\Clnrefrange{b}{e} 에서의 \co{hashtab_free()} 함수는 직관적입니다.
+\end{fcvref}
+
+\iffalse
 
 Listing~\ref{lst:datastruct:Hash-Table Allocation and Free}
 shows \co{hashtab_alloc()} and \co{hashtab_free()},
@@ -411,6 +539,8 @@ Finally, line~\lnref{return} returns a pointer to the newly allocated hash table
 The \co{hashtab_free()} function on
 \clnrefrange{b}{e} is straightforward.
 \end{fcvref}
+
+\fi
 
 \subsection{Hash-Table Performance}
 \label{sec:datastruct:Hash-Table Performance}
