@@ -860,6 +860,21 @@ section~\cite{McKenney:2013:SDS:2483852.2483867}.
 \subsection{RCU-Protected Hash Table Implementation}
 \label{sec:datastruct:RCU-Protected Hash Table Implementation}
 
+버킷별 락킹과 함께 RCU 로 보호되는 해쉬 테이블에서, 업데이트 쓰레드는
+Section~\ref{sec:datastruct:Partitionable Data Structures} 에서 보인 것과 같이
+락킹을 사용하지만 읽기 쓰레드는 RCU 를 사용합니다.
+데이터 구조는
+Listing~\ref{lst:datastruct:Hash-Table Data Structures} 에 보인 것 그대로이며,
+\co{HASH2BKT()}, \co{hashtab_lock()}, 그리고 \co{hashtab_unlock()} 함수는
+Listing~\ref{lst:datastruct:Hash-Table Mapping and Locking} 에 보인
+그대로입니다.
+그러나, 읽기 쓰레드는
+Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Read-Side Concurrency Control}
+에 보인, \co{hashtab_lock_lookup()} 과 \co{hashtab_unlock_lookup()} 에 포함된
+더 가벼운 동시성 제어를 사용합니다.
+
+\iffalse
+
 For an RCU-protected hash table with per-bucket locking,
 updaters use locking as shown in
 Section~\ref{sec:datastruct:Partitionable Data Structures},
@@ -874,11 +889,33 @@ by \co{hashtab_lock_lookup()} and \co{hashtab_unlock_lookup()}
 shown in
 Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Read-Side Concurrency Control}.
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_bkt_rcu@lock_unlock.fcv}
 \caption{RCU-Protected Hash-Table Read-Side Concurrency Control}
 \label{lst:datastruct:RCU-Protected Hash-Table Read-Side Concurrency Control}
 \end{listing}
+
+Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Lookup}
+은 RCU 로 보호되는 버킷별 락을 사용하는 해쉬 테이블을 위한
+\co{hashtab_lookup()} 을 보입니다.
+이는 \co{cds_list_for_each_entry()} 가 \co{cds_list_for_each_entry_rcu()} 로
+대체되었다는 것을 제외하면
+Listing~\ref{lst:datastruct:Hash-Table Lookup} 의 것과 동일합니다.
+이 두 함수들 모두 \co{htb->htb_head} 로 참조되는 해쉬 체인을 순회합니다만
+\co{cds_list_for_each_entry_rcu()} 는 동시의 삽입 시에 메모리 순서를 올바르게
+강제합니다.
+이게 이 두 해쉬 테이블 구현 사이의 중요한 차이점입니다:
+순수한 버킷별 락킹 구현과 달리, RCU 로 보호되는 구현은 탐색이 삽입과 삭제와
+동시에 이루어질 수 있게 하며, \co{cds_list_for_each_entry_rcu()} 와 같은 RCU 를
+인지하는 기능들은 이 추가된 동시성을 올바르게 처리할 필요를 갖습니다.
+또한 \co{hashtab_lookup()} 의 호출자는 RCU read-side 크리티컬 섹션 내에
+있어야만 하는데, 예를 들면 호출자는 \co{hashtab_lookup()} 호출 전에
+\co{hashtab_lock_lookup()} 을 (그리고 물론 얼마 후에는
+\co{hashtab_unlock_lookup()} 을) 호출해야만 함을 알아두시기 바랍니다.
+
+\iffalse
 
 Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Lookup}
 shows \co{hashtab_lookup()} for the RCU-protected per-bucket-locked
@@ -901,6 +938,8 @@ RCU read-side critical section, for example, the caller must invoke
 \co{hashtab_lock_lookup()} before invoking \co{hashtab_lookup()}
 (and of course invoke \co{hashtab_unlock_lookup()} some time afterwards).
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_bkt_rcu@lookup.fcv}
 \caption{RCU-Protected Hash-Table Lookup}
@@ -908,11 +947,33 @@ RCU read-side critical section, for example, the caller must invoke
 \end{listing}
 
 \QuickQuiz{
+	하지만 해쉬 테이블 내의 원소들이 탐색과 동시에 제거될 수 있다는 것은,
+	탐색이 찾아진 직후 제거된 데이터 원소로의 참조를 리턴할 수 있다는 의미
+	아닌가요?
+
+	\iffalse
+
 	But if elements in a hash table can be removed concurrently
 	with lookups, doesn't that mean that a lookup could return
 	a reference to a data element that was removed immediately
 	after it was looked up?
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞아요 그럴 수 있습니다!
+	이게 왜 \co{hashtab_lookup()} 이 RCU read-side 크리티컬 섹션 내에서
+	호출되어야 하는지에 대한 이유이며, \co{hashtab_add()} 와
+	\co{hashtab_del()} 이 RCU 를 인지하는 리스트 조정 기능을 써야만 하는
+	이유입니다.
+	마지막으로, 이는 왜 \co{hashtab_del()} 호출자가 제거한 원소를 메모리
+	해제하기 전에 하나의 grace period 를 기다려야만 (예:
+	\co{synchronize_rcu()} 를 호출함으로써) 하는 이유입니다.
+	이는 모든 RCU 읽기 쓰레드가 제거된 원소들을 메모리 해제되기 전에
+	참조함을 보장할 겁니다.
+
+	\iffalse
+
 	Yes it can!
 	This is why \co{hashtab_lookup()} must be invoked within an
 	RCU read-side critical section, and it is why
@@ -924,6 +985,9 @@ RCU read-side critical section, for example, the caller must invoke
 	This will ensure that all RCU readers that might reference
 	the newly removed element have completed before that element
 	is freed.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tb]
@@ -931,6 +995,25 @@ RCU read-side critical section, for example, the caller must invoke
 \caption{RCU-Protected Hash-Table Modification}
 \label{lst:datastruct:RCU-Protected Hash-Table Modification}
 \end{listing}
+
+Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Modification}
+은 \co{hashtab_add()} 와 \co{hashtab_del()} 을 보이는데, 둘 다
+Listing~\ref{lst:datastruct:Hash-Table Modification} 에 보인 RCU 기반이 아닌
+해쉬 테이블의 것들과 상당히 비슷합니다.
+\co{hashtab_add()} 함수는 어떤 원소를 탐색되고 있는 사이 이 해쉬 테이블에
+추가하는 경우 올바른 순서를 보장하기 위해 \co{cds_list_add()} 대신
+\co{cds_list_add_rcu()} 를 사용합니다.
+\co{hashtab_del()} 함수는 원소가 삭제되기 전에 탐색되는 경우를 허용하기 위해
+\co{cds_list_del_init()} 대신 \co{cds_list_del_rcu()} 를 사용합니다.
+\co{cds_list_del_init()} 와 달리, \co{cds_list_del_rcu()} 는 앞으로의 포인터를
+원래대로 두어서 \co{hashtab_lookup()} 이 새로이 제거된 원소의 다음 원소를
+따라갈 수 있게 합니다.
+
+물론, \co{hashtab_del()} 을 호출한 다음에는, 해당 원소의 메모리를 해제하기 전에
+하나의 RCU grace period 를 기다려야 하며 (예: \co{synchronize_rcu()} 호출을
+통해), 그러지 않으면 이 새로이 삭제된 원소의 메모리를 재사용하게 되어버립니다.
+
+\iffalse
 
 Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Modification}
 shows \co{hashtab_add()} and \co{hashtab_del()}, both of which
@@ -951,6 +1034,8 @@ to the newly deleted element's successor.
 Of course, after invoking \co{hashtab_del()}, the caller must wait for
 an RCU grace period (e.g., by invoking \co{synchronize_rcu()}) before
 freeing or otherwise reusing the memory for the newly deleted element.
+
+\fi
 
 \subsection{RCU-Protected Hash Table Performance}
 \label{sec:datastruct:RCU-Protected Hash Table Performance}
