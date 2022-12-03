@@ -1227,6 +1227,17 @@ memory system.
 
 \fi
 
+이 메모리 시스템 병목의 추가적인 증거가 동기화되지 않은 코드를 검사함으로써
+찾아질 수도 있습니다.
+이 코드는 락이 필요없으므로 각 해쉬 버킷은 RCU 와 QSBR 의 경우의 56~바이트에
+비해 적은 16~바이트만을 사용합니다.
+비슷하게, 각 해쉬 테이블원소는 RCU 와 QSBR 의 72~바이트에 비해 적은
+56~바이트만을 사용합니다.
+따라서 단일 CPU 의 동기화되지 않은 수행이 QSBR 이나 RCU 양쪽에 비해 반쯤 빠른
+것은 놀라운 일이 아닙니다.
+
+\iffalse
+
 Additional evidence for this memory-system bottleneck may be found by
 examining the unsynchronized code.
 This code does not need locks, so each hash bucket occupies only 16~bytes
@@ -1236,7 +1247,17 @@ Similarly, each hash-table element occupies only 56~bytes compared to the
 So it is unsurprising that the single-CPU unsynchronized run performs up
 to about half again faster than that of either QSBR or RCU\@.
 
+\fi
+
 \QuickQuiz{
+	Page~\pageref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets} 의
+	Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets}
+	가 해쉬 테이블 크기를 변화시키는게 거의 아무 효과도 내지 못하는 걸
+	보이는데 해쉬 테이블 크기가 문제라고 여기서 확신할 수 있나요?
+	문제는 그게 아니라 false sharing 일수도 있지 않을까요?
+
+	\iffalse
+
 	How can we be so sure that the hash-table size is at fault here,
 	especially given that
 	Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets}
@@ -1244,7 +1265,18 @@ to about half again faster than that of either QSBR or RCU\@.
 	shows that varying hash-table size has almost
 	no effect?
 	Might the problem instead be something like false sharing?
+
+	\fi
+
 }\QuickQuizAnswer{
+	훌륭한 질문입니다!
+
+	False sharing 은 쓰기를 필요로 하는데, 이 탐색만 하는 벤치마크의
+	동기화되지 않은 수행이나 RCU 수행에서는 사용되지 않습니다.
+	따라서 문제는 false sharing 이 아닙니다.
+
+	\iffalse
+
 	Excellent question!
 
 	False sharing requires writes, which are not featured in the
@@ -1252,12 +1284,26 @@ to about half again faster than that of either QSBR or RCU\@.
 	benchmark.
 	The problem is therefore not false sharing.
 
+	\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{CodeSamples/datastruct/hash/data/hps.perf-hashsize.2020.12.29a/zoohashsize}}
 \caption{Read-Only RCU-Protected Hash-Table Performance For Schr\"odinger's Zoo at 448 CPUs, Varying Table Size}
 \label{fig:datastruct:Read-Only RCU-Protected Hash-Table Performance For Schr\"odinger's Zoo at 448 CPUs, Varying Table Size}
 \end{figure}
+
+	아직 만족스럽지 않나요?
+	그렇다면 해쉬 테이블 크기, 즉 버킷의 수와 원소의 최대 개수에 대한
+	함수로써의 448~CPU 성능을 log-log 그림으로 보이는
+	Figure~\ref{fig:datastruct:Read-Only RCU-Protected Hash-Table Performance For Schr\"odinger's Zoo at 448 CPUs, Varying Table Size}
+	를 보시기 바랍니다.
+	크기 1,024 의 해쉬 테이블은 1,024~버킷을 가지고 최대 1,024개 원소를
+	가지며, 평균적으로는 512개 원소를 갖습니다.
+	이것은 읽기만 하는 벤치마크이므로, 실제 사용량은 항상 평균 사용량과
+	같습니다.
+
+	\iffalse
 
 	Still unconvinced?
 	Then look at the log-log plot in
@@ -1270,6 +1316,26 @@ to about half again faster than that of either QSBR or RCU\@.
 	512~elements.
 	Because this is a read-only benchmark, the actual occupancy is
 	always equal to the average occupancy.
+
+	\fi
+
+	이 그림은 8,000개 원소 미만에서 거의 이상적인 성능을 보이는데, 즉 해쉬
+	테이블이 1\,MB 미만의 데이터를 가질 때입니다.
+	이 거의 이상적인 성능은
+	page~\pageref{fig:defer:Pre-BSD Routing Table Protected by RCU} 의
+	\cref{fig:defer:Pre-BSD Routing Table Protected by RCU}
+	에서 보인 pre-BSD 라우팅 테이블에 대해선 심지어 448~CPU 에서도
+	일관적입니다.
+	그러나, 이 성능은 8,000개 원소에서서 상당히 떨어지는데 (이건 log-log
+	그림입니다), 1,048,576-바이트 L2 캐쉬가 넘쳐날 때입니다.
+	300,000개 원소에서 성능은 절벽 아래로 떨어지는데 (이 log-log
+	그림에서조차), 40,370,176-바이트 L3 캐쉬가 넘치는 지점입니다.
+	이는 메모리 시스템 병목이 지대하며 성능을 큰 새쉬 테이블의 경우
+	수십수백배 넘게 떨어뜨릴 수 있음을 보입니다.
+	8,338,608 크기의 해쉬 테이블은 1\,GB 메모리를 사용하여 L3 캐쉬의 25배
+	이상이므로 놀라운 일이 아닙니다.
+
+	\iffalse
 
 	This figure shows near-ideal performance below about 8,000~elements,
 	that is, when the hash table comprises less than 1\,MB of data.
@@ -1289,6 +1355,28 @@ to about half again faster than that of either QSBR or RCU\@.
 	This should not be a surprise, as the size-8,388,608 hash table
 	occupies about 1\,GB of memory, overflowing the L3 caches by
 	a factor of 25.
+
+	\fi
+
+	Page~\pageref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets} 의
+	Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets}
+	가 작은 영향을 보이는 이유는 그 데이터가 버킷별로 락킹 되는 해쉬
+	테이블에서 얻어졌기 때문으로, 락킹 오버헤드와 락킹 경쟁이 캐쉬 용량
+	효과를 넘어서기 때문입니다.
+	대조적으로 RCU 와 해저드 포인터 읽기 쓰레드들은 모두 공유된 데이터로의
+	쓰기를 하지 않아서 캐쉬 용량 효과가 전면에 드러남을 의미합니다.
+
+	여전히 만족스럽지 않으신가요?
+	멀티 소켓 시스템을 찾아서 이 코드를 돌리면서 뭐가 됐든 가능한
+	performance-counter 하드웨어를 사용하세요.
+	그 하드웨어는 카운터는 여러분이 특정 시스템에서 나타나는 모든 속도
+	저하의 자세한 원인을 찾을 수 있게 할 겁니다.
+	이 연습을 함으로써 얻는 경험은 굉장히 가치 있어서 여러분에게 이 문제를
+	이론적이라고 생각하는 사람들에 비해 엄청난 이득을 가져다 줄
+	겁니다.\footnote{
+		물론, 이론적 이해는 이해하지 못함보다 낫습니다.}
+
+	\iffalse
 
 	The reason that
 	Figure~\ref{fig:datastruct:Read-Only Hash-Table Performance For Schroedinger's Zoo, Varying Buckets}
@@ -1310,7 +1398,18 @@ to about half again faster than that of either QSBR or RCU\@.
 	understanding of this issue is strictly theoretical.\footnote{
 		Of course, a theoretical understanding beats no
 		understanding.}
+
+	\fi
+
 }\QuickQuizEnd
+
+메모리 사용량이 더 줄어들면 어떻게 될까요?
+Page~\pageref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR With Non-Initial rcu-head} 의
+\cref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR}
+는 pre-BSD 라우팅 테이블로 표현되는 훨씬 작은 데이터 구조에서는 RCU 가 정말
+이상에 근접한 성능을 얻음을 보입니다.
+
+\iffalse
 
 What if the memory footprint is reduced still further?
 \Cref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR}
@@ -1318,11 +1417,42 @@ on page~\pageref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR With Non-
 shows that RCU attains very nearly ideal performance on the much smaller
 data structure represented by the pre-BSD routing table.
 
+\fi
+
 \QuickQuiz{
+	이 커다란 시스템에서는 메모리 시스템이 상당한 병목입니다.
+	유용한 뭔가를 하기 충분한 메모리 대역폭을 주지 않고서 시스템에 448~CPU
+	를 장착해서는 왜 고생할까요?
+
+	\iffalse
+
 	The memory system is a serious bottleneck on this big system.
 	Why bother putting 448~CPUs on a system without giving them
 	enough memory bandwidth to do something useful???
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 커다랗고 비싼 시스템을 작은 데이터 원소들로 구성된 간단한 해쉬
+	테이블 탐색에만 사용하는 것은 실제로 나쁜 생각일 겁니다.
+	하지만, 이 시스템은 더 많은 계산과 적은 메모리 액세스를 사용하는 무척
+	많은 워코로드에 매우 유용합니다.
+	예를 들어, 어떤 인메모리 데이터베이스는 이런 종류의 시스템에서 무척 잘
+	동작하는데, 이 챕터의 벤치마크에서 수행하는 것에 비해 훨씬 복잡한 쿼리
+	집합을 사용할 때 뿐이긴 합니다.
+	예를 들어, 그런 시스템은 각 원소에 저장된 이미지나 비디오를 처리해서
+	그로 인해 생겨나는 순차적 메모리 액세스가 가용한 메모리 대역폭의 더
+	나은 사용을 하여서 순전히 포인터 따라가기만 하는 워크로드에 비해 추가적
+	성능 이득을 얻을 겁니다.
+
+	하지만 이걸 여러분의 교훈으로 삼기 바랍니다.
+	현대의 컴퓨터 시스템은 매우 다양한 형태와 크기로 나오며, 여러분의
+	어플리케이션에 맞는 것을 고르는데는 상당한 주의가 종종 필요합니다.
+	그리고 여러분의 어플리케이션을 특정 컴퓨터 시스템에 맞춰 조정하는데는
+	아마 그보다도 자주 상당한 주의와 작업이 필요합니다.
+
+	\iffalse
+
 	It would indeed be a bad idea to use this large and expensive
 	system for a workload consisting solely of simple hash-table
 	lookups of small data elements.
@@ -1344,6 +1474,9 @@ data structure represented by the pre-BSD routing table.
 	And perhaps even more frequently, significant care and work is
 	required to adjust your application to the specific computer
 	systems at hand.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{figure}[tb]
@@ -1352,6 +1485,28 @@ data structure represented by the pre-BSD routing table.
 \caption{Read-Side Cat-Only RCU-Protected Hash-Table Performance For Schr\"odinger's Zoo at 64 CPUs}
 \label{fig:datastruct:Read-Side Cat-Only RCU-Protected Hash-Table Performance For Schroedinger's Zoo at 64 CPUs}
 \end{figure}
+
+앞에서 언급했듯, Schr\"odinger 는 그의 고양이의 인기에
+놀랐습니다만~\cite{ErwinSchroedinger1935Cat}, 이 인기를 그의 설계에 적용할
+필요를 인식했습니다.
+Figure~\ref{fig:datastruct:Read-Side Cat-Only RCU-Protected Hash-Table Performance For Schroedinger's Zoo at 64 CPUs}
+는 64-CPU 수행에서의 결과를 변화하는 CPU 수에 따라 그 고양이 탐색만을 하는 하는
+워크로드에 대해 보입니다.
+RCU 와 해저드 포인터 모두 이 도전에 잘 응합니다만, 버킷 락킹은 음의 확장을
+보이며, 결국은 글로벌 락킹만큼이나 나쁜 성능을 보입니다.
+모든 CPU 가 그 고양이 탐색만을 한다면 그 고양이의 버킷에 연관된 락이 글로벌
+락의 의도와 목적에 부합하게 되므로 놀라운 일이 아닙니다.
+
+이 고양이만 찾기 벤치마크는 완전히 파티셔닝 된 샤딩 접근법의 잠재적 문제
+한가지를 보입니다.
+이 고양이의 파티션에 연관된 CPU 만이 그 고양이에 접근할 수 있어서 고양이만 찾기
+처리량을 제한합니다.
+물론, 무척 많은 어플리케이션이 좋은 부하 분산 속성을 가지며 그런
+어플리케이션에서 샤딩은 무척 잘 동작합니다.
+하지만, 샤딩은 ``핫스팟'' 을 아주 잘 처리하지는 않으며, Schr\"odinger 의
+고양이는 그런 핫스팟을 보이는 한가지 예일 뿐입니다.
+
+\iffalse
 
 As noted earlier, Schr\"odinger is surprised by the popularity of his
 cat~\cite{ErwinSchroedinger1935Cat}, but recognizes the need to reflect
@@ -1378,12 +1533,34 @@ However, sharding does not handle ``hot spots'' very well, with
 the hot spot exemplified by Schr\"odinger's cat being but one case
 in point.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{CodeSamples/datastruct/hash/data/hps.perf.2020.11.26a/zooupdatelu}}
 \caption{Read-Side RCU-Protected Hash-Table Performance For Schr\"odinger's Zoo in the Presence of Updates}
 \label{fig:datastruct:Read-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo in the Presence of Updates}
 \end{figure}
+
+우리가 데이터를 읽기만 할거라면, 애초에 동시성 제어가 필요 없을 겁니다.
+따라서
+Figure~\ref{fig:datastruct:Read-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo in the Presence of Updates}
+는 읽기 쓰레들에서의 업데이트의 효과를 보입니다.
+이 그림의 가장 왼쪽에서는 하나의 CPU 를 제외한 모든 CPU 가 탐색을 하며,
+오른쪽에서는 448~CPU 가 모두 업데이트를 합니다.
+이 모든 네가지 구현에서, 밀리세컨드당 룩업 횟수는 업데이트를 하는 CPU 의 수가
+늘어날수록 감소하는데, 448~CPU 가 모두 업데이트를 할때는 물론 밀리세컨드당 0
+탐색에 닿습니다.
+해저드 포인터와 RCU 모두 버킷별 락킹에 비해 잘 동작하는데 그것들의 읽기
+쓰레드는 업데이트 쪽 락 경쟁을 증가시키지 않기 때문입니다.
+RCU 는 업데이트 쓰레드의 수가 증가함에 따라 해저드 포인터에 비해 더 잘
+동작하는데 해저드 포인터의 읽기 쪽 메모리 배리어 때문으로, 특히 업데이트가
+존재할 때, 그리고 수행이 하나 이상의 소켓을 관여시킬 때 메모리 오버헤드는 훨씬
+큰 오버헤드를 일으킵니다.
+따라서 현대의 하드웨어는 메모리 배리어 수행을 상당히 최적화 해서 읽기만 있는
+경우에는 메모리 배리어 오버헤드를 줄였을 것으로 보입니다.
+
+\iffalse
 
 If we were only ever going to read the data, we would not need any
 concurrency control to begin with.
@@ -1402,6 +1579,8 @@ greater overhead, especially in the presence of updates, and particularly
 when execution involves more than one socket.
 It therefore seems likely that modern hardware heavily optimizes memory-barrier
 execution, greatly reducing memory-barrier overhead in the read-only case.
+
+\fi
 
 \begin{figure}[tb]
 \centering
