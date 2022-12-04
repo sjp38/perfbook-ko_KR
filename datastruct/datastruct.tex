@@ -1589,6 +1589,21 @@ execution, greatly reducing memory-barrier overhead in the read-only case.
 \label{fig:datastruct:Update-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo}
 \end{figure}
 
+Figure~\ref{fig:datastruct:Read-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo in the Presence of Updates}
+는 증가하는 업데이트 비율이 탐색에 끼치는 영향을 보이며,
+Figure~\ref{fig:datastruct:Update-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo}
+는 증가하는 업데이트 비율이 업데이트 스스로에게 끼치는 영향을 보입니다.
+다시 말하지만, 이 그림의 왼쪽은 하나의 CPU 를 제외한 모두가 탐색을 하며
+오른쪽은 모든 448개 CPU 가 업데이트를 하고 있습니다.
+해저드 포인터와 RCU 는 상당한 이점을 가지고 시작하는데, 버킷 락킹과 달리 읽기
+쓰레드들은 업데이트 쓰레드를 배제시키지 않기 때문입니다.
+그러나, 업데이트를 하는 CPU 의 수가 늘어날수록 업데이트 쪽 오버헤드는 그 존재를
+드러내기 시작하는데, RCU 에서 먼저 그러하고 이어서 해저드 포인터에서
+그러합니다.
+물론, 이 세개의 구현은 모두 글로벌 락킹보다는 낫습니다.
+
+\iffalse
+
 Where
 Figure~\ref{fig:datastruct:Read-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo in the Presence of Updates}
 showed the effect of increasing update rates on lookups,
@@ -1604,6 +1619,21 @@ starts to make its presence known, first for RCU and then for hazard
 pointers.
 Of course, all three of these implementations beat global locking.
 
+\fi
+
+탐색 성능의 차이점이 업데이트 비율에 의해 영향을 받았을 가능성이 상당히
+있습니다.
+이를 확인하는 한가지 방법은 인위적으로 버킷별 락킹과 해저드 포인터의 업데이트
+비율을 RCU 의 그것과 맞게 조정하는 것입니다.
+그렇게 하는 것이 버킷별 락킹의 탐색 성능을 눈에 띄게 개선하지는 않으며, 해저드
+포인터와 RCU 사이의 차이를 메우지도 않습니다.
+하지만, 해저드 포인터의 읽기 쪽 메모리 배리어를 제거하는 것은 (따라서 안전치
+않은 구현이 되는 것은) 해저드 포인터와 RCU 사이의 차이를 거의 메웁니다.
+이 안전하지 않은 해저드 포인터 구현은 벤치마킹 목적에는 충분히 안전하겠지만
+제품에서의 사용에는 결코 추천되지 않습니다.
+
+\iffalse
+
 It is quite possible that the differences in lookup performance
 are affected by the differences in update rates.
 One way to check this is to artificially throttle the update rates of
@@ -1618,18 +1648,42 @@ Although this unsafe hazard-pointer implementation will
 usually be reliable enough for benchmarking purposes, it is absolutely
 not recommended for production use.
 
+\fi
+
 \QuickQuiz{
+	28~CPU 에서의 결과를 448~CPU 로 외삽하는 것의 위험성은
+	Section~\ref{sec:datastruct:Hash-Table Performance} 에서 분명히
+	보여졌습니다.
+	하지만 왜 448~CPU 에서의 결과로 그 이상을 외삽하는 것은 안전한가요?
+
+	\iffalse
+
 	The dangers of extrapolating from 28~CPUs to 448~CPUs was
 	made quite clear in
 	Section~\ref{sec:datastruct:Hash-Table Performance}.
 	But why should extrapolating up from 448~CPUs be any safer?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이론상 이는 결코 안전하지 않으며 유용한 행위는 이 프로그램을 더 큰
+	시스템에서 돌려보는 것일 겁니다.
+	실용적으로는, 448~CPU 이상의 시스템보다 28~CPU 이상의 것이 훨씬
+	많습니다.
+	더해서, 다른 테스트가 RCU read-side 기능들이 1024~CPU 까지의 일관적인
+	성능과 확장성을 보임을 보인 바 있습니다.
+
+	\iffalse
+
 	In theory, it isn't any safer, and a useful exercise would be
 	to run these programs on larger systems.
 	In practice, there are a lot more systems with more than 28~CPUs
 	than there are systems with more than 448~CPUs.
 	In addition, other testing has shown that RCU read-side primitives
 	offer consistent performance and scalability up to at least 1024~CPUs.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{RCU-Protected Hash Table Discussion}
