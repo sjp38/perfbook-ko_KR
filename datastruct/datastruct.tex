@@ -1990,6 +1990,21 @@ which is the subject of the next section.
 \label{sec:datastruct:Resizable Hash Table Implementation}
 
 \begin{fcvref}[ln:datastruct:hash_resize:data]
+크기 재조정은 고전적인 간접 조정 단계를 추가하는 접근법으로 행해지는데, 이 경우
+Listing~\ref{lst:datastruct:Resizable Hash-Table Data Structures}
+(\path{hash_resize.c}) 의
+\clnrefrange{ht:b}{ht:e} 에 보여진 \co{ht} 구조체입니다.
+\Clnrefrange{hashtab:b}{hashtab:e} 에 보여진 \co{hashtab} 구조체는 현재의
+\co{ht} 구조체로의 구조체와 함께 동시의 해쉬 테이블을 크기 조정들을 직렬화 하기
+위한 스핀락을 갖습니다.
+우리가 고전적인 락 또는 어토믹 오퍼레이션 기반 구현을 사용하기로 했다면, 이
+\co{hashtab} 구조체는 성능과 확장성 측면에서 상당한 병목이 될 수 있었을 겁니다.
+하지만, 크기 재조정 오퍼레이션은 상대적으로 흔히 행해지지 않기 때문에, RCU 를
+잘 사용할 수 있을 겁니다.
+
+\iffalse
+
+\begin{fcvref}[ln:datastruct:hash_resize:data]
 Resizing is accomplished by the classic approach of inserting a level
 of indirection, in this case, the \co{ht} structure shown on
 \clnrefrange{ht:b}{ht:e} of
@@ -2005,11 +2020,33 @@ from both performance and scalability viewpoints.
 However, because resize operations should be relatively infrequent,
 we should be able to make good use of RCU\@.
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_resize@data.fcv}
 \caption{Resizable Hash-Table Data Structures}
 \label{lst:datastruct:Resizable Hash-Table Data Structures}
 \end{listing}
+
+\co{ht} 구조체는
+라인~\lnref{ht:nbuckets} 의 \co{->ht_nbuckets} 에 보여진 것처럼 해쉬 테이블의
+구체적 크기를 표현합니다.
+이 크기는 버킷 배열을 담는 같은 구조체 (line~\lnref{ht:bkt} 의 \co{->ht_bkt[]})
+에도 크기와 배열 사이의 어긋남을 막기 위해 저장됩니다.
+라인~\lnref{ht:resize_cur} 의 \co{->ht_resize_cur} 필드는 크기 재조정
+오퍼레이션이 진행 중이 아니라면 $-1$ 과 동일한데, 원소들이 새로운 해쉬 테이블에
+삽입되고 있는 버킷의 인덱스를 가리키는데, 라인~\lnref{ht:new} 의 \co{->ht_new}
+를 통해 참조됩니다.
+크기 재조정 오퍼레이션이 진행중이지 않다면, \co{->ht_new} 는 \co{NULL} 입니다.
+따라서, 크기 재조정은 새로운 \co{ht} 구조체를 할당하고 그것을 \co{->ht_new}
+포인터를 통해 참조하며, 이어서 \co{->ht_resize_cur} 를 기존 테이블의 버킷을
+통해 진행시킴으로써 이루어집니다.
+모든 원소가 이 새 테이블에 더해진 후에는 새 테이블이 \co{hashtab} 구조체의
+\co{->ht_cur} 필드로 연결됩니다.
+모든 기존 읽기 쓰레드들이 완료된 후에는 기존 해쉬 테이블의 \co{ht} 구조체는
+메모리 해제 될 수 있습니다.
+
+\iffalse
 
 The \co{ht} structure represents a specific size of the hash table,
 as specified by the \co{->ht_nbuckets} field on line~\lnref{ht:nbuckets}.
@@ -2032,6 +2069,29 @@ table is linked into the \co{hashtab} structure's \co{->ht_cur} field.
 Once all old readers have completed, the old hash table's \co{ht} structure
 may be freed.
 
+\fi
+
+라인~\lnref{ht:idx} 의 \co{->ht_idx} 필드는 이 두개의 리스트 포인터 중 어느
+것이 이 해쉬 테이블 현현물에 의해 사용되고 있는지를 나타내며,
+라인~\lnref{ht_elem:next} 의 \co{ht_elem} 구조체의 \co{->ht_next[]} 배열을
+인덱스 합니다.
+
+\Clnrefrange{ht:cmp}{ht:getkey} 의
+\co{->ht_cmp()}, \co{->ht_gethash()}, 그리고 \co{->ht_getkey()} 필드는 원소별
+키와 해쉬 함수를 정의합니다.
+\co{->ht_cmp()} 함수는 명시된 키를 명시된 원소와 비교하고, \co{->ht_gethash()}
+는 명시된 키의 해쉬를 계산하며, \co{->ht_getkey()} 는 감싸는 데이터 원소로부터
+키를 얻어옵니다.
+
+\Clnrefrange{hls:b}{hls:e} 에 보인
+\co{ht_lock_state} 는 새로운 \co{hashtab_lock_mod()} 로부터의 락 상태를
+\co{hashtab_add()}, \co{hashtab_del()} 그리고 \co{hashtab_unlock_mod()} 에
+전달하기 위해 사용됩니다.
+이 상태는 이 알고리즘이 동시의 크기 재조정 오퍼레이션 사이에 잘못된 버킷을
+향하는 것을 막습니다.
+
+\iffalse
+
 The \co{->ht_idx} field on
 line~\lnref{ht:idx} indicates which of the two sets of
 list pointers are being used by this instantiation of the hash table,
@@ -2053,6 +2113,24 @@ to \co{hashtab_add()}, \co{hashtab_del()}, and \co{hashtab_unlock_mod()}.
 This state prevents the algorithm from being redirected to the wrong
 bucket during concurrent resize operations.
 
+\fi
+
+\co{ht_bucket} 구조체는 이전과 같으며, \co{ht_elem} 구조체는 앞의 구현에서는
+하나의 리스트 포인터 집합만 제공했던데 반해 리스트 포인터 집합의 두개 원소
+배열을 제공한다는 점만이 다릅니다.
+
+고정크기 해쉬 테이블에서 버킷 현택은 상당히 간단했습니다:
+단순히 해쉬 값을 연관된 버킷 인덱스로 변환했습니다.
+반대로, 크기를 재조정 할 때에는 버킷의 기존과 새 것들 중 어떤 것에서 선택을
+할지 결정해야 합니다.
+기존 테이블에서 선택될 수 있는 버킷이 이미 새 테이블로 분산되었다면, 이 버킷은
+새 테이블에서는 물론이고 기존 테이블에서도 선택되어야 합니다.
+반대로 이 기존 테이블에서 선택되었을 수 있는 버킷이 아직 분산되지 않았다면, 이
+버킷은 기존 테이블에서 선택되어야 합니다.
+\end{fcvref}
+
+\iffalse
+
 The \co{ht_bucket} structure is the same as before, and the
 \co{ht_elem} structure differs from that of previous implementations
 only in providing a two-element array of list pointer sets in place of
@@ -2070,11 +2148,37 @@ has not yet been distributed, then the bucket should be selected from
 the old table.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_resize@get_bucket.fcv}
 \caption{Resizable Hash-Table Bucket Selection}
 \label{lst:datastruct:Resizable Hash-Table Bucket Selection}
 \end{listing}
+
+\begin{fcvref}[ln:datastruct:hash_resize:get_bucket]
+\clnrefrange{single:b}{single:e} 에 \co{ht_get_bucket()} 를,
+\clnrefrange{hsb:b}{hsb:e} 에 \co{ht_search_bucket()} 를 보이는
+Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection} 에 버킷
+선택이 보여져 있습니다.
+\co{ht_get_bucket()} 함수는 크기 재조정을 허용하지 않으면서 명시된 해쉬 테이블
+내에서 명시된 키에 연관된 버킷으로의 참조를 반환합니다.
+이 함수는 또한 라인~\lnref{single:gethash} 에서 이 키에 연관된 버킷 인덱스를
+패러미터~\co{b} 로 참조되는 위치에 저장하며, 라인~\lnref{single:h} 에서
+패러미터~\co{h} 로 참조되는 위치에 (\co{h} 가 \co{NULL} 이 아니라면) 이 키에
+연관되는 해쉬 값을 저장합니다.
+
+\co{ht_search_bucket()} 함수는 명시된 해쉬 테이블 버전 내에서 명시된 키를 위한
+탐색을 합니다.
+라인~\lnref{hsb:get_curbkt} 은 명시된 키에 연관된 버킷으로의 참조를 얻습니다.
+\Clnrefrange{hsb:loop:b}{hsb:loop:e} 의 반복문은 그 버킷을 찾아서
+라인~\lnref{hsb:match} 가 들어맞음을 발견하면 라인~\lnref{hsb:ret_match} 는
+이를 감싸는 데이터 원소로의 포인터를 반환하게 합니다.
+그렇지 않고 들어맞는 경우가 없다면 라인~\lnref{hsb:ret_NULL} 은 실패를 알리기
+위해 \co{NULL} 을 반환합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:datastruct:hash_resize:get_bucket]
 Bucket selection is shown in
@@ -2103,6 +2207,8 @@ Otherwise, if there is no match,
 line~\lnref{hsb:ret_NULL} returns \co{NULL} to indicate
 failure.
 \end{fcvref}
+
+\fi
 
 \QuickQuiz{
 	How does the code in
