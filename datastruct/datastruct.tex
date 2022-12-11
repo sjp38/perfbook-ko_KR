@@ -2211,25 +2211,58 @@ failure.
 \fi
 
 \QuickQuiz{
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
+	의 코드는 크기 재조정 프로세스가 선택된 버킷을 지나가는 걸 어떻게
+	보호합니까?
+
+	\iffalse
+
 	How does the code in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Bucket Selection}
 	protect against the resizing process progressing past the
 	selected bucket?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그런 보호는 제공하지 않습니다.
+	그건 이어서 설명될 업데이트 쪽 동시성 제어 기능의 역할입니다.
+
+	\iffalse
+
 	It does not provide any such protection.
 	That is instead the job of the update-side concurrency-control
 	functions described next.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 \co{ht_get_bucket()} 과 \co{ht_search_bucket()} 의 구현은 탐색과 수정이 크기
+재조정 오퍼레이션과 동시에 이루어질 수 있게 합니다.
+
+\iffalse
 
 This implementation of \co{ht_get_bucket()} and \co{ht_search_bucket()}
 permits lookups and modifications to run concurrently with a resize
 operation.
+
+\fi
 
 \begin{listing}[tb]
 \input{CodeSamples/datastruct/hash/hash_resize@lock_unlock_mod.fcv}
 \caption{Resizable Hash-Table Update-Side Concurrency Control}
 \label{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
 \end{listing}
+
+읽기 쪽 동시성 제어는
+Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Read-Side Concurrency Control}
+에 보여졌듯 RCU 에 의해 제공됩니다만, 업데이트 쪽 동시성 제어 기능인
+\co{hashtab_lock_mod()} 와 \co{hashtab_unlock_mod()} 는
+Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
+에 보이듯 동시의 크기 재조정 오퍼레이션의 가능성을 처리해야만 합니다.
+
+\iffalse
 
 Read-side concurrency control is provided by RCU as was shown in
 Listing~\ref{lst:datastruct:RCU-Protected Hash-Table Read-Side Concurrency Control},
@@ -2238,6 +2271,33 @@ but the update-side concurrency\-/control functions
 must now deal with the possibility of a
 concurrent resize operation as shown in
 Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}.
+
+\fi
+
+\begin{fcvref}[ln:datastruct:hash_resize:lock_unlock_mod:l]
+\co{hashtab_lock_mod()} 는 이 리스트의 \clnrefrange{b}{e} 에 있습니다.
+라인~\lnref{rcu_lock} 은 데이터 구조가 순회 도중 메모리 해제되는 걸 막기 위해
+RCU read-side 크리티컬 섹션에 들어가고, 라인~\lnref{refhashtbl} 은 현재 해쉬
+테이블로의 참조를 획득하며, 라인~\lnref{refbucket} 은 이 키에 연관되는 해쉬
+테이블의 버킷으로의 참조를 얻습니다.
+라인~\lnref{acq_bucket} 은 이 버킷의 락을 획득하는데, 이는 이 버킷이 동시의
+크기 재조정 오퍼레이션에 의해 분산되는 것을 막을 것인데, 물론 이 버킷이 이미
+분산되어 있다면 아무 영향을 끼치지 못할 것이긴 합니다.
+\Clnrefrange{lsp0b}{lsp0e} 는 버킷 포인터와 포인터 집합 인덱스를
+\co{ht_lock_state} 구조체의 연관된 필드에 저장하는데, 이는 \co{hashtab_add()},
+\co{hashtab_del()}, 그리고 \co{hashtab_unlock_mod()} 에게 이 정보를 전달하는
+것입니다.
+라인~\lnref{ifresized} 는 동시의 크기 재조정 오퍼레이션이 이미 이 버킷을 새
+해쉬 테이블로 분산시켰는지 검사하고, 그렇지 않다면 라인~\lnref{lsp1_1} 에서
+이미 크기 재조정된 해쉬 버킷이 없음을 알리고 라인~\lnref{fastret1} 에서 선택된
+해쉬 버킷의 락이 잡힌 채 (따라서 동시의 크기 재조정 오퍼레이션이 이 버킷을
+분산시키는 것을 막은 채), 그리고 RCU read-side 크리티컬 섹션 안에 있는 채
+리턴합니다.
+기존 테이블의 락은 새 테이블의 것들 전에 항상 잡혀 있으므로, 그리고 RCU 의
+사용이 한번에 두개를 넘는 버전이 조재하는 것을 막기 때문에 데드락 사이클이
+방지되어 데드락이 회피됩니다.
+
+\iffalse
 
 \begin{fcvref}[ln:datastruct:hash_resize:lock_unlock_mod:l]
 The \co{hashtab_lock_mod()} spans
@@ -2266,6 +2326,28 @@ before those of the new table, and because the use of RCU prevents more
 than two versions from existing at a given time, thus preventing a
 deadlock cycle.
 
+\fi
+
+그렇지 않고 동시의 크기 재조정 오퍼레이션이 이미 이 버킷을 분산시켰다면,
+라인~\lnref{new_hashtbl} 은 새 해쉬 테이블로 넘어가서 라인~\lnref{get_newbkt}
+이 이 키에 연관된 버킷을 선택하고 라인~\lnref{acq_newbkt} 에서 이 버킷의 락을
+획득합니다.
+\Clnrefrange{lsp1b}{lsp1e} 는 이 버킷 포인터와 포인터 집합 인텍스를
+\co{ht_lock_state} 구조체의 연관된 필드에 저장하는데, 다시 말하지만 이 정보를
+\co{hashtab_add()}, \co{hashtab_del()}, 그리고 \co{hashtab_unlock_mod()} 에게
+전달하기 위함입니다.
+이 버킷은 이미 크기 재조정 되었고 \co{hashtab_add()} 와 \co{hashtab_del()} 이
+기존과 새로운 \co{ht_bucket} 구조체 모두에 영향을 끼쳤으므로, 두개의 버킷 각각
+하나씩 두개의 락이 잡혀 있습니다.
+더해서, \co{ht_lock_state} 구조체의 각 배열의 원소 둘 다 사용되었는데, \co{[0]}
+원소는 기존 \co{ht_bucket} 구조체를 따르고 있고 \co{[1]} 원소는 새 구조체를
+따르고 있습니다.
+다시 말하지만, \co{hashtab_lock_mod()} 는 RCU read-side 크리티컬 섹션에
+있습니다.
+\end{fcvref}
+
+\iffalse
+
 Otherwise, a concurrent resize operation has already distributed this
 bucket, so line~\lnref{new_hashtbl} proceeds to the new hash table,
 line~\lnref{get_newbkt} selects the bucket corresponding to the key,
@@ -2285,6 +2367,20 @@ Once again, \co{hashtab_lock_mod()} exits within an RCU read-side critical
 section.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:datastruct:hash_resize:lock_unlock_mod:ul]
+\co{hashtab_unlock_mod()} 함수는 \co{hashtab_lock_mod()} 에 의해 획득된 락들을
+해제합니다.
+라인~\lnref{relbkt0} 는 기존 \co{ht_bucket} 구조체의 락을 해제합니다.
+라인~\lnref{ifbkt1} 이 크기 재조정 오퍼레이션이 진행 중이라는 드문 이벤트를
+감지하면 라인~\lnref{relbkt1} 은 새 \co{ht_bucket} 구조체의 락을 해제합니다.
+어떤 경우든 라인~\lnref{rcu_unlock} 은 RCU read-side 크리티컬 섹션을
+빠져나갑니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:datastruct:hash_resize:lock_unlock_mod:ul]
 The \co{hashtab_unlock_mod()} function releases the lock(s) acquired by
 \co{hashtab_lock_mod()}.
@@ -2296,12 +2392,35 @@ Either way, line~\lnref{rcu_unlock} exits the RCU read-side critical
 section.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	한 쓰레드가 크기 재조정 오퍼레이션 중에 이 해쉬 테이블에 원소를 하나
+	넣는다고 생각해 봅시다.
+	뒤따르는 크기 재조정 오퍼레이션이 이 삽입 전에 완료됨으로 인해 이
+	삽입이 사라지는 것은 어떻게 방지됩니까?
+
+	\iffalse
+
 	Suppose that one thread is inserting an element into the
 	hash table during a resize operation.
 	What prevents this insertion from being lost due to a subsequent
 	resize operation completing before the insertion does?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 두번째 크기 재조정 오퍼레이션은 이 버킷을 이 삽입이 위치하는 곳으로
+	옮길 수 없을텐데 이 삽입은 이 해쉬 테이블의 해쉬 버킷 하나 또는 둘
+	모두의 락을 잡을 것이기 때문입니다.
+	더 나아가, 이 삽입 오퍼레이션은 RCU read-side 크리티컬 섹션 내에 위치해
+	있습니다.
+	\co{hashtab_resize()} 함수를 살펴 볼 때 보게 되겠지만, 이는 각 크기
+	재조정 오퍼레이션이 이 삽입의 read-side 크리티컬 섹션이 완료되길
+	기다리기 위해 \co{synchronize_rcu()} 를 호출함을 의미합니다.
+
+	\iffalse
+
 	The second resize operation will not be able to move beyond
 	the bucket into which the insertion is taking place due to
 	the insertion holding the lock(s) on one or both of the hash
@@ -2312,6 +2431,9 @@ section.
 	function, this means that each resize operation uses
 	\co{synchronize_rcu()} invocations to wait for the insertion's
 	read-side critical section to complete.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tb]
