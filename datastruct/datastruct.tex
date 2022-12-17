@@ -2670,6 +2670,24 @@ a concurrent resize operation.
 \end{listing*}
 
 \begin{fcvref}[ln:datastruct:hash_resize:resize]
+실제 크기 재조정은
+page~\pageref{lst:datastruct:Resizable Hash-Table Resizing} 의
+Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}
+에 보여져 있습니다.
+라인~\lnref{trylock} 은 조건적으로 꼭대기 단계의 \co{->ht_lock} 을 획득하고, 이
+획득이 실패하면 라인~\lnref{ret_busy} 에서 크기 재조정이 이미 진행 중임을
+알리는 \co{-EBUSY} 를 리턴합니다.
+그렇지 않다면, 라인~\lnref{get_curtbl} 이 현재 해쉬 테이블로의 레퍼런스를
+가져오고, \clnrefrange{alloc:b}{alloc:e} 에서 원하는 크기의 새 해쉬 테이블을
+할당합니다.
+새로운 해쉬/키 함수가 명시되었다면, 그것들이 새 해쉬 테이블에서 사용되며,
+그렇지 않다면 기존 테이블의 것들이 유지됩니다.
+라인~\lnref{chk_nomem} 이 메모리 할당 실패를 감지하면 라인~\lnref{rel_nomem} 이
+\co{->ht_lock} 을 해제하고 라인~\lnref{ret_nomem} 에서 실패 알림을 리턴합니다.
+
+\iffalse
+
+\begin{fcvref}[ln:datastruct:hash_resize:resize]
 The actual resizing itself is carried out by \co{hashtab_resize}, shown in
 Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing} on
 page~\pageref{lst:datastruct:Resizable Hash-Table Resizing}.
@@ -2683,6 +2701,24 @@ used for the new table, otherwise those of the old table are preserved.
 If line~\lnref{chk_nomem} detects memory-allocation failure,
 line~\lnref{rel_nomem} releases \co{->ht_lock}
 and line~\lnref{ret_nomem} returns a failure indication.
+
+\fi
+
+라인~\lnref{get_curidx} 는 현재 테이블의 인덱스를 가져오고
+라인~\lnref{put_curidx} 는 그것의 해쉬 테이블로의 역을 저장하여서 이 두개의
+해쉬 테이블이 서로의 링크드 리스트를 덮어쓰는 것을 막습니다.
+이어서 라인~\lnref{set_newtbl} 은 새 테이블로의 레퍼런스를 기존 테이블의
+\co{->ht_new} 필드에 저장함으로써 버킷 분산 프로세스를 시작합니다.
+라인~\lnref{sync_rcu} 는 새 테이블을 모르는 모든 읽기 쓰레드가 크기 재조정
+오퍼레이션이 이어지기 전에 완료될 것을 보장합니다.
+
+\Clnrefrange{loop:b}{loop:e} 의 반복문의 각 패스는 기존 해쉬 테이블의 버킷들 중
+하나의 내용물들을 새로운 해쉬 테이블로 분산시킵니다.
+라인~\lnref{get_oldcur} 는 기존 테이블의 현재 버킷으로의 레퍼런스를 가져오고
+라인~\lnref{acq_oldcur} 는 그 버킷의 스핀락을 획득합니다.
+\end{fcvref}
+
+\iffalse
 
 Line~\lnref{get_curidx} picks up the current table's index and
 line~\lnref{put_curidx} stores its inverse to
@@ -2700,7 +2736,22 @@ Line~\lnref{get_oldcur} picks up a reference to the old table's current bucket
 and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:datastruct:hash_resize:resize]
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}
+	의 \co{hashtab_resize()} 함수에서, 라인~\lnref{set_newtbl} 에서의
+	\co{->ht_new} 로의 업데이트가 라인~\lnref{update_resize} 에서의
+	\co{->ht_resize_cur} 업데이트보다 전에 일어난 것으로 \co{hashtab_add()}
+	와 \co{hashtab_del()} 의 관점에 보일 것을 무엇이 보장합니까?
+	달리 말하자면, \co{hashtab_add()} 와 \co{hashtab_del()} 이
+	\co{->ht_new} 에서 얻어진 \co{NULL} 포인터를 역참조 하는 것을 무엇이
+	방지합니까?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:datastruct:hash_resize:resize]
 	In the \co{hashtab_resize()} function in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing},
@@ -2712,7 +2763,28 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	and \co{hashtab_del()} from dereferencing
 	a \co{NULL} pointer loaded from \co{->ht_new}?
 	\end{fcvref}
+
+	\fi
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:datastruct:hash_resize:resize]
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}
+	의 라인~\lnref{sync_rcu} 에서의 \co{synchronize_rcu()} 가 모든
+	앞서서부터 존재해온 RCU 읽기 쓰레드들은 우리가 새 해쉬 테이블
+	레퍼런스를 라인~\lnref{set_newtbl} 에 설치한 시점과 우리가
+	라인~\lnref{update_resize} 에서 \co{->ht_resize_cur} 를 업데이트 하는
+	시점 사이에 완료될 것을 보장합니다.
+	이는 \co{->ht_resize_cur} 의 음수가 아닌 값을 보는 모든 읽기 쓰레드는
+	\co{->ht_new} 할당 전에 시작했을 수 없음을, 따라서 새 해쉬 테이블로의
+	레퍼런스를 볼 수 있을 것임을 의미합니다.
+
+	그리고 이는 업데이트 쪽 \co{hashtab_add()} 와 \co{hashtab_del()} 함수가
+	RCU read-side 크리티컬 섹션에 있어야만 하는지에 대한 이유로,
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}
+	의 \co{hashtab_lock_mod()} 와 \co{hashtab_unlock_mod()} 덕입니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:datastruct:hash_resize:resize]
 	The \co{synchronize_rcu()} on line~\lnref{sync_rcu} of
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}
@@ -2731,7 +2803,29 @@ and line~\lnref{acq_oldcur} acquires that bucket's spinlock.
 	\co{hashtab_lock_mod()} and \co{hashtab_unlock_mod()} in
 	Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control}.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:datastruct:hash_resize:resize]
+\Clnrefrange{loop_list:b}{loop_list:e} 의 반복문의 각 패스는 현재의 기존 테이블
+버킷으로부터 데이터 원소 하나를 연관된 새 테이블의 버킷으로 더하며, 이 더하기
+오퍼레이션 동안 새 테이블의 버킷의 락을 잡고 있습니다.
+라인~\lnref{update_resize} 는 이 버킷이 분산되었음을 알리기 위해
+\co{->ht_resize_cur} 를 업데이트 합니다.
+마지막으로, 라인~\lnref{rel_oldcur} 는 기존 테이블 버킷 락을 해제합니다.
+
+모든 기존 테이블 버킷이 새 테이블로 분산되고 나면 수행은
+라인~\lnref{rcu_assign} 에 도달합니다.
+라인~\lnref{sync_rcu_2} 는 (기존 테이블을 아직 참조하고 있을수도 있는) 모든
+읽기 쓰레드들이 완료되기를 기다립니다.
+라인~\lnref{rel_master} 는 크기 재조정 직렬화 락을 해제하고, 라인~\lnref{free}
+는 기존 해쉬 테이블을 메모리 해제하며, 마지막으로 라인~\lnref{ret_success} 를
+성공을 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:datastruct:hash_resize:resize]
 Each pass through the loop spanning
@@ -2752,12 +2846,35 @@ line~\lnref{free} frees
 the old hash table, and finally line~\lnref{ret_success} returns success.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:datastruct:hash_resize:resize]
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}
+	의 라인~\lnref{update_resize} 에는 왜 \co{WRITE_ONCE()} 가 있나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:datastruct:hash_resize:resize]
 	Why is there a \co{WRITE_ONCE()} on line~\lnref{update_resize}
 	in Listing~\ref{lst:datastruct:Resizable Hash-Table Resizing}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:datastruct:hash_resize:lock_unlock_mod]
+	Listing~\ref{lst:datastruct:Resizable Hash-Table Update-Side Concurrency Control} 의
+	line~\lnref{l:ifresized} in \co{hashtab_lock_mod()}
+	에서의 \co{READ_ONCE()} 와 함께 그것이 컴파일러에게
+	\co{->ht_resize_cur} 로의 액세스는 \co{->ht_resize_cur} 로부터의 읽기가
+	실제로 쓰기와 레이스를 벌일 수 있으므로 ``if'' 조건을 바꾸지않음으로써
+	남아있을 수 있게 해달라고 이야기 합니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:datastruct:hash_resize:lock_unlock_mod]
 	Together with the \co{READ_ONCE()}
 	on line~\lnref{l:ifresized} in \co{hashtab_lock_mod()}
@@ -2767,6 +2884,9 @@ the old hash table, and finally line~\lnref{ret_success} returns success.
 	from \co{->ht_resize_cur} really can race with writes,
 	just not in a way to change the ``if'' conditions.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Resizable Hash Table Discussion}
