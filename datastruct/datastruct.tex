@@ -2940,6 +2940,22 @@ In particular, the entire hash table fits into L3 cache.
 
 \fi
 
+아래의 세개 선은 2,097,152-원소 해쉬 테이블의 것입니다.
+위쪽 선은 262,144-버킷 고정 크기 해쉬 테이블의 것이고, 중간의 것은 낮은 CPU
+갯수의, 그리고 바닥의 것은 높은 CPU 갯수의 크기 재조정 가능한 해쉬 테이블의
+것이며, 남은 선은 524,288-버킷 고정크기 해쉬 테이블의 것입니다.
+이제 버킷당 평균 여덟개의 원소가 있다는 사실만이 성능 하락을 일으킬 것이라
+예상할 수 있으며 실제로 그래프가 이를 보입니다.
+하지만 더 나쁜게, 이 해쉬 테이블의 원소들은 128\,MB 를 차지하는데, 이는 각
+소켓의 39\,MB L3 캐쉬를 넘치게 하여, 
+Section~\ref{sec:cpu:Costs of Operations} 에서 보인 것과 비슷한 성능 결과를
+일으킵니다.
+결과적으로 일어나는 캐쉬 넘침은 메모리 시스템이 읽기만 하는 벤치마크에서조차도
+관여되며, 아래 세개 선의 선형에 가까운 정도에서 볼 수 있듯이, 이 메모리
+시스템은 심각한 병목이 될 수 있습니다.
+
+\iffalse
+
 The lower three traces are for the 2,097,152-element hash table.
 The upper trace corresponds to the 262,144-bucket fixed-size hash table,
 the trace in the middle for low CPU counts and at the bottom for high
@@ -2956,17 +2972,36 @@ even for a read-only benchmark, and as you can see from the sublinear
 portions of the lower three traces, the memory system can be a serious
 bottleneck.
 
+\fi
+
 \QuickQuiz{
+	Figure~\ref{fig:datastruct:Overhead of Resizing Hash Tables Between 262,144 and 524,288 Buckets vs. Total Number of Elements}
+	에 보인 크고 작은 해쉬 테이블들 사이의 성능 차이 중 얼만큼이 긴 해쉬
+	체인 때문이었고 얼만큼은 메모리 시스템 병목 때문이었나요?
+
+	\iffalse
+
 	How much of the difference in performance between the large and
 	small hash tables shown in
 	Figure~\ref{fig:datastruct:Overhead of Resizing Hash Tables Between 262,144 and 524,288 Buckets vs. Total Number of Elements}
 	was due to long hash chains and how much was due to
 	memory-system bottlenecks?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 질문에 답하는 한가지 쉬운 방법은 2,097,152 원소를 가지고 수행하지만
+	이번엔 2,097,152 버킷을 가져서 버킷당 평균 원소 갯수가 하나로 되도록
+	되돌리는 것입니다.
+
+	\iffalse
+
 	The easy way to answer this question is to do another run with
 	2,097,152 elements, but this time also with 2,097,152 buckets,
 	thus bringing the average number of elements per bucket back down
 	to unity.
+
+	\fi
 
 \begin{figure}[tb]
 \centering
@@ -2975,6 +3010,30 @@ bottleneck.
 \label{fig:datastruct:Effect of Memory-System Bottlenecks on Hash Tables}
 \end{figure}
 % Data from CodeSamples/datastruct/hash/data/hps.resize.2020.09.27a
+
+	그 결과가
+	\cref{fig:datastruct:Effect of Memory-System Bottlenecks on Hash Tables}
+	가운데에 있는 세개의 새로운 점선으로 보여져 있습니다.
+	나머지 여섯개의 선은
+	page~\pageref{fig:datastruct:Overhead of Resizing Hash Tables Between 262,144 and 524,288 Buckets vs. Total Number of Elements} 의
+	Figure~\ref{fig:datastruct:Overhead of Resizing Hash Tables Between 262,144 and 524,288 Buckets vs. Total Number of Elements}
+	에 보인 것들과 동일합니다.
+	이 새 선과 아래쪽 세 선들의 집합 사이의 차이가 그 성능 차이 중 얼만큼이
+	해쉬 체인 길이 때문이었는지 보이며, 새 선과 위쪽 세 선 집합 사이의
+	차이가 그 성능 차이 주 얼만큼이 메모리 시스템 병목 때문이었는지입니다.
+	이 새 선은 단일 CPU 에서 262,144-원소의 버전의 것보다 조금 낮게
+	시작하여, 단일 CPU 에서조차 캐쉬 용량이 성능을 적게나마 떨어뜨림을
+	보입니다.\footnote{
+		그래요, 하드웨어 설계자가 걱정하는 만큼 캐쉬는 메모리 시스템의
+		한 부분입니다.}
+	이는 예견되었을 것으로, 그 작은 버전의과 달리 2,097,152-버킷 해쉬
+	테이블은 L3 캐쉬에 들어서지 않기 때문입니다.
+	이 새 선은 28~CPU 를 넘어서야 올라가기 시작하는데 이 역시 예견되었을
+	것입니다.
+	이 상승은 29\textsuperscript{번째} CPU 가 다른 소켓에 있기 때문으로,
+	추가적인 39\,MB 캐쉬와 함께 추가적인 메모리 대역폭을 가져옵니다.
+
+	\iffalse
 
 	The results are shown by the triple-dashed new trace in
 	the middle of
@@ -3000,6 +3059,26 @@ bottleneck.
 	CPU is on another socket, which brings with it an additional
 	39\,MB of cache as well as additional memory bandwidth.
 
+	\fi
+
+	하지만 이 큰 해쉬 테이블의 524,288 버킷 (하지만 여전히 2,097,152 원소)
+	해쉬 테이블에 대비한 성능 이득은 추가적인 CPU 들과 함께 감소하는데,
+	메모리 시스템에 존재하는 병목으로 인한 일관적 모습입니다.
+	400~CPU 를 넘어서서는 2,097,152-버킷 해쉬 테이블이 524,288 버킷 해쉬
+	테이블보다 실제로 약간 뒤집니다.
+	메모리 시스템이 병목이고 더 큰 수의 버킷은 이 워크로드의 메모리
+	사용량을 늘리므로 놀랄 일이 아닙니다.
+
+	주의 깊은 독자 여러분은 앞의 ``대략적'' 이라는 단어에 주목했을 것이며
+	더 자세한 분석에 흥미가 있을 수도 있습니다.
+	그런 독자 여러분은 비슷한 벤치마크를 사용할 수 있는 performance counter
+	또는 하드웨어 분석 도구 또는 무엇이든 가지고 수행해 보시기 바랍니다.
+	이는 길고 복잡한 여정이 될 수 있으나, 거기 시간을 들일 용기가 충분한
+	사람은 하드웨어 성능과 그것의 소프트웨어로의 영향에 대한 자세한
+	지식으로 보상받을 것입니다.
+
+	\iffalse
+
 	But the large hash table's advantage over that of the hash table
 	with 524,288~buckets (but still 2,097,152 elements) decreases
 	with additional CPUs, which is consistent with the bottleneck
@@ -3019,7 +3098,33 @@ bottleneck.
 	This can be a long and complex journey, but those brave enough
 	to embark on it will be rewarded with detailed knowledge of
 	hardware performance and its effect on software.
+
+	\fi
+
 }\QuickQuizEnd
+
+Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz}
+의 마지막 행을 보면, 첫번째 28~CPU 는 첫번째 소켓에 있어서, 코어당 CPU 하나
+기준임을 기억하면 크기 재조정 가능한 해쉬 테이블의 28~CPU 넘어서의 성능이
+떨어지는 모습을 설명할 수 있습니다.
+이 성능 감소가 크긴 하지만, 그것은 지속적으로 크기를 재조정하기 때문임을
+기억하시기 바랍니다.
+524,288 버킷으로 일단 크기 재조정 하고 나면 분명 나을 것이며, 2,097,152 원소의
+1/8 로의 단 한번의 크기 재조정하여 버킷당 원소의 평균 갯수를 위의 세개
+선에서처럼 줄이면 더 나을 겁니다.
+
+이 데이터에서의 핵심은 RCU 로 보호되는 크기 재조정 가능한 해쉬 테이블이 그
+고정크기 버전만큼이나 성능과 확장성이 좋다는 것입니다.
+실제 크기 재조정 오퍼레이션 동안의 성능은 물론 각 원소의 포인터들로 행해지는
+업데이트에 의해 생겨난 캐쉬 미스들 같은 걸로 인해 떨어질 것이고 이 효과는
+메모리 시스템이 병목이 될 때 가장 잘 드러날 겁니다.
+이는 해쉬 테이블이 상당한 정도로 크기 재조정 되어야 함을 알리며, 그 이력 현상은
+너무 잦은 크기 재조정 오퍼레이션으로 인한 성능 하락을 막기 위해 적용되어야
+합니다.
+메모리가 충분한 환경에서는 해쉬 테이블 크기가 줄어드는 것보다 훨씬 적극적으로
+더 늘어나야 할 겁니다.
+
+\iffalse
 
 Referring to the last column of
 Table~\ref{tab:cpu:CPU 0 View of Synchronization Mechanisms on 8-Socket System With Intel Xeon Platinum 8176 CPUs at 2.10GHz},
@@ -3045,6 +3150,24 @@ due to too-frequent resize operations.
 In memory-rich environments, hash-table sizes should furthermore
 be increased much more aggressively than they are decreased.
 
+\fi
+
+또다른 핵심은 \co{hashtab} 구조체가 파티셔닝 불가하기는 하나 읽기가
+대부분이라는 것으로 RCU 사용을 추천하게 합니다.
+이 크기 재조정 가능한 해쉬 테이블의 성능과 확장성은 RCU 로 보호되는 고정크기
+해쉬 테이블의 그것에 무척 근접함을 놓고 보면, 우린 이 접근법이 상당히
+성공적이라 결론내려야 하겠습니다.
+
+마지막으로, 삽입, 삭제, 그리고 탐색이 크기 재조정 오퍼레이션과 동시에 수행될 수
+있음을 알아두는게 중요합니다.
+이 동시성은 커다란 해쉬 테이블을 크기 재조정할 때, 특히 상당한 응답 시간 제한을
+지켜야 하는 어플리케이션에서는 치명적으로 중요합니다.
+
+물론, \co{ht_elem} 구조체의 포인터 쌍은 약간의 메모리 오버헤드를 일으키는데,
+다음 섹션에서 이야기 됩니다.
+
+\iffalse
+
 Another key point is that although the \co{hashtab} structure is
 non-partitionable, it is also read-mostly, which suggests the use
 of RCU\@.
@@ -3061,6 +3184,8 @@ for applications that must meet severe response-time constraints.
 Of course, the \co{ht_elem} structure's
 pair of pointer sets does impose some memory overhead,
 which is taken up in the next section.
+
+\fi
 
 \subsection{Other Resizable Hash Tables}
 \label{sec:datastruct:Other Resizable Hash Tables}
