@@ -3190,6 +3190,23 @@ which is taken up in the next section.
 \subsection{Other Resizable Hash Tables}
 \label{sec:datastruct:Other Resizable Hash Tables}
 
+이 섹션의 앞부분에서 설명된 크기 재조정 가능한 해쉬 테이블의 한가지 단점은
+메모리 소모입니다.
+각 데이터 원소는 하나가 아닌 두 쌍의 링크드 리스트 포인터를 갖습니다.
+한 쌍의 것만 가지며 RCU 로 보호되고 크기 재조정도 가능한 해쉬 테이블을 만들 수
+있을까요?
+
+결과는 ``그렇다'' 로 드러났습니다.
+Josh Triplett 등은~\cite{Triplett:2011:RPHash} 점진적으로 연관된 해쉬 체인들을
+쪼개고 합쳐서 읽기 쓰레드가 항상 유효한 해쉬 체인을 크기 재조정 오퍼레이션
+중간의 모든 지점에서 볼 수 있게 하는 \emph{relativistic hash table} 을
+만들었습니다.
+이 점진적 쪼개기와 합치기는 읽기 쓰레드들이 다른 해쉬 체인에 있는 원소를 보는
+것이 문제되지 않는다는 사실에 기반합니다: 이게 일어나면, 읽기 쓰레드는 키
+미스매치로 인해 이 관계없는 데이터를 그냥 무시할 겁니다.
+
+\iffalse
+
 One shortcoming of the resizable hash table described earlier in this
 section is memory consumption.
 Each data element has two pairs of linked-list pointers rather than just
@@ -3207,12 +3224,32 @@ is harmless for a reader to see a data element that should be in some
 other hash chain: When this happens, the reader will simply ignore the
 extraneous data element due to key mismatches.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{datastruct/zipperhashshrink}}
 \caption{Shrinking a Relativistic Hash Table}
 \label{fig:datastruct:Shrinking a Relativistic Hash Table}
 \end{figure}
+
+이 relativistic 해쉬 테이블의 크기를 두배 줄이는 과정이
+Figure~\ref{fig:datastruct:Shrinking a Relativistic Hash Table}
+에 보여져 있는데, 이 경우 두개 버킷 해쉬 테이블을 한개 버킷 해쉬 테이블, 달리
+말하면 하나의 리니어 리스트로 줄입니다.
+이 프로세스는 기존의 커다란 해쉬 테이블의 한 쌍의 버킷을 새 작은 해쉬 테이블의
+단일 버킷으로 합침으로써 행해집니다.
+이 프로세스가 올바르게 동작하기 위해 우린 두 테이블을 위한 해쉬 함수를 분명히
+제한해야 합니다.
+그런 제한 하나는 두 테이블에서 모두 똑같은 해쉬 함수를 사용하되 큰 테이블에서
+작은 테이블로 줄일 때에는 아래 비트를 버릴 것입니다.
+예를 들어, 기존의 두개 버킷 해쉬 테이블은 이 값의 위쪽 두 비트를 사용하는 반면,
+새 한개 버킷 해쉬 테이블은 이 값의 위쪽 한개 비트만 사용할 수 있습니다.
+이 방법으로, 기존 큰 해쉬 테이블의 인접한 수와 홀수 버킷은 새 작은 해쉬
+테이블의 단일 버킷으로 모아질 수 있으며, 여전히 이 단일 버킷의 원소를 모두 다룰
+수 있는 하나의 해쉬 값을 가질 수 있습니다.
+
+\iffalse
 
 The process of shrinking a relativistic hash table by a factor of two
 is shown in
@@ -3234,6 +3271,25 @@ large hash table can be coalesced into a single bucket in the new small
 hash table, while still having a single hash value cover all of the
 elements in that single bucket.
 
+\fi
+
+최초의 상태가 이 그림의 꼭대기에 보여져 있고, 초기 상태~(a) 로부터 시작해서
+시간은 위에서 아래로 흐릅니다.
+크기 줄이기 프로세스는 새 작은 버킷 배열을 할당하는 것으로 시작하고, 이 작은
+배열의 각 버킷이 기존 해쉬 테이블의 연관된 버킷 쌍 중 하나의 첫번째 원소를
+참조하게 하여 상태~(b) 에 이르게 합니다.
+
+이어서 두 해쉬 체인이 서로 이어져서 상태~(c) 에 이릅니다.
+이 상태에서, 짝수 원소를 탐색하는 읽기 쓰레드는 변화를 느끼지 못하며, 원소~1
+과~3 을 찾는 읽기 쓰레드 역시 변화를 보지 못합니다.
+그러나, 홀수 원소를 탐색하는 읽기 쓰레드들은 원소~0 과~2 도 보게 될 겁니다.
+모든 홀수 원소는 이 두 원소들과 동일하지 않다고 비교될 것이므로 이는 문제가
+되지 않습니다.
+약간의 성능 하락이 있겠지만, 이는 또한 일단 이 작은 해쉬 테이블이 완전히
+만들어지면 어차피 겪게 될 성능 하락입니다.
+
+\iffalse
+
 The initial state is shown at the top of the figure, with time advancing
 from top to bottom, starting with initial state~(a).
 The shrinking process begins by allocating the new smaller array of
@@ -3252,6 +3308,20 @@ There is some performance loss, but on the other hand, this is exactly
 the same performance loss that will be experienced once the new small
 hash table is fully in place.
 
+\fi
+
+다음으로, 이 작은 해쉬 테이블이 읽기 쓰레드들에게 접근 가능해져서 상태~(d) 가
+됩니다.
+기존 읽기 쓰레드들은 여전히 기존 큰 해쉬 테이블을 순회하고 있을 수 있어서 이
+상태에서는 두 해쉬 테이블이 모두 사용중이 됩니다.
+
+다음 단계는 모든 앞서서부터 존재해온 읽기 쓰레드들이 완료되길 기다리는 것으로
+상태~(e) 가 됩니다.
+이 시점에서, 모든 읽기 쓰레드는 새 작은 해쉬 테이블을 사용하고 있으므로 기존의
+큰 해쉬 테이블의 버킷은 메모리 해제될 수 있어서 마지막 상태~(f) 에 이릅니다.
+
+\iffalse
+
 Next, the new small hash table is made accessible to readers, resulting
 in state~(d).
 Note that older readers might still be traversing the old large hash
@@ -3262,6 +3332,8 @@ resulting in state~(e).
 In this state, all readers are using the new small hash table, so that
 the old large hash table's buckets may be freed, resulting in the final
 state~(f).
+
+\fi
 
 \begin{figure}[tb]
 \centering
