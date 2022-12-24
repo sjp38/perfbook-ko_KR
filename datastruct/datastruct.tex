@@ -3472,6 +3472,29 @@ library~\cite{MathieuDesnoyers2009URCU}.
 \epigraph{All life is an experiment.  The more experiments you make the better.}
 	 {\emph{Ralph Waldo Emerson}}
 
+앞의 섹션들은 파티셔닝 가능성을 통해
+(Section~\ref{sec:datastruct:Partitionable Data Structures}),
+효율적인 읽기가 대부분인 액세스 패턴 처리를 통해
+(Section~\ref{sec:datastruct:Read-Mostly Data Structures}),
+또는 파티셔닝 불가능성을 막기 위한 읽기가 대부분인 기법 적용을 통해
+(Section~\ref{sec:datastruct:Non-Partitionable Data Structures})
+동시성을 개선하는 데이터 구조들에 집중했습니다.
+
+병렬 사용을 위한 해쉬 테이블의 큰 장점 가운데 하나는 적어도 크기 재조정 되고
+있지 않는 동안은 완벽히 파티셔닝 가능하다는 것입니다.
+이 파티셔닝 가능성과 크기를 독립적으로 유지하는 한가지 방법은 trie 라고도
+불리는 radix 트리를 사용하는 것입니다.
+Trie 는 중첩된 해쉬 테이블이 집합이라고 생각될 수 있으며, 따라서 요구되는
+파티셔닝 가능성을 제공합니다.
+Trie 의 단점 중 하나는 농도가 옅은 키 공간은 비효율적인 메모리 사용을 초래할 수
+있다는 겁니다.
+이 단점을 막기 위해 사용 가능한 여러 압축 기법이 있는데, 순회 전에 키 값을 더
+작은 키 공간으로 해쉬 하는 기법이~\cite{RobertOlsson2007Trash} 포함됩니다.
+Radix 트리는 리눅스 커널을 포함해~\cite{NickPiggin2006radixtree} 실전에서 많이
+사용되고 있습니다.
+
+\iffalse
+
 The preceding sections have focused on data structures that enhance
 concurrency due to partitionability
 (Section~\ref{sec:datastruct:Partitionable Data Structures}),
@@ -3499,6 +3522,33 @@ traversal~\cite{RobertOlsson2007Trash}.
 Radix trees are heavily used in practice, including in the Linux
 kernel~\cite{NickPiggin2006radixtree}.
 
+\fi
+
+해쉬 테이블과 trie 모두에 중요한 특수한 경우 하나는 아마도 가장 오래된 데이터
+구조인 배열과 그것의 다차원 버전, 즉 행렬입니다.
+행렬들의 완벽히 파티셔닝 가능한 본성은 동시적 수학 알고리즘에서 널리
+사용됩니다.
+
+스스로 밸런스를 맞추는 트리는 동시성 코드에서 널리 사용되는데, AVL 트리와
+red-black 트리가 가장 널리 알려진 예일
+겁니다~\cite{ThomasHCorman2001Algorithms}.
+AVL 트리를 병렬화 하려는 앞선 시도들은 복잡하고 모두가 효율적이지는
+않았습니다만~\cite{Ellis80}, 보다 최근의 red-black 트리 작업은 읽기
+쓰레드들에게 RCU 를 사용하게 하고 읽기와 업데이트 각각을 보호하는데 락들의
+해쉬된 배열을
+제공함으로써~\cite{PhilHoward2011RCUTMRBTree,PhilipWHoward2013RCUrbtree} 더
+나은 성능과 확장성을 제공합니다\footnote{
+	SwissTM의~\cite{AleksandarDragovejic2011STMnotToy} 의 형태로
+	제공하는데, 이는 개발자가 공유되지 않는 액세스를 표시해 두는 형태의
+	소프트웨어 트랜잭셔널 메모리의 한 변종입니다.}.
+Red-black 트리는 적극적으로 밸런스를 맞추어서 순차적 프로그램에서는 잘
+동작하지만 병렬의 사용에서는 꼭 그렇지만은 않음이 드러났습니다.
+따라서 최근의 작업은 RCU 로 보호되는 ``bonsai tree'' 를 사용했는데, 이것은 덜
+적극적으로 밸런스를 맞추어서~\cite{AustinClements2012RCULinux:mmapsem}, 더
+효율적인 동시 업데이트를 위해 트리의 최적 깊이를 희생합니다.
+
+\iffalse
+
 One important special case of both a hash table and a trie is what is
 perhaps the oldest of data structures, the array and its multi-dimensional
 counterpart, the matrix.
@@ -3525,6 +3575,27 @@ Recent work has therefore made use of RCU-protected ``bonsai trees''
 that rebalance less aggressively~\cite{AustinClements2012RCULinux:mmapsem},
 trading off optimal tree depth to gain more efficient concurrent updates.
 
+\fi
+
+동시성 skip list 역시 RCU 읽기 쓰레드에 적용될 수 있으며, RCU 를 닮은 초기의
+학계에서의 사용에서~\cite{Pugh90} 실제로 소개된 바 있습니다.
+
+동시의 양 끝단 queue 는
+Section~\ref{sec:SMPdesign:Double-Ended Queue} 에서 이야기 되었고, 동시의
+스택과 queue 는 긴 역사를~\cite{Treiber86} 가지고 있습니다만, 보통 가장
+인상적인 성능과 확장성을 갖지는 않습니다.
+그것들은 다만 동시성 라이브러리의 흔한
+기능입니다~\cite{PaulMcKenney2013LWNURCUqueuestack}.
+연구자들은 최근 스택과 queue 의 순서 규칙을 완화하는 것을
+제안했는데~\cite{Shavit:2011:DSM:1897852.1897873}, 관련된 연구에서는 완화된
+순서규칙의 queue 가 실제로 엄격한 FIFO queue 보다 더 나은 순서 속성을 가짐을
+드러냈습니다~\cite{AndreasHaas2012FIFOisnt,ChristophMKirsch2012FIFOisntTR,AndreasHaas2013CFRelaxedQueues}.
+
+동시적 데이터 구조들에 대한 계속된 연구는 놀라운 특성을 갖는 최신 알고리즘들을
+만들어낼 가능성이 높아 보입니다.
+
+\iffalse
+
 Concurrent skip lists lend themselves well to RCU readers, and in fact
 represents an early academic use of a technique resembling
 RCU~\cite{Pugh90}.
@@ -3543,6 +3614,8 @@ queues~\cite{AndreasHaas2012FIFOisnt,ChristophMKirsch2012FIFOisntTR,AndreasHaas2
 
 It seems likely that continued work with concurrent data structures will
 produce novel algorithms with surprising properties.
+
+\fi
 
 \section{Micro-Optimization}
 \label{sec:datastruct:Micro-Optimization}
