@@ -3342,6 +3342,21 @@ state~(f).
 \label{fig:datastruct:Growing a Relativistic Hash Table}
 \end{figure}
 
+Relativistic 해쉬 테이블의 크기를 키우는 것은 줄이는 과정의 반대입니다만,
+Figure~\ref{fig:datastruct:Growing a Relativistic Hash Table} 에 보인 것처럼 더
+많은 grace-period 단계가 필요합니다.
+처음 상태~(a) 가 이 그림의 꼭대기에 있고, 시간이 위에서 아래로 흐릅니다.
+
+새로운 커다란 두개 버킷 해쉬 테이블을 할당하는 것으로 시작해 상태~(b) 에
+이릅니다.
+이 새 버킷들 각각은 그 버킷을 향하게 되는 첫번째 원소를 참조하고 있음을
+주의하세요.
+이 새 버킷들은 읽기 쓰레드들에게 공개되어 상태~(c) 에 이릅니다.
+이 상태에서, 짝수 번호 해쉬 버킷을 횡단하는 읽기 쓰레드들만이 원소~0 에
+다다르게 되는데, 그래서 흰색으로 칠해져 있습니다.
+
+\iffalse
+
 Growing a relativistic hash table reverses the shrinking process,
 but requires more grace-period steps, as shown in
 Figure~\ref{fig:datastruct:Growing a Relativistic Hash Table}.
@@ -3357,6 +3372,27 @@ After a grace-period operation, all readers are using the new large
 hash table, resulting in state~(d).
 In this state, only those readers traversing the even-values hash bucket
 traverse element~0, which is therefore now colored white.
+
+\fi
+
+이 시점에서, 기존의 작은 해쉬 버킷들은 메모리 해제될 수 있습니다만 많은
+구현들은 이 오래된 버킷들을 항목들의 리스트를 연관된 새 버킷으로 ``풀어내는''
+과정을 추적하기 위해 사용합니다.
+그런 원소들의 첫번째 연속된 순회의 마지막 짝수 번호 원소는 이제 뒤따르는 짝수
+번호 원소를 참조하도록 업데이트 된 다음 포인터를 가집니다.
+다음 grace period 오퍼레이션 후에는 상태~(e) 가 됩니다.
+세로 화살표는 풀어져야 할 다음 원소를 가리키며, 원소~1 은 이제 홀수 번호 해쉬
+버킷을 횡단하는 읽기 쓰레드만이 그것에 다다를 수 있음을 알리기 위해 검은 색으로
+칠해져 있습니다.
+
+다음으로, 마지막 그런 원소들의 첫번째 연속 수행에서의 마지막 홀수 번호 원소는
+이제 뒤따르는 홀수 번호 원소를 참조하도록 업데이트 된 다음 포인터를 가지게
+되었습니다.
+다음 grace-period 오퍼레이션 후에는 상태~(f) 에 다다릅니다.
+마지막 풀어내기 오퍼레이션 (grace-period 오퍼레이션 포함) 은 마지막 상태~(g) 에
+이르게 합니다.
+
+\iffalse
 
 At this point, the old small hash buckets may be freed, although many
 implementations use these old buckets to track progress ``unzipping''
@@ -3375,6 +3411,31 @@ odd-numbered element.
 After a subsequent grace-period operation, the result is state~(f).
 A final unzipping operation (including a grace-period operation)
 results in the final state~(g).
+
+\fi
+
+요약하면, relativistic 해쉬 테이블은 원소별 리스트 포인터의 갯수를 크기 재조절
+중에 발생하는 추가적인 grace period 의 비용으로 줄입니다.
+이 추가적인 grace period 는 삽입, 삭제, 그리고 탐색이 크기 재조정 오퍼레이션과
+동시에 이루어지므로 일반적으로는 문제가 아닙니다.
+
+$\O{1}$ 삭제를 유지하면서도 원소별 메모리 오버헤드를 한쌍의 포인터에서 하나의
+포인터로 줄일 수 있음이 드러났습니다.
+이는 split-order 리스트를~\cite{OriShalev2006SplitOrderListHash} RCU 보호와
+결합하여~\cite{MathieuDesnoyers2009URCU,PaulMcKenney2013LWNURCUhash}
+이루어졌습니다.
+해쉬 테이블의 데이터 원소들은 하나의 정렬된 링크드 리스트로 구성되고, 각 해쉬
+버킷은 해당 버킷의 첫번째 원소를 참조합니다.
+원소들은 각자의 다음으로의 포인터 필드의 아래쪽 비트를 설정하는 것으로
+삭제되며, 이 원소들은 그것들을 마주하는 다음 순회에서 리스트로부터 제거됩니다.
+
+이 RCU 로 보호되는 split-order 리스트는 복잡하지만 모든 삽입, 삭제, 그리고 탐색
+오퍼레이션에 lock-free 진행 보장을 제공합니다.
+그런 보장은 real-time 오플리케이션에서는 중요할 수 있습니다.
+최신 버전의 userspace RCU 라이브러리~\cite{MathieuDesnoyers2009URCU} 에서 그
+구현을 구할 수 있습니다.
+
+\iffalse
 
 In short, the relativistic hash table reduces the number of per-element
 list pointers at the expense of additional grace periods incurred during
@@ -3402,6 +3463,8 @@ progress guarantees for all insertion, deletion, and lookup operations.
 Such guarantees can be important in real-time applications.
 An implementation is available from recent versions of the userspace RCU
 library~\cite{MathieuDesnoyers2009URCU}.
+
+\fi
 
 \section{Other Data Structures}
 \label{sec:datastruct:Other Data Structures}
