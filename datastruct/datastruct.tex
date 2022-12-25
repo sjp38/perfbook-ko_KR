@@ -3953,6 +3953,22 @@ memory overhead.
 \subsection{Hardware Considerations}
 \label{sec:datastruct:Hardware Considerations}
 
+오늘날의 컴퓨터들은 대부분 데이터를 CPU 와 메인 메모리 사이에서 32 바이트에서
+256 바이트 사이의 고정 크기 블록으로 옮깁니다.
+이 블록들은 \emph{캐쉬 라인} 이라 불리며,
+Section~\ref{sec:cpu:Overheads} 에서 다뤘듯 높은 성능과 확장성을 위해 무척
+중요합니다.
+성능과 확장성을 모두 죽이는 한가지 오래된 방법은 호환되지 않는 변수들을 같은
+캐쉬라인에 두는 겁니다.
+예를 들어, 크기 재조정 가능한 해쉬 테이블의 데이터 원소 하나가 자주 증가되는
+카운터와 같은 캐쉬라인에 \co{ht_elem} 구조체를 두었다고 생각해 봅시다.
+이 잦은 카운터 값 증가는 이 캐쉬라인이 이 값 증가를 하는 CPU 에게 존재하지만
+다른 곳에는 존재하지 않게 만들 겁니다.
+만약 다른 CPU 들이 이 원소를 담는 해쉬 버킷 리스트를 순회하려 하면, 비싼 캐쉬
+미스를 일으켜서 성능과 확장성을 모두 떨어뜨릴 겁니다.
+
+\iffalse
+
 Modern computers typically move data between CPUs and main memory in
 fixed-sized blocks that range in size from 32 bytes to 256 bytes.
 These blocks are called \emph{cache lines}, and are extremely important
@@ -3969,6 +3985,8 @@ If other CPUs attempted to traverse the hash bucket list containing
 that element, they would incur expensive cache misses, degrading both
 performance and scalability.
 
+\fi
+
 \begin{listing}[tb]
 \begin{VerbatimL}
 struct hash_elem {
@@ -3979,6 +3997,28 @@ struct hash_elem {
 \caption{Alignment for 64-Byte Cache Lines}
 \label{lst:datastruct:Alignment for 64-Byte Cache Lines}
 \end{listing}
+
+64 바이트 캐쉬 라인의 시스템에서 이 문제를 해결하는 한가지 방법이
+Listing~\ref{lst:datastruct:Alignment for 64-Byte Cache Lines} 에 보여
+있습니다.
+여기서 \GCC 의 \co{aligned} 지시어가 \co{->counter} 와 \co{ht_elem} 구조체를
+다른 캐쉬 라인에 위치하게 강제합니다.
+이는 CPU 들이 잦은 카운터 값 증가에도 불구하고 해쉬 버킷 리스트를 완전한 속도로
+순회할 수 있게 합니다.
+
+물론, 이는 ``우린 캐쉬 라인이 64 바이트 크기란 걸 어떻게 하나?'' 라는 질문을
+떠올리게 합니다.
+리눅스 시스템에서, 이 정보는 \path{/sys/devices/systems/cpu/cpu*/cache/}
+디렉토리에서 얻을 수 있으며, 설치 프로세스가 어플리케이션을 이 시스템의
+하드웨어 구조에 맞춰 다시 빌드되게 할 수도 있습니다.
+그러나, 여러분의 어플리케이션이 리눅스가 아닌 시스템에서도 돌아가게 하고 싶다면
+좀 더 어려울 수 있습니다.
+더 나아가서, 여러분이 리눅스에서만 수행하려 해도, 그런 스스로를 수정하는 설치는
+검증의 문제를 갖습니다.
+예를 들어, 32 바이트 캐쉬라인에서는 잘 동작하지만, 거짓 공유로 인해 64 바이트
+캐쉬라인에서는 성능이 떨어질 수도 있습니다.
+
+\iffalse
 
 One way to solve this problem on systems with 64-byte cache line is shown in
 Listing~\ref{lst:datastruct:Alignment for 64-Byte Cache Lines}.
@@ -4000,6 +4040,8 @@ self-modifying installation poses validation challenges.
 For example, systems with 32-byte cachelines might work well, but
 performance might suffer on systems with 64-byte cachelines due
 to false sharing.
+
+\fi
 
 Fortunately, there are some rules of thumb that work reasonably well in
 practice, which were gathered into a 1995
