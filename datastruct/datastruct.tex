@@ -3654,6 +3654,29 @@ alone to the set of CPU families in common use today.
 \subsection{Specialization}
 \label{sec:datastruct:Specialization}
 
+Section~\ref{sec:datastruct:Non-Partitionable Data Structures}
+에 보인 크기 재조정 가능한 해쉬 테이블은 임의의 타입의 키를 사용했습니다.
+이는 상당한 유연성을 가능하게 해서 어떤 종류의 키든 사용될 수 있게 하지만,
+포인터를 통한 함수 호출을 통해 상당한 오버헤드를 일으킵니다.
+오늘날의 하드웨어는 이 오버헤드를 줄이기 위해 훌륭한 브랜치 예측 기법을
+사용합니다만, 다른 한편 실제 세계의 소프트웨어는 오늘날의 커다란 하드웨어
+브랜치 예측 테이블로도 담기지 못할 정도로 큰 경우가 많습니다.
+이는 특히 포인터를 통한 호출의 경우 그런데, 브랜치 예측 하드웨어가
+취해진/취해지지 않은 브랜치 정보에 더해 포인터를 기록해야만 하기 때문입니다.
+
+이 오버헤드는 해쉬 테이블 구현을 특정 키 타입과 해쉬 함수로 특수화 시킴으로써
+제거할 수 있는데, 예를 들면 C++ 템플릿을 사용하는 겁니다.
+그렇게 하는 것은
+page~\pageref{lst:datastruct:Resizable Hash-Table Data Structures} 의
+Listing~\ref{lst:datastruct:Resizable Hash-Table Data Structures} 에 보인
+\co{ht} 구조체로부터 \co{->ht_cmp()}, \co{->ht_gethash()}, 그리고
+\co{->ht_getkey()} 함수 포인터들을 제거합니다.
+이는 또한 이 포인터들을 통한 함수 호출들을 제거하여, 컴파일러가 그 결과 고정된
+함수들을 인라인 시켜서 호출 명령의 오버헤드 뿐 아니라 인자 처리 오버헤드까지
+제거할 수 있게 합니다.
+
+\iffalse
+
 The resizable hash table presented in
 Section~\ref{sec:datastruct:Non-Partitionable Data Structures}
 used an opaque type for the key.
@@ -3679,6 +3702,18 @@ which could allow the compiler to inline the resulting fixed functions,
 eliminating not only the overhead of the call instruction, but the
 argument marshalling as well.
 
+\fi
+
+또한, 이 크기 재조정 가능한 해쉬 테이블은 동시성 제어로부터 버킷 선택을
+분리하는 API 에 맞게 설계되었습니다.
+이게 단일한 고문 테스트가 이 챕터의 모든 해쉬 테이블 구현을 테스트 할 수 있게
+하지만, 이는 또한 많은 오퍼레이션들이 해쉬를 계산하고 가능한 크기 재조정
+오퍼레이션들과 한번이 아니라 두번 상호작용해야만 하게 함을 의미합니다.
+성능이 중요한 환경에서 \co{hashtab_lock_mod()} 함수는 또한 선택된 버킷으로의
+참조를 반환해서 뒤따르는 \co{ht_get_bucket()} 호출을 제거할 겁니다.
+
+\iffalse
+
 In addition, the resizable hash table is designed to fit an API
 that segregates bucket selection from concurrency control.
 Although this allows a single torture test to exercise all the hash-table
@@ -3689,22 +3724,58 @@ In a performance-conscious environment, the \co{hashtab_lock_mod()}
 function would also return a reference to the bucket selected, eliminating
 the subsequent call to \co{ht_get_bucket()}.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\path{hashtorture.h} 코드는 \co{ht_get_bucket()} 기능을 포함하는 버전의
+	\co{hashtab_lock_mod()} 를 갖도록 수정될 수 없나요?
+
+	\iffalse
+
 	Couldn't the \path{hashtorture.h} code be modified to accommodate
 	a version of \co{hashtab_lock_mod()} that subsumes the
 	\co{ht_get_bucket()} functionality?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	아마 그럴 수 있을 거고, 그렇게 하는건 이 챕터에 보인 버킷별 락킹 기반
+	해쉬 테이블에 이득을 줄 겁니다.
+	이 수정을 가하는 것은 독자 여러분의 연습문제로 남겨둡니다.
+
+	\iffalse
+
 	It probably could, and doing so would benefit all of the
 	per-bucket-locked hash tables presented in this chapter.
 	Making this modification is left as an exercise for the
 	reader.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	이 특수화가 얼마나 이득을 제공하나요?
+	그게 정말 가치있나요?
+
+	\iffalse
+
 	How much do these specializations really save?
 	Are they really worth it?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	첫번째 질문에 대한 대답은 독자 여러분의 연습문제로 남겨둡니다.
+	이 크기 재조정 가능한 해쉬 테이블을 특수화 시키고 얼만큼의 성능 개선이
+	일어나는지 보십시오.
+	두번째 질문은 일반적으로 답변될 수 없으며, 특정 사용 예에 맞춰
+	답변되어야만 합니다.
+	어떤 사용처는 다른것들에 비해 성능과 확장성에 무척 예민할 수 있습니다.
+
+	\iffalse
+
 	The answer to the first question is left as an exercise to
 	the reader.
 	Try specializing the resizable hash table and see how much
@@ -3713,14 +3784,27 @@ the subsequent call to \co{ht_get_bucket()}.
 	instead be answered with respect to a specific use case.
 	Some use cases are extremely sensitive to performance and
 	scalability, while others are less so.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+그렇다고는 하나, 제가 1970년대 초에 처음 프로그램을 배우기 시작했을 때 쓸 수
+있었던 것들에 비교해 현대 하드웨어의 큰 이득 중 하나는 훨씬 적은 특수화가
+필요하다는 겁니다.
+이는 4 킬로바이트 주소 공간의 시대에 가능했던 것에 비해 훨씬 큰 생산성을
+가능하게 합니다.
+
+\iffalse
 
 All that aside, one of the great benefits of modern hardware compared
 to that available when I first started learning to program back in
 the early 1970s is that much less specialization is required.
 This allows much greater productivity than was possible back in the
 days of four-kilobyte address spaces.
+
+\fi
 
 \subsection{Bits and Bytes}
 \label{sec:datastruct:Bits and Bytes}
