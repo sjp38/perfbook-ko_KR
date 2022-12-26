@@ -4043,6 +4043,14 @@ to false sharing.
 
 \fi
 
+다행히, 1995년 어느 논문에~\cite{BenjaminGamsa95a} 모아진, 실전에서 합리적
+수준으로 잘 동작하는 경험적 법칙이 있습니다.\footnote{
+	이 규칙들 중 여럿을 Orran Krieger 의 허락 하에 여기 바꿔 쓰고
+	확장했습니다.}
+첫번째 그룹의 규칙들은 구조체들을 캐쉬 구조에 맞춰 재배열 하는 것에 관여됩니다:
+
+\iffalse
+
 Fortunately, there are some rules of thumb that work reasonably well in
 practice, which were gathered into a 1995
 paper~\cite{BenjaminGamsa95a}.\footnote{
@@ -4051,7 +4059,29 @@ paper~\cite{BenjaminGamsa95a}.\footnote{
 The first group of rules involve rearranging structures to accommodate
 cache geometry:
 
+\fi
+
 \begin{enumerate}
+\item	읽기가 대부분인 데이터를 자주 업데이트 되는 데이터와 떨어뜨려 놓으세요.
+	예를 들어, 읽기가 대부분인 데이터를 구조체의 앞부분에 두고 자주
+	업데이트 되는 데이터는 끝부분에 두세요.
+	드물게 접근되는 데이터를 그 사이에 두세요.
+\item	그 구조체가 필드들의 그룹들을 가지고 있고 각 그룹이 독립적 코드 경로에
+	의해 업데이트 된다면, 이 그룹들을 서로로부터 분리시키세요.
+	다시 말하지만, 자주 접근되지 않는 데이터를 이 그룹들 사이에 두는게
+	도움이 됩니다.
+	어떤 경우에는 그런 각각의 그룹을 원래 구조체에 의해 참조되는 분리된
+	구조체에 두는 것 역시 말이 될 수도 있습니다.
+\item	가능하다면 업데이트가 주로 되는 데이터는 CPU, 쓰레드, 또는 태스크와
+	연관시키십시오.
+	Chapter~\ref{chp:Counting} 의 카운터 구현에서 우린 이 경험적 법칙의
+	매우 효과적인 예를 여럿 보았습니다.
+\item	한 단계 더 나아가서, 여러분의 데이터를
+	Chapter~\ref{chp:Data Ownership} 에서 이야기한 것처럼 CPU 별, 쓰레드별,
+	또는 태스크별로 분리시키세요.
+
+\iffalse
+
 \item	Place read-mostly data far from frequently updated data.
 	For example, place read-mostly data at the beginning of the
 	structure and frequently updated data at the end.
@@ -4071,7 +4101,19 @@ cache geometry:
 \item	Going one step further, partition your data on a per-CPU,
 	per-thread, or per-task basis, as was discussed in
 	Chapter~\ref{chp:Data Ownership}.
+
+\fi
+
 \end{enumerate}
+
+자동화된 기록 기반 구조체 필드 재정렬을 위한 연구가 몇몇
+있었습니다~\cite{Golovanevsky:2010:TDL:2174824.2174835}.
+이는 멀티쓰레드 소프트웨어에서 훌륭한 성능과 확장성을 위해 필요한 더 고통스러운
+작업들을 더 쉽게 만들어줄 수도 있습니다.
+
+락을 다루는 추가적 경험적 법칙들이 있습니다:
+
+\iffalse
 
 There has been some work towards automated trace-based rearrangement
 of structure
@@ -4082,7 +4124,25 @@ multithreaded software.
 
 An additional set of rules of thumb deal with locks:
 
+\fi
+
 \begin{enumerate}
+\item	자주 수정되는 데이터를 보호하며 경쟁도 심한 락이 있다면 다음 방법들 중
+	하나를 사용하세요:
+	\begin{enumerate}
+	\item	그 락을 그것이 보호하는 데이터와 다른 캐쉬라인에 두세요.
+	\item	경쟁이 심한 경우를 위해 조정된, queued lock 같은 락을
+		사용하세요.
+	\item	락 경쟁을 줄이기 위해 설계를 다시 하세요.
+		(이 방법이 최고입니다만, 항상 간단하지는 않습니다.)
+	\end{enumerate}
+\item	경쟁이 심하지 않은 락은 그것이 보호하는 데이터와 같은 캐쉬 라인에
+	두세요.
+\item	읽기가 대부분인 데이터를 해저드 포인터, RCU, 또는, 긴 크리티컬 섹션을
+	갖는 경우, reader-writer 락으로 보호하세요.
+
+\iffalse
+
 \item	Given a heavily contended lock protecting data that is
 	frequently modified, take one of the following approaches:
 	\begin{enumerate}
@@ -4099,11 +4159,21 @@ An additional set of rules of thumb deal with locks:
 	lock to the current CPU also brings its data.
 \item	Protect read-mostly data with hazard pointers, RCU, or, for
 	long-duration critical sections, reader-writer locks.
+
+\fi
+
 \end{enumerate}
+
+물론, 이것들은 절대적 법칙이 아니라 경험적 규칙입니다.
+주어진 상황에 무엇이 가장 적합한지 알기 위해선 실험이 필요합니다.
+
+\iffalse
 
 Of course, these are rules of thumb rather than absolute rules.
 Some experimentation is required to work out which are most applicable
 to a given situation.
+
+\fi
 
 \section{Summary}
 \label{sec:datastruct:Summary}
