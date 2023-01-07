@@ -1476,6 +1476,15 @@ if (something_bad_is_happening())
 	complain();
 \end{VerbatimN}
 
+이 패턴은 종종 C 전처리기 매크로나 언어 내재 기능 안에 들어가게 되는데 예를
+들면 리눅스 커널에서는 \co{WARN_ON(뭔가_나쁜게_일어나고있음())} 으로
+표현됩니다.
+물론, \co{뭔가_나쁜게_일어나고있음()} 이 종종 사실이라면, 결과 출력물은 다른
+문제들을 숨길수도 있는 보고서가 될 것이므로,
+\co{WARN_ON_ONCE(뭔가_나쁜게_일어나고있음())} 가 더 적절할 겁니다.
+
+\iffalse
+
 This pattern is often encapsulated into C-preprocessor macros or
 language intrinsics, for example, in the Linux kernel, this might
 be represented as \co{WARN_ON(something_bad_is_happening())}.
@@ -1484,9 +1493,29 @@ the resulting output might obscure reports of other problems,
 in which case
 \co{WARN_ON_ONCE(something_bad_is_happening())} might be more appropriate.
 
+\fi
+
 \QuickQuiz{
+	\co{WARN_ON_ONCE()} 를 어떻게 구현할 수 있나요?
+
+	\iffalse
+
 	How can you implement \co{WARN_ON_ONCE()}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여러분이 \co{WARN_ON_ONCE()} 가 가끔은 두번 이상 경고를 하는게
+	괜찮다면, 간단하게 0 으로 초기화 되는 static 변수를 두세요.
+	그 조건이 일어났을 때, 그 변수를 검사하고 그게 0 이 아니면 리턴하세요.
+	그렇지 않다면, 그것을 1 로 바꾸고 메세지를 출력하고 리턴하세요.
+
+	그 메세지가 정말로 한번 넘게 발생하지 않아야 한다면 위의 ``1 로
+	바꾸고'' 대신 어토믹 교환 오퍼레이션을 사용할 수 있습니다.
+	그 어토믹 교환 오퍼레이션이 0을 리턴할 때에만 메세지를 출력하세요.
+
+	\iffalse
+
 	If you don't mind \co{WARN_ON_ONCE()} sometimes warning more
 	than once, simply maintain a static variable that is initialized
 	to zero.
@@ -1499,7 +1528,24 @@ in which case
 	to one'' above.
 	Print the message only if the atomic exchange operation returns
 	zero.
+
+	\fi
+
 }\QuickQuizEnd
+
+병렬 코드에서 일어날 수도 있는 한가지 나쁜 무언가는 특정 락을 잡은 상태에서
+호출될 것으로 예상되는 함수가 그 락을 잡지 않은채 호출되는 것입니다.
+그런 함수는 가끔 ``호출자는 \co{foo_lock} 을 잡고서만 이 함수를 호출해야 함''
+같은 무언가를 그 함수의 머리부분 주석에 가지고 있습니다만, 그런 주석은 누군가가
+그걸 정말로 읽지 않는다면 좋은 일을 하지 않습니다.
+수행가능한 문장이 훨씬 많은 가치를 제공합니다.
+그래서 리눅스 커널의 lockdep
+기능은~\cite{JonathanCorbet2006lockdep,StevenRostedt2011locdepCryptic}  특정
+락이 잡혀져 있는지 검사하는 \co{lockdep_assert_held()} 함수를 제공합니다.
+물론, lockdep 은 상당한 오버헤드를 일으키며, 따라서 제품에서는 도움이 되지 않을
+수도 있습니다.
+
+\iffalse
 
 In parallel code, one bad something that might happen is that
 a function expecting to be called under a particular lock might be called
@@ -1514,6 +1560,26 @@ therefore provides a \co{lockdep_assert_held()} function that checks
 whether the specified lock is held.
 Of course, lockdep incurs significant overhead, and thus might not be
 helpful in production.
+
+\fi
+
+병렬 코드에서의 특히나 나쁜 무언가는 데이터로의 예상되지 못한 동시의
+접근입니다.
+Kernel Concurrency Sanitizer (KCSAN)~\cite{JonathanCorbet2019KCSAN} 은
+\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 같은 존재하는 표시를 어떤 액세스가 경고
+메세지를 낼 가치가 있는지 아는데 사용합니다.
+KCSAN 은 상당한 false-positive 비율을 갖는데, C 를 어셈블리어에 추가적 문법을
+가진 것으로 생각하는 개발자의 관점에서는 특히나 그렇습니다.
+따라서 KCSAN 은 알려진 데이터 경쟁을 포기하기 위해 \co{data_race()} 기능을
+제공하며, 데이터 경쟁을 명시적으로 검사하기 위해 \co{ASSERT_EXCLUSIVE_ACCESS()}
+와 \co{ASSERT_EXCLUSIVE_WRITER()} 또한
+제공합니다~\cite{MarcoElver2020FearDataRaceDetector1,MarcoElver2020FearDataRaceDetector2}.
+
+그러니 검사가 필요한 곳에서 뭘 할 수 있느냐는 알겠는데, 실행시간 검사
+오버헤드가 허용될 수 없는 경우에는 어떡하죠?
+한가지 방법은 정적 분석으로, 다음 섹션에서 다룹니다.
+
+\iffalse
 
 An especially bad parallel-code something is unexpected concurrent
 access to data.
@@ -1531,6 +1597,8 @@ for data races~\cite{MarcoElver2020FearDataRaceDetector1,MarcoElver2020FearDataR
 So what can be done in cases where checking is necessary, but where the
 overhead of runtime checking cannot be tolerated?
 One approach is static analysis, which is discussed in the next section.
+
+\fi
 
 \section{Static Analysis}
 \label{sec:debugging:Static Analysis}
