@@ -1336,6 +1336,23 @@ you already have a good test suite.
 %
 \epigraph{The machine knows what is wrong.  Make it tell you.}{\emph{Unknown}}
 
+모든게 실패하면, \co{printk()} 를 추가하세요!
+또는, 여러분이 사용자 모드 C 언어 어플리케이션을 작업하고 있다면, \co{printf()}
+를요.
+
+이유는 간단합니다: 어떻게 수행이 코드의 특정 포인트에 이르렀는지 모르겠다면,
+뭐가 일어났는지 알기 위해 그 코드의 앞부분에 print 문을 뿌려두세요.
+(사용자 어플리케이션을 위해) gdb 또는 (리눅스 커널 디버깅을 위해) kgdb 를
+사용해서 비슷한 효과를 더 편리하고 유연하게 얻을 수 있습니다.
+훨씬 더 정교한 도구들이 존재하는데, 최근의 것들은 실패 지점으로부터 시간을
+되돌리는 기능도 제공합니다.
+
+이런 간단한 테스트 도구들은 모두 가치있는데, 대부분의 시스템이 64K 이상의
+메모리와 4\,MHz 보다 빠른 CPU 를 갖는 지금은 더욱 그렇습니다.
+이런 도구들을 위한 많은 서적이 있으므로, 이 챕터는 약간만 더 이야기 하겠습니다.
+
+\iffalse
+
 When all else fails, add a \co{printk()}!
 Or a \co{printf()}, if you are working with user-mode C-language applications.
 
@@ -1354,6 +1371,32 @@ that typical systems have more than 64K of memory and CPUs running
 faster than 4\,MHz.
 Much has been
 written about these tools, so this chapter will add only a little more.
+
+\fi
+
+그러나, 이런 도구들은 모두 여러분의 fastpath 에서 뭐가 잘못되고 있는지 보려고
+할 때 심각한 단점을 보이는데, 이 도구들은 종종 지나친 오버헤드를 갖는다는
+것입니다.
+이런 목적을 위한 특수한 추적 도구가 있는데, 실행 시간 데이터 수집의 오버헤드를
+최소화 하기 위해 데이터 소유권 기법을
+(Chapter~\ref{chp:Data Ownership} 를 보세요)
+사용합니다.
+리눅스 커널에서의 한가지 예는 ``trace
+events''~\cite{StevenRostedt2010perfTraceEventP1,StevenRostedt2010perfTraceEventP2,StevenRostedt2010perfTraceEventP3,StevenRostedt2010perfHP+DeathlyMacros}
+로, 극단적으로 낮은 오버헤드를 가지고 데이터를 수집할 수 있게 하는 CPU 별
+버퍼를 사용합니다.
+심지어 그렇다고 해도 추적 기능을 켜는 것은 때로는 버그를 숨기기 충분할 정도로
+타이밍을 바꿀 수 있어서
+Section~\ref{sec:debugging:Probability and Heisenbugs} 과
+특히 Section~\ref{sec:debugging:Hunting Heisenbugs} 에서 이야기한
+\emph{heisenbug} 를 초래할 수 있습니다.
+커널에서, BPF 는 커널 내의 데이터를 줄일 수 있어서, 커널에서 userspace 로의
+정보 교환 오버헤드를 줄일 수 있습니다~\cite{BrendanGregg2019BPFperftools}.
+Userspace 코드에서는 여러분을 도울 수 있는 도구가 굉장히 많습니다.
+Brendan Gregg 의 블로그가 시작하기에 좋을 겁니다.\footnote{
+	\url{http://www.brendangregg.com/blog/}}
+
+\iffalse
 
 However, these tools all have a serious shortcoming when you need a
 fastpath to tell you what is going wrong, namely, these tools often have
@@ -1377,6 +1420,28 @@ In userspace code, there is a huge number of tools that can help you.
 One good starting point is Brendan Gregg's blog.\footnote{
 	\url{http://www.brendangregg.com/blog/}}
 
+\fi
+
+여러분이 heisenbug 를 막는다 하더라도, 다른 문제들이 여러분을 기다립니다.
+예를 들어, 기계는 정말 모든 걸 알고 있다 하더라도, 그것이 아는 것은 거의 항상
+여러분의 머리가 다룰 수 있는것보다 많습니다.
+이런 이유로, 높은 품질의 테스트 도구들은 일반적으로 큰 결과를 분석하는 고도화된
+스크립트를 갖춥니다.
+하지만 알아두세요---스크립트는 여러분이 그것에게 말해달라는 것만 말합니다.
+제 rcutorture 스크립트는 그런 점에서 한 예입니다: 그 스크립트의 초기 버전은 RCU
+grace period 가 무한정 멈춰있는 테스트에 대해 만족을 했습니다.
+이는 물론 RCU grace period 멈춤을 탐지하기 위한 수정을 초래했지만, 그
+스크립트가 제가 그것들에게 찾으라고 한 문제들만을 찾을 것이라는 사실은 변하지
+않습니다.
+하지만 여러분이 탄탄한 설계를 갖지 않는다면 여러분은 여러분의 스크립트가 무엇을
+검사해야 하는지 모를 수 있음을 명심하세요!
+
+특히 \co{printk()} 호출과 관련한 추적의 또다른 문제는 그 오버헤드가
+제품단계에서의 사용을 금지시킬 수 있다는 것입니다.
+그런 경우엔 단정문이 도움이 됩니다.
+
+\iffalse
+
 Even if you avoid heisenbugs, other pitfalls await you.
 For example, although the machine really does know all,
 what it knows is almost always way more than your head can hold.
@@ -1395,6 +1460,8 @@ your script should check for!
 Another problem with tracing and especially with \co{printk()} calls
 is that their overhead can rule out production use.
 In such cases, assertions can be helpful.
+
+\fi
 
 \section{Assertions}
 \label{sec:debugging:Assertions}
