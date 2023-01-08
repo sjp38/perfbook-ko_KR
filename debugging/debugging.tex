@@ -1701,6 +1701,28 @@ This section covers inspection, walkthroughs, and self-inspection.
 \subsection{Inspection}
 \label{sec:debugging:Inspection}
 
+전통적으로 정식 코드 검사는 정식으로 정의된 역할을 가지고 대면 회의에서
+수행됩니다: 운영자, 개발자, 그리고 한명 혹은 두명의 참여자들.
+개발자는 코드를 읽어나가며 그게 무엇을 하고 왜 동작하는지 설명합니다.
+한명 혹은 두명의 참여자들은 질문을 던지고 문제를 제기하여, 저자의 잘못된 가정을
+드러내길 바라며, 운영자의 역할은 발생하는 충돌을 처리하고 기록을 하는 것입니다.
+이 과정은 버그를 찾는데 굉장히 효과적인데, 특히 모든 참여자가 해당 코드에
+친숙하면 그렇습니다.
+
+그러나, 이 대면 정식 진행은 세계의 리눅스 커널 공동체에서는 잘 동작하지 않을 수
+있습니다.
+그대신, 각 개인들은 분리된 채로 코드를 리뷰하고 이메일이나 IRC 를 통해 의견을
+제공합니다.
+기록 남기기는 이메일 기록이나 IRC 로그를 통해 제공되며, 운영자는 간혹 발생하는
+의견 대립 시에 자발적으로 서비스를 제공합니다.
+이 프로세스는 합리적 수준으로 잘 동작하는데, 모든 참여자가 해당 코드에 친숙할
+때 특히 그렇습니다.
+실제로, 전통적인 정식 분석 대비 리눅스 커널 공동체 방식의 장점 중 하나는 코드에
+친숙하지 \emph{않은}, 따라서 저자의 잘못된 가정에 의해 눈이 가려지지 않고
+코드를 테스트 할수도 있는 사람들의 기여 확률이 높다는 것입니다.
+
+\iffalse
+
 Traditionally, formal code inspections take place in face-to-face meetings
 with formally defined roles: moderator, developer, and one or two other
 participants.
@@ -1725,17 +1747,55 @@ traditional formal inspections is the greater probability of contributions
 from people \emph{not} familiar with the code, who might not be blinded
 by the author's invalid assumptions, and who might also test the code.
 
+\fi
+
 \QuickQuiz{
+	숨겨져 있는 리눅스 커널 해커들의 어떤 잘못된 가정을 당신은 이야기 하는
+	건가요???
+
+	\iffalse
+
 	Just what invalid assumptions are you accusing Linux kernel
 	hackers of harboring???
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 질문에 대한 완벽한 답을 원하는 사람들은 ``Fixes:'' 문자를 가지고
+	있는 커밋들을 리눅스 커널 \co{git} 저장소에서 검색해 보세요.
+	그런 것들이 2020년에는 수천개가 있는데, 아래의 잘못된 가정을 위한
+	수정들을 포함합니다:
+
+	\iffalse
+
 	Those wishing a complete answer to this question are encouraged
 	to search the Linux kernel \co{git} repository for commits
 	containing the string \co{Fixes:}.
 	There were many thousands of them just in the year 2020, including
 	fixes for the following invalid assumptions:
 
+	\fi
+
 	\begin{enumerate}
+	\item	0이 아닌 분모에 대한 검사가 divide-by-zero 에러를 막는다.
+		(힌트: 테스트는 64비트 오퍼레이터를 사용하는데 나누기는 32비트
+		오퍼레이터를 사용한다고 생각해 보세요.)
+	\item	Userspace 는 커널과 통신하는데 사용되는 버전 관리된 데이터
+		구조를 0으로 초기화 한다고 신뢰될 수 있다.
+		(힌트: 가끔 userspace 는 그 데이터 구조가 얼마나 큰지 모를 때가
+		있습니다.)
+	\item	오래되어 유효하지않은 TCP duplicate selective acknowledgement
+		(D-SACK) 패킷은 완전히 무시될 수 있다.
+		(힌트: 이 패킷은 다른 정보도 담고 있을수도 있습니다.)
+	\item	모든 CPU 는 little-endian 을 사용한다.
+	\item	데이터 구조가 더이상 필요하지 않아지면 그 메모리는 즉시
+		해제된다.
+	\item	모든 기기는 대기 모드인 상태에서 초기화 될 수 있다.
+	\item	개발자들은 올바른 16진수 산수를 일관적으로 할거라 신뢰될 수
+		있다.
+
+	\iffalse
+
 	\item	Testing for a non-zero denominator will prevent
 		divide-by-zero errors.
 		(Hint: Suppose that the test uses 64-bit arithmetic
@@ -1753,16 +1813,42 @@ by the author's invalid assumptions, and who might also test the code.
 	\item	All devices can be initialized while in standby mode.
 	\item	Developers can be trusted to consistently do correct
 		hexidecimal arithmetic.
+
+	\fi
+
 	\end{enumerate}
+
+	이 커밋들을 더 자세히 들여다보는 분들은 잘못된 가정은 예외가 아니라
+	규칙이라는 결론을 내릴 겁니다.
+
+	\iffalse
 
 	Those who look at these commits in greater detail will conclude
 	that invalid assumptions are the rule, not the exception.
+
+	\fi
+
 }\QuickQuizEnd
+
+리눅스 커널 공동체의 리뷰 프로세스는 개선의 여지가 분명 있을 것입니다:
+
+\iffalse
 
 It is quite likely that the Linux kernel community's review process
 is ripe for improvement:
 
+\fi
+
 \begin{enumerate}
+\item	가끔은 효과적인 리뷰를 하기에 필요한 시간과 전문성을 가진 사람이
+	부족합니다.
+\item	모든 리뷰 토론이 기록된다고는 하지만, 통찰이 잊혀지고 사람들이 토론을
+	찾아내는데 실패함으로써 ``소실'' 되고는 합니다.
+\item	의견 대립은 때로는 해결하기가 어려운데 대립하는 사람들이 다른 목표,
+	경험, 단어집을 사용할 때 특히 그렇습니다.
+
+\iffalse
+
 \item	There is sometimes a shortage of people with the time and
 	expertise required to carry out an effective review.
 \item	Even though all review discussions are archived, they are
@@ -1772,7 +1858,18 @@ is ripe for improvement:
 \item	It is sometimes difficult to resolve flamewars when they do
 	break out, especially when the combatants have disjoint
 	goals, experience, and vocabulary.
+
+\fi
+
 \end{enumerate}
+
+아마도 필요한 개선들 중 일부는 continuous-integration 형태의 테스팅을 통해
+제공될 것입니다만, 테스팅보다 리뷰를 통해 더 쉽게 발견되는 버그들이 많습니다.
+따라서, 리뷰를 할 때에는 커밋 로그, 버그 레포트, 그리고 LWN 기사 등의 관련된
+문서들을 볼 가치가 있습니다.
+이 문서들은 여러분이 필요한 전문성을 빠르게 얻을 수 있게 도울 겁니다.
+
+\iffalse
 
 Perhaps some of the needed improvements will be provided by
 continuous-integration-style testing, but there are many bugs more
@@ -1780,6 +1877,8 @@ easily found by review than by testing.
 When reviewing, therefore, it is worthwhile to look at relevant documentation
 in commit logs, bug reports, and LWN articles.
 This documentation can help you quickly build up the required expertise.
+
+\fi
 
 \subsection{Walkthroughs}
 \label{sec:debugging:Walkthroughs}
