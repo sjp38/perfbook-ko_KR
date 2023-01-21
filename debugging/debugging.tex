@@ -2969,13 +2969,37 @@ Nevertheless, the next section takes a more rigorous approach.
 \subsection{Statistics for Continuous Testing}
 \label{sec:debuggingStatistics for Continuous Testing}
 
+실패 확률의 기본 공식은 Poisson 분포입니다:
+
+\iffalse
+
 The fundamental formula for failure probabilities is the Poisson
 distribution:
+
+\fi
 
 \begin{equation}
 	F_m = \frac{\lambda^m}{m!} \euler^{-\lambda}
 \label{eq:debugging:Poisson Probability}
 \end{equation}
+
+여기서 $F_m$ 은 테스트에서 $m$ 회 실패할 확률이며 $\lambda$ 는 단위 시간당
+예상되는 실패율입니다.
+모든 고급 확률 교재에서는 상당한 도출이 있겠는데, 예를들어 Feller 의 고전인
+``An Introduction to Probability Theory and Its Applications''~\cite{Feller58}
+이 있겠으며, 더 직관적인 도출은 이 책의 첫번째
+판본에서~\cite[Equations 11.8--11.26]{McKenney2014ParallelProgramming-e1}
+찾아볼 수 있을 겁니다.
+
+Section~\ref{sec:debugging:Statistics Abuse for Discrete Testing}
+의 예를 Possion 분포를 사용해 다시 작업해 봅시다.
+이 예는 시간당 30\,\% 실패율을 갖는 테스트를 사용하며 질문은 수정이 실패 확률을
+줄였음을 99\,\% 확신하기 위해 얼마나 오래 에러 없이 테스트를 돌려야
+하는지임을 다시 말씀드립니다.
+이 경우, $m$ 은 0이며, 따라서 Equation~\ref{eq:debugging:Poisson Probability}
+은 다음과 같이 요약됩니다:
+
+\iffalse
 
 Here $F_m$ is the probability of $m$ failures in the test and
 $\lambda$ is the expected failure rate per unit time.
@@ -2996,16 +3020,38 @@ failure rate.
 In this case, $m$ is zero, so that
 Equation~\ref{eq:debugging:Poisson Probability} reduces to:
 
+\fi
+
 \begin{equation}
 	F_0 =  \euler^{-\lambda}
 \end{equation}
 
+이를 푸는데는 $F_0$ 를 0.01 로 하고 $\lambda$ 를 구할 것이 필요해지는데, 다음과
+같습니다:
+
+\iffalse
+
 Solving this requires setting $F_0$
 to 0.01 and solving for $\lambda$, resulting in:
+
+\fi
 
 \begin{equation}
 	\lambda = - \ln 0.01 = 4.6
 \end{equation}
+
+시간당 $0.3$ 실패를 가지므로, 필요한 시간은 $4.6/0.3 = 14.3$ 로,
+Section~\ref{sec:debugging:Statistics Abuse for Discrete Testing} 에서의
+방법으로 계산된 13 시간의 10\,\% 입니다.
+보통 여러분의 실패 확률이 10\,\% 근처임을 모를 것을 놓고 생각하면,
+Section~\ref{sec:debugging:Statistics Abuse for Discrete Testing}
+에서 이야기된 더 간단한 방법이 거의 항상 충분히 좋을 겁니다.
+
+더 일반적으로는, 만약 우리가 단위 시간당 $n$ 회 실패를 한다면, 그리고 어떤
+수정사항이 이 실패 확률을 줄였음을 $P$\,\% 확신하려면 다음 공식을 사용할 수
+있습니다:
+
+\iffalse
 
 Because we get $0.3$ failures per hour, the number of hours required
 is $4.6/0.3 = 14.3$, which is within 10\,\% of the 13 hours
@@ -3020,28 +3066,68 @@ More generally, if we have $n$ failures per unit time, and we want to
 be $P$\,\% certain that a fix reduced the failure rate, we can use the
 following formula:
 
+\fi
+
 \begin{equation}
 	T = - \frac{1}{n} \ln \frac{100 - P}{100}
 \label{eq:debugging:Error-Free Test Duration}
 \end{equation}
 
 \QuickQuiz{
+	어떤 버그가 어떤 테스트를 시간당 평균 세번 실패를 하게 한다고 해봅시다.
+	어떤 수정사항이 그 실패 확률을 충분히 줄였음을 99.9\,\% 확신하기 위해선
+	얼마나 오래 에러 없는 테스트 수행을 해야 할까요?
+
+	\iffalse
+
 	Suppose that a bug causes a test failure three times per hour
 	on average.
 	How long must the test run error-free to provide 99.9\,\%
 	confidence that the fix significantly reduced the probability
 	of failure?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Equation~\ref{eq:debugging:Error-Free Test Duration} 에 $n$ 을 $3$
+	으로, $P$ 를 $99.9$ 로 하면 다음과 같이 됩니다:
+
+	\iffalse
+
 	We set $n$ to $3$ and $P$ to $99.9$ in
 	Equation~\ref{eq:debugging:Error-Free Test Duration}, resulting in:
+
+	\fi
 
 	\begin{equation}
 		T = - \frac{1}{3} \ln \frac{100 - 99.9}{100} = 2.3
 	\end{equation}
 
+	테스트가 실패 없이 2.3 시간을 수행된다면 우린 이 수정사항이 실패 확률을
+	줄였음을 99.9\,\% 확신할 수 있습니다.
+
+	\iffalse
+
 	If the test runs without failure for 2.3 hours, we can be 99.9\,\%
 	certain that the fix reduced the probability of failure.
+
+	\fi
+
 }\QuickQuizEnd
+
+이전과 같이, 버그가 덜 빈번히 발생하고 필요한 확신의 수준이 높을수록 에러 없는
+테스트 수행은 더 길게 필요해집니다.
+
+어떤 테스트가 시간당 한번 정도 실패하지만 어떤 버그 수정 후, 24시간의
+테스트에서 두번만 실패한다고 해봅시다.
+이 버그로 이끄는 실패가 무작위적으로 발생한다고 가정하면, 두번째 수행에서의
+적은 수의 실패가 무작위적 선택에 의한 것일 확률이 얼마나 될까요?
+달리 말하자면, 그 수정이 버그에 영향을 줬음에 우린 얼마나 자신할 수 있을까요?
+이 확률은
+Equation~\ref{eq:debugging:Poisson Probability} 을 다음과 가이 더해서 계산할 수
+있을 겁니다:
+
+\iffalse
 
 As before, the less frequently the bug occurs and the greater the
 required level of confidence, the longer the required error-free test run.
@@ -3056,18 +3142,36 @@ had some effect on the bug?
 This probability may be calculated by summing
 Equation~\ref{eq:debugging:Poisson Probability} as follows:
 
+\fi
+
 \begin{equation}
 	F_0 + F_1 + \dots + F_{m - 1} + F_m =
 		\sum_{i=0}^m \frac{\lambda^i}{i!} \euler^{-\lambda}
 \end{equation}
 
+이는 다음과 같이 요약될 수 있는 Poisson 누적 분포 함수입니다:
+
+\iffalse
+
 This is the Poisson cumulative distribution function, which can be
 written more compactly as:
+
+\fi
 
 \begin{equation}
 	F_{i \le m} = \sum_{i=0}^m \frac{\lambda^i}{i!} \euler^{-\lambda}
 \label{eq:debugging:Possion CDF}
 \end{equation}
+
+여기서 $m$ 은 긴 시간의 테스트 수행 (이 경우, 두시간) 에서의 오류 횟수이며
+$\lambda$ 는 긴 테스트 수행에서 (이 경우 ,24시간) 예상되는 오류의 수입니다.
+$m=2$ 와 $\lambda=24$ 를 이 식에 대입하면 두번 이하 실패 확률은 $1.2 \times
+10^{-8}$ 이 되는데, 달리 말하면 이 수정이 버그에 어떤 영향을 주었다는 높은
+수준의 자신을 가질 수 있습니다.\footnote{
+	물론, 이는 여러분이 남은 두번의 실패를 초래한 버그(들)을 찾아서 고쳐야
+	한다는데에 대한 변명이 되지 않습니다!}
+
+\iffalse
 
 Here $m$ is the actual number of errors in the long test run
 (in this case, two) and $\lambda$ is expected number of errors
@@ -3079,12 +3183,38 @@ that the fix actually had some relationship to the bug.\footnote{
 	Of course, this result in no way excuses you from finding and
 	fixing the bug(s) resulting in the remaining two failures!}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	이 모든 factorial 과 exponential 을 더하는 건 고통입니다.
+	더 쉬운 방법은 없나요?
+
+	\iffalse
+
 	Doing the summation of all the factorials and exponentials
 	is a real pain.
 	Isn't there an easier way?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	한가지 방법은 ``maxima'' 라는 오픈소스 기호 조작 프로그램을 사용하는
+	겁니다.
+	많은 리눅스 배포판의 일부인 이 프로그램을 설치하면 여러분은 그걸
+	실행하고
+	\co{load(distrib);} 에 이어 여러
+	\co{bfloat(cdf_poisson(m,l));} 커맨드를 사용할 수 있는데, \co{m} 은
+	원하는 $m$ 값으로 교체하고 (실제 테스트에서의 실제 실패 횟수) \co{l} 은
+	원하는 $\lambda$ (실제 테스트에서 예상되는 실패 횟수) 로 설정해야
+	합니다.
+
+	특히, \co{bfloat(cdf_poisson(2,24));} 커맨드는
+	\co{1.181617112359357b-8} 가 되는데,
+	Equation~\ref{eq:debugging:Possion CDF} 에서의 값과 일치합니다.
+
+	\iffalse
+
 	One approach is to use the open-source symbolic manipulation
 	program named ``maxima''.
 	Once you have installed this program, which is a part of many
@@ -3098,6 +3228,8 @@ that the fix actually had some relationship to the bug.\footnote{
 	In particular, the \co{bfloat(cdf_poisson(2,24));} command
 	results in \co{1.181617112359357b-8}, which matches the value
 	given by Equation~\ref{eq:debugging:Possion CDF}.
+
+	\fi
 
 \begin{table}[tb]
 \renewcommand*{\arraystretch}{1.25}
@@ -3123,6 +3255,29 @@ that the fix actually had some relationship to the bug.\footnote{
 \label{tab:debugging:Human-Friendly Poisson-Function Display}
 \end{table}
 
+	다른 방법은 이 실제 세계를 인정하는 것으로, 349.2x 안정성 개선의
+	76.8\,\% 확신을 주기 위해 두번 이하의 오류를 테스트 기간을 계산하는게
+	전혀 유용하지 않다는 것입니다.
+	대신, 인간은 특정 값에 집중하려 하는데, 예를 들어 10x 개선의 95\,\%
+	확신입니다.
+	사람들은 또한 오류가 없는 테스트 수행을 훨씬 선호하는데 그게 여러분에게
+	필요한 테스트 시간을 줄이므로 여러분도 그럴겁니다.
+	따라서,
+	\cref{tab:debugging:Human-Friendly Poisson-Function Display}
+	의 값들이 충분한 겨우가 많을 겁니다.
+	간단히 원하는 확신도와 개선 정도를 찾아보면 그 결과 숫자가 한번의
+	오류가 나타나기 위해 예상되는 시간을 위한 에러 없는 테스트 시간을 보일
+	겁니다.
+	따라서 여러분의 수정 전 테스트가 시간당 한번의 실패를 겪었다면, 10x
+	개선의 95\,\% 확신을 갖기 위해 여러분은 30시간의 오류 없는 테스트
+	수행을 해야 합니다.
+
+	대안적으로, 여러분은
+	Section~\ref{sec:debugging:Statistics Abuse for Discrete Testing}
+	에 소개된 대략적이고 준비된 방법을 사용할 수 있습니다.
+
+	\iffalse
+
 	Another approach is to recognize that in this real world,
 	it is not all that useful to compute (say) the duration of a test
 	having two or fewer errors that would give a 76.8\,\% confidence
@@ -3144,42 +3299,89 @@ that the fix actually had some relationship to the bug.\footnote{
 
 	Alternatively, you can use the rough-and-ready method described in
 	Section~\ref{sec:debugging:Statistics Abuse for Discrete Testing}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	하지만 기다려요!!!
+	\emph{약간의} 실패가 있음을 생각하면 (0번 실패할 확률을 포함해),
+	Equation~\ref{eq:debugging:Possion CDF} 은 $m$ 이 무한으로 감에 따라
+	$1$ 의 값이 되지 않나요?
+
+	\iffalse
+
 	But wait!!!
 	Given that there has to be \emph{some} number of failures
 	(including the possibility of zero failures), shouldn't
 	Equation~\ref{eq:debugging:Possion CDF}
 	approach the value $1$ as $m$ goes to infinity?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	맞습니다.
+	그리고 그렇습니다.
+
+	이걸 자세히 보기 위해, 
+	 $\euler^{-\lambda}$ 는 $i$ 에 의존하지 않는데 이는 다음과 같이 합으로
+	 나올 수 있음에 주목하시기 바랍니다:
+
+	 \iffalse
+
 	Indeed it should.
 	And it does.
 
 	To see this, note that $\euler^{-\lambda}$ does not depend on $i$,
 	which means that it can be pulled out of the summation as follows:
 
+	\fi
+
 	\begin{equation}
 		\euler^{-\lambda} \sum_{i=0}^\infty \frac{\lambda^i}{i!}
 	\end{equation}
 
+	남아있는 합은 $\euler^\lambda$ 의 Taylor 시리즈여서 다음이 도출됩니다:
+
+	\iffalse
+
 	The remaining summation is exactly the Taylor series for
 	$\euler^\lambda$, yielding:
+
+	\fi
 
 	\begin{equation}
 		\euler^{-\lambda} \euler^\lambda
 	\end{equation}
 
+	이 두 exponential 은 상흥하는 것이며, 따라서 취소될 수 있어서
+	필요한대로 정확히 $1$ 이 됩니다.
+
+	\iffalse
+
 	The two exponentials are reciprocals, and therefore cancel,
 	resulting in exactly $1$, as required.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+Poisson 분포는 테스트 결과를 분석하기 위한 강력한 도구입니다만 이 마지막
+예에서는 여전히 24시간 테스트 수행에서의 두번의 실패가 남아있었음이 사실입니다.
+그런 낮은 실패 확률은 매우 긴 테스트 수행을 초래합니다.
+다음 섹션은 이 상황을 개선하는 반직관적인 방법들을 이야기 합니다.
+
+\iffalse
 
 The Poisson distribution is a powerful tool for analyzing test results,
 but the fact is that in this last example there were still two remaining
 test failures in a 24-hour test run.
 Such a low failure rate results in very long test runs.
 The next section discusses counter-intuitive ways of improving this situation.
+
+\fi
 
 \subsection{Hunting Heisenbugs}
 \label{sec:debugging:Hunting Heisenbugs}
