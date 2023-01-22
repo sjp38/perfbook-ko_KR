@@ -3488,6 +3488,29 @@ These are followed by discussion in
 \subsubsection{Add Delay}
 \label{sec:debugging:Add Delay}
 
+Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?} 의 셈을 놓치기
+쉬운 코드를 생각해 봅시다.
+\co{printf()} 문을 더하는 것은 놓쳐진 셈을 크게 줄이거나 심지어 없앨 수도
+있습니다.
+그러나, 읽고-더하고-저장하기 순서를 읽고-더하고-지연하고-저장하기 순서로 바꾸는
+것은 셈을 잃는 사고를 크게 증가시킬 겁니다 (해보세요!).
+어떤 경주 조건에 (race condition) 관련된 버그를 찾았다면, 이런식으로 지연을
+더하는 것으로 anti-heisenbug 를 만드는게 종종 가능합니다.
+
+물론, 이는 일단 그 경주 조건을 어떻게 찾을 것인가 하는 질문을 남깁니다.
+이는 약간 암흑예술에 가깝지만, 그걸 찾기 위해 여러분이 해볼 수 있는 것들이 좀
+있습니다.
+
+한가지 방법은 경주 조건은 종종 그 경주에 관여된 데이터 일부를 오염시키곤 한다는
+겁니다.
+따라서 모든 오염된 데이터의 동기화를 이중 검사하는 건 좋습니다.
+당장 경주 조건을 찾아내지는 못하더라도 이 오염된 데이터로의 액세스 전후에
+지연을 더하는 것은 실패 확률을 줄일 수도 있습니다.
+이 지연들을 어떤 정리된 방법으로 (예: 바이너리 탐색) 더하고 뺌으로써 여러분은
+이 경주 조건에 대해 뭔가를 배울지도 모릅니다.
+
+\iffalse
+
 Consider the count-lossy code in
 Section~\ref{sec:count:Why Isn't Concurrent Counting Trivial?}.
 Adding \co{printf()} statements will likely greatly reduce or even
@@ -3512,10 +3535,39 @@ the failure rate.
 By adding and removing the delays in an organized fashion (e.g., binary
 search), you might learn more about the workings of the race condition.
 
+\fi
+
 \QuickQuiz{
+	이 오염이 어떤 연관되지 않은 포인터에 영향을 끼쳐서 그게 이후 오염을
+	일으킨다면 이 방법이 어떻게 도움이 되겠습니까?
+
+	\iffalse
+
 	How is this approach supposed to help if the corruption affected some
 	unrelated pointer, which then caused the corruption???
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로, 그럴 수 있습니다.
+	많은 CPU 가 그 연관되지 않은 포인터를 찾을 수 있게 돕는 하드웨어 디버깅
+	기능을 갖습니다.
+	더 나아가, core dump 가 있다면 여러분은 그 오염된 메모리 영역을
+	참조하는 포인터를 core dump 에서 찾을 수 있습니다.
+	또한 여러분은 이 오염된 데이터 배치를 보고 그 배치에 맞는 타입의
+	포인터를 검사해 볼 수 있습니다.
+
+	여러분은 또한 한발 뒤로 물러서서 여러분의 프로그램의 강도를 높게 하는
+	모듈을 테스트 할 수도 있는데, 이는 오염을 거기 책임 있는 모듈로
+	국한시킬 확률이 높습니다.
+	이게 오염을 사라지게 만든다면, 각 모듈에서 노출되는 함수들에 추가적인
+	인자 검사를 더하는 걸 고려해 보세요.
+
+	그러나, 이는 어려운 문제이며 그게 제가 ``약간 암흑 예술'' 이라는 말을
+	사용한 이유입니다.
+
+	\iffalse
+
 	Indeed, that can happen.
 	Many CPUs have hardware-debugging facilities that can help you
 	locate that unrelated pointer.
@@ -3532,7 +3584,23 @@ search), you might learn more about the workings of the race condition.
 
 	Nevertheless, this is a hard problem, which is why I used the
 	words ``a bit of a dark art''.
+
+	\fi
+
 }\QuickQuizEnd
+
+또다른 중요한 방법은 소프트웨어와 하드웨어 구성을 다양하게 해보고 통계적으로
+상당한 실패 확률의 차이를 보는 겁니다.
+그러면 여러분은 실패 확률에 가장 큰 차이를 만드는 소프트웨어나 하드웨어 구성
+변경에 영향 받는 코드를 집중해서 볼 수 있습니다.
+그 코드를 예를 들면 고립시켜서 테스트 하는게 도움이 될 수도 있습니다.
+
+소프트웨어 구성에 있어 중요한 지점은 변경의 역사로, \co{git bisect} 가 그리
+유용한 이유입니다.
+변경 역사를 bisect 하는 것은 heisenbug 의 정체에 대한 매우 가치있는 단서를 줄
+수 있습니다.
+
+\iffalse
 
 Another important approach is to
 vary the software and hardware configuration and look for statistically
@@ -3547,10 +3615,32 @@ changes, which is why \co{git bisect} is so useful.
 Bisection of the change history can provide very valuable clues as
 to the nature of the heisenbug.
 
+\fi
+
 \QuickQuiz{
+	전 bisect 를 했지만 거대한 커밋을 찾는데 그쳤어요.
+	이제 어떡하죠?
+
+	\iffalse
+
 	But I did the bisection, and ended up with a huge commit.
 	What do I do now?
+
+	\fi
+
 }\QuickQuizAnswer{
+	거대한 커밋?
+	안됐군요!
+	그러나 이는 여러분이 커밋을 작게 유지해야 하는 이유 중 하나이기도
+	합니다.
+
+	그리고 그게 여러분의 답입니다: 그 커밋을 깨물기 좋은 작은 크기로 쪼개고
+	그 조각들을 bisect 하세요.
+	제 경험상, 커밋을 쪼개는 것은 버그가 분명해지게 만들기에 종종
+	충분합니다.
+
+	\iffalse
+
 	A huge commit?
 	Shame on you!
 	This is but one reason why you are supposed to keep the commits small.
@@ -3559,7 +3649,21 @@ to the nature of the heisenbug.
 	pieces and bisect the pieces.
 	In my experience, the act of breaking up the commit is often
 	sufficient to make the bug painfully obvious.
+
+	\fi
+
 }\QuickQuizEnd
+
+하지만 여러분이 의심스러운 코드 영역을 발견하면 그 실패 확률을 높이기 위해
+지연을 추가할 수 있습니다.
+앞서 봤듯이, 실패의 확률을 높이는 것은 연관된 수정사항에 대한 높은 확신을 얻기
+쉽게 해줍니다.
+
+그러나, 평범한 디버깅 기법을 가지고는 문제를 추적하기가 상당히 어려운 경우가
+있습니다.
+다음 섹션은 다른 대안들을 보입니다.
+
+\iffalse
 
 However you locate the suspicious section of code, you can then introduce
 delays to attempt to increase the probability of failure.
@@ -3569,6 +3673,8 @@ easier to gain high confidence in the corresponding fix.
 However, it is sometimes quite difficult to track down the problem using
 normal debugging techniques.
 The following sections present some other alternatives.
+
+\fi
 
 \subsubsection{Increase Workload Intensity}
 \label{sec:debugging:Increase Workload Intensity}
