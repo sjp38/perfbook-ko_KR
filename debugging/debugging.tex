@@ -3855,6 +3855,27 @@ sequential programs as well as parallel programs.
 \subsubsection{Count Near Misses}
 \label{sec:debugging:Count Near Misses}
 
+버그는 많은 경우 그렇거나 아니거나여서 버그는 일어났거나 아니거나일 뿐 그
+중간이 없습니다.
+그러나, 버그가 실패를 초래하진 않았지만 나타났을 것 같은 \emph{거의 실수함} 을
+정의하는 것이 가끔은 가능합니다.
+예를 들어, 여러본의 코드가 어떤 로봇을 걷게 한다고 해봅시다.
+이 로봇의 쓰러짐은 여러분의 프로그램에 버그가 있음으로 간주됩니다만, 비틀거리고
+회복되는 것은 거의 실수함으로 간주될 수도 있을 겁니다.
+로봇이 한시간에 한번만 쓰러지지만 몇분에 한번씩 비틀거린다면 여러분은 비틀거림
+횟수를 쓰러짐 횟수에 더함으로써 디버깅을 빠르게 진행할 수 있을 겁니다.
+
+동시성 프로그램에서, 시간 기록은 거의 놓침을 파악하는데 때때로 사용될 수
+있습니다.
+예를 들어 락킹 기능은 상당한 지연을 유발하므로 같은 락의 다른 획득으로 보호되는
+한쌍의 오퍼레이션 사이에 너무 짧은 지연이 있다면 이 너무 짧은 지연은 거의
+실수했음으로 세어질 수 있을 겁니다.\footnote{
+	물론, 이 경우 여러분은 여러분의 환경에서 사용 가능한 \co{lock_held()}
+	같은 기능을 사용하는게 나을수도 있을 겁니다.
+	\co{lock_held()} 기능이 없다면, 하나 만드세요!}
+
+\iffalse
+
 Bugs are often all-or-nothing things, so that a bug either happens
 or not, with nothing in between.
 However, it is sometimes possible to define a \emph{near miss} where
@@ -3877,12 +3898,42 @@ delay might be counted as a near miss.\footnote{
 	in your environment.
 	If there isn't a \co{lock_held()} primitive, create one!}
 
+\fi
+
 \begin{figure}[tbp]
 \centering
 \resizebox{3in}{!}{\includegraphics{debugging/RCUnearMiss}}
 \caption{RCU Errors and Near Misses}
 \label{fig:debugging:RCU Errors and Near Misses}
 \end{figure}
+
+예를 들어, 어떤 RCU 우선순위 부스팅의 낮은 확률 버그는 집중된 \co{rcutorture}
+테스트에서 백시간마다 한번 가량 빌생했습니다.
+이 버그의 확률이 상당히 줄었음을 99\,\% 확신하기 위해선 500 시간의 실패 없는
+테스팅이 필요했으므로, 이 실패를 찾기 위한 \co{git bisect} 과정은 고통스럽게
+느렸을 겁니다---또는 굉장히 커다란 테스트 환경이 필요했을 겁니다.
+다행히도, 이 테스트 되는 RCU 오퍼레이션은 RCU grace period 대기만이 아니라
+시작하기 위한 grace period 의 이전 대기, 그리고 이 RCU grace period 의 완료 후
+RCU 콜백을 호출하기 위한 다음 대기를 포함했습니다.
+\co{rcutorture} 에러와 거의 실수했음 사이의 이 차이가
+Figure~\ref{fig:debugging:RCU Errors and Near Misses}
+에 보여져 있습니다.
+완벽한 오류의 요건을 갖추기 위해, 하나의 RCU read-side 크리티컬 섹션은 하나의
+grace period 를 시작한 \co{call_rcu()} 로부터 앞의 grace period 의 남은 부분을
+지나 \co{call_rcu()} 에 의해 시작된 grace period  전체를 지나 (구불거리는 선
+사이의 영역으로 표시되었습니다), 이 grace period 의 종료로부터 콜백 호출 사이의
+지연까지 지나도록 연장되어야 하는데, ``Error'' 화살표로 표시되어 있습니다.
+그러나, RCU 의 정형적 정의는 RCU read-side 크리티컬 섹션이 단일 grace period 를
+넘어 연장될 수 없게 하는데, ``Near Miss'' 화살표로 표시되어 있습니다.
+이는 거의 실수함을 에러 조건으로 사용할 것을 추천하게 되지만, 언제 특정 grace
+period 가 시작되고 끝났는지에 대해 구불거리는 선으로 표시된 것처럼 다른 CPU
+들은 다른 의견을 가질 수 있으므로 문제가 됩니다.\footnote{
+	실제 세계에서, idle CPU 는 많은 최근 grace period 를 완전히 인지하지
+	못할 수 있으므로 이 선들은 훨씬 더 구불거릴 수 있습니다.}
+따라서 이 거의 실수함을 오류로 사용하는 것은 false positive 를 초래할 수
+있는데, 이는 자동화된 \co{rcutorture} 테스트에서는 지양되어야 합니다.
+
+\iffalse
 
 For example, a low-probability bug in RCU priority boosting occurred
 roughly once every hundred hours of focused \co{rcutorture} testing.
@@ -3919,6 +3970,30 @@ Using the near misses as the error condition could therefore result
 in false positives, which need to be avoided in the automated
 \co{rcutorture} testing.
 
+\fi
+
+운좋게도 \co{rcutorture} 는 grace period 의 거의 실수 버전에 민감한 일부 통계를
+포함합니다.
+앞서 이야기 했듯, 이 통계들은 RCU 의 상태 변수들로의 비동기적 액세스 덕에 false
+positive 가 될 수 있지만, 이 false positive 는 IBM 메인프레임과 x86 같은 강한
+순서 규칙 시스템에서는 굉장히 드물어서 천시간 테스팅 중 한번 정도 일어납니다.
+
+이런 거의 실수함은 대략 한시간에 한번 일어나는데, 실제 실패보다 백배 이상 자주
+일어나는 겁니다.
+이런 거의 실수함을 사용하는 것은 이 버그의 근본 원인이 일주일도 안되어 파악될
+수 있게 하였고 효과적이었음을 높은 수준으로 확신할 수 있는 수정사항을 하루도
+안되어 만들 수 있게 했습니다.
+대조적으로, 실제 오류만을 선호해 거의 실수함을 배제하는 것은 몇달의 디버깅과
+검증 시간을 필요로 했을 겁니다.
+
+거의 실수를 세는 것을 정리하자면, 일반적 접근법은 흔하지 않은 실패 세기를 그
+실패와 연관되어 있을 것으로 여겨지며 더 흔한 거의 실수함으로 대체하는 것입니다.
+이런 거의 실수함은 실제 실패의 heisenbug 에 대한 anti-heisenbug 로 여겨지는데,
+거의 실수함은 더 흔하게 발생하고, 예를 들면 여러분이 디버깅을 위해 코드에
+무언가를 추가하는 것 같은 코드 변경에 더 잘 버티기 때문입니다.
+
+\iffalse
+
 By sheer dumb luck, \co{rcutorture} happens to include some statistics that
 are sensitive to the near-miss version of the grace period.
 As noted above, these statistics are subject to false positives due to
@@ -3942,6 +4017,8 @@ These near-misses can be considered an anti-heisenbug to the real failure's
 heisenbug because the near-misses, being more frequent, are likely to
 be more robust in the face of changes to your code, for example, the
 changes you make to add debugging code.
+
+\fi
 
 \subsubsection{Heisenbug Discussion}
 \label{sec:debugging:Heisenbug Discussion}
