@@ -4733,6 +4733,23 @@ data that might have been corrupted by that interference.
 \subsection{Isolation}
 \label{sec:debugging:Isolation}
 
+리눅스 커널은 한 그룹의 CPU 를 바깥의 간섭에서 격리화 하는 여러 방법을
+제공합니다.
+
+첫째로, 다른 프로세스, 쓰레드, 그리고 태스크로부터의 간섭을 알아봅시다.
+POSIX \co{sched_setaffinity()} 시스템콜은 대부분의 태스크를 특정 CPU
+집합으로부터 떨어뜨리고 여러분의 테스트를 같은 그룹에 묶이게 하기 위해 사용될
+수 있습니다.
+리눅스에 있는 사용자 단계의 \co{taskset} 커맨드가 같은 목적으로 사용될 수
+있습니다만, \co{sched_setaffinity()} 와 \co{taskset} 둘 다 높은 권한을 필요로
+합니다.
+리눅스에 있는 control groups (cgroups) 가 이 목적으로 사용될 수 있습니다.
+이 접근법은 간섭을 줄이는데 상당히 효과적이며 많은 경우 충분합니다.
+그러나, 이 방법은 한계가 있는데, 예를 들어 이 방법은 시스템 유지를 위해
+사용되는 per-CPU 커널 쓰레드에는 아무일도 못합니다.
+
+\iffalse
+
 The Linux kernel provides a number of ways to isolate a group of
 CPUs from outside interference.
 
@@ -4750,6 +4767,20 @@ However, it does have limitations, for example, it cannot do anything
 about the per-CPU kernel threads that are often used for housekeeping
 tasks.
 
+\fi
+
+Per-CPU 커널 쓰레드로부터의 간섭을 막는 한가지 방법은 여러분의 테스트를 높은
+리얼타임 우선순위로 돌리는 것으로, 예를 들면 POSIX \co{sched_setscheduler()}
+시스템콜을 사용할 수 있습니다.
+하지만 여러분이 이걸 하면 여러분은 암묵적으로 무한 반복을 막는 책임을 진다는
+것을 의미하는데, 그러지 않으면 여러분의 테스트가 커널의 일부분을 동작하지
+못하게 하기 때문입니다.
+이는 스파이더맨 원칙의 한 예입니다: ``큰 힘에는 큰 책임이 따른다.''
+그리고 기본 리얼타임 처리 구성이 그런 문제를 종종 처리하지만, 그게 여러분의
+리얼타임 쓰레드가 데드라인을 놓치게 할수도 있습니다.
+
+\iffalse
+
 One way to avoid interference from per-CPU kernel threads is to run
 your test at a high real-time priority, for example, by using
 the POSIX \co{sched_setscheduler()} system call.
@@ -4761,6 +4792,29 @@ power comes great responsibility.''
 And although the default real-time throttling settings often address
 such problems, they might do so by causing your real-time threads
 to miss their deadlines.
+
+\fi
+
+이 방법들은 프로세스, 쓰레드, 그리고 태스크로부터의 간섭을 크게 줄이거나 어쩌면
+제거조차 할 수 있습니다.
+하지만, 최소한 쓰레드 기반 인터럽트의 부재 시에는 기기 인터럽트로부터의 간섭은
+막지 못합니다.
+리눅스는 인터럽트 벡터당 하나씩 숫자로 이름지어진 디렉토리를 갖는
+\path{/proc/irq} 디렉토리를 통한 쓰레드 기반 인터럽트의 일부 조정을 허락합니다.
+각 숫자 이름 디렉토리는 \co{smp_affinity} 와 \co{smp_affinity_list} 를
+갖습니다.
+충분한 권한을 가지고 있다면 여러분은 특정 CPU 집합으로의 인터럽트를 제한하기
+위해 이 파일들에 값들을 쓸 수 있습니다.
+예를들어,
+``\co{echo 3 > /proc/irq/23/smp_affinity}''
+또는
+``\co{echo 0-1 > /proc/irq/23/smp_affinity_list}''
+는 주어진 권한이 충분하면 벡터~23 의 인터럽트를 CPU~0 과~1 에 국한시킬 겁니다.
+여러분 시스템의 인터럽트 벡터 리스트, 각 CPU 에 의해 각 인터럽트가 얼마나 많이
+처리되었는지, 그리고 어떤 기기가 각 인터럽트 벡터를 사용하는지 알기 위해
+``\co{cat /proc/interrupts}'' 를 사용할 수 있습니다.
+
+\iffalse
 
 These approaches can greatly reduce, and perhaps even eliminate,
 interference from processes, threads, and tasks.
@@ -4782,6 +4836,32 @@ at least given sufficient privileges.
 You can use ``\co{cat /proc/interrupts}'' to obtain a list of the interrupt
 vectors on your system, how many are handled by each CPU, and what
 devices use each interrupt vector.
+
+\fi
+
+여러분의 시스템의 모든 인터럽트 벡터를 위한 비슷한 커맨드를 돌리는 것은
+인터럽트를 CPU~0 과~1 에 국한시켜서 나머지 CPU 들은 간섭으로부터 자유롭게 할
+겁니다.
+또는 간섭으로부터 거의 자유롭게요, 어쨌건.
+각 CPU 에서 일어나는 scheduling-clock 인터럽트가 사용자 모드로 발생함이
+드러났습니다.\footnote{
+	하나의 수행가능 태스크만 있는 CPU 에서는 scheduling-clock 인터럽트가 
+	불능화 되게 하는 \co{NO_HZ_FULL} adaptive-ticks 프로젝트를 Frederic
+	Weisbecker 가 이끌고 있습니다.
+	2021년 기준으로 이는 거의 완료되었습니다.}
+여기 더해서 여러분은 여러분이 인터럽트를 몰아넣은 CPU 집합은 그 부하를 감당하기
+충분함을 보장해야 합니다.
+
+하지만 이는 테스트 되는 같은 운영체제 인스턴스에서 수행되는 프로세스와
+인터럽트만 처리합니다.
+예를 들면 KVM 을 수행하는 리눅스와 같은, 그 스스로 하이퍼바이저 위에서 수행되는
+guest OS 에서 테스트를 하고 있다고 생각해 봅시다.
+이론상 여러분은 guest OS 단계에서 할 수 있는 기법을 하이퍼바이저 단계에 적용할
+수 있으나, 하이퍼바이저 단계 오퍼레이션들은 인가된 사람에게만 허용되는게
+흔합니다.
+또한, 이 기법들 중 어느것도 펌웨어 단계 간섭에는 적용되지 않습니다.
+
+\iffalse
 
 Running a similar command for all interrupt vectors on your system
 would confine interrupts to CPUs~0 and~1, leaving the remaining CPUs
@@ -4807,11 +4887,31 @@ hypervisor-level operations to be restricted to authorized personnel.
 In addition, none of these techniques work against firmware-level
 interference.
 
+\fi
+
 \QuickQuiz{
+	테스트 되는 코드를 격리하기 위해 추천된 기법들 또한 그 코드의 성능에
+	영향을 끼치지 않을까요?  특히나 그게 더 큰 어플리케이션 내에서
+	돌아간다면요.
+
+	\iffalse
+
 	Wouldn't the techniques suggested to isolate the code under
 	test also affect that code's performance, particularly if
 	it is running within a larger application?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그럴수도 있습니다만, 대부분의 마이크로벤치마크에서는 여러분은
+	테스트 되는 코드를 그걸 감싸는 어플리케이션으로부터 꺼낼 겁니다.
+	그러나, 어떤 이유로 여러분이 그 테스트 되는 코드를 어플리케이션 내에
+	두어야 한다면,
+	Section~\ref{sec:debugging:Detecting Interference} 에서 이야기되는
+	기법을 사용해야 할 겁니다.
+
+	\iffalse
+
 	Indeed it might, although in most microbenchmarking efforts
 	you would extract the code under test from the enclosing
 	application.
@@ -4819,7 +4919,17 @@ interference.
 	test within the application, you will very likely need to use
 	the techniques discussed in
 	Section~\ref{sec:debugging:Detecting Interference}.
+
+	\fi
+
 }\QuickQuizEnd
+
+물론, 흥미로운 행동을 만드는게 정말 그 간섭이라면, 여러분은 오히려 간섭이 잘
+일어나게 해야 할텐데, 이 경우엔 그걸 막을 수 없는게 문제가 되지 않습니다.
+하지만 정말 간섭이 없는 측정을 필요로 한다면, 간섭을 막는 대신 다음 섹션에
+설명되는 것처럼 간섭을 파악해야 할수도 있습니다.
+
+\iffalse
 
 Of course, if it is in fact the interference that is producing the
 behavior of interest, you will instead need to promote interference,
@@ -4827,6 +4937,8 @@ in which case being unable to prevent it is not a problem.
 But if you really do need interference-free measurements, then instead
 of preventing the interference, you might need to detect the interference
 as described in the next section.
+
+\fi
 
 \subsection{Detecting Interference}
 \label{sec:debugging:Detecting Interference}
