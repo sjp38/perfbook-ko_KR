@@ -4526,6 +4526,18 @@ support.
 \subsection{Microbenchmarking}
 \label{sec:debugging:Microbenchmarking}
 
+마이크로벤치마크는 어떤 알고리즘 또는 데이터 구조가 소프트웨어의 큰 몸통에
+내포될 가치가 있는지를 판단하기 위한 깊은 평가를 위해 유용합니다.
+
+마이크로벤치마크에 대한 한가지 흔한 접근법은 시간을 측정하고 테스트 되는 코드를
+몇번 반복해 수행한 후 시간을 다시 측정하는 겁니다.
+이 두 시간 사이의 차이를 반복 수행 횟수로 나누면 그 테스트 되는 코드를
+수행하는데 필요한 시간이 됩니다.
+
+불행히도, 이 방법은 다음을 포함한 여러 오류가 포함될 수 있습니다:
+
+\iffalse
+
 Microbenchmarking can be useful when deciding which algorithms or
 data structures are worth incorporating into a larger body of software
 for deeper evaluation.
@@ -4539,7 +4551,28 @@ gives the measured time required to execute the code under test.
 Unfortunately, this approach to measurement allows any number of errors
 to creep in, including:
 
+\fi
+
 \begin{enumerate}
+\item	시간 측정의 오버헤드가 포함될 수 있습니다.
+	이 오류의 원천은 반복 횟수를 늘림으로써 임의의 작은 값으로 줄어들 수
+	있습니다.
+\item	테스트의 처음 몇번의 반복은 캐쉬 미스나 (더 나쁘게는) page fault 를
+	일으켜서 측정값을 크게 만들 수 있습니다.
+	이 오류의 원천 역시 반복 횟수를 늘려서 줄일 수 있으며, 측정을 시작하기
+	전에 몇번의 워밍업 반복을 수행함으로써 완전히 제거할 수 있는 경우도
+	많습니다.
+	대부분의 시스템은 특정 프로세스가 page fault 를 일으켰는지 파악하기
+	위한 방법을 가지고 있으며, 여러분은 성능이 영향받은 수행을 제거하기
+	위해 이 방법을 사용해야 합니다.
+\item	예를 들면 무작위 메모리 오류 같은 어떤 종류의 간섭은 너무 가끔 일어나서
+	테스트의 여러 반복 집합을 수행함으로써 처리할 수 있습니다.
+	간섭의 수준이 통계적으로 심각하다면, 모든 성능이 특이하게 나온 결과는
+	통계적으로 제거될 수 있습니다.
+
+\iffalse
+
+
 \item	The measurement will include some of the overhead of
 	the time measurement.
 	This source of error can be reduced to an arbitrarily small
@@ -4559,6 +4592,30 @@ to creep in, including:
 	of sets of iterations of the test.
 	If the level of interference was statistically significant,
 	any performance outliers could be rejected statistically.
+
+\fi
+
+\item	이 테스트의 모든 반복은 시스템의 다른 활동에 간섭받았을 수도 있습니다.
+	간섭의 원천은 다른 어플리케이션, 시스템 유틸리티와 daemon, 기기
+	인터럽트, 펌웨어 인터럽트 (시스템 관리 인터럽트 또는 SMI 를 포함),
+	가상화, 메모리 오류, 그 외에도 여러가지가 포함됩니다.
+	이 간섭의 원천이 무작위적으로 발생한다고 가정하면, 그것들의 영향은 반복
+	횟수를 줄임으로써 제거될 수 있습니다.
+\item	열처리가 확장성을 낮출 수 있는데 CPU 활동을 늘이는 것은 열 발생을
+	늘리며, 적절한 냉방장치가 없는 시스템에서는 (대부분이 그렇습니다!) 이게
+	CPU 갯수가 늘어날수록 CPU 속도를 낮추는 결과를 초래할 수
+	있습니다.\footnote{
+		적절한 냉방장치가 있는 시스템은 게임 시스템처럼 보이는 경향이
+		있습니다.}
+	물론, 여러분이 어떤 어플리케이션을 그것이 제품 환경에서 동작할 때
+	예상되는 행동을 평가하기 위해 테스트 한다면 그런 열처리는 그저
+	마주해야할 사실일 뿐입니다.
+	그렇지 않고 여러분이 이론적 확장성에 관심있다면 적절한 냉방장치를 갖춘
+	시스템을 사용하거나 그 냉방장치가 처리할 수 있는 수준까지 CPU 속도를
+	낮추세요.
+
+\iffalse
+
 \item	Any iteration of the test might be interfered with by other
 	activity on the system.
 	Sources of interference include other applications, system
@@ -4579,16 +4636,55 @@ to creep in, including:
 	Otherwise, if you are interested in theoretical scalability,
 	use a system with adequate cooling or reduce the CPU clock rate
 	to a level that the cooling system can handle.
+
+\fi
+
 \end{enumerate}
+
+첫번째와 네번째 간섭은 서로 충돌하는 조언을 제공하는데, 우리가 실제 세계에 살고
+있다는 하나의 징표입니다.
+다음 섹션들은 이 충돌을 처리하는 방법들을 알아봅니다.
+
+\iffalse
 
 The first and fourth sources of interference provide conflicting advice,
 which is one sign that we are living in the real world.
 The following sections look at ways of resolving this conflict.
 
+\fi
+
 \QuickQuiz{
+	예를 들면 캐쉬와 메모리 배치 사이의 상호작용 같은 다른 오류의 원천들은
+	어떡하죠?
+
+	\iffalse
+
 	But what about other sources of error, for example, due to
 	interactions between caches and memory layout?
+
+	\fi
+
 }\QuickQuizAnswer{
+	메모리 배치의 변화는 실제로 비현실적인 수행시간 감소를 초래할 수
+	있습니다.
+	예를 들어, 특정 마이크로벤치마크가 거의 항상 L0 캐쉬의 용량을 넘치게
+	하지만 올바른 메모리 배치에서는 항상 딱 맞는다고 해봅시다.
+	이게 정말 문제라면, 메모리 배치를 완전히 제어하기 위해 여러분의
+	마이크로벤치마크를 huge page 를 이용해서 (또는 커널에서, 또는 bare
+	metal 에서) 수행하는 걸 고려해 보세요.
+
+	하지만 다양한 메모리 배치 병목이 존재함을 알아두시기 바랍니다.
+	메모리 대역폭에 민감한 벤치마크는 (행렬 계산과 관계되는 것 같은) 메모리
+	병렬성을 극대화 하기 위해 수행되는 쓰레드를 사용 가능한 코어와 소켓들
+	사이로 흩뿌려야 합니다.
+	그것들은 또한 데이터를 NUMA 노드, 메모리 컨트롤러, 그리고 DRAM 칩
+	사이에 가능한 만큼 분배해야 합니다.
+	대조적으로, 메모리 응답시간에 민감한 벤치마크는 (가장 잘 확장되지
+	못하는 어플리케이션을 포함해) 그대신 지역성을 최대화 해야 해서, 다른
+	코어와 소켓을 추가하기 전에 개별 코어와 소켓을 최대한 사용해야 합니다.
+
+	\iffalse
+
 	Changes in memory layout can indeed result in unrealistic
 	decreases in execution time.
 	For example, suppose that a given microbenchmark almost
@@ -4609,7 +4705,18 @@ The following sections look at ways of resolving this conflict.
 	most poorly scaling applications) should instead maximize
 	locality, filling each core and socket in turn before adding
 	another one.
+
+	\fi
+
 }\QuickQuizEnd
+
+다음 섹션은 이 측정 오류를 다루는 방법들을 이야기 하는데,
+Section~\ref{sec:debugging:Isolation}
+은 어떤 형태의 간섭을 막는 격리 기법을 다루고,
+Section~\ref{sec:debugging:Detecting Interference}
+은 어떤 간섭으로 오염된 측정 결과를 제거하기 위한 간섭 파악 방법을 다룹니다.
+
+\iffalse
 
 The following sections discuss ways of dealing with these measurement
 errors, with
@@ -4620,6 +4727,8 @@ and with
 Section~\ref{sec:debugging:Detecting Interference}
 covering methods for detecting interference so as to reject measurement
 data that might have been corrupted by that interference.
+
+\fi
 
 \subsection{Isolation}
 \label{sec:debugging:Isolation}
