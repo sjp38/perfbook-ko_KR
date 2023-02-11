@@ -121,6 +121,16 @@ more complex uses.
 
 \begin{fcvref}[ln:formal:promela:increment:whole]
 Listing~\ref{lst:formal:Promela Code for Non-Atomic Increment}
+은 어토믹하지 않은 값 증가에서 초래되는 교재에 나오는 경주 조건을 선보입니다.
+라인~\lnref{nprocs} 는 수행할 프로세스의 수를 정의하고 (상태 공간에의 영향을
+보기 위해 우린 이 값을 변화시켜 볼 겁니다), 라인~\lnref{count} 는 카운터를
+정의하며, 라인~\lnref{prog} 는 \clnrefrange{assert:b}{assert:e} 에 나오는
+단정문을 구현하는데 사용됩니다.
+
+\iffalse
+
+\begin{fcvref}[ln:formal:promela:increment:whole]
+Listing~\ref{lst:formal:Promela Code for Non-Atomic Increment}
 demonstrates the textbook race condition
 resulting from non-atomic increment.
 Line~\lnref{nprocs} defines the number of processes to run (we will vary this
@@ -128,11 +138,31 @@ to see the effect on state space), line~\lnref{count} defines the counter,
 and line~\lnref{prog} is used to implement the assertion that appears on
 \clnrefrange{assert:b}{assert:e}.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/promela/increment@whole.fcv}
 \caption{Promela Code for Non-Atomic Increment}
 \label{lst:formal:Promela Code for Non-Atomic Increment}
 \end{listing}
+
+\Clnrefrange{proc:b}{proc:e} 는 어토믹하지 않게 카운터를 증가시키는 프로세스
+하나를 정의합니다.
+인자 \co{me} 는 프로세스 수로, 코드의 뒤쪽에 있는 초기화 블록에서 설정됩니다.
+간단한 Promela 선언문들은 각각 어토믹한 걸로 가정되므로, 우린 이 값 증가를
+\clnrefrange{incr:b}{incr:e} 의 두개 선언문으로 쪼개야 합니다.
+라인~\lnref{setprog} 에서의 값 할당은 이 프로세스의 완료를 표시합니다.
+Spin 시스템은 상태 공간을 모든 가능한 상태 순서들을 포함해 완전히 탐색하므로,
+전통적인 스트레스 테스트에 사용되는 반복문은 필요 없습니다.
+
+\Clnrefrange{init:b}{init:e} 는 초기화 블록으로, 가장 먼저 수행됩니다.
+\Clnrefrange{doinit:b}{doinit:e} 는 실제로 초기화를 하며,
+\clnrefrange{assert:b}{assert:e} 는 단정을 수행합니다.
+둘 다 불필요한 상태 공간 증가를 막기 위해 원자적 블록으로 정의됩니다: 이것들은
+알고리즘의 부분이 아니므로, 이것들을 원자적으로 만듦으로써 검증 범위를 잃지는
+않습니다.
+
+\iffalse
 
 \Clnrefrange{proc:b}{proc:e} define a process that increments
 the counter non-atomically.
@@ -155,6 +185,22 @@ Both are atomic blocks in order to avoid unnecessarily increasing
 the state space: because they are not part of the algorithm proper,
 we lose no verification coverage by making them atomic.
 
+\fi
+
+\Clnrefrange{dood1:b}{dood1:e} 의 \co{do-od} 구성은 C 에서의 case label 표현을
+허용하는 \co{switch} 문을 담는 \co{for (;;)} 반복문으로 생각될 수 있는 Promela
+반복문을 구현합니다.
+조건 블록 (\co{::} 접두어로 표시됨) 은 비결정적으로 스캔됩니다만, 이 경우에는
+한번에 단 하나의 조건만 잡힐 수 있습니다.
+이 \co{do-od} 의
+\clnrefrange{block1:b}{block1:e} 에 있는 첫번째 블록은 i 번째 값 증가 쓰레드의
+진행 셀을 초기화 하고, i 번째 값 증가 쓰레드의 프로세스를 수행하며, 이어서 변수
+\co{i} 의 값을 증가시킵니다.
+라인~\lnref{block2} 에 있는 \co{do-od} 의 두번째 블록은 이 프로세스들이
+시작되고 나면 이 반복문을 빠져나갑니다.
+
+\iffalse
+
 The \co{do-od} construct on \clnrefrange{dood1:b}{dood1:e}
 implements a Promela loop,
 which can be thought of as a C \co{for (;;)} loop containing a
@@ -172,6 +218,16 @@ The second block of the \co{do-od} on
 line~\lnref{block2} exits the loop once
 these processes have been started.
 
+\fi
+
+\Clnrefrange{assert:b}{assert:e} 의 어토믹 블록도 진행 카운터의 합을 구하는
+비슷한 \co{do-od} 반복문을 갖습니다.
+라인~\lnref{assert} 의 \co{assert()} 문은 모든 프로세스가 완료되었다면 모든
+카운트가 올바르게 기록되었을 것을 검증합니다.
+\end{fcvref}
+
+\iffalse
+
 The atomic block on \clnrefrange{assert:b}{assert:e} also contains
 a similar \co{do-od}
 loop that sums up the progress counters.
@@ -180,7 +236,15 @@ if all processes
 have been completed, then all counts have been correctly recorded.
 \end{fcvref}
 
+\fi
+
+여러분은 이 프로그램을 다음과 같이 빌드하고 수행할 수 있습니다:
+
+\iffalse
+
 You can build and run this program as follows:
+
+\fi
 
 \begin{VerbatimU}
 spin -a increment.spin      # Translate the model to C
@@ -195,6 +259,22 @@ cc -DSAFETY -o pan pan.c    # Compile the model
 \label{lst:formal:Non-Atomic Increment Spin Output}
 \end{listing}
 
+이는
+Listing~\ref{lst:formal:Non-Atomic Increment Spin Output} 에 보인 것과 같은
+출력을 낼 겁니다.
+첫번째 줄은 우리의 단정이 위배되었음을 (어토믹 하지 않은 값 증가를 했으니
+예상된 바입니다!) 말합니다.
+두번째 줄은 이 단정이 어떻게 위배되었는지에 대한 설명이 \co{trail} 파일에 쓰여
+있음을 말합니다.
+``Warning'' 줄은 우리의 모델이 완벽하지 않았음을 다시 말합니다.
+두번째 문단은 진행된 상태 탐색의 종류를 설명하는데 이 경우 단정 위배와 올바르지
+않은 종료 상태입니다.
+세번째 문단은 상태 크기 통계를 보입니다: 이 작은 모델은 45개의 상태만을
+가졌습니다.
+마지막 라인은 메모리 사용량을 보입니다.
+
+\iffalse
+
 This will produce output as shown in
 Listing~\ref{lst:formal:Non-Atomic Increment Spin Output}.
 The first line tells us that our assertion was violated (as expected
@@ -207,6 +287,8 @@ in this case for assertion violations and invalid end states.
 The third paragraph gives state-size statistics: this small model had only
 45 states.
 The final line shows memory usage.
+
+\fi
 
 The \co{trail} file may be rendered human-readable as follows:
 
