@@ -419,9 +419,35 @@ elaborate examples.
 \subsection{How to Use Promela}
 \label{sec:formal:How to Use Promela}
 
+소스 파일 \path{qrcu.spin} 을 가지고, 다음과 같은 커맨드를 사용할 수 있습니다:
+
 Given a source file \path{qrcu.spin}, one can use the following commands:
 
 \begin{description}[style=nextline]
+\item	[\tco{spin -a qrcu.spin}]
+	상태 기계를 전체 탐색하는 \path{pan.c} 파일을 만듭니다.
+\item	[\tco{cc -DSAFETY [-DCOLLAPSE] [-DMA=N] -o pan pan.c}]
+	생성된 상태 기계 탐색을 컴파일 합니다.  \co{-DSAFETY} 는 여러분이
+	단정문들만을 가지고 있다면 (그리고 어쩌면 \co{never} 명령문을) 적합한
+	최적화를 생성합니다.  여러분이 liveness, fairness, 그리고
+	forward-progress 체크를 갖는다면, 여러분은 \co{-DSAFETY} 없이 컴파일을
+	해야할 수도 있습니다.  여러분이 사용할 수 있음에도 \co{-DSAFETY} 를
+	사용하지 않는다면 프로그램은 이를 알려줄 겁니다.
+
+	\co{-DSAFETY} 에 의해 생성되는 최적화는 상당히 속도를 향상시키므로
+	사용할 수 있다면 여러분은 그걸 사용해야 합니다.
+	여러분이 \co{-DSAFETY} 를 사용할 수 없는 상황 중 한 예는 \co{-DNP} 를
+	통해 livelock (``non-pregress cycles'' 라고도 알려져 있습니다) 을
+	검사할 때입니다.
+
+	옵션 \co{-DCOLLAPSE} 는 state vector compression 모드를 위한 코드를
+	생성합니다.
+
+	또다른 옵션인 \co{-DMA=N} 은 느리지만 공격적인 상태 공간 메모리 압축
+	모드를 위한 코드를 생성합니다.
+
+\iffalse
+
 \item	[\tco{spin -a qrcu.spin}]
 	Create a file \path{pan.c} that fully searches the state machine.
 \item	[\tco{cc -DSAFETY [-DCOLLAPSE] [-DMA=N] -o pan pan.c}]
@@ -443,6 +469,30 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 
 	Another optional flag \co{-DMA=N} generates code for a slow
 	but aggressive state-space memory compression mode.
+
+\fi
+
+\item	[\tco{./pan [-mN] [-wN]}]
+	이는 실제로 상태 공간을 탐색합니다.  상태의 수는 매우 작은 상태 기계를
+	가지고도 수천만에 이를 수 있으므로 여러분은 큰 메모리의 기계를 필요로
+	할 겁니다.
+	예를 들어, 3개의 업데이트 쓰레드와 2개의 읽기 쓰레드를 갖는
+	\path{qrcu.spin} 은 \co{-DCOLLAPSE} 플래그를 가지고도 10.5\,GB 메모리를
+	필요로 했습니다.
+
+	\co{./pan} 이 다음과 같이 말한다면, 여러분은 완벽한 탐색을 위해
+	\co{-mN} 옵션을 사용해 최대 깊이를 늘려야 합니다:
+	\qco{error: max search depth too small}.
+	기본값은 \co{-m10000} 입니다.
+
+	\co{-wN} 옵션은 해쉬테이블 크기를 명시합니다.
+	전체 상태 공간 탐색을 위한 기본 값은 \co{-w24} 입니다.\footnote{
+		Spin 버전 6.4.6 과 6.4.8 에서.  2011년 7월 10일 자의 Spin
+		온라인 매뉴얼에서는 전체 탐색 모드를 위한 기본 값은 \co{-w19}
+		라고 이야기하는데, 실제 동작과 맞지 않습니다.}
+
+\iffalse
+
 \item	[\tco{./pan [-mN] [-wN]}]
 	This actually searches the state space.  The number of states
 	can reach into the tens of millions with very small state
@@ -461,6 +511,30 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 		Spin dated 10 July 2011, the default for exhaustive search
 		mode is said to be \co{-w19}, which does not meet
 		the actual behavior.}
+
+\fi
+
+	여러분의 기계가 충분한 메모리를 가지고 있는지 확신치 못한다면, 한
+	윈도우에서 \co{top} 을 돌리고 다른 윈도우에서 \co{./pan} 을 돌리세요.
+	\co{./pan} 윈도우에 포커스를 유지해서 필요하면 그 수행을 중지시킬 수
+	있게 하세요.  CPU 시간이 100\,\% 아래로 떨어지는 순간 \co{./pan} 을
+	강제 종료시키세요.  \co{./pan} 을 수행하는 윈도우로부터  포커스를
+	제거했다면 윈도우 시스템이 다른 무언가를 하는데 충분한 메모리를 쥐는데
+	많은 시간을 소요해 여러분을 기다려야 하게 만들 겁니다.
+
+	메모리 소모를 막는 다른 방법은 \co{-DMEMLIM=N} 컴파일러 플래그입니다.
+	\co{-DMEMLIM=2000} 은 그 최대값을 2\,GB 로 만듭니다.
+
+	출력을 캡쳐해 두는걸, 특히 여러분이 원격의 기계에서 작업 중이라면 잊지
+	마세요.
+
+	여러분의 모델이 forward-progress 체크를 포함한다면 여러분은 \co{./pan}
+	에의 \co{-f} 커맨드라인 인자를 통해 ``weak fairness'' 를 활성화 시켜야
+	할 겁니다.
+	여러분의 forward-progress 검사가 \co{accept} 라벨을 포함한다면, \co{-a}
+	인자도 필요할 겁니다.
+
+\iffalse
 
 	If you aren't sure whether your machine has enough memory,
 	run \co{top} in one window and \co{./pan} in another.  Keep the
@@ -485,12 +559,26 @@ Given a source file \path{qrcu.spin}, one can use the following commands:
 	you will also need the \co{-a} argument.
 	% forward reference to model: formal.2009.02.19a in
 	% /home/linux/git/userspace-rcu/formal-model.
+
+\fi
+
+\item	[\tco{spin -t -p qrcu.spin}]
+	오류를 발견한 수행에 의한 \co{trail} 파일 결과물을 가지고 그 오류를
+	일으킨 단계들을 출력합니다.
+	\co{-g} 플래그는 변경된 전역 변수들을 포함시키고 \co{-l} 플래그는
+	변경된 지역 변수들도 포함시킵니다.
+
+\iffalse
+
 \item	[\tco{spin -t -p qrcu.spin}]
 	Given \co{trail} file output by a run that encountered an
 	error, output the sequence of steps leading to that error.
 	The \co{-g} flag will also include the values of changed
 	global variables, and the  \co{-l} flag will also include
 	the values of changed local variables.
+
+\fi
+
 \end{description}
 
 \subsubsection{Promela Peculiarities}
