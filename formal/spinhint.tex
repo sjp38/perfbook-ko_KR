@@ -913,6 +913,19 @@ loop, repeating until the lock is available.
 \label{lst:formal:Promela Code for Spinlock}
 \end{listing}
 
+\co{spin_unlock()} 매크로는 단순히 락을 잡혀있지 않다고 표시합니다.
+
+Promela 는 완전한 순서규칙을 가정하므로 메모리 배리어는필요치 않음에
+주의하십시오.
+모든 Promela 상태에서, 모든 프로세스는 현재 상태와 그 위에서 우리에게 가해진
+상태 변화의 순서에 동의합니다.
+이는 일부 컴퓨터 시스템에서 (1990년대의 MPIS 와 PA-RISC 같은) 사용된
+``순차적으로 일관적인 (sequentially consistent)'' 메모리 모델과 비슷합니다.
+앞서 언급되었듯, 그리고 뒤의 예에서 살펴보게 되겠지만 완화된 메모리 순서 규칙은
+명시적으로 코딩 되어야 합니다.
+
+\iffalse
+
 The \co{spin_unlock()} macro simply marks the lock as no
 longer held.
 
@@ -926,11 +939,33 @@ used by a few computer systems (such as 1990s MIPS and PA-RISC).
 As noted earlier, and as will be seen in a later example,
 weak memory ordering must be explicitly coded.
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/formal/promela/lock@spin.fcv}
 \caption{Promela Code to Test Spinlocks}
 \label{lst:formal:Promela Code to Test Spinlocks}
 \end{listing}
+
+\begin{fcvref}[ln:formal:promela:lock:spin]
+이 매크로들은
+Listing~\ref{lst:formal:Promela Code to Test Spinlocks}
+에 보인 Promela 코드로 테스트 됩니다.
+이 코드는 값 증가를 테스트하는데 사용된 것과 유사한데, 락을 사용하는 프로세스가
+라인~\lnref{nlockers} 의 \co{N_LOCKERS} 매크로로 정의되어 있습니다.
+뮤텍스 자체는 라인~\lnref{mutex} 에, 락 소유자를 추적하기 위한 배열은
+라인~\lnref{array} 에 정의되어 있으며, 라인~\lnref{sum} 은 하나의 프로세스만이
+락을 잡음을 검증하기 위한 단정문 코드에 의해 사용됩니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:formal:promela:lock:spin:locker]
+락을 사용하는 프로세스는 \clnrefrange{b}{e} 에 있는데, 단순히 라인~\lnref{lock}
+에서 락을 잡고 라인~\lnref{claim} 에서 락을 잡았음을 표시하고
+라인~\lnref{unclaim} 에서 이를 철회한 후 라인~\lnref{unlock} 에서 락을
+내려놓기를 영원히 반복합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:lock:spin]
 These macros are tested by the Promela code shown in
@@ -950,6 +985,28 @@ acquiring the lock on line~\lnref{lock}, claiming it on line~\lnref{claim},
 unclaiming it on line~\lnref{unclaim}, and releasing it on line~\lnref{unlock}.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:formal:promela:lock:spin:init]
+\Clnrefrange{b}{e} 의 초기화 블록은 현재 락 사용 프로세스의 \co{havelock}
+배열을 라인~\lnref{array} 에서 초기화하고 현재 락 사용 프로세스를
+라인~\lnref{start} 에서 시작하며, 라인~\lnref{next} 에서 다음 락 사용
+프로세스로 진행합니다.
+일단 모든 락 사용 프로세스가 시작되면, \co{do-od} 반복문은
+라인~\lnref{chkassert} 로 이동하는데, 단정문을 검사합니다.
+라인~\lnref{sum} 과~\lnref{j} 는 통제 변수를 초기화하고,
+\clnrefrange{atm:b}{atm:e} 는 원자적으로 \co{havelock} 배열의 원소들의 값을
+합하며, 라인~\lnref{assert} 는 단정을 하고, 라인~\lnref{break} 에서 반복문을
+나갑니다.
+\end{fcvref}
+
+Listing~\ref{lst:formal:Promela Code for Spinlock}
+과~\ref{lst:formal:Promela Code to Test Spinlocks} 의 두 코드 조각을
+\path{lock.h} 와 \path{lock.spin} 파일들에 각각 넣고 다음 명령들을 사용해
+이 모델을 수행시킬 수 있습니다.
+
+\iffalse
+
 \begin{fcvref}[ln:formal:promela:lock:spin:init]
 The init block on \clnrefrange{b}{e} initializes the current locker's
 \co{havelock} array entry on line~\lnref{array}, starts the current locker on
@@ -967,6 +1024,8 @@ and~\ref{lst:formal:Promela Code to Test Spinlocks} into
 files named \path{lock.h} and \path{lock.spin}, respectively, and then running
 the following commands:
 
+\fi
+
 \begin{VerbatimU}
 spin -a lock.spin
 cc -DSAFETY -o pan pan.c
@@ -980,26 +1039,74 @@ cc -DSAFETY -o pan pan.c
 \label{lst:formal:Output for Spinlock Test}
 \end{listing}
 
+그 결과물은
+Listing~\ref{lst:formal:Output for Spinlock Test}
+에 보인 것과 비슷한 무엇일 겁니다.
+예상대로, 이 수행은 실패를 갖지 않습니다 (\qco{errors: 0}).
+
+\iffalse
+
 The output will look something like that shown in
 Listing~\ref{lst:formal:Output for Spinlock Test}.
 As expected, this run has no assertion failures (\qco{errors: 0}).
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	락 사용 프로세스에 도달되지 못한 명령문이 있는 이유는 뭐죠?  어쨌건,
+	이건 \emph{전체} 상태 공간 탐색 아니었나요?
+
+	\iffalse
+
 	Why is there an unreached statement in
 	locker?  After all, isn't this a \emph{full} state-space
 	search?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 락 사용 프로세스는 무한 반복문이므로, 제어는 이 프로세스의 마지막에
+	결코 도달하지 못합니다.
+	그러나, 단조증가하는 변수가 없으므로 Promela 는 이 무한 반복문을 작은
+	수의 상태로 모델링할 수 있습니다.
+
+	\iffalse
+
 	The locker process is an infinite loop, so control
 	never reaches the end of this process.
 	However, since there are no monotonically increasing variables,
 	Promela is able to model this infinite loop with a small
 	number of states.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	이 예에서 Promela 코드 스타일 문제는 무엇이 있을까요?
+
+	\iffalse
+
 	What are some Promela code-style issues with this example?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	여러개 있습니다:
+	\begin{enumerate}
+	\item	\co{sum} 의 선언은 초기화 블록으로 옮겨져야 하는데, 어디서도
+		사용되지 않기 때문입니다.
+	\item	단정문 코드는 초기화 반복문 바깥으로 옮겨져야 합니다.  이
+		초기화 반복문은 그러면 어토믹 블록에 위치해서 상태 공간을 크게
+		줄일 수 있습니다 (얼마나 줄일까요?).
+	\item	단정문을 감싸는 이 어토믹 블록은 단정문에 더해 \co{sum} 과
+		\co{j} 의 초기화를 포함하도록 확장되어야 합니다.
+		이 또한 상태 공간을 줄입니다 (다시 말하지만, 얼마나 줄일까요?).
+	\end{enumerate}
+
+	\iffalse
+
 	There are several:
 	\begin{enumerate}
 	\item	The declaration of \co{sum} should be moved to within
@@ -1014,6 +1121,9 @@ As expected, this run has no assertion failures (\qco{errors: 0}).
 		This also reduces the state space (again, by how
 		much?).
 	\end{enumerate}
+
+	\fi
+
 }\QuickQuizEndE
 }
 
