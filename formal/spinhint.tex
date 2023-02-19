@@ -1130,6 +1130,22 @@ As expected, this run has no assertion failures (\qco{errors: 0}).
 \subsection{Promela Example: QRCU}
 \label{sec:formal:Promela Example: QRCU}
 
+이 마지막 예는 Oleg Nesterov 의
+QRCU~\cite{OlegNesterov2006QRCU,OlegNesterov2006aQRCU} 의 실제 사용된 것이지만
+\co{synchronize_qrcu()} 의 빠른경로를 더 빠르게 하기 위해 수정된 버전을
+선보입니다.
+
+그런데 먼저, QRCU 란 무엇일까요?
+
+QRCU 는 SRCU~\cite{PaulEMcKenney2006c} 의 변종으로 더 높은 읽기 오버헤드를
+(전혁 변수에 대한 원자적 값 증가와 감소) 극단적으로 낮은 grace-period
+응답시간을 위해 포기합니다.
+읽기 쓰레드가 없다면 grace period 는 1 마이크로세컨드 미만의 시간에 파악되는데,
+대부분의 다른 RCU 구현의 수 밀리세컨드 grace period 응답시간에 비해 무척
+빠릅니다.
+
+\iffalse
+
 This final example demonstrates a real-world use of Promela on Oleg
 Nesterov's
 QRCU~\cite{OlegNesterov2006QRCU,OlegNesterov2006aQRCU},
@@ -1146,7 +1162,22 @@ If there are no readers, the grace period will be detected in less
 than a microsecond, compared to the multi-millisecond grace-period
 latencies of most other RCU implementations.
 
+\fi
+
 \begin{enumerate}
+\item	QRCU 도메인을 정의하는 \co{qrcu_struct} 가 있습니다.
+	SRCU 처럼 (그리고 다른 RCU 변종들과는 달리) QRCU 의 행동은 전역적이지
+	않으며 특정 \co{qrcu_struct} 에 명시적입니다.
+\item	QRCU read-side 크리티컬 섹션을 정의하는 \co{qrcu_read_lock()} 과
+	\co{qrcu_read_unlock()} 이 있습니다.
+	연관된 \co{qrcu_struct} 가 이 함수들에 넘겨져야만 하며,
+	\co{qrcu_read_lock()} 의 리턴값은 \co{qrcu_read_unlock()} 에 넘겨져야
+	합니다.
+
+	예를 들면:
+
+\iffalse
+
 \item	There is a \co{qrcu_struct} that defines a QRCU domain.
 	Like SRCU (and unlike other variants of RCU) QRCU's action
 	is not global, but instead focused on the specified
@@ -1159,11 +1190,25 @@ latencies of most other RCU implementations.
 
 	For example:
 
+\fi
+
 \begin{VerbatimU}
 idx = qrcu_read_lock(&my_qrcu_struct);
 /* read-side critical section. */
 qrcu_read_unlock(&my_qrcu_struct, idx);
 \end{VerbatimU}
+
+\item	모든 앞서서부터 존재한 QRCU read-side 크리티컬 섹션이 완료될 때까지
+	기다리는 \co{synchronize_qrcu()} 함수가 있지만, SRCU 의
+	\co{synchronize_srcu()} 와 같이, QRCU 의 \co{synchronize_qrcu()} 는
+	같은 \co{qrcu_struct} 를 사용하는 read-side 크리티컬 섹션만 기다립니다.
+
+	예를 들어, \co{synchronize_qrcu(&your_qrcu_struct)} 는 앞의 QRCU
+	read-side 크리티컬 섹션을 기다리지 \emph{않을} 겁니다.
+	대조적으로 \co{synchronize_qrcu(&my_qrcu_struct)} 는 같은
+	\co{qrcu_struct} 를 공유하므로 기다려야 \emph{할겁니다}.
+
+\iffalse
 
 \item	There is a \co{synchronize_qrcu()} primitive that blocks until
 	all pre-existing QRCU read-side critical sections complete,
@@ -1177,17 +1222,42 @@ qrcu_read_unlock(&my_qrcu_struct, idx);
 	In contrast, \co{synchronize_qrcu(&my_qrcu_struct)}
 	\emph{would} need to wait, since it shares the same
 	\co{qrcu_struct}.
+
+\fi
+
 \end{enumerate}
+
+리눅스 커널을 위한 QRCU 패치가
+만들어졌습니다만~\cite{PaulMcKenney2007QRCUpatch}, 리눅스 커널에 받아들여지지는
+못할 것 같습니다.
+
+\iffalse
 
 A Linux-kernel patch for QRCU has been
 produced~\cite{PaulMcKenney2007QRCUpatch},
 but is unlikely to ever be included in the Linux kernel.
+
+\fi
 
 \begin{listing}[htbp]
 \input{CodeSamples/formal/promela/qrcu@gvar.fcv}
 \caption{QRCU Global Variables}
 \label{lst:formal:QRCU Global Variables}
 \end{listing}
+
+QRCU 를 위한 Promela 코드로 돌아와서, 전역 변수들은
+Listing~\ref{lst:formal:QRCU Global Variables} 에 보인 것과 같습니다.
+이 예는 락킹을 사용하고 \path{lock.h} 를 포함합니다.
+읽기 쓰레드와 쓰기 쓰레드의 수 모두 두개의 \co{#define} 문을 통해 변화될 수
+있어서 우리에게 조합적 상태 수 폭발을 일으킬 수 있는 두개의 방법을 제공합니다.
+\co{idx} 변수는 \co{ctr} 변수의 두 원소 중 무엇이 읽기 쓰레드에 의해 사용될지
+통제하며, \co{readerprogress} 변수는 언제 모든 읽기 쓰레드가 끝날지 정하는
+단정문을 가능하게 합니다 (QRCU 업데이트는 모든 앞서서부터 존재한 읽기 쓰레드가
+그들의 QRCU read-side 크리티컬 섹션을 완료하기 전까지 허용되지 않으므로).
+\co{readerprogress} 배열 원소들은 다음과 같은 값을 가져서 연관된 읽기 쓰레드의
+상태를 표시합니다:
+
+\iffalse
 
 Returning to the Promela code for QRCU, the global variables are as shown in
 Listing~\ref{lst:formal:QRCU Global Variables}.
@@ -1204,19 +1274,46 @@ sections).
 The \co{readerprogress} array elements have values as follows,
 indicating the state of the corresponding reader:
 
+\fi
+
 \begin{enumerate}[label={\arabic*}:,start=0,itemsep=0pt]
 \item	not yet started.
 \item	within QRCU read-side critical section.
 \item	finished with QRCU read-side critical section.
 \end{enumerate}
 
+마지막으로, \co{mutex} 변수는 업데이트 쓰레드의 느린경로를 순차화 시키기 위해
+사용됩니다.
+
+\iffalse
+
 Finally, the \co{mutex} variable is used to serialize updaters' slowpaths.
+
+\fi
 
 \begin{listing}[htbp]
 \input{CodeSamples/formal/promela/qrcu@reader.fcv}
 \caption{QRCU Reader Process}
 \label{lst:formal:QRCU Reader Process}
 \end{listing}
+
+\begin{fcvref}[ln:formal:promela:qrcu:reader]
+QRCU 읽기 쓰레드는
+Listing~\ref{lst:formal:QRCU Reader Process} 에 보인 \co{qrcu_reader()}
+프로세스로 모델링 되었습니다.
+\Clnrefrange{do}{od} 의 \co{do-od} 반복문은 라인~\lnref{one} 의 ``1'' 보호를
+가져서 무한 반복문이 됩니다.
+라인~\lnref{curidx} 는 전역 인덱스의 현재 값을 가져오며
+\clnrefrange{atm:b}{atm:e} 는 그 값이 0이 아니었다면 원자적으로 이를
+증가시키고 (\co{atomic_inc_not_zero()}) 반복문을 종료합니다.
+라인~\lnref{cs:entry} 는 RCU read-side 크리티컬 섹션 내로의 진입을 표시하고
+라인~\lnref{cs:exit} 는 이 크리티컬 섹션으로부터 빠져나옴을 표시하는데, 둘 다
+우리가 뒤에서 마주할 \co{assert()} 문의 이익을 위함입니다.
+라인~\lnref{atm:dec} 는 우리가 값 증가시킨 카운터의 값을 감소시키고 RCU
+read-side 크리티컬 섹션을 빠져나옵니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:qrcu:reader]
 QRCU readers are modeled by the \co{qrcu_reader()} process shown in
@@ -1235,6 +1332,8 @@ the \co{assert()} statement that we shall encounter later.
 Line~\lnref{atm:dec} atomically decrements the same counter that we incremented,
 thereby exiting the RCU read-side critical section.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[htbp]
 \input{CodeSamples/formal/promela/qrcu@sum_unordered.fcv}
