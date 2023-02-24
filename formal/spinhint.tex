@@ -1612,11 +1612,20 @@ This is all done within an atomic block to reduce state space.
 \subsubsection{Running the QRCU Example}
 \label{sec:formal:Running the QRCU Example}
 
+이 QRCU 예제를 수행하기 위해, 앞 섹션의 코드 조각들을 \path{qrcu.spin} 이라는
+이름의 파일에 결합시키고 \co{spin_lock()} 과 \co{spin_unlock()} 의 정의들을
+\path{lock.h} 라는 이름의 파일에 넣으십시오.
+이어서 이 QRCU 모델을 빌드하고 수행하기 위해 다음 커맨드를 사용하세요:
+
+\iffalse
+
 To run the QRCU example, combine the code fragments in the previous
 section into a single file named \path{qrcu.spin}, and place the definitions
 for \co{spin_lock()} and \co{spin_unlock()} into a file named
 \path{lock.h}.
 Then use the following commands to build and run the QRCU model:
+
+\fi
 
 \begin{VerbatimU}
 spin -a qrcu.spin
@@ -1658,6 +1667,18 @@ cc -DSAFETY [-DCOLLAPSE] -o pan pan.c
 \label{tab:advsync:Memory Usage of QRCU Model}
 \end{table}
 
+이 출력물은 이 모델이
+Table~\ref{tab:advsync:Memory Usage of QRCU Model}
+에 보인 모든 경우를 통과함을 보입니다.
+세개의 읽기 쓰레드와 세개의 업데이트 쓰레드를 수행하는게 나을 수도 있겠으나,
+간단한 외삽은 이게 대략 0.5 테라바이트 메모리를 요할 것을 보입니다.
+어떡하시겠어요?
+
+\co{./pan} 은 메모리 부족 시에 조언을 주는데, 예를 들어 세개의 읽기 쓰레드와
+세개의 업데이트 쓰레드를 시도하면:
+
+\iffalse
+
 The output shows that this model passes all of the cases shown in
 Table~\ref{tab:advsync:Memory Usage of QRCU Model}.
 It would be nice to run three readers and three
@@ -1668,6 +1689,8 @@ What to do?
 It turns out that \co{./pan} gives advice when it runs out of memory,
 for example, when attempting to run three readers and three updaters:
 
+\fi
+
 \begin{VerbatimU}
 hint: to reduce memory, recompile with
   -DCOLLAPSE # good, fast compression, or
@@ -1676,16 +1699,37 @@ hint: to reduce memory, recompile with
   -DBITSTATE # supertrace, approximation
 \end{VerbatimU}
 
+크게 증가된 탐색 오버헤드의 비용으로 상태 공간을 강하게 압축하는 코드를
+생성하는 \co{-DMA=N} 컴파일러 플래그를 제안받은대로 시도해봅시다:
+
+\iffalse
+
 Let's try the suggested compiler flag \co{-DMA=N},
 which generates code for aggressive compression of the
 state space at the cost of greatly increased search overhead.
 The required commands are as follows:
+
+\fi
 
 \begin{VerbatimU}
 spin -a qrcu.spin
 cc -DSAFETY -DMA=96 -O2 -o pan pan.c
 ./pan -m20000000
 \end{VerbatimU}
+
+여기서, 깊이 한계 20,000,000 은 간단한 외삽을 통해 추론된 예상 깊이보다 열배
+이상 큽니다.
+이게 메모리 사용량을 늘리지만, 너무 빡빡한 깊이 제한으로부터 기인하는 불완전한
+탐색으로 인한 긴 수행 낭비를 막습니다.
+이 수행은 \Power{9} 서버에서 3일보다 조금 더 걸렸습니다.
+그 결과는
+Listing~\ref{lst:formal:spinhint:3 Readers 3 Updaters QRCU Spin Output with -DMA=96}
+에 보여져 있습니다.
+이 Spin 수행은 오직 6.5\,GB 전체 메모리 사용만 가지고 성공적으로 완료되었는데,
+이는 대략 0.5 테라바이트 사용량을 보이는 \co{-DCOLLAPSE} 사용보다 거의 백배
+가량 낮은 수치입니다.
+
+\iffalse
 
 Here, the depth limit of 20,000,000 is an order of magnitude
 larger than the expected depth deduced from simple extrapolation.
@@ -1699,6 +1743,8 @@ This Spin run completed successfully with a total memory
 usage of only 6.5\,GB, which is almost two orders of magnitude
 lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 
+\fi
+
 \begin{listing}
 \VerbatimInput[numbers=none,fontsize=\scriptsize]{CodeSamples/formal/promela/qrcu.spin.33ma.lst}
 \vspace*{-9pt}
@@ -1707,11 +1753,26 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 \end{listing}
 
 \QuickQuiz{
+	상태들로 인해 점유되는 메모리에서 200대1 감소에 연관되는 0.48\,\%
+	압축률!
+	이 상태 공간 탐색은 \emph{정말로} 완벽한가요???
+
+	\iffalse
+
 	A compression rate of 0.48\,\% corresponds to a 200-to-1 decrease
 	in memory occupied by the states!
 	Is the state-space search \emph{really} exhaustive???
+
+	\fi
+
 }\QuickQuizAnswer{
+	Spin 의 문서에 따르면, 네, 그렇습니다.
+
+	\iffalse
+
 	According to Spin's documentation, yes, it is.
+
+	\fi
 
 \begin{listing}
 \VerbatimInput[numbers=none,fontsize=\scriptsize]{CodeSamples/formal/promela/qrcu.spin.col-ma.diff.lst}
@@ -1720,6 +1781,15 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 \label{lst:formal:promela:Spin Output Diff of -DCOLLAPSE and -DMA=88}
 \end{listing}
 
+	간접적인 증거로, \co{-DCOLLAPSE} 와 \co{-DMA=88} (두개의 읽기 쓰레드와
+	세개의 업데이트 쓰레드) 에 의한 수행 결과를 비교해 봅시다.
+	이 수행들에서의 결과물의 차이점이
+	Listing~\ref{lst:formal:promela:Spin Output Diff of -DCOLLAPSE and -DMA=88}
+	에 보여져 있습니다.
+	볼 수 있듯, 상태의 수에 (저장된 것과 매치된 것) 둘 다 동의합니다.
+
+	\iffalse
+
 	As an indirect evidence, let's compare the results of
 	runs with \co{-DCOLLAPSE} and with \co{-DMA=88}
 	(two readers and three updaters).
@@ -1727,6 +1797,9 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 	Listing~\ref{lst:formal:promela:Spin Output Diff of -DCOLLAPSE and -DMA=88}.
 	As you can see, they agree on the numbers of states
 	(stored and matched).
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{table*}[tbp]
@@ -1778,6 +1851,30 @@ lower than the \co{-DCOLLAPSE} usage of about half a terabyte.
 \label{tab:formal:promela:QRCU Spin Result Summary}
 \end{table*}
 
+참고를 위해, Table~\ref{tab:formal:promela:QRCU Spin Result Summary}
+은 \co{-DCOLLAPSE} 와 \co{-DMA=N} 컴파일러 플래그가 사용되었을 때의 Spin 결과를
+요약합니다.
+메모리 사용량은 최소의 충분한 탐색 깊이를 통해 얻어졌고 \co{-DMA=N} 패러미터는
+표에 보여져 있습니다.
+\co{-DCOLLAPSE} 수행을 위한 해쉬테이블의 크기는 작은 상태 공간을 해슁하는데
+너무 많은 메모리가 사용되는 것을 막기 위해 \co{./pan} 의 \co{-wN} 옵션을 통해
+조정되었습니다.
+따라서 메모리 사용량은
+Table~\ref{tab:advsync:Memory Usage of QRCU Model} 에 보인 것보다 작은데,
+해쉬테이블 크기는 \co{-w24} 의 기본값부터 시작합니다.
+수행시간은 \Power{9} 서버에서의 것으로 \co{-DCOLAAPSE} 보다 \co{-DMA=N} 이 대략
+열배 가까이 높은 CPU 오버헤드로 고생함을 보이지만, 다른 한편 메모리 오버헤드는
+열배 이상 줄입니다.
+
+여기까진 좋습니다.
+하지만 업데이트 쓰레드와 읽기 스레드를 조금 더 늘리는 것은 \co{-DMA=N} 을
+사용하더라도 메모리를 소모시킬 겁니다.\footnote{
+	대안적으로, CPU 소모량은 지나쳐질 거니다.}
+그러니 어떡하죠?
+여기 몇가지 가능한 접근법이 있습니다:
+
+\iffalse
+
 For reference, Table~\ref{tab:formal:promela:QRCU Spin Result Summary}
 summarizes the Spin results with \co{-DCOLLAPSE} and \co{-DMA=N}
 compiler flags.
@@ -1801,15 +1898,34 @@ with \co{-DMA=N}.\footnote{
 So what to do?
 Here are some possible approaches:
 
+\fi
+
 \begin{enumerate}
+\item	더 작은 수의 읽기 쓰레드와 업데이트 쓰레드가 일반적인 경우를 검증하기
+	충분한지 봅니다.
+\item	수작업으로 정확성을 증명합니다.
+\item	더 적합한 도구를 사용합니다.
+\item	분할해 정복합니다.
+
+\iffalse
+
 \item	See whether a smaller number of readers and updaters suffice
 	to prove the general case.
 \item	Manually construct a proof of correctness.
 \item	Use a more capable tool.
 \item	Divide and conquer.
+
+\fi
+
 \end{enumerate}
 
+다음 섹션은 이 방법들 각각을 이야기 합니다.
+
+\iffalse
+
 The following sections discuss each of these approaches.
+
+\fi
 
 \subsubsection{How Many Readers and Updaters Are Really Needed?}
 \label{sec:formal:How Many Readers and Updaters Are Really Needed?}
