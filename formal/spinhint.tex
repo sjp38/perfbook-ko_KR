@@ -2137,6 +2137,24 @@ easier to understand.
 \subsubsection{Is QRCU Really Correct?}
 \label{sec:formal:Is QRCU Really Correct?}
 
+QRCU 는 정말로 정확할까요?
+우리는 그렇다고 말하는 Promela 기반의 기계적 증명과 손을 통한 증명을
+보았습니다.
+하지만, \pplsur{Jade}{Alglave} et al.~\cite{JadeAlglave2013-cav} 의 논문은
+다르게 말합니다 (page~12 아래쪽의 Section~5.1 을 보세요).
+뭐가 맞을까요?
+
+둘 다 맞는 것으로 드러났습니다!
+QRCU 가 정형 검증 벤치마크에 추가되었을 때, 그것의 메모리 배리어는 생략되었고,
+따라서 버그 있는 버전의 QRCU 가 되었습니다.
+따라서 여기서의 진짜 뉴스는 여러 정형 검증 도구들이 이 버그있는 QRCU 를
+잘못되게도 올바르다고 검증했습니다.
+그리고 이게 정형 검증 도구들 그 자체들도 버그가 투입된 버전의 코드를 통해
+검증되어야 하는 이유입니다.
+특정 도구가 투입된 버그를 찾지 못한다면, 그 도구는 분명 믿지 못할 것입니다.
+
+\iffalse
+
 Is QRCU really correct?
 We have a Promela-based mechanical proof and a by-hand proof that both
 say that it is.
@@ -2155,13 +2173,51 @@ using bug-injected versions of the code being verified.
 If a given tool cannot find the injected bugs, then that tool is
 clearly untrustworthy.
 
+\fi
+
 \QuickQuiz{
+	하지만 다른 정형 검증 도구들은 종종 특정 종류의 버그를 찾기 위해
+	설계됩니다.
+	예를 들어, 매우 적은 정형 검증 도구들은 명세서 내의 오류를 찾을 겁니다.
+	그러니 이 ``분명 믿지 못할만 하다'' 는 좀 센 말 아닌가요?
+
+	\iffalse
+
 	But different formal-verification tools are often designed to
 	locate particular classes of bugs.
 	For example, very few formal-verification tools will find
 	an error in the specification.
 	So isn't this ``clearly untrustworthy'' judgment a bit harsh?
+
+	\fi
+
 }\QuickQuizAnswer{
+	많은 정형 검증 도구들이 어떤 방법으로 특수화 되었음은 분명한
+	사실입니다.
+	예를 들어, Promela 는 실제 메모리 모델을 다루지 않고 (그게 Promela 에
+	프로그램이 될 수 있긴
+	합니다~\cite{Desnoyers:2013:MSM:2506164.2506174}),
+	CMBC~\cite{EdmundClarke2004CBMC} 는 확률적 멈춤과 데드락을 탐지하지
+	못하며,
+	Nidhugg~\cite{CarlLeonardsson2014Nidhugg} 는 데이터 비결정성에 관한
+	버그를 탐지하지 못합니다.
+	하지만 이는 이 도구들이 찾게끔 설계되지 않은 버그를 찾을 수 있다고는
+	믿어질 수 없음을 의미합니다.
+
+	그리고 따라서 정형 검증 도구를 작성하는 사람들은 ``라벨에 진실을
+	말해야'' 하고, 그들의 도구들이 어떤 종류의 버그를 찾고 못찾는지 분명히
+	밝혀야 합니다.
+	그러지 않는다면, 사용자는 그 도구가 어떤 버그를 탐지하지 못함을 처음
+	발견했을 때 그 도구에 대한 매우 거칠고 공개적인 비난을 할 겁니다.
+	그래요, 그래요, 최선을 다했다고 할 수 있는 뭔가가 있지만 적절한
+	면책조항 없이 무언가를 지나치게 이야기 하는 것은 여러분의 도구가
+	그로부터 회복될 수도 그러지 못할수도 있는 부정적 반응을 쉽게 야기할 수
+	있습니다.
+
+	경고했어요!
+
+	\iffalse
+
 	It is certainly true that many formal-verification tools are
 	specialized in some way.
 	For example, Promela does not handle realistic memory models
@@ -2188,19 +2244,49 @@ clearly untrustworthy.
 	to recover from.
 
 	You have been warned!
+
+	\fi
+
 }\QuickQuizEnd
+
+따라서, 여러분이 QRCU 를 사용하려 한다면, 주의하세요.
+그것의 정확성 증명 그 자체는 정확할수도 아닐수도 있습니다.
+이는 Donal Knuth 가 무척 오래전 이야기 했듯 정형 검증이 테스트를 완전히 대체할
+수 없는 이유 중 하나입니다.
+
+\iffalse
 
 Therefore, if you do intend to use QRCU, please take care.
 Its proofs of correctness might or might not themselves be correct.
 Which is one reason why formal verification is unlikely to
 completely replace testing, as Donald Knuth pointed out so long ago.
 
+\fi
+
 \QuickQuiz{
+	여기 설명된 QRCU 알고리즘을 위한 두개의 개별적 정확성 증명이 있고
+	부정확성 증명은 다른 알고리즘에 대한 것이었는데 왜 의심의 여지가 있죠?
+
+	\iffalse
+
 	Given that we have two independent proofs of correctness for
 	the QRCU algorithm described herein, and given that the
 	proof of incorrectness covers what is known to be a different
 	algorithm, why is there any room for doubt?
+
+	\fi
+
 }\QuickQuizAnswer{
+	언제나 의심의 여지는 있습니다.
+	이 경우, 그 두개의 정확성 증명은 실제 세계의 메모리 순서 모델의
+	정형화를 사용했으므로 이 두개의 증명들은 올바르지 않은 메모리 순서 규칙
+	가정에 기반했을 가능성을 높입니다.
+	더 나아가서, 두 증명 모두 같은 사람에 의해 구축되었으므로 동일한 오류를
+	가지고 있을 가능성이 꽤 있습니다.
+	다시 말하지만, 항상 의심의 여지가 있습니다.
+
+	\iffalse
+
 	There is always room for doubt.
 	In this case, it is important to keep in mind that the two proofs
 	of correctness preceded the formalization of real-world memory
@@ -2209,4 +2295,7 @@ completely replace testing, as Donald Knuth pointed out so long ago.
 	Furthermore, since both proofs were constructed by the same person,
 	it is quite possible that they contain a common error.
 	Again, there is always room for doubt.
+
+	\fi
+
 }\QuickQuizEnd
