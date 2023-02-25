@@ -1930,6 +1930,24 @@ The following sections discuss each of these approaches.
 \subsubsection{How Many Readers and Updaters Are Really Needed?}
 \label{sec:formal:How Many Readers and Updaters Are Really Needed?}
 
+한가지 방법은 \co{qrcu_updater()} 의 Promela 코드를 주의깊게 들여다보고 유일한
+전역적 상태 변화는 락 아래에서만 일어남을 깨닫는 겁니다.
+따라서, 한번에 단 하나의 업데이트 쓰레드만 읽기 쓰레드나 다른 업데이트
+쓰레드에게 보이는 상태를 고칠 수 있습니다.
+이는 Promela 는 전체 상태 공간 탐색을 하므로 단일 업데이트 쓰레드에 의해
+순차적으로 변화들이 일어남을 의미합니다.
+따라서, 최대 두개의 업데이트 쓰레드가 필요합니다: 하나는 상태를 변화시키고 다른
+하나는 혼란스러워지기 위해.
+
+읽기 쓰레드와의 상황은 덜 분명한데, 각 읽기 쓰레드는 하나의 read-side 크리티컬
+섹션을 수행하고는 종료되기 때문입니다.
+빠른 수행 경로는 카운터에서 0 또는 1까지만 볼 수 있으므로 일반적인 읽기
+쓰레드의 수는 제한되어 있다고 말할 수도 있겠습니다.
+이는 조사해 볼 가치 있는 부분일텐데, 실제로 다음 섹션에서 이야기 될 완전한
+정확성 증명을 이끕니다.
+
+\iffalse
+
 One approach is to look carefully at the Promela code for
 \co{qrcu_updater()} and notice that the only global state
 change is happening under the lock.
@@ -1948,6 +1966,8 @@ due to the fact that the fastpath must see at most a zero and a one
 in the counters.
 This is a fruitful avenue of investigation, in fact, it leads to
 the full proof of correctness described in the next section.
+
+\fi
 
 \subsubsection{Alternative Approach: Proof of Correctness}
 \label{sec:formal:Alternative Approach: Proof of Correctness}
