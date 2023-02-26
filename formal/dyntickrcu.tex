@@ -269,8 +269,15 @@ grace-period machinery as of Linux kernel v2.6.25-rc4.
 \subsubsection{Task Interface}
 \label{sec:formal:Task Interface}
 
+특정 CPU 가 더이상 수행할 태스크가 없어 dynticks-idle 모드에 진입할 때, 그 CPU
+는 \co{rcu_enter_nohz()} 를 호출합니다:
+
+\iffalse
+
 When a given CPU enters dynticks-idle mode because it has no more
 tasks to run, it invokes \co{rcu_enter_nohz()}:
+
+\fi
 
 \begin{VerbatimN}
 static inline void rcu_enter_nohz(void)
@@ -282,6 +289,16 @@ static inline void rcu_enter_nohz(void)
 }
 \end{VerbatimN}
 
+이 함수는 단순히 \co{dynticks_progress_counter} 를 증가시키고 그 결과가
+짝수인지 검사하는데, \co{dynticks_progress_counter} 의 새 값을 보는 모든 다른
+CPU 가 앞의 RCU read-side 크리티컬 섹션의 완료 또한 볼 것을 보장하기 위해
+메모리 배리어를 먼저 수행합니다.
+
+비슷하게, dynticks-idle 모드에 있는 어떤 CPU 가 새 수행 가능한 task 를 시작하려
+준비할 때, 그 CPU 는 \co{rcu_exit_nohz()} 를 호출합니다:
+
+\iffalse
+
 This function simply increments \co{dynticks_progress_counter} and
 checks that the result is even, but first executing a memory barrier
 to ensure that any other CPU that sees the new value of
@@ -292,6 +309,8 @@ Similarly, when a CPU that is in dynticks-idle mode prepares to
 start executing a newly runnable task, it invokes
 \co{rcu_exit_nohz()}:
 
+\fi
+
 \begin{VerbatimN}
 static inline void rcu_exit_nohz(void)
 {
@@ -301,6 +320,18 @@ static inline void rcu_exit_nohz(void)
 	          0x1));
 }
 \end{VerbatimN}
+
+이 함수 역시 \co{dynticks_progress_counter} 를 증가시키는데, 어떤 다른 CPU 가
+뒤따르는 RCU read-side 크리티컬 섹션의 결과를 본다면 그 CPU 는 또한
+\co{dynticks_progress_counter} 의 증가된 값을 볼것을 보장하기 위해 메모리
+배리어를 이어서 수행합니다.
+마지막으로, \co{rcu_exit_nohz()} 는 그 증가된 값이 홀수임을 검사합니다.
+
+\co{rcu_enter_nohz()} 와 \co{rcu_exit_nohz()} 함수는 CPU 가 task 수행을 위해
+dynticks-idle 모드에 진입하고 빠져나오는 것을 처리하지만 인터럽트는 처리하지
+않는데, 이는 다음 섹션에서 다룹니다.
+
+\iffalse
 
 This function again increments \co{dynticks_progress_counter},
 but follows it with a memory barrier to ensure that if any other CPU
@@ -314,6 +345,8 @@ The \co{rcu_enter_nohz()} and \co{rcu_exit_nohz()}
 functions handle the case where a CPU enters and exits dynticks-idle
 mode due to task execution, but does not handle interrupts, which are
 covered in the following section.
+
+\fi
 
 \subsubsection{Interrupt Interface}
 \label{sec:formal:Interrupt Interface}
