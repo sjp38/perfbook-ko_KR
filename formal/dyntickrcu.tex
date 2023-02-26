@@ -351,6 +351,19 @@ covered in the following section.
 \subsubsection{Interrupt Interface}
 \label{sec:formal:Interrupt Interface}
 
+\co{rcu_irq_enter()} 와 \co{rcu_irq_exit()} 함수는 각각 인터럽트/NMI 진입과
+종료를 처리합니다.
+물론, 중첩된 인터럽트들은 올바르게 처리되어야만 합니다.
+인터럽트들이 중첩되었을 가능성은 인터럽트 또는 NMI handler 에 진입할 때
+(\co{rcu_irq_enter()} 에서) 증가되고 빠져나올 때 (\co{rcu_irq_exit()} 에서)
+감소되는 두번째 per-CPU 변수, \co{rcu_update_flag} 에 의해 처리됩니다.
+또한, 앞서서부터 존재한 \co{in_interrupt()} 기능은 중첩된 인터럽트/NMI 와 가장
+바깥 사이를 구분하기 위해 사용됩니다.
+
+인터럽트 진입은 \co{rcu_irq_enter()} 에 의해 다음과 같이 처리됩니다:
+
+\iffalse
+
 The \co{rcu_irq_enter()} and \co{rcu_irq_exit()}
 functions handle interrupt/NMI entry and exit, respectively.
 Of course, nested interrupts must also be properly accounted for.
@@ -363,6 +376,8 @@ used to distinguish between an outermost or a nested interrupt/NMI\@.
 
 Interrupt entry is handled by the \co{rcu_irq_enter()}
 shown below:
+
+\fi
 
 \begin{fcvlabel}[ln:formal:dyntickrcu:rcu_irq_enter]
 \begin{VerbatimN}[commandchars=\\\[\]]
@@ -384,6 +399,22 @@ void rcu_irq_enter(void)
 \end{fcvlabel}
 
 \begin{fcvref}[ln:formal:dyntickrcu:rcu_irq_enter]
+\Clnref{fetch} 는 현재 CPU 의 수를 가져오고, \clnref{inc:b,inc:e} 는
+\co{rcu_update_flag} 중첩 카운터를 그게 0이 아니라면 증가시킵니다.
+\Clnrefrange{chk_lv:b}{chk_lv:e} 는 우리가 인터럽트의 가장 바깥 단계에 있는지
+검사하고, 그렇다면 \co{dynticks_progress_counter} 가 증가되어야 하는지 봅니다.
+그렇다면 \clnref{inc_cnt} 는 \co{dynticks_progress_counter} 를 증가시키고
+\clnref{mb} 에서 메모리 배리어를 수행하며, \clnref{inc_flg} 에서
+\co{rcu_update_flag} 를 증가시킵니다.
+\co{rcu_exit_nohz()} 에서와 같이, 이 메모리 배리어는 이 인터럽트 핸들러 내에서
+(이 \co{rcu_irq_enter()} 호출을 뒤따르는)어떤 RCU read-side 크리티컬 섹션의
+효과를 보는 모든 다른 CPU 가 \co{dynticks_progress_counter} 의 증가된 값도 볼
+수 있게 합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:formal:dyntickrcu:rcu_irq_enter]
 \Clnref{fetch} fetches the current CPU's number, while \clnref{inc:b,inc:e}
 increment the \co{rcu_update_flag} nesting counter if it
 is already non-zero.
@@ -400,6 +431,8 @@ in the interrupt handler (following the \co{rcu_irq_enter()}
 invocation) will also see the increment of
 \co{dynticks_progress_counter}.
 \end{fcvref}
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
