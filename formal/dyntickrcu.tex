@@ -609,11 +609,20 @@ preemptible RCU's grace-period machinery.
 \subsubsection{Grace-Period Interface}
 \label{sec:formal:Grace-Period Interface}
 
+\Cref{fig:formal:Preemptible RCU State Machine} 에서 보인 preemption 가능한 RCU
+grace-period 상태 네개 가운데 \co{rcu_try_flip_waitack_state} 와
+\co{rcu_try_flip_waitmb_state} 상태들만이 다른 CPU 들이 응답하기를 기다려야
+합니다.
+
+\iffalse
+
 Of the four preemptible RCU grace-period states shown in
 \cref{fig:formal:Preemptible RCU State Machine},
 only the \co{rcu_try_flip_waitack_state}
 and \co{rcu_try_flip_waitmb_state} states need to wait
 for other CPUs to respond.
+
+\fi
 
 \begin{figure}[tb]
 \centering
@@ -621,6 +630,14 @@ for other CPUs to respond.
 \caption{Preemptible RCU State Machine}
 \label{fig:formal:Preemptible RCU State Machine}
 \end{figure}
+
+물론, 어떤 CPU 가 dynticks-idle 상태에 있다면 우린 그걸 기다려야 합니다.
+따라서, 이 두개의 상태들 가운데 하나를 진입하기 전에 진행중인 상태는 각 CPU 의
+\co{dynticks_progress_counter} 변수의 스냅샷을 찍고, 이를 또다른 CPU별 변수,
+\co{rcu_dyntick_snapshot} 에 저장합니다.
+이는 아래에 보인 \co{dyntick_save_progress_counter()} 호출을 통해 이루어집니다:
+
+\iffalse
 
 Of course, if a given CPU is in dynticks-idle state, we shouldn't
 wait for it.
@@ -632,6 +649,8 @@ snapshot in another per-CPU variable,
 This is accomplished by invoking
 \co{dyntick_save_progress_counter()}, shown below:
 
+\fi
+
 \begin{VerbatimN}
 static void dyntick_save_progress_counter(int cpu)
 {
@@ -640,8 +659,15 @@ static void dyntick_save_progress_counter(int cpu)
 }
 \end{VerbatimN}
 
+\co{rcu_try_flip_waitack_state} 상태는 아래에 보인
+\co{rcu_try_flip_waitack_needed()} 를 호출합니다:
+
+\iffalse
+
 The \co{rcu_try_flip_waitack_state} state invokes
 \co{rcu_try_flip_waitack_needed()}, shown below:
+
+\fi
 
 \begin{fcvlabel}[ln:formal:dyntickrcu:rcu_try_flip_waitack_needed]
 \begin{VerbatimN}[samepage=true,commandchars=\\\[\]]
@@ -662,6 +688,27 @@ rcu_try_flip_waitack_needed(int cpu)
 }
 \end{VerbatimN}
 \end{fcvlabel}
+
+\begin{fcvref}[ln:formal:dyntickrcu:rcu_try_flip_waitack_needed]
+\Clnref{curr,snap} 은 현재와 스탭샷 버전의 \co{dynticks_progress_counter} 를
+각각 집어옵니다.
+\Clnref{mb} 에서의 메모리 배리어는 뒤의 \co{rcu_try_flip_waitzero_state} 에서의
+카운터 검사가 이 카운터 읽기 뒤에 이루어질 것을 보장합니다.
+\Clnref{chk_remain,ret_0_r} 은 그 스냅샷이 취해진 이후 그 CPU 가 dynticks-idle
+상태에 머물러 있었다면 0을 리턴합니다 (어떤 CPU 와의 통신도 필요치 않음을
+의미).
+비슷하게 \clnref{chk_idle,ret_0_i} 는 그 CPU 가 처음엔 dynticks-idle 상태에
+있었거나 dynticks-idle 상태를 완전히 지나왔다면 0을 리턴합니다.
+이 두 경우 모두, CPU 가 이 grace-period 카운터의 기존 값을 얻어올 방법은
+없습니다.
+이 조건들 중 어느것도 유지되지 않는다면, \clnref{ret_1} 은 1을 리턴해서 CPU 가
+명시적으로 응답할 필요가 있음을 의미합니다.
+\end{fcvref}
+
+그 부분을 위해, \co{rcu_try_flip_waitmb_state} 상태는 아래 보인
+\co{rcu_try_flip_waitmb_needed()} 를 호출합니다:
+
+\iffalse
 
 \begin{fcvref}[ln:formal:dyntickrcu:rcu_try_flip_waitack_needed]
 \Clnref{curr,snap} pick up current and snapshot versions of
@@ -686,6 +733,8 @@ that the CPU needs to explicitly respond.
 For its part, the \co{rcu_try_flip_waitmb_state} state
 invokes \co{rcu_try_flip_waitmb_needed()}, shown below:
 
+\fi
+
 \begin{fcvlabel}[ln:formal:dyntickrcu:rcu_try_flip_waitmb_needed]
 \begin{VerbatimN}[commandchars=\\\[\]]
 static inline int
@@ -707,6 +756,19 @@ rcu_try_flip_waitmb_needed(int cpu)
 \end{fcvlabel}
 
 \begin{fcvref}[ln:formal:dyntickrcu:rcu_try_flip_waitmb_needed]
+이는 \co{rcu_try_flip_waitack_needed()} 와 상당히 비슷한데, 차이점은
+\clnref{chk_to_from,ret_0} 로, dynticks-idle 상태로, 또는 그로부터의 모든
+전환은 \co{rcu_try_flip_waitmb_state} 상태에 의해 필요한 메모리 배리어를
+수행하기 때문입니다.
+\end{fcvref}
+
+이제 우리는 RCU 와 dynticks-idle 상태 사이의 인터페이스에 연관된 모든 코드를
+보았습니다.
+다음 섹션은 이 코드를 검증하기 위한 Promela 모델을 만들어봅니다.
+
+\iffalse
+
+\begin{fcvref}[ln:formal:dyntickrcu:rcu_try_flip_waitmb_needed]
 This is quite similar to \co{rcu_try_flip_waitack_needed()},
 the difference being in \clnref{chk_to_from,ret_0}, because any transition
 either to or from dynticks-idle state executes the memory barrier
@@ -718,10 +780,26 @@ RCU and the dynticks-idle state.
 The next section builds up the Promela model used to verify this
 code.
 
+\fi
+
 \QuickQuiz{
+	이 섹션의 코드에 있는 어떤 버그를 발견했습니까?
+
+	\iffalse
+
 	Can you spot any bugs in any of the code in this section?
+
+	\fi
+
 }\QuickQuizAnswer{
+	여러분이 옳았는지 확인하기 위해 다음 섹션을 읽어보세요.
+
+	\iffalse
+
 	Read the next section to see if you were correct.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Validating Preemptible RCU and dynticks}
