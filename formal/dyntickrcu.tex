@@ -833,6 +833,14 @@ present a simpler solution to RCU's dynticks problem.
 \subsubsection{Basic Model}
 \label{sec:formal:Basic Model}
 
+이 섹션은 프로세스 단계 dynticks 진입/종료와 grace-period 처리 코드를
+Promela~\cite{Holzmann03a} 으로 번역합니다.
+2.6.25-rc4 커널의 \co{rcu_exit_nohz()} 와 \co{rcu_enter_nohz()} 로부터 시작해서
+이를 다음과 같이 반복문 내에서 dynticks-idle 모드를 빠져나오고 들어가는 과정을
+모델링하는 Promela 프로세스 하나에 넣을 겁니다:
+
+\iffalse
+
 This section translates the process-level dynticks entry/exit
 code and the grace-period processing into
 Promela~\cite{Holzmann03a}.
@@ -842,7 +850,29 @@ from the 2.6.25-rc4 kernel, placing these in a single Promela
 process that models exiting and entering dynticks-idle mode in
 a loop as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base@dyntick_nohz.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base:dyntick_nohz]
+\Clnref{do,od} 는 반복문을 정의합니다.
+\Clnref{break} 는 반복문 카운터 \co{i} 가 \co{MAX_DYNTICK_LOOP_NOHZ} 한계를
+넘어서면 이 반복문을 빠져나갑니다.
+\Clnref{kick_loop} 은 이 반복문의 각 패스에서 \clnrefrange{ex_inc:b}{inc_i} 를
+수행하라고 이 반복문에게 이야기합니다.
+\Clnref{break,kick_loop} 에서의 조건들은 서로에게 배타적이므로, 일반적인
+Promela 의 사실 조건 무작위 선택은 불능화 됩니다.
+\Clnref{ex_inc:b,ex_inc:e} 는 \co{rcu_exit_nohz()} 의 어토믹하지 않은
+\co{dynticks_progress_counter} 값 증가를 모델링하며, \clnref{ex_assert} 는
+\co{WARN_ON()} 을 모델링 합니다.
+\co{atomic} 은 간단히 Promela 상태 공간을 줄이는데, \co{WARN_ON()} 은 엄밀히
+말해 이 알고리즘의 부분이 아니기 때문입니다.
+\Clnrefrange{ent_inc:b}{ent_inc:e} 는 비슷하게 \co{rcu_enter_nohz()} 를 위한 값
+증가와 \co{WARN_ON()} 을 모델링 합니다.
+마지막으로, \clnref{inc_i} 는 반복문 카운터를 증가시킵니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base:dyntick_nohz]
 \Clnref{do,od} define a loop.
@@ -867,32 +897,91 @@ of the algorithm.
 Finally, \clnref{inc_i} increments the loop counter.
 \end{fcvref}
 
+\fi
+
+따라서 이 반복문의 각 패스는 dynticks-idle 모드를 빠져나오고 (예를 들면,
+태스크를 수행 시작하는), 이어서 dynticks-idle 모드에 재진입하는 (예를 들면,
+같은 태스크가 블록 당하는) CPU 를 모델링합니다.
+
+\iffalse
+
 Each pass through the loop therefore models a CPU exiting
 dynticks-idle mode (for example, starting to execute a task), then
 re-entering dynticks-idle mode (for example, that same task blocking).
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\co{rcu_exit_nohz()} 와 \co{rcu_enter_nohz()} 에서의 메모리 배리어는 왜
+	Promela 에서 모델링 되지 않죠?
+
+	\iffalse
+
 	Why isn't the memory barrier in \co{rcu_exit_nohz()}
 	and \co{rcu_enter_nohz()} modeled in Promela?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	Promela 는 순차적 일관성을 가정하므로 메모리 배리어를 모델링할 필요는
+	없습니다.
+	실제로,
+	page~\pageref{lst:formal:QRCU Unordered Summation} 의
+	\cref{lst:formal:QRCU Unordered Summation} 에 보인 것처럼 우린 메모리
+	배리어의 부재를 명시적으로 모델링 해야 합니다.
+
+	\iffalse
+
 	Promela assumes sequential consistency, so
 	it is not necessary to model memory barriers.
 	In fact, one must instead explicitly model lack of memory barriers,
 	for example, as shown in
 	\cref{lst:formal:QRCU Unordered Summation} on
 	page~\pageref{lst:formal:QRCU Unordered Summation}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\co{rcu_exit_nohz()} 에 이어 \co{rcu_enter_nohz()} 가 수행되는 걸
+	모델링 하는건 좀 이상하지 않나요?
+	종료 전에 진입하는 걸 모델링하는게 더 자연스럽지 않을까요?
+
+	\iffalse
+
 	Isn't it a bit strange to model \co{rcu_exit_nohz()}
 	followed by \co{rcu_enter_nohz()}?
 	Wouldn't it be more natural to instead model entry before exit?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	그게 더 자연스러울 수 있겠습니다만, 특히 우리가 뒤에 추가할 liveness
+	검사를 위해 이게 필요합니다.
+
+	\iffalse
+
 	It probably would be more natural, but we will need
 	this particular order for the liveness checks that we will add later.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+다음 단계는 RCU 의 grace-period 처리 인터페이스의 모델링입니다.
+이를 위해, 우린 2.6.25-rc4 커널의
+\co{dyntick_save_progress_counter()},
+\co{rcu_try_flip_waitack_needed()},
+\co{rcu_try_flip_waitmb_needed()} 에 더해
+\co{rcu_try_flip_waitack()} 와
+\co{rcu_try_flip_waitmb()} 를 모델링해야 합니다.
+다음의 \co{grace_period()} Promela 프로세스는 preemption 가능한 RCU 의
+grace-period 처리 동인 호출될 이 함수들을 모델링 합니다.
+
+\iffalse
 
 The next step is to model the interface to RCU's grace-period
 processing.
@@ -906,6 +995,8 @@ as well as portions of
 The following \co{grace_period()} Promela process models
 these functions as they would be invoked during a single pass
 through preemptible RCU's grace-period processing.
+
+\fi
 
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base@grace_period.fcv}
 
