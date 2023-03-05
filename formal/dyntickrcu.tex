@@ -1124,18 +1124,46 @@ The next section therefore adds safety assertions.
 \subsubsection{Validating Safety}
 \label{sec:formal:Validating Safety}
 
+안전한 RCU 구현은 grace period 가 grace period 의 시작 전에 시작된 어떤 RCU
+읽기 쓰레드보다도 먼저 완료되면 안됩니다.
+이게 다음과 같이 세개의 상태를 취하는 \co{grace_period_state} 변수에 의해
+모델링 됩니다.
+
+\iffalse
+
 A safe RCU implementation must never permit a grace period to
 complete before the completion of any RCU readers that started
 before the start of the grace period.
 This is modeled by a \co{grace_period_state} variable that
 can take on three states as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base-s@grace_period_state.fcv}
+
+\co{grace_period()} 프로세스는 이 변수를 아래에 보인 것처럼 grace-period 단계가
+진행중인 것으로 설정합니다:
+
+\iffalse
 
 The \co{grace_period()} process sets this variable as it
 progresses through the grace-period phases, as shown below:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base-s@grace_period.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-s:grace_period]
+\Clnref{upd_gps1,upd_gps2,upd_gps3,upd_gps4,upd_gps5,upd_gps6}
+는 \co{dyntick_nohz()} 프로세스가 기본 RCU 안전성 속성을 검증할 수 있게끔 이
+변수를 (가능한 곳에는 알고리즘 기반 오퍼레이션들을 어토믹하게 결합해서)
+업데이트합니다.
+이 검증의 형태는 \co{grace_period_state} 변수의 값이 RCU 읽기 쓰레드들이
+그럴듯하게 존재할 수 있는 시간 동안 \co{GP_IDLE} 에서 \co{GP_DONE} 으로 변하지
+못함을 단정하는 것입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-s:grace_period]
 \Clnref{upd_gps1,upd_gps2,upd_gps3,upd_gps4,upd_gps5,upd_gps6}
@@ -1149,25 +1177,64 @@ The form of this verification is to assert that the value of the
 over which RCU readers could plausibly persist.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-s:grace_period]
+	\Clnref{upd_gps3,upd_gps4} 의 한쌍의 뒤에서 뒤로의
+	\co{grace_period_state} 변경이 있는데, 우린 \clnref{upd_gps3} 의 변경을
+	놓치지 않을 꺼라고 어떻게 확신하죠?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-s:grace_period]
 	Given there are a pair of back-to-back changes to
 	\co{grace_period_state} on \clnref{upd_gps3,upd_gps4},
 	how can we be sure that \clnref{upd_gps3}'s changes won't be lost?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	Promela 와 Spin 은 모든 가능한 상태 변경을 기록함을 기억하세요.
+	따라서, 타이밍은 상관없습니다: Promela/Spin 은 이 모델의 모든 나머지
+	부분을 일부 상태 변수가 특별히 그걸 막지 않는 이상은 그 두 명령문
+	사이에 섞어낼 겁니다.
+
+	\iffalse
+
 	Recall that Promela and Spin trace out
 	every possible sequence of state changes.
 	Therefore, timing is irrelevant: Promela/Spin will be quite
 	happy to jam the entire rest of the model between those two
 	statements unless some state variable specifically prohibits
 	doing so.
+
+	\fi
+
 }\QuickQuizEnd
+
+\co{dyntick_nohz()} Promela 프로세스는 이 검증을 다음과 같이 구현합니다:
+
+\iffalse
 
 The \co{dyntick_nohz()} Promela process implements
 this verification as shown below:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base-s@dyntick_nohz.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-s:dyntick_nohz]
+\Clnref{new_flg} 는 \co{grace_period_state} 변수의 값이 태스크 수행 시작 시점에
+\co{GP_IDLE} 이라면 새로운 \co{old_gp_idle} 플래그를 설정하고,
+\clnref{assert:b,assert:e} 의 단정문은 \co{grace_period_state} 변수가 태스크
+수행 중간에 \co{GP_DONE} 으로 변경되었다면 발화하는데, 하나의 RCU read-side
+크리티컬 섹션은 전체 시간 동안 이어질 수 있음을 생각하면 불법적인 일입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-s:dyntick_nohz]
 \Clnref{new_flg} sets a new \co{old_gp_idle} flag if the
@@ -1180,6 +1247,17 @@ which would be illegal given that a single RCU read-side critical
 section could span the entire intervening time period.
 \end{fcvref}
 
+\fi
+
+결과되는 모델은 (\path{dyntickRCU-base-s.spin}) \path{runspin.sh} 스크립트로
+수행되었을 때, 964개의 상태를 생성하고 오류 없이 통과되는데, 안심되는
+결과입니다.
+그러나, 안전성이 치명적으로 중요하다고는 해도 무한정 grace period 에 멈춰있는
+것을 막는 것도 무척 중요합니다.
+따라서 다음 섹션은 liveness 검증을 다룹니다.
+
+\iffalse
+
 The resulting
 model (\path{dyntickRCU-base-s.spin}),
 when run with the \path{runspin.sh} script,
@@ -1187,6 +1265,8 @@ generates 964 states and passes without errors, which is reassuring.
 That said, although safety is critically important, it is also quite
 important to avoid indefinitely stalling grace periods.
 The next section therefore covers verifying liveness.
+
+\fi
 
 \subsubsection{Validating Liveness}
 \label{sec:formal:Validating Liveness}
