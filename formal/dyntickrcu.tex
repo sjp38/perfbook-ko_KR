@@ -1002,7 +1002,7 @@ through preemptible RCU's grace-period processing.
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base:grace_period]
 \Clnrefrange{print:b}{print:e} 는 반복문의 한계를 출력하고 (하지만 오류의 경우
-.trail 파일에만 합니다) \co{rcu_try_flip_idle()} 의 코드와 현재 CPU 의
+``.trail'' 파일에만 합니다) \co{rcu_try_flip_idle()} 의 코드와 현재 CPU 의
 \co{dynticks_progress_counter} 변수의 스냅샷을 뜨는
 \co{dyntick_save_progress_counter()} 호출을 모델링합니다.
 이 두 라인은 상태 공간을 줄이기 위해 어토믹하게 수행됩니다.
@@ -1272,6 +1272,15 @@ The next section therefore covers verifying liveness.
 \label{sec:formal:Validating Liveness}
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-sl-busted:dyntick_nohz]
+Liveness 는 중명하기 어렵긴 하지만, 여기 적용할 수 있는 간단한 속임수가
+있습니다.
+첫번째 단계는 \co{dyntick_nohz()} 를 \co{dyntick_nohz_done} 변수를 통해 그것의
+완료를 알리게 하는 것으로, 다음의 \clnref{done} 에 보인 것과 같습니다:
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-sl-busted:dyntick_nohz]
 Although liveness can be difficult to prove, there is a simple
 trick that applies here.
 The first step is to make \co{dyntick_nohz()} indicate that
@@ -1279,13 +1288,39 @@ it is done via a \co{dyntick_nohz_done} variable, as shown on
 \clnref{done} of the following:
 \end{fcvref}
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base-sl-busted@dyntick_nohz.fcv}
+
+이 변수가 있으면, 우린 다음과 같이 불필요한 블록킹을 검사하기 위해
+\co{grace_period()} 에 단정문들을 넣을 수 있습니다:
+
+\iffalse
 
 With this variable in place, we can add assertions to
 \co{grace_period()} to check for unnecessary blockage
 as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base-sl-busted@grace_period.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-sl-busted:grace_period]
+\Clnref{init_shex} 에서 0 으로 초기화 되는 \co{shouldexit} 변수를 \clnref{shex}
+에 추가했습니다.
+\Clnref{assert_shex} 는 \co{shouldexit} 이 아직 설정되지 않았을 것을 단정하며,
+\clnref{set_shex} 는 \co{shouldexit} 을 \co{dyntick_nohz()} 에 의해 유지되는
+\co{dyntick_nohz_done} 으로 설정합니다.
+따라서 이 단정문은 우리가 \co{dyntick_nohz()} 가 수행을 완료한 후 카운터 뒤집기
+확인 대기 반복문의 패스를 하나 이상 취하려 할 때 발동될 겁니다.
+어쨌건, \co{dyntick_nohz()} 가 완료되었다면, 우리를 반복문 바깥으로 나가게
+강제할 더 많은 상태 변화가 있을 수 없으므로, 이 상태를 두번 진입함은 무한
+반복을 의미하여, 결국 grace period 가 끝나지 않음을 의미합니다.
+
+\Clnref{init_shex2,assert_shex2,set_shex2} 는 두번째 (메모리 배리어) 반복문에
+대해 비슷한 형태로 동작합니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base-sl-busted:grace_period]
 We have added the \co{shouldexit} variable on \clnref{shex},
@@ -1304,6 +1339,28 @@ grace period.
 
 \Clnref{init_shex2,assert_shex2,set_shex2} operate in a similar manner
 for the second (memory-barrier) loop.
+
+\fi
+
+그러나, 이 모델 (\path{dyntickRCU-base-sl-busted.spin}) 을 수행하는 것은 실패를
+초래하는데, \clnref{chk_2} 가 잘못된 변수가 짝수임을 검사하기 때문입니다.
+실패 시, \co{spin} 은 그 실패를 오게 한 상태들의 순서를 기록하는 ``trail'' 파일
+(\path{dyntickRCU-base-sl-busted.spin.trail}) 을 씁니다.
+\co{spin} 이 이 상태 순서를 재기록하여 수행된 상태들과 변수들의 값을 프린트하게
+하기 위해 ``\co{spin -t -p -g -l\ } \path{dyntickRCU-base-sl-busted.spin}''
+커맨드를 사용하세요 (\path{dyntickRCU-base-sl-busted.spin.trail.txt}).
+
+우린 \co{dyntick_nohz()} 프로세스가 step 34 에서 완료되었음을 볼 수 있지만
+(``34:'' 를 검색하세요), \co{grace_period()} 프로세스는 이 반복문을
+빠져나가는데 실패했음을 볼 수 있습니다.
+\co{curr} 의 값은 \co{6} 이고 (step 35 를 보세요) \co{snap} 의 값은 \co{5}
+입니다 (step 17 을 보세요).
+따라서 \clnref{chk_1} 에서의 첫번째 조건은 \qco{curr != snap} 이므로 만족되지
+않으며, \clnref{chk_2} 에서의 두번째 조건 역시 \co{snap} 이 홀수이고 \co{curr}
+이 \co{snap} 보다 1만 크므로 성립되지 않습니다.
+\end{fcvref}
+
+\iffalse
 
 However, running this
 model (\path{dyntickRCU-base-sl-busted.spin})
@@ -1335,6 +1392,8 @@ does not hold because
 does not hold either because \co{snap} is odd and because
 \co{curr} is only one greater than \co{snap}.
 \end{fcvref}
+
+\fi
 
 So one of these two conditions has to be incorrect.
 Referring to the comment block in \co{rcu_try_flip_waitack_needed()}
