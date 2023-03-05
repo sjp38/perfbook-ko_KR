@@ -1001,6 +1001,24 @@ through preemptible RCU's grace-period processing.
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-base@grace_period.fcv}
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base:grace_period]
+\Clnrefrange{print:b}{print:e} 는 반복문의 한계를 출력하고 (하지만 오류의 경우
+.trail 파일에만 합니다) \co{rcu_try_flip_idle()} 의 코드와 현재 CPU 의
+\co{dynticks_progress_counter} 변수의 스냅샷을 뜨는
+\co{dyntick_save_progress_counter()} 호출을 모델링합니다.
+이 두 라인은 상태 공간을 줄이기 위해 어토믹하게 수행됩니다.
+
+\Clnrefrange{do1}{od1} 은 \co{rcu_try_flip_waitack()} 의 연관된 코드와 그것의
+\co{rcu_try_flip_waitack_needed()} 호출을 모델링합니다.
+이 반복문은 각 CPU 로부터의 카운터 뒤집기 응답을 기다리는 grace-period
+상태머신을 모델링하는데, dynticks-idle CPU 와 상호작용하는 부분만 모델링합니다.
+
+\Clnref{snap} 은 \co{rcu_try_flip_waitzero()} 와 그것의
+\co{dyntick_save_progress_counter()} 호출을 모델링하는데, 다시 한번 이 CPU 의
+\co{dyntick_save_progress_counter} 변수의 스냅샷을 찍습니다.
+
+\iffalse
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-base:grace_period]
 \Clnrefrange{print:b}{print:e} print out the loop limit
 (but only into the .trail file
 in case of error) and models a line of code
@@ -1022,6 +1040,17 @@ and its call to \co{dyntick_save_progress_counter()}, again
 taking a snapshot of the CPU's \co{dynticks_progress_counter}
 variable.
 
+\fi
+
+마지막으로, \clnrefrange{do2}{od2} 는 \co{rcu_try_flip_waitack()} 의 연관된
+코드와 그것의 \co{rcu_try_flip_waitack_needed()} 호출을 모델링 합니다.
+이 반복문은 각 CPU 가 메모리 배리어 호출을 기다리는 grace-period 상태머신을
+모델링하는데, 이번에도 dynticks-idle CPU 들과 상호작용하는 부분들만을
+모델링합니다.
+\end{fcvref}
+
+\iffalse
+
 Finally, \clnrefrange{do2}{od2} model the relevant code in
 \co{rcu_try_flip_waitack()} and its call to
 \co{rcu_try_flip_waitack_needed()}.
@@ -1030,12 +1059,35 @@ each CPU to execute a memory barrier, but again only that part
 that interacts with dynticks-idle CPUs.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	잠시만요!
+	리눅스 커널에서, \co{dynticks_progress_counter} 와
+	\co{rcu_dyntick_snapshot} 모두 CPU 별 변수들입니다.
+	그런데 왜 그것들이 전역 변수들로 모델링 되는거죠?
+
+	\iffalse
+
 	Wait a minute!
 	In the Linux kernel, both \co{dynticks_progress_counter} and
 	\co{rcu_dyntick_snapshot} are per-CPU variables.
 	So why are they instead being modeled as single global variables?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 grace-period 코드는 각 CPU 의 \co{dynticks_progress_counter} 와
+	\co{rcu_dyntick_snapshot} 변수들을 따로 처리하여서, 우린 그 상태를 단일
+	CPU 에 뭉칠 수 있습니다.
+	만약 grace-period 코드가 특정 CPU 에서의 특정 값에 따라 뭔가 특별한
+	일을 하기 위한 거였다면 여러 CPU 들을 모델링 해야 할수 있습니다.
+	하지만 다행히도, 우린 우리들을 grace-period 처리를 수행하는 하나와
+	dynticks-idle 모드를 진입하고 빠져나오는 하나, 총 두개의 CPU 에 안전히
+	가둘 수 있습니다.
+
+	\iffalse
+
 	Because the grace-period code processes each
 	CPU's \co{dynticks_progress_counter} and
 	\co{rcu_dyntick_snapshot} variables separately,
@@ -1046,7 +1098,18 @@ that interacts with dynticks-idle CPUs.
 	But fortunately, we can safely confine ourselves to two CPUs, the
 	one running the grace-period processing and the one entering and
 	leaving dynticks-idle mode.
+
+	\fi
+
 }\QuickQuizEnd
+
+그 결과 나오는 모델은 (\path{dyntickRCU-base.spin}) \path{runspin.sh}
+스크립트로 수행되었을 때, 691개의 상태를 생성하고 오류 없이 통과하는데, 실패를
+찾을 수 있는 단정문이 전혀 존재하지 않는다는 사실을 생각하면 전혀 놀랍지
+않습니다.
+따라서 다음 섹션은 안전을 위한 단정문들을 추가합니다.
+
+\iffalse
 
 The resulting model (\path{dyntickRCU-base.spin}),
 when run with the
@@ -1055,6 +1118,8 @@ generates 691 states and
 passes without errors, which is not at all surprising given that
 it completely lacks the assertions that could find failures.
 The next section therefore adds safety assertions.
+
+\fi
 
 \subsubsection{Validating Safety}
 \label{sec:formal:Validating Safety}
