@@ -1654,10 +1654,25 @@ is active, as required.
 \subsubsection{Validating Interrupt Handlers}
 \label{sec:formal:Validating Interrupt Handlers}
 
+첫번재 단계는 \co{dyntick_nohz()} 를 다음과 같이 \co{EXECUTE_MAINLINE()} 의
+형태로 변환하는 것입니다:
+
+\iffalse
+
 The first step is to convert \co{dyntick_nohz()} to
 \co{EXECUTE_MAINLINE()} form, as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irqnn-ssl@dyntick_nohz.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_nohz]
+\co{EXECUTE_MAINLINE()} 에 여러개의 명령문이 넘겨질 때에는
+\clnrefrange{stmt2:b}{stmt2:e} 에서와 같이 그 모든 명령문이 원자적으로
+수행되어야 함을 알아두는게 중요합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_nohz]
 It is important to note that when a group of statements is passed
@@ -1665,22 +1680,53 @@ to \co{EXECUTE_MAINLINE()}, as in \clnrefrange{stmt2:b}{stmt2:e}, all
 statements in that group execute atomically.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	하지만 하나의 \co{EXECUTE_MAINLINE()} 그룹 내의 명령문들이 비원자적으로
+	수행되어야 한다면 어떡하죠?
+
+	\iffalse
+
 	But what would you do if you needed the statements in a single
 	\co{EXECUTE_MAINLINE()} group to execute non-atomically?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	가장 쉬운 방법은 그런 명령문 각각을 각자의 \co{EXECUTE_MAINLINE()} 에
+	넣는 것일 겁니다.
+
+	\iffalse
+
 	The easiest thing to do would be to put
 	each such statement in its own \co{EXECUTE_MAINLINE()}
 	statement.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	하지만 \co{dynticks_nohz()} 프로세스가 조건적인 \qco{if} 나 \qco{do}
+	명령문을 가져서 이 구조의 몸체 명령문들이 비원자적으로 수행되어야 하는
+	경우는 어떡하죠?
+
+	\iffalse
+
 	But what if the \co{dynticks_nohz()} process had
 	\qco{if} or \qco{do} statements with conditions,
 	where the statement bodies of these constructs
 	needed to execute non-atomically?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	뒤 섹션에서 보게 되겠지만 한가지 가능한 방법은 명시적인 라벨과
+	\qco{goto} 문을 사용하는 겁니다.
+	예를 들어, 다음 구조는:
+
 	One approach, as we will see in a later section,
 	is to use explicit labels and \qco{goto} statements.
 	For example, the construct:
@@ -1692,7 +1738,13 @@ statements in that group execute atomically.
 	fi;
 \end{VerbatimU}
 
+	다음과 같이 모델링 될 수 있습니다:
+
+	\iffalse
+
 	could be modeled as something like:
+
+	\fi
 
 \begin{VerbatimU}
 	EXECUTE_MAINLINE(stmt1,
@@ -1707,16 +1759,44 @@ statements in that group execute atomically.
 	stmt1_end: skip;
 \end{VerbatimU}
 
+	그러나, 이 매크로가 \qco{if} 문의 경우에도 큰 도움이 되는지는 분명치
+	않으므로, 이런 종류의 상황에는 다음 섹션들에서 직접 코딩하겠습니다.
+
+	\iffalse
+
 	However, it is not clear that the macro is helping much in the case
 	of the \qco{if} statement, so these sorts of situations will
 	be open-coded in the following sections.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+다음 단계는 \co{dyntick_irq()} 프로세스를 인터럽트 핸들러를 모델링하도록
+작성하는 겁니다:
+
+\iffalse
 
 The next step is to write a \co{dyntick_irq()} process
 to model an interrupt handler:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irqnn-ssl@dyntick_irq.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_irq]
+\Clnrefrange{do}{od} 의 반복문은 최대 \co{MAX_DYNTICK_LOOP_IRQ} 의 인터럽트들을
+모델링 하는데 \clnref{cond1,cond2} 는 반복 조건을 형성하고 \clnref{inc_i} 는 이
+제어 변수의 값을 증가시킵니다.
+\Clnref{in_irq} 는 \co{dyntick_nohz()} 에게 인터럽트 핸들러가 수행중임을
+이야기하고, \clnref{clr_in_irq} 는 \co{dyntick_nohz()} 에게 이 핸들러가
+완료되었음을 이야기 합니다.
+\Clnref{irq_done} 은 liveness 검증을 위해 사용되는데, \co{dyntick_nohz()} 의
+연관된 부분과 동일합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_irq]
 The loop from \clnrefrange{do}{od} models up to \co{MAX_DYNTICK_LOOP_IRQ}
@@ -1729,18 +1809,53 @@ handler has completed.
 line of \co{dyntick_nohz()}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_irq]
+	\Clnref{clr_in_irq,inc_i} (\qtco{in_dyntick_irq = 0;} 와 \qco{i++;}) 는
+	왜 어토믹하게 수행되나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_irq]
 	Why are \clnref{clr_in_irq,inc_i} (the \qtco{in_dyntick_irq = 0;}
 	and the \qco{i++;}) executed atomically?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 부분들은 이 모델을 제어하는데 관계됩니다만, 모델링되는 코드 자체에
+	대해서는 아니므로 이것들을 어토믹하지 않게 모델링 할 이유가 없습니다.
+	이것들을 어토믹하게 모델링하는 동기는 상태 공간 크기를 줄이고자 하는
+	것입니다.
+
+	\iffalse
+
 	These lines of code pertain to controlling the
 	model, not to the code being modeled, so there is no reason to
 	model them non-atomically.
 	The motivation for modeling them atomically is to reduce the size
 	of the state space.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_irq]
+\Clnrefrange{enter:b}{enter:e} 는 \co{rcu_irq_enter()} 를 모델링하고
+\clnref{add_prmt_cnt:b,add_prmt_cnt:e} 는 \co{__irq_enter()} 의 연관된 부분을
+모델링합니다.
+\Clnrefrange{vrf_safe:b}{vrf_safe:e} 는 \co{dynticks_nohz()} 의 연관된 부분과
+매우 같은 방식으로 안전성을 검사합니다.
+\Clnref{irq_exit:b,irq_exit:e} 는 \co{__irq_exit()} 의 연관된 부분을
+모델링하며, 마지막으로 \clnrefrange{exit:b}{exit:e} 는 \co{rcu_irq_exit()} 을
+모델링 합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:dyntick_irq]
 \Clnrefrange{enter:b}{enter:e} model \co{rcu_irq_enter()}, and
@@ -1752,17 +1867,56 @@ as do the corresponding lines of \co{dynticks_nohz()}.
 and finally \clnrefrange{exit:b}{exit:e} model \co{rcu_irq_exit()}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	인터럽트의 어떤 특성을 이 \co{dynticks_irq()} 프로세스는 모델링할 수
+	없나요?
+
+	\iffalse
+
 	What property of interrupts is this \co{dynticks_irq()}
 	process unable to model?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그런 특성 가운데 하나는 중첩된 인터럽트일 것으로, 다음 섹션에서
+	다룹니다.
+
+	\iffalse
+
 	One such property is nested interrupts,
 	which are handled in the following section.
+
+	\fi
+
 }\QuickQuizEnd
+
+\co{grace_period()} 프로세스는 다음과 같이 될 수 있습니다:
+
+\iffalse
 
 The \co{grace_period()} process then becomes as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irqnn-ssl@grace_period.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:grace_period]
+\co{grace_period()} 의 구현은 앞의 것과 매우 유사합니다.
+유일한 차이는 새 인터럽트 카운트 패러미터를 더하기 위해 \clnref{MDLI} 를 더하는
+것과 liveness 검사를 위한 새로운 \co{dyntick_irq_done} 변수를
+\clnref{edit1,edit3} 에 더하는 것, 그리고 물론 \clnref{edit2,edit4} 의
+최적화입니다.
+\end{fcvref}
+
+이 모델은 (\path{dyntickRCU-irqnn-ssl.spin}) 약 50만개의 상태를 갖고 오류 없이
+통과하는 옳은 검증이 됩니다.
+그러나, 이 버전의 모델은 중첩된 인터럽트를 다루지 않습니다.
+이 주제는 다음 섹션에서 다룹니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:grace_period]
 The implementation of \co{grace_period()} is very similar
@@ -1779,6 +1933,8 @@ states, passing without errors.
 However, this version of the model does not handle nested
 interrupts.
 This topic is taken up in the next section.
+
+\fi
 
 \subsubsection{Validating Nested Interrupt Handlers}
 \label{sec:formal:Validating Nested Interrupt Handlers}
