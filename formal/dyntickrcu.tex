@@ -1395,29 +1395,75 @@ does not hold either because \co{snap} is odd and because
 
 \fi
 
+따라서 이 두개의 조건들 중 하나는 옳지 않아야 합니다.
+첫번째 조건을 위한 \co{rcu_try_flip_waitack_needed()} 의 주석에 따르면:
+
+\iffalse
+
 So one of these two conditions has to be incorrect.
 Referring to the comment block in \co{rcu_try_flip_waitack_needed()}
 for the first condition:
 
+\fi
+
 \begin{quote}
+	CPU 가 전체 시간동안 dynticks 모드에 있었고 인터럽트, NMI, SMI, 또는
+	뭐든 취하지 않았다면 그것은 \co{rcu_read_lock()} 의 가운데 있을 수
+	없고, 따라서 그것이 수행하는 다음 \co{rcu_read_lock()} 은 이 카운터의
+	새 값을 가져야 합니다.  따라서 우린 이 CPU 가 이미 카운터를 확인했다고
+	여겨도 안전합니다.
+
+	\iffalse
+
 	If the CPU remained in dynticks mode for the entire time
 	and didn't take any interrupts, NMIs, SMIs, or whatever,
 	then it cannot be in the middle of an \co{rcu_read_lock()}, so
 	the next \co{rcu_read_lock()} it executes must use the new value
 	of the counter.  So we can safely pretend that this CPU
 	already acknowledged the counter.
+
+	\fi
+
 \end{quote}
+
+첫번재 조건은 실제로 이에 부합하는데, \qco{curr == snap} 이고 \co{curr} 이
+짝수라면 연관된 CPU 는 전체 시간동안 dynticks-idle 모드에 있었기 때문입니다.
+그러니 두번째 조건의 주석을 봅시다:
+
+\iffalse
 
 The first condition does match this, because if \qco{curr == snap}
 and if \co{curr} is even, then the corresponding CPU has been
 in dynticks-idle mode the entire time, as required.
 So let's look at the comment block for the second condition:
 
+\fi
+
 \begin{quote}
+	CPU 가 활성화된 irq 핸들러 없이 dynticks idle phase 를 진입했거나
+	통과했다면, 앞에서와 같이 우린 이 CPU 가 이미 카운터를 확인했다고
+	여겨도 안전합니다.
+
+	\iffalse
+
 	If the CPU passed through or entered a dynticks idle phase with
 	no active irq handlers, then, as above, we can safely pretend
 	that this CPU already acknowledged the counter.
+
+	\fi
+
 \end{quote}
+
+이 조건의 첫번째 부분은 옳은데, \co{curr} 와 \co{snap} 의 차이가 2라면, 그
+사이에 최소 하나의 짝수가 있을 것이어서 dynticks-idle phase 를 완전히 지나왔을
+겁니다.
+그러나, 이 조건의 두번째 부분은 \emph{started} 를 dynticks-idle 모드에서 가지고
+있고 이 모드에서 \emph{종료} 되었음을 의미합니다.
+따라서 우린 \co{snap} 이 아니라 \co{curr} 가 짝수인지 검사합니다.
+
+고쳐진 C 코드는 다음과 같습니다:
+
+\iffalse
 
 The first part of the condition is correct, because if \co{curr}
 and \co{snap} differ by two, there will be at least one even
@@ -1430,6 +1476,8 @@ We therefore need to be testing \co{curr} rather than
 \co{snap} for being an even number.
 
 The corrected C code is as follows:
+
+\fi
 
 \begin{fcvlabel}[ln:formal:dyntickrcu:rcu_try_flip_waitack_needed_fixed]
 \begin{VerbatimN}[commandchars=\\\[\]]
@@ -1452,11 +1500,21 @@ rcu_try_flip_waitack_needed(int cpu)
 \end{fcvlabel}
 
 \begin{fcvref}[ln:formal:dyntickrcu:rcu_try_flip_waitack_needed_fixed]
+\Clnrefrange{if:b}{if:e} 는 이제 합쳐지고 간략화 되어서 다음과 같이 될 수
+있습니다.
+비슷한 간략화가 \co{rcu_try_flip_waitmb_needed()} 에도 적용될 수 있습니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:formal:dyntickrcu:rcu_try_flip_waitack_needed_fixed]
 \Clnrefrange{if:b}{if:e} can now be combined and simplified,
 resulting in the following.
 A similar simplification can be applied to
 \co{rcu_try_flip_waitmb_needed()}.
 \end{fcvref}
+
+\fi
 
 \begin{VerbatimN}[commandchars=\\\[\]]
 static inline int
@@ -1474,6 +1532,19 @@ rcu_try_flip_waitack_needed(int cpu)
 }
 \end{VerbatimN}
 
+이 모델에 (\path{dyntickRCU-base-sl.spin}) 연관된 수정을 가하는 것은 오류 없이
+통과하는 661개의 상태를 갖는 올바른 검증을 만듭니다.
+그러나, 이 liveness 검증의 첫번째 버전은 그 검증 자체 내의 버그 때문에 이
+버그를 잡는데 실패했음을 이야기 해 둘 가치가 있습니다.
+이 livness 검증 버그는 \co{grace_period()} 프로세스 내에 무한 반복문을 넣고 이
+liveness 검증 코드가 이 문제를 발견하지 못함을 확인함으로써 발견되었습니다!
+
+우린 이제 안전과 liveness 조건을 검증했습니다만, 수행되고 블록되는 프로세스에
+한정되었습니다.
+우린 인터럽트도 다뤄야 하는데, 이는 다음 섹션에서 다룹니다.
+
+\iffalse
+
 Making the corresponding correction in the
 model (\path{dyntickRCU-base-sl.spin})
 results in a correct verification with 661 states that passes without
@@ -1488,6 +1559,8 @@ the liveness-verification code failed to detect this problem!
 We have now successfully verified both safety and liveness
 conditions, but only for processes running and blocking.
 We also need to handle interrupts, a task taken up in the next section.
+
+\fi
 
 \subsubsection{Interrupts}
 \label{sec:formal:Interrupts}
