@@ -1565,6 +1565,27 @@ We also need to handle interrupts, a task taken up in the next section.
 \subsubsection{Interrupts}
 \label{sec:formal:Interrupts}
 
+Promela 에서 인터럽트를 모델링 하는 두가지 방법이 있습니다:
+\begin{enumerate}
+\item	\co{dynticks_nohz()} 프로세스의 모든 명령문 사이에 인터럽트 핸들러를
+	넣는 C 전처리기 속임수를 사용하거나
+\item	별도의 프로세스로 인터럽트 핸들러를 모델링하는 겁니다.
+\end{enumerate}
+
+잠깐 생각해보면 두번째 방법이 더 작은 상태 공간을 가질 것 같지만 그 인터럽트
+핸들러는 어떻게든 \co{dynticks_nohz()} 에 대해서는 원자적으로, 그러나
+\co{grace_period()} 에는 원자적이지 않게 수행되어야 할겁니다.
+
+다행히도, Promela 는 여러분이 어토믹 명령문에서 분기해 빠져나오는 것을
+허용합니다.
+이 기법은 우리가 인터럽트 핸들러가 어떤 플래그를 설정하게 하고,
+\co{dynticks_nohz()} 를 원자적으로 이 플래그를 검사한 후 이 플래그가 설정되어
+있을 때에만 수행하게 다시 짤 수 있게 합니다.
+이는 다음과 같이 Promela 명령문과 라벨을 취하는 C 전처리기 매크로를 사용해
+이뤄질 수 있습니다:
+
+\iffalse
+
 There are a couple of ways to model interrupts in Promela:
 \begin{enumerate}
 \item	using C-preprocessor tricks to insert the interrupt handler
@@ -1587,14 +1608,34 @@ and execute only when the flag is not set.
 This can be accomplished with a C-preprocessor macro that takes
 a label and a Promela statement as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irqnn-ssl@EXECUTE_MAINLINE.fcv}
 
+이 매크로는 다음과 같이 사용될 수 있겠습니다:
+
+\iffalse
+
 One might use this macro as follows:
+
+\fi
 
 \begin{VerbatimU}
 EXECUTE_MAINLINE(stmt1,
                  tmp = dynticks_progress_counter)
 \end{VerbatimU}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:EXECUTE_MAINLINE]
+이 매크로의 \clnref{label} 은 명시된 명령문 라벨을 생성합니다.
+\Clnrefrange{atm:b}{atm:e} 는 \co{in_dyntick_irq} 변수를 검사하는 어토믹
+블록이며, 이 변수가 설정되어 있다면 (인터럽트 핸들러가 동작 중임을 알림),
+어토믹 블록에서 그 라벨로 분기해 나갑니다.
+그렇지 않다면, \clnref{else} 는 명시된 명령문을 수행합니다.
+전체적인 효과는 요구되는대로 메인라인 수행이 인터럽트가 동작 중인 동안은 항상
+수행이 멈춰져 있다는 것입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irqnn-ssl:EXECUTE_MAINLINE]
 \Clnref{label} of the macro creates the specified statement label.
@@ -1607,6 +1648,8 @@ Otherwise, \clnref{else} executes the specified statement.
 The overall effect is that mainline execution stalls any time an interrupt
 is active, as required.
 \end{fcvref}
+
+\fi
 
 \subsubsection{Validating Interrupt Handlers}
 \label{sec:formal:Validating Interrupt Handlers}
