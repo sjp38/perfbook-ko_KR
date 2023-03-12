@@ -2028,11 +2028,26 @@ which are taken up in the next section.
 \subsubsection{Validating NMI Handlers}
 \label{sec:formal:Validating NMI Handlers}
 
+NMI 에도 인터럽트에서와 같은 범용적 접근법을 취하는데, NMI 는 중첩되지 않음을
+염두에 둡니다.
+이는 다음과 같은 \co{dyntick_nmi()} 프로세스가 됩니다:
+
+\iffalse
+
 We take the same general approach for NMIs as we do for interrupts,
 keeping in mind that NMIs do not nest.
 This results in a \co{dyntick_nmi()} process as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irq-nmi-ssl@dyntick_nmi.fcv}
+
+물론, 우리가 NMI 를 가짐은 다른 컴포넌트들에 조정을 필요로 합니다.
+예를 들어, \co{EXECUTE_MAINLINE()} 매크로는 이제 다음과 같이
+\co{dyntick_nmi_done} 을 검사함으로써 인터럽트 핸들러 (\co{in_dyntick_irq})
+외에도 NMI 핸들러에 주의를 기울여야 합니다 (\co{in_dyntick_nmi}).
+
+\iffalse
 
 Of course, the fact that we have NMIs requires adjustments in
 the other components.
@@ -2041,18 +2056,41 @@ pay attention to the NMI handler (\co{in_dyntick_nmi}) as well
 as the interrupt handler (\co{in_dyntick_irq}) by checking
 the \co{dyntick_nmi_done} variable as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irq-nmi-ssl@EXECUTE_MAINLINE.fcv}
+
+우린 또한 \co{dyntick_irq()} 가 \co{dyntick_nmi()} 를 배제하게 하기 위해
+\co{in_dyntick_nmi} 를 검사하는 \co{EXECUTE_IRQ()} 매크로를 만들어야 합니다:
+
+\iffalse
 
 We will also need to introduce an \co{EXECUTE_IRQ()}
 macro that checks \co{in_dyntick_nmi} in order to allow
 \co{dyntick_irq()} to exclude \co{dyntick_nmi()}:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irq-nmi-ssl@EXECUTE_IRQ.fcv}
+
+더 나아가 \co{dyntick_irq()} 를 \co{EXECUTE_IRQ()} 를 수행하게끔 다음과 같이
+변환시켜야 합니다:
 
 It is further necessary to convert \co{dyntick_irq()}
 to \co{EXECUTE_IRQ()} as follows:
 
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irq-nmi-ssl@dyntick_irq.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irq-nmi-ssl:dyntick_irq]
+우린 \qco{if} 문을 직접 코딩했음을 (예를 들어, \clnrefrange{stmt1:b}{stmt1:e})
+기억해 두시기 바랍니다.
+또한, 엄격히 지역적인 상태를 처리하는 명령들은 (예를 들면 \clnref{inc_i})
+\co{dyntick_nmi()} 를 배제할필요 없습니다.
+\end{fcvref}
+
+마지막으로 \co{grace_period()} 는 약간의 변경만을 필요로 합니다:
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irq-nmi-ssl:dyntick_irq]
 Note that we have open-coded the \qco{if} statements
@@ -2063,7 +2101,20 @@ In addition, statements that process strictly local state
 
 Finally, \co{grace_period()} requires only a few changes:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irq-nmi-ssl@grace_period.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irq-nmi-ssl:grace_period]
+\Clnref{MDL_NMI} 에 새로운 \co{MAX_DYNTICK_LOOP_NMI} 패러미터를 위한
+\co{printf()} 를 추가했으며 \clnref{nmi_done1,nmi_done2} 에서 \co{shouldexit}
+할당에 \co{dyntick_nmi_done} 을 추가했습니다.
+\end{fcvref}
+
+이 모델은 (\path{dyntickRCU-irq-nmi-ssl.spin}) 오류 없이 통과하는 수억개 상태를
+가지는 올바른 검증이 됩니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irq-nmi-ssl:grace_period]
 We have added the \co{printf()} for the new
@@ -2076,10 +2127,35 @@ The model (\path{dyntickRCU-irq-nmi-ssl.spin})
 results in a correct verification with several hundred million
 states, passing without errors.
 
+\fi
+
 \QuickQuiz{
+	Paul 은 정말로 \emph{항상} 그의 코드를 이 고통스럽게 점진적인 방식으로
+	작성하나요?
+
+	\iffalse
+
 	Does Paul \emph{always} write his code in this painfully incremental
 	manner?
+
+	\fi
+
 }\QuickQuizAnswer{
+	항상 그런건 아니지만, 점점 더 자주 그러고 있습니다.
+	이 경우, Paul 은 인터럽트 핸들러를 포함하는 가장 작은 코드조각으로부터
+	시작했는데, Promela 에서 인터럽트를 가장 잘 모델링하는 방법을 그는
+	확신할 수 없었기 때문입니다.
+	일단 그게 동작하게 한 후로 그는 다른 기능들을 추가했습니다.
+	(하지만 그게 이를 다시 하게 된다면, 그는 ``장난감'' 핸들러로부터
+	시작했을 겁니다.
+	례를 들어, 그는 변수를 두번 값 증가시키는 핸들러를 만들고 중앙의 코드는
+	그 값이 항상 짝수일 것을 검증하게 했을수도 있습니다.)
+
+	왜 이런 점진적 방법을 취할까요?
+	Brian W. Kerninghan 의 다음 발언을 생각해 보세요:
+
+	\iffalse
+
 	Not always, but more and more frequently.
 	In this case, Paul started with the smallest slice of code that
 	included an interrupt handler, because he was not sure how best
@@ -2092,11 +2168,23 @@ states, passing without errors.
 	Why the incremental approach?
 	Consider the following, attributed to Brian W. Kernighan:
 
+	\fi
+
 	\begin{quote}
 		Debugging is twice as hard as writing the code in the first
 		place. Therefore, if you write the code as cleverly as possible,
 		you are, by definition, not smart enough to debug it.
 	\end{quote}
+
+	이는 코드의 생성을 최적화 하려는 모든 시도는 코딩에 들이는 시간과
+	노력을 늘리는 비용이 있더라도 그 중점 중 최소한 66\,\% 는 디버깅 과정을
+	최적화 하는데 있어야 함을 의미합니다.
+	점진적 코딩과 테스팅은 코딩에 드는 노력을 어느정도 늘리는 비용을 들여서
+	디버깅 과정을 최적화 하는 한가지 방법입니다.
+	Paul 인 모든 날들을 (약 1주일) 코딩과 디버깅에 전념할 수 있는 사치를
+	가끔만 누릴 수 있기 때문에 이 방법을 취합니다.
+
+	\iffalse
 
 	This means that any attempt to optimize the production of code should
 	place at least 66\,\% of its emphasis on optimizing the debugging process,
@@ -2105,6 +2193,9 @@ states, passing without errors.
 	process, at the expense of some increase in coding effort.
 	Paul uses this approach because he rarely has the luxury of
 	devoting full days (let alone weeks) to coding and debugging.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Lessons (Re)Learned}
