@@ -2201,9 +2201,25 @@ states, passing without errors.
 \subsubsection{Lessons (Re)Learned}
 \label{sec:formal:Lessons (Re)Learned}
 
+이 노력은 어떤 교훈들을 (다시)배우게 해줬습니다:
+
+\iffalse
+
 This effort provided some lessons (re)learned:
 
+\fi
+
 \begin{enumerate}
+\item	{\bf Promela 와 Spin 은 인터럽트\slash NMI\-/핸들러 상호작용을 검증할
+	수 있습니다.}
+\item	{\bf 코드를 문서화 하는 것은 버그를 찾는 것을 돕습니다.}
+	이 경우, 문서화 노력은 이어진
+	패치에서~\cite{PaulEMcKenney2008commit:d7c0651390b6} 볼 수 있듯
+	\co{rcu_enter_nohz()} 와 \co{rcu_exit_nohz()} 의 잘못 배치된 메모리
+	배리어를 찾게 해줬습니다.
+
+\iffalse
+
 \item	{\bf Promela and Spin can verify interrupt\slash NMI\-/handler
 	interactions.}
 \item	{\bf Documenting code can help locate bugs.}
@@ -2211,6 +2227,8 @@ This effort provided some lessons (re)learned:
 	a misplaced memory barrier in
 	\co{rcu_enter_nohz()} and \co{rcu_exit_nohz()},
 	as shown by the following patch~\cite{PaulEMcKenney2008commit:d7c0651390b6}.
+
+\fi
 
 \begin{VerbatimU}
  static inline void rcu_enter_nohz(void)
@@ -2228,6 +2246,13 @@ This effort provided some lessons (re)learned:
  }
 \end{VerbatimU}
 
+\item	{\bf 여러분의 코드를 일찍, 자주, 파멸적 수준까지 검증하십시오.}
+	이 노력은 다음 패치에서~\cite{PaulEMcKenney2008commit:ae66be9b71b1} 볼
+	수 있는 테스트나 디버깅 하기 무척 어려웠을
+	\co{rcu_try_flip_waitack_needed()} 에 있는 작은 버그를 찾아냈습니다.
+
+\iffalse
+
 \item	{\bf Validate your code early, often, and up to the point
 	of destruction.}
 	This effort located one subtle bug in
@@ -2235,10 +2260,31 @@ This effort provided some lessons (re)learned:
 	that would have been quite difficult to test or debug, as
 	shown by the following patch~\cite{PaulEMcKenney2008commit:ae66be9b71b1}.
 
+\fi
+
 \begin{VerbatimU}
 -       if ((curr - snap) > 2 || (snap & 0x1) == 0)
 +       if ((curr - snap) > 2 || (curr & 0x1) == 0)
 \end{VerbatimU}
+
+\item	{\bf 여러분의 검증 코드를 항상 검증하세요.}
+	이를 위한 일반적인 방법은 고의적인 버그를 넣고 그 검증 코드가 이를
+	찾는지 검사하는 겁니다.
+	물론, 그 검증 코드가 이 버그를 찾아내지 못한다면 여러분은 그 버그
+	자체를 검증해야 하며, 그 과정은 무한히 반복되어야 합니다.
+	그러나, 여러분 스스로가 이 위치에 있다면, 충분한 숙면을 취하는 것이
+	극단적으로 효과적인 디버깅 기술이 될 수 있습니다.
+	그러면 여러분은 검증을 검증하는 분명한 기법은 의도적으로 검증되는
+	코드에 넣는 것임을 알게 될 겁니다.
+	이 검증이 그것들을 찾지 못한다면, 그 검증은 분명 버그가 있습니다.
+\item	{\bf 어토믹 명령을 사용하는 것은 검증을 단순화 시킬 수 있습니다.}
+	불행히도, \co{cmpxchg} 어토믹 명령을 사용하는 것은 치명적인 \IRQ\ 빠른
+	수행경로를 느려지게 만들 수 있으므로, 그것들은 이 경우에 적합하지
+	않습니다.
+\item	{\bf 복잡한 정형 검증의 필요성은 종종 여러분의 설계를 다시 고민해볼
+	필요를 알립니다.}
+
+\iffalse
 
 \item	{\bf Always verify your verification code.}
 	The usual way to do this is to insert a deliberate bug
@@ -2259,10 +2305,20 @@ This effort provided some lessons (re)learned:
 	are not appropriate in this case.
 \item	{\bf The need for complex formal verification often indicates
 	a need to re-think your design.}
+
+\fi
+
 \end{enumerate}
+
+이 마지막 지점에 이르러서 dynticks 문제를 위한 훨씬 더 간단한 해법이 있음이
+드러났는데, 이를 다음 섹션에서 보입니다.
+
+\iffalse
 
 To this last point, it turns out that there is a much simpler solution to
 the dynticks problem, which is presented in the next section.
+
+\fi
 
 \subsubsection{Simplicity Avoids Formal Verification}
 \label{sec:formal:Simplicity Avoids Formal Verification}
