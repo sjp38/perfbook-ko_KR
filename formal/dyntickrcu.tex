@@ -1939,10 +1939,35 @@ This topic is taken up in the next section.
 \subsubsection{Validating Nested Interrupt Handlers}
 \label{sec:formal:Validating Nested Interrupt Handlers}
 
+중첩된 인터럽트 핸들러는 \co{dyntick_irq()} 내의 반복문의 몸체를 다음과 같이
+쪼개서 모델링 할 수 있을 겁니다:
+
+\iffalse
+
 Nested interrupt handlers may be modeled by splitting the body of
 the loop in \co{dyntick_irq()} as follows:
 
+\fi
+
 \input{CodeSamples/formal/promela/dyntick/dyntickRCU-irq-ssl@dyntick_irq.fcv}
+
+\begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irq-ssl:dyntick_irq]
+이는 앞의 \co{dynticks_irq()} 프로세스와 비슷합니다.
+여기선 두번째 카운터 변수인 \co{j} 를 \clnref{j} 에 더해서 \co{i} 는 인터럽트
+핸들러로의 진입 횟수를 세고 \co{j} 는 종료를 셉니다.
+\Clnref{om} 의 \co{outermost} 변수는 언제 \co{grace_period_state} 변수가 안전
+검사를 위해 샘플링 되어야 하는지 판단하는 것을 돕습니다.
+\Clnref{chk_ex:b,chk_ex:e} 의 반복문 종료 검사는 특정 횟수의 인터럽트 핸들러가
+진입은 물론 종료되었음을 요구하게끔 업데이트 되었으며, \co{i} 의 값 증가는 이
+인터럽트 진입 모델의 마지막인 \clnref{inc_i} 로 옮겨졌습니다.
+\Clnrefrange{atm1:b}{atm1:e} 는 이게 중첩된 인터럽트들 가운데 가장 바깥의
+것인지 알리기 위해, 그리고 \co{dyntick_nohz()} 프로세스에 의해 사용되는
+\co{in_dyntick_irq} 변수의 값을 설정하기 위해 \co{outermost} 변수의 값을
+설정합니다.
+\Clnrefrange{atm2:b}{atm2:e} 는 \co{grace_period_state} 변수의 상태를 읽지만,
+가장 바깥의 인터럽트 핸들러에 있을때만입니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:promela:dyntick:dyntickRCU-irq-ssl:dyntick_irq]
 This is similar to the earlier \co{dynticks_irq()} process.
@@ -1963,6 +1988,24 @@ set the \co{in_dyntick_irq} variable that is used by the
 \Clnrefrange{atm2:b}{atm2:e} capture the state of the \co{grace_period_state}
 variable, but only when in the outermost interrupt handler.
 
+\fi
+
+\Clnref{cnd_ex} 는 인터럽트 종료 모델링을 위한 do-loop 조건을 갖습니다:
+우리가 진입한 것보다 적은 수의 인터럽트를 종료했다면, 다른 인터럽트를 종료하는
+것이 합법적입니다.
+\Clnrefrange{atm3:b}{atm3:e} 는 안전성을 검사하지만 우리가 가장 바깥의 인터럽트
+단계를 나갈때만입니다.
+마지막으로, \clnrefrange{atm4:b}{atm4:e} 는 인터럽트 종료 카운트인 \co{j} 의
+값을 증가시키며, 이게 가장 바깥의 인터럽트 단계라면 \co{in_dyntick_irq} 의 값을
+지웁니다.
+\end{fcvref}
+
+이 모델은 (\path{dyntickRCU-irq-ssl.spin}) 오류 없이 통과하며 50만개를 조금
+넘는 상태를 갖는 올바른 검증이 됩니다.
+그러나, 이 버전의 모델은 NMI 를 처리하지 않는데, 이를 다음 섹션에서 다룹니다.
+
+\iffalse
+
 \Clnref{cnd_ex} has the do-loop conditional for interrupt-exit modeling:
 as long as we have exited fewer interrupts than we have entered, it is
 legal to exit another interrupt.
@@ -1979,6 +2022,8 @@ results in a correct verification with a bit more than half a million
 states, passing without errors.
 However, this version of the model does not handle NMIs,
 which are taken up in the next section.
+
+\fi
 
 \subsubsection{Validating NMI Handlers}
 \label{sec:formal:Validating NMI Handlers}
