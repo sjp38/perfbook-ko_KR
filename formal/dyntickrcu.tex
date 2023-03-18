@@ -2778,6 +2778,25 @@ a reschedule API if so.
 
 \begin{fcvref}[ln:formal:Saving Dyntick Progress Counters]
 \Cref{lst:formal:Saving Dyntick Progress Counters}
+는 특정 CPU 의 \co{dynticks} 와 \co{dynticks_nmi} 카운터의 스냅샷을 가져오는
+\co{dyntick_save_progress_counter()} 를 보입니다.
+\Clnref{snap,snapn} 은 이 두 변수의 값을 지역변수에 스냅샷 뜨고, \clnref{mb} 는
+\cref{lst:formal:Entering and Exiting Dynticks-Idle Mode,%
+lst:formal:NMIs From Dynticks-Idle Mode,%
+lst:formal:Interrupts From Dynticks-Idle Mode} 의 함수들 내의 메모리 배리어들과
+짝을 맞추기 위해 메모리 배리어를 수행합니다.
+\Clnref{rec_nsap,rec_snapn} 은 \co{rcu_implicit_dynticks_qs()} 의 다음 호출을
+위한 스냅샷을 기록해 두고, \clnref{chk_prgs} 는 그 CPU 가 진행중인 \IRQ 나 NMI
+없이 dynticks-idle 모드에 있어서 (달리 말하자면 두 스냅샷이 모두 짝수여서)
+연장된 quiescent state 에 있는지 검사합니다.
+그렇다면, \clnref{cnt:b,cnt:e} 는 이 이벤트를 세고, \clnref{ret} 은 이 CPU 가
+quiescent state 에 있었다면 true 를 리턴합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:formal:Saving Dyntick Progress Counters]
+\Cref{lst:formal:Saving Dyntick Progress Counters}
 shows \co{dyntick_save_progress_counter()}, which takes a snapshot
 of the specified CPU's \co{dynticks} and \co{dynticks_nmi}
 counters.
@@ -2794,6 +2813,8 @@ have even values), hence in an extended quiescent state.
 If so, \clnref{cnt:b,cnt:e} count this event, and \clnref{ret} returns
 true if the CPU was in a quiescent state.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:formal:Saving Dyntick Progress Counters]
@@ -2823,6 +2844,32 @@ dyntick_save_progress_counter(struct rcu_data *rdp)
 
 \begin{fcvref}[ln:formal:Checking Dyntick Progress Counters]
 \Cref{lst:formal:Checking Dyntick Progress Counters}
+는 어떤 CPU 가 \co{dynticks_save_progress_counter()} 호출에 뒤이어 dyntick-idle
+모드에 진입했는지 검사하기 위해 호출되는 \co{rcu_implicit_dynticks_qs()} 를
+보입니다.
+\Clnref{curr,currn} 은 연관된 CPU 의 \co{dynticks} 와 \co{dynticks_nmi}
+변수들의 새 스냅샷을 취하며 \clnref{snap,snapn} 은
+\co{dynticks_save_progress_counter()} 에 의해 앞서 저장된 스냅샷들을
+얻어옵니다.
+\Clnref{mb} 는 이어서
+\cref{lst:formal:Entering and Exiting Dynticks-Idle Mode,%
+lst:formal:NMIs From Dynticks-Idle Mode,%
+lst:formal:Interrupts From Dynticks-Idle Mode} 의 함수들의 메모리 배리어들과
+짝을 맞추기 위해 메모리 배리어를 수행합니다.
+\Clnrefrange{chk_q:b}{chk_q:e} 는 이어서 이 CPU 가 현재 quiescent state 에
+있는지 (\co{curr} 와 \co{curr_nmi} 가 짝수) 아니면 마지막
+\co{dynticks_save_progress_counter()} 호출 후 quiescent state 를 하나 지났는지
+(\co{dynticks} 와 \co{dynticks_nmi} 가 변경되었는지) 검사합니다.
+이 검사들이 이 CPU 는 dyntick-idle quiescent state 를 지났음을 확인한다면
+\clnref{cnt} 는 그 사실을 세고 \clnref{ret_1} 은 이 사실의 알림을 리턴합니다.
+어느 경우든, \clnref{chk_race} 는 RCU 이 오프라인된 CPU 를 기다리는 결과를 만들
+수 있는 레이스 컨디션을 검사합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:formal:Checking Dyntick Progress Counters]
+\Cref{lst:formal:Checking Dyntick Progress Counters}
 shows \co{rcu_implicit_dynticks_qs()}, which is called to check
 whether a CPU has entered dyntick-idle mode subsequent to a call
 to \co{dynticks_save_progress_counter()}.
@@ -2849,6 +2896,8 @@ Either way, \clnref{chk_race}
 checks for race conditions that can result in RCU
 waiting for a CPU that is offline.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:formal:Checking Dyntick Progress Counters]
@@ -2880,11 +2929,28 @@ rcu_implicit_dynticks_qs(struct rcu_data *rdp)
 \end{listing}
 
 \QuickQuiz{
+	이는 여전히 무척 복잡합니다.
+	간단하게 CPU 별 비트를 갖는 \co{cpumask_t} 를 가지고 그 비트를 \IRQ\ 나
+	NMI 핸들러에 진입할 때 지우고 종료할 때 값 설정하는건 어떨까요?
+
+	\iffalse
+
 	This is still pretty complicated.
 	Why not just have a \co{cpumask_t} with per-CPU bits, clearing
 	the bit when entering an \IRQ\ or NMI handler, and setting it
 	upon exit?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 방법이 기능적으로는 올바르지만 큰 기계에서는 지나친 \IRQ\ 진입/종료
+	오버헤드를 초래할 수 있습니다.
+	반면에, 이 섹션에서 보인 방법은 각 CPU 가 \IRQ\ 와 NMI 진입/종료 시에
+	CPU 별 데이터만 만져서 특히나 큰 기계에서는 \IRQ\ 진입/종료 오버헤드를
+	훨씬 낮게 만듭니다.
+
+	\iffalse
+
 	Although this approach would be functionally correct, it
 	would result in excessive \IRQ\ entry/exit overhead on
 	large machines.
@@ -2892,12 +2958,23 @@ rcu_implicit_dynticks_qs(struct rcu_data *rdp)
 	each CPU to touch only per-CPU data on \IRQ\ and NMI entry/exit,
 	resulting in much lower \IRQ\ entry/exit overhead, especially
 	on large machines.
+
+	\fi
+
 }\QuickQuizEnd
+
+리눅스 커널 RCU 의 dyntick-idle 코드는 이 이후로도 Andy Lutomirski 의
+제안에~\cite{PaulMcKenney2015dyntickAndyNMI} 의해 한번 더 재작성 되었습니다만
+이젠 정리하고 다음 주제로 넘어갈 시간입니다.
+
+\iffalse
 
 Linux-kernel RCU's dyntick-idle code has since been rewritten yet again
 based on a suggestion from
 Andy Lutomirski~\cite{PaulMcKenney2015dyntickAndyNMI},
 but it is time to sum up and move on to other topics.
+
+\fi
 
 \subsubsection{Discussion}
 \label{sec:formal:Discussion}
