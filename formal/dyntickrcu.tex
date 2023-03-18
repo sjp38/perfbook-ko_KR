@@ -2351,11 +2351,21 @@ development cycle~\cite{PaulEMcKenney2008commit:64db4cfff99c}.
 \label{sec:formal:State Variables for Simplified Dynticks Interface}
 
 \Cref{lst:formal:Variables for Simple Dynticks Interface}
+는 새로운 CPU 별 상태 변수들을 보입니다.
+이 변수들은 여러 개별적 RCU 구현들이 (예: \co{rcu} 와 \co{rcu_bh}) 편리하고
+효율적으로 dynticks 상태를 공유할 수 있게끔 구조체로 그룹지어져 있습니다.
+다음과 같이, 이것들은 개별적인 CPU 별 변수로 생각될 수 있습니다.
+
+\iffalse
+
+\Cref{lst:formal:Variables for Simple Dynticks Interface}
 shows the new per-CPU state variables.
 These variables are grouped into structs to allow multiple independent
 RCU implementations (e.g., \co{rcu} and \co{rcu_bh}) to conveniently
 and efficiently share dynticks state.
 In what follows, they can be thought of as independent per-CPU variables.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{VerbatimL}
@@ -2376,6 +2386,14 @@ struct rcu_data {
 \label{lst:formal:Variables for Simple Dynticks Interface}
 \end{listing}
 
+\co{dynticks_nesting}, \co{dynticks}, 그리고 \co{dynticks_snap} 변수들은 \IRQ\
+코드 경로를 위한 것들이고 \co{dynticks_nmi} 와 \co{dynticks_nmi_snap} 변수들은
+NMI 코드 경로를 위한 것들입니다만, NMI 코드 경로는 \co{dynticks_nesting} 변수를
+참조할수도 (그러나 수정하지는 않습니다) 있습니다.
+이 변수들은 다음과 같이 사용됩니다:
+
+\iffalse
+
 The \co{dynticks_nesting}, \co{dynticks}, and \co{dynticks_snap} variables
 are for the \IRQ\ code paths, and the \co{dynticks_nmi} and
 \co{dynticks_nmi_snap} variables are for the NMI code paths, although
@@ -2383,7 +2401,22 @@ the NMI code path will also reference (but not modify) the
 \co{dynticks_nesting} variable.
 These variables are used as follows:
 
+\fi
+
 \begin{description}[style=nextline]
+\item	[\tco{dynticks_nesting}]
+	이는 연관된 CPU 가 RCU read-side 크리티컬 섹션들을 모니터링 해야하는
+	이유들의 수를 셉니다.
+	그 CPU 가 dynticks-idle 모드에 있다면, 이는 \IRQ\ 중첩 수준을 세며,
+	그렇지 않다면 \IRQ\ 중첩 수준보다 1 큰 값을 갖습니다.
+\item	[\tco{dynticks}]
+	이 카운터의 값은 연관된 CPU 가 dynticks-idle 모드에 있고 해당 CPU 에서
+	현재 수행중인 \IRQ\ 핸들러가 없으면 짝수이며, 그렇지 않다면 홀수입니다.
+	달리 말하자면, 이 카운터의 값이 홀수라면 연관된 CPU 는 RCU read-side
+	크리티컬 섹션 내에 있을 수 있습니다.
+
+\iffalse
+
 \item	[\tco{dynticks_nesting}]
 	This counts the number of reasons that the corresponding
 	CPU should be monitored for RCU read-side critical sections.
@@ -2396,6 +2429,23 @@ These variables are used as follows:
 	running on that CPU, otherwise the counter's value is odd.
 	In other words, if this counter's value is odd, then the
 	corresponding CPU might be in an RCU read-side critical section.
+
+\fi
+
+\item	[\tco{dynticks_nmi}]
+	이 카운터의 값은 연관된 CPU 가 NMI 핸들러에 있으면 홀수이지만 그 NMI 가
+	이 CPU 가 \IRQ\ 핸들러를 수행중이지 않은 상태에서 dyntick-idle 모드에
+	있을 때 도착했을 때에만 그렇습니다.
+	그렇지 않다면, 이 카운터의 값은 짝수가 됩니다.
+\item	[\tco{dynticks_snap}]
+	이는 \co{dynticks} 카운터의 스냅샷이 되지만 현재 RCU grace period 가
+	너무 긴 시간동안 연장되었을 때에만 그렇습니다.
+\item	[\tco{dynticks_nmi_snap}]
+	이는 \co{dynticks_nmi} 의 스냅샷이 되지만, 이번에도 현재 RCU grace
+	period 가 너무 긴 시간으로 연장되었을 때에만 그렇습니다.
+
+\iffalse
+
 \item	[\tco{dynticks_nmi}]
 	This counter's value is odd if the corresponding CPU is
 	in an NMI handler, but only if the NMI arrived while this
@@ -2409,17 +2459,45 @@ These variables are used as follows:
 	This will be a snapshot of the \co{dynticks_nmi} counter, but
 	again only if the current RCU grace period has extended for too
 	long a duration.
+
+\fi
+
 \end{description}
+
+\co{dynticks} 와 \co{dynticks_nmi} 가 둘 다 특정 시간 기간동안 짝수 값을
+가졌다면, 연관된 CPU 는 그 시간동안 하나의 quiescent state 를 통과했습니다.
+
+\iffalse
 
 If both \co{dynticks} and \co{dynticks_nmi} have taken on an even
 value during a given time interval, then the corresponding CPU has
 passed through a quiescent state during that interval.
 
+\fi
+
 \QuickQuiz{
+	하지만 어떤 \IRQ\ 핸들러가 완료되기 전에 NMI 핸들러가 수행을 시작했고
+	그 NMI 핸들러는 두번째 \IRQ\ 핸들러가 시작될 때까지 수행을 계속하면
+	어떻게 되죠?
+
+	\iffalse
+
 	But what happens if an NMI handler starts running before
 	an \IRQ\ handler completes, and if that NMI handler continues
 	running until a second \IRQ\ handler starts?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이는 단일 CPU 내에서는 일어날 수 없습니다.
+	첫번째 \IRQ\ 핸들러는 해당 NMI 핸들러가 리턴하기 전까지는 완료될 수
+	없습니다.
+	따라서, \co{dynticks} 와 \co{dynticks_nmi} 변수들이 모두 특정 시간 동안
+	짝수였다면, 연관된 CPU 는 그 시간 중 언젠가는 quiescent state 에 정말로
+	있었습니다.
+
+	\iffalse
+
 	This cannot happen within the confines of a single CPU\@.
 	The first \IRQ\ handler cannot complete until the NMI handler
 	returns.
@@ -2427,6 +2505,9 @@ passed through a quiescent state during that interval.
 	variables have taken on an even value during a given time
 	interval, the corresponding CPU really was in a quiescent
 	state at some time during that interval.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Entering and Leaving Dynticks-Idle Mode}
