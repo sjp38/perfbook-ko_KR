@@ -2676,6 +2676,21 @@ void rcu_nmi_exit(void)
 
 \begin{fcvref}[ln:formal:Interrupts From Dynticks-Idle Mode]
 \Cref{lst:formal:Interrupts From Dynticks-Idle Mode}
+는 \IRQ\ 컨텍스트로의 진입과 종료를 RCU 에게 알리는 \co{rcu_irq_enter()} 와
+\co{rcu_irq_exit()} 함수들을 보입니다.
+\co{rcu_irq_enter()} 의 \clnref{inc_nst} 는 \co{dynticks_nesting} 의 값을
+증가시키고, 이 변수가 이미 0이 아니었다면 \clnref{ret1} 에서 조용히 리턴합니다.
+그렇지 않았다면, \clnref{inc_dynt1} 은 \co{dynticks} 의 값을 증가시키는데
+그러면 그 값은 홀수가 되어서 이 CPU 는 이제 RCU read-side 크리티컬 섹션을
+수행할 수 있는 사실과 일관성을 갖게 됩니다.
+\Clnref{mb1} 은 따라서 \co{dynticks} 의 값 증가가 뒤따르는 \IRQ\ 핸들러가
+수행할 수도 있는 모든 RCU read-side 크리티컬 섹션들에게 보일  것을 보장하기
+위해 메모리 배리어를 수행합니다.
+
+\iffalse
+
+\begin{fcvref}[ln:formal:Interrupts From Dynticks-Idle Mode]
+\Cref{lst:formal:Interrupts From Dynticks-Idle Mode}
 shows \co{rcu_irq_enter()} and \co{rcu_irq_exit()}, which
 inform RCU of entry to and exit from, respectively, \IRQ\ context.
 \Clnref{inc_nst} of \co{rcu_irq_enter()} increments \co{dynticks_nesting},
@@ -2688,6 +2703,8 @@ execute RCU read-side critical sections.
 the increment of \co{dynticks} is seen before any
 RCU read-side critical sections that the subsequent \IRQ\ handler
 might execute.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:formal:Interrupts From Dynticks-Idle Mode]
@@ -2724,6 +2741,21 @@ void rcu_irq_exit(void)
 \label{lst:formal:Interrupts From Dynticks-Idle Mode}
 \end{listing}
 
+\co{rcu_irq_exit()} 의 \clnref{dynticks_nesting} 은 \co{dynticks_nesting} 의
+값을 감소시키고, 그 결과가 0이 아니라면 \clnref{ret2} 에서 조용히 리턴합니다.
+그렇지 않다면, \clnref{mb2} 는 \clnref{inc_dynt2} 에서의 \co{dynticks} 값
+증가가 앞의 \IRQ\ 핸들러가 수행했을 수도 있는 모든 RCU read-side 크리티컬 섹션
+뒤에 보일 것을 보장하기 위해 메모리 배리어를 수행합니다.
+\Clnref{chk_even} 은 \co{dynticks} 가 이제 짝수여서 어떤 RCU read-side 크리티컬
+섹션들도 dynticks-idle 모드에서는 나타날 수 없다는 사실과 일관될 것을
+검사합니다.
+\Clnrefrange{chk_cb:b}{chk_cb:e} 는 앞의 \IRQ\ 핸들러가 어떤 RCU 콜백을 등록해
+두었는지 검사하고, 그렇다면 reschedule API 를 사용해 이 CPU 가 dynticks-idle
+모드에서 나가도록 강제합니다.
+\end{fcvref}
+
+\iffalse
+
 \Clnref{dec_nst} of \co{rcu_irq_exit()} decrements
 \co{dynticks_nesting}, and
 if the result is non-zero, \clnref{ret2} silently returns.
@@ -2738,6 +2770,8 @@ if the prior \IRQ\ handlers enqueued any
 RCU callbacks, forcing this CPU out of dynticks-idle mode via
 a reschedule API if so.
 \end{fcvref}
+
+\fi
 
 \subsubsection{Checking For Dynticks Quiescent States}
 \label{sec:formal:Checking For Dynticks Quiescent States}
