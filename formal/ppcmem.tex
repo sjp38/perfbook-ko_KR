@@ -345,6 +345,25 @@ answer your Power or \ARM\ memory-ordering question.
 \subsection{What Does This Litmus Test Mean?}
 \label{sec:formal:What Does This Litmus Test Mean?}
 
+P0 의 \clnref{reginit,stw} 는 C 명령문 \co{x=1} 과 동일한데 \clnref{init:0} 는
+P0 의 레지스터 \co{r2} 가 \co{x} 의 주소가 되게 정의하기 때문입니다.
+P0 의 \clnref{P0lwarx,P0stwcx} 는 load-linked (\ARM\ 용어에서의 ``load register
+exclusive'' 이자 Power 용어에서의 ``load reserve'') 와 store-conditional (\ARM\
+용어에서의 ``store register exclusive'') 의 기억을 각각 돕는 장치들입니다.
+함께 사용되었을 때, 이것들은 하나의 어토믹 명령 시퀀스를 만드는데 x86
+\co{lock;cmpxchg} 명령으로 예시될 수 있는 compare-and-swap 시퀀스와 대략적으로
+비슷합니다.
+더 높은 단계의 추상화 단계로 넘어가서 \clnrefrange{P0lwsync}{P0isync} 의
+시퀀스는 리눅스 커널의 \co{atomic_add_return(&z, 0)} 와 동일합니다.
+마지막으로, \clnref{P0lwz} 는 C 명령문 \co{r3=y} 와 대략적으로 동일합니다.
+
+P1 의 \clnref{reginit,stw} 는 C 명령문 \co{y=1} 과 동일하며, \clnref{P1sync} 는
+메모리 배리어로, 리눅스 커널 명령문 \co{smp_mb()} 와 동일하며 \clnref{P1lwz} 는
+C 명령문 \co{r3=x} 와 동일합니다.
+\end{fcvref}
+
+\iffalse
+
 P0's \clnref{reginit,stw} are equivalent to the C statement \co{x=1}
 because \clnref{init:0} defines P0's register \co{r2} to be the address
 of \co{x}. P0's \clnref{P0lwarx,P0stwcx} are the mnemonics for
@@ -365,13 +384,37 @@ is a memory barrier, equivalent to the Linux kernel statement \co{smp_mb()},
 and \clnref{P1lwz} is equivalent to the C statement \co{r3=x}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:formal:PPCMEM Litmus Test]
+	하지만 \cref{lst:formal:PPCMEM Litmus Test} 의 \clnref{P0fail1}, 즉
+	\co{Fail1:} 라벨에 무언가 벌어지긴 할까요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:PPCMEM Litmus Test]
 	But whatever happened to \clnref{P0fail1} of
 	\cref{lst:formal:PPCMEM Litmus Test},
 	the one that is the \co{Fail1:} label?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	PowerPC 버전의 \co{atomic_add_return()} 구현은 \co{stwcx} 명령이
+	실패했을 때 반복을 하게 되는데, 조건 코드 레지스터에 0이 아닌 상태를
+	설정함으로써 이를 통신하며, 이는 결국 \co{bne} 명령에 의해 검사됩니다.
+	실제로 반복문을 모델링 하는 것은 상태 공간 폭증을 일으킬 것이므로, 우린
+	그 대신 \co{Fail1:} 라벨로 분기해서, P0 의 \co{r3} 레지스터의 초기값
+	2를 가지고 이 모델을 종료시켜서 존재하는 단정문을 깨뜨리지 않게 합니다.
+
+	이 속임수가 항상 적용 가능한지에 대해선 논란이 있습니다만, 이게
+	실패하는 예를 전 아직 보지 못했습니다.
+
+	\iffalse
+
 	The implementation of PowerPC version of \co{atomic_add_return()}
 	loops when the \co{stwcx} instruction fails, which it communicates
 	by setting non-zero status in the condition-code register,
@@ -383,6 +426,9 @@ and \clnref{P1lwz} is equivalent to the C statement \co{r3=x}.
 
 	There is some debate about whether this trick is universally
 	applicable, but I have not seen an example where it fails.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -409,6 +455,16 @@ void P1(void)
 \label{lst:formal:Meaning of PPCMEM Litmus Test}
 \end{listing}
 
+이를 모두 종합해서, 이 전체 리트머스 테스트의 C-언어 동일 버전이
+\cref{lst:formal:Meaning of PPCMEM Litmus Test} 에 보여져 있습니다.
+핵심은 \co{atomic_add_return()} 이 (리눅스 커널이 요구하듯) 완전한 메모리
+배리어로 동작한다면 \co{P0} 와 \co{P1()} 의 \co{r3} 변수는 수행이 완료된 후 둘
+다 0일 수 없다는 것입니다.
+
+다음 섹션은 이 리트머스 테스트를 어떻게 수행하는지 설명합니다.
+
+\iffalse
+
 Putting all this together, the C-language equivalent to the entire litmus
 test is as shown in
 \cref{lst:formal:Meaning of PPCMEM Litmus Test}.
@@ -418,6 +474,8 @@ then it should be impossible for \co{P0()}'s and \co{P1()}'s \co{r3}
 variables to both be zero after execution completes.
 
 The next section describes how to run this litmus test.
+
+\fi
 
 \subsection{Running a Litmus Test}
 \label{sec:formal:Running a Litmus Test}
