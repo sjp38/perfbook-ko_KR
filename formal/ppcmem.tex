@@ -689,11 +689,44 @@ cannot happen.
 \subsection{PPCMEM Discussion}
 \label{sec:formal:PPCMEM Discussion}
 
+이 도구들은 \ARM\ 와 Power 에서 수행되는 저수준 병렬 기능을 작업하는 사람들에게
+큰 도움이 될 것을 약속합니다.
+이 도구들은 본질적인 한계도 가지고 있습니다:
+
+\iffalse
+
 These tools promise to be of great help to people working on low-level
 parallel primitives that run on \ARM\ and on Power. These tools do have
 some intrinsic limitations:
 
+\fi
+
 \begin{enumerate}
+\item	이 도구들은 연구용 프로토타입이며, 따라서 지원되지 않는 경우들이
+	있습니다.
+\item	이 도구들은 IBM 이나 \ARM\ 에 의해 각각의 CPU 아키텍쳐에 대한 공식적
+	성명을 갖추지 못했습니다.
+	예를 들어, 두 회사 모두 이 도구들의 어떤 버전에 대해서든 언제든 버그를
+	보고할 권리를 가지고 있습니다.
+	따라서 이 도구들은 실제 하드웨어에서의 철저한 스트레스 테스트의
+	대체물이 될 수 없습니다.
+	더 나아가서, 이것들이 기반하고 있는 도구들과 모델 모두 여전히 개발
+	중이며 언제든 바뀔 수 있습니다.
+	다른 한편, 이 모델은 연관된 하드웨어 전문가의 자문 아래 개발되었으므로,
+	이게 해당 아키텍쳐에 대한 충분한 표현이라고 자신을 가질 좋은 이유가
+	있기도 합니다.
+\item	이 도구들은 명령 집합의 부분집합만을 다룹니다.
+	이 부분집ㅎ바은 많은 목적에 있어 충분했으나, 여러분의 목표는 다양할
+	겁니다.
+	특히, 이 도구는 워드 (word) 크기 (32 비트) 액세스만을 처리하며, 그
+	워드는 올바르게 정렬되어 있어야만 합니다.\footnote{
+		하지만 최근의 연구는 여러 크기가 혼재된 액세스도 주목하고
+		있습니다~\cite{Flur:2017:MCA:3093333.3009839}.}
+	또한, 이 도구는 더 완화된 \ARM\ 메모리 배리어 명령 변종들 일부도,
+	산술도 다루지 않습니다.
+
+\iffalse
+
 \item	These tools are research prototypes, and as such are unsupported.
 \item	These tools do not constitute official statements by IBM or \ARM\
 	on their respective CPU architectures. For example, both
@@ -714,6 +747,32 @@ some intrinsic limitations:
 	In addition, the tool does not handle some of the weaker variants
 	of the \ARM\ memory-barrier instructions, nor does it handle
 	arithmetic.
+
+\fi
+
+\item	이 도구들은 작은 수의 쓰레드에서 돌아가는 작은 수의 반복문 없는 코드
+	조각들에 제한되어 있습니다.
+	더 큰 예제는 Promela 와 Spin 같은 비슷한 도구에서와 같이 상태 공간
+	폭증을 야기합니다.
+\item	전체 상태 공간 탐색은 어떻게 각 공격이 되는 상태에 이르렀는지를 알리지
+	않습니다.
+	그러나, 일단 그 상태에 닿는게 가능하다는 걸 알게 된다면 대화형 도구를
+	사용해 그 상태를 찾는건 너무 어렵지 않은게 일반적입니다.
+\item	이 도구들은 복잡한 데이터 구조에는 썩 좋지 못합니다만,
+	\qco{x=y; y=z; z=43;} 형태의 초기화 명령들을 이용해 극단적으로 간단한
+	링크드 리스트 순회를 만드는 건 가능합니다.
+\item	이 도구들은 memory mapped I/O 나 기기 레지스터들을 다루지 않습니다.
+	물론, 그런 것들을 처리하는 것은 그것들이 공식화 될 것을 필요로 하는데,
+	아직은 공식화 되지 않은 것으로 보입니다.
+\item	이 도구들은 여러분이 단정문을 짜넣는 문제들만 탐지합니다.
+	이 약점은 모든 정형적 방법들에 공통된 것이며, 테스트가 여전히 중요한
+	또다른 이유입니다.
+	이 챕터의 시작에서 인용된 Donald Knuth 의 불멸의 명언을 인용하자면,
+	``Beware of bugs in the above code; I have only proved it correct, not
+	tried it.''
+
+\iffalse
+
 \item	The tools are restricted to small loop-free code fragments
 	running on small numbers of threads. Larger examples result
 	in state-space explosion, just as with similar tools such as
@@ -735,7 +794,27 @@ some intrinsic limitations:
 	immortal words of Donald Knuth quoted at the beginning of this
 	chapter, ``Beware of bugs in the above
 	code; I have only proved it correct, not tried it.''
+
+\fi
+
 \end{enumerate}
+
+그러나, 이 도구들의 강점들 중 하나는 이 아키텍쳐들에 허용된 동작들 전체를
+모델링 하도록 설계되었다는 것으로, 그 동작들은 합법적이지만 현재의 하드웨어
+구현이 아직 부주의한 소프트웨어 개발자들에게 영향을 주지 않은 것들을
+포함합니다.
+따라서, 이 도구들에 의해 신뢰되는 알고리즘은 실제 하드웨어에서 수행될때 약간의
+추가적 안전성 허용범위를 갖습니다.
+더 나아가, 실제 하드웨어에서의 테스트는 버그를 발견할 수만 있습니다; 그런
+테스트는 근본적으로 어떤 사용이 올바른지를 증명할 수는 없습니다.
+이를 이해하려면, 연구자들이 그들의 모델을 검증하기 위해 실제 하드웨어에서
+1000억개의 테스트를 주기적으로 수행했음을 생각해 보세요.
+그 중 한 경우, 아키텍쳐상으로는 허용된 동작인 1760억 회의 수행에도 불구하고
+발생하지 않았습니다~\cite{JadeAlglave2011ppcmem}.
+대조적으로, 전체 상태 공간 탐색은 이 도구가 코드 조각의 올바름을 증명할 수 있게
+합니다.
+
+\iffalse
 
 That said, one strength of these tools is that they are designed to
 model the full range of behaviors allowed by the architectures, including
@@ -751,6 +830,28 @@ In one case, behavior that is allowed by the architecture did not occur,
 despite 176 billion runs~\cite{JadeAlglave2011ppcmem}.
 In contrast, the
 full-state-space search allows the tool to prove code fragments correct.
+
+\fi
+
+정형적 방법론들과 도구들은 테스트의 대체물이 될 수 없음을 한번 더 반복할 가치가
+있습니다.
+중요한 사실은, 예를 들어 리눅스 커널과 같은 거대하며 신뢰성 있는 동시성
+소프트웨어 작품을 만드는 것은 매우 어렵다는 것입니다.
+따라서 개발자들은 이 목표를 위해 모든 도구를 적용할 준비를 해야 합니다.
+이 챕터에서 선보인 도구들은 테스트를 통해 발견하기 (추적하기도) 매우 어려운
+버그들을 찾을 수 있게 합니다.
+다른 한편, 테스트는 이 챕터에 선보인 도구들이 영원히 처리하지 못할만큼 큰
+몸체의 소프트웨어에 적용될 수 있습니다.
+항상 그렇듯, 그 일에 맞는 도구를 사용하세요!
+
+물론, 여러분의 일이 더 간단해지게끔 병렬 코드를 쉽게 분할되게끔 설계하고 더
+높은 수준의 기능들을 (락, sequence counter, 어토믹 오퍼레이션, 그리고 RCU 같은)
+사용해서 이 단계의 일을 회피하는게 최고입니다.
+그리고 여러분이 정말로 저수준 메모리 배리어와 read-modify-write 명령들을
+사용해야만 한다고 하더라도, 여러분의 더 보수적인 이런 날카로운 도구들의 사용이
+여러분의 삶은 더 쉽게 만들어 줄 겁니다.
+
+\iffalse
 
 It is worth repeating that formal methods and tools are no substitute for
 testing. The fact is that producing large reliable concurrent software
@@ -769,3 +870,5 @@ operations, and RCU) to get your job done more straightforwardly. And even
 if you absolutely must use low-level memory barriers and read-modify-write
 instructions to get your job done, the more conservative your use of
 these sharp instruments, the easier your life is likely to be.
+
+\fi
