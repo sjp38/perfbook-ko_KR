@@ -571,6 +571,14 @@ Observation SB+lwsync-RMW-lwsync+sync Never 0 5
 \label{lst:formal:PPCMEM on Repaired Litmus Test}
 \end{listing}
 
+이 리눅스 커널 버그의 수정은 P0 의 \co{isync} 를 \co{sync} 로 바꾸는 것으로,
+\cref{lst:formal:PPCMEM on Repaired Litmus Test} 에 보인 형태가 됩니다.
+여기서 볼 수 있듯, \co{0:r3=0; 1:r3=0;} 는 상태 리스트에 나타나지 않으며,
+마지막 행은 ``Never'' 라고 말합니다.
+따라서, 이 모델은 공격 수행 시퀀스는 일어날 수 없다고 예측합니다.
+
+\iffalse
+
 The fix to this Linux-kernel bug is to replace P0's \co{isync} with
 \co{sync}, which results in the output shown in
 \cref{lst:formal:PPCMEM on Repaired Litmus Test}.
@@ -579,23 +587,76 @@ and the last line calls out ``Never''.
 Therefore, the model predicts that the offending execution sequence
 cannot happen.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\ARM\ 리눅스 커널도 비슷한 버그를 가지고 있나요?
+
+	\iffalse
+
 	Does the \ARM\ Linux kernel have a similar bug?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\ARM\ 은 \co{atomic_add_return()} 함수의 어셈블리어 구현 전후에
+	\co{smp_bm()} 를 위치하기 때문에 이 버그를 가지고 있지 않습니다.
+	PowerPC 도 이 버그를 더이상 가지고 있지 않습니다; 이건 한참 전에
+	고쳐졌습니다~\cite{BenjaminHerrenschmidt2011:powerpc:atomic_return}.
+
+	\iffalse
+
 	\ARM\ does not have this particular bug because it places
 	\co{smp_mb()} before and after the \co{atomic_add_return()}
 	function's assembly-language implementation.
 	PowerPC no longer has this bug; it has long since been
 	fixed~\cite{BenjaminHerrenschmidt2011:powerpc:atomic_return}.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
 	\begin{fcvref}[ln:formal:PPCMEM Litmus Test]
+	\Cref{lst:formal:PPCMEM Litmus Test} provide sufficient ordering
+	의 \clnref{P0lwsync} 에 있는 \co{lwsync} 는 충분한 순서 규칙을
+	제공하나요?
+	\end{fcvref}
+
+	\iffalse
+
+	\begin{fcvref}[ln:formal:PPCMEM Litmus Test]
 	Does the \co{lwsync} on \clnref{P0lwsync} in
 	\cref{lst:formal:PPCMEM Litmus Test} provide sufficient ordering?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerE{
+	필요한 의미에 따라 다릅니다.
+	이 답의 나머지 부분은
+	\cref{lst:formal:PPCMEM Litmus Test} 의 \co{P0} 를 위한 어셈블리어가
+	값을 반환하는 어토믹 오퍼레이션을 구현할 것으로 여긴다고 가정합니다.
+
+	\Cref{chp:Advanced Synchronization: Memory Ordering} 에서 이야기 했듯,
+	리눅스 커널의 메모리 일관성 모델은 양쪽에서 모두 완전히 순서잡히기 위해
+	값을 반환하는 어토믹 RMW 오퍼레이션을 필요로 합니다.
+	\co{lwsync} 로 제공되는 순서는 이 목적에 불충분하며, 따라서 \co{sync}
+	가 대신 사용되어야 합니다.
+	이 변경은 다른 두개의 리트머스
+	테스트를~\cite{Paulmck2015:powerpc:value-returning-atomics} 다뤘던
+	이메일 쓰레드에 대한 대답의 일환으로
+	만들어졌습니다~\cite{BoqunFeng2015:powerpc:value-returning-atomics}.
+	리눅스 커널이 가지고 있을 수도 있는 모든 다른 버그의 반견은 독자
+	여러분의 연습문제로 남겨둡니다.
+
+	더 완화된 의미를 제공하는 다른 환경에서는 \co{lwsync} 가 충분할 수도
+	있습니다.
+	하지만 리눅스 커널의 값 반환 어토믹 오퍼레이션에서는 아닙니다!
+
+	\iffalse
+
 	It depends on the semantics required.
 	The rest of this answer assumes that the assembly language
 	for \co{P0} in
@@ -619,6 +680,9 @@ cannot happen.
 	In other enviroments providing weaker semantics, \co{lwsync}
 	might be sufficient.
 	But not for the Linux kernel's value-returning atomic operations!
+
+	\fi
+
 }\QuickQuizEndE
 }
 
