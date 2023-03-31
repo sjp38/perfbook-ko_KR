@@ -34,6 +34,25 @@ exists
 \label{lst:formal:IRIW Litmus Test}
 \end{listing}
 
+PPCMEM 도구가 Listing~\ref{lst:formal:IRIW Litmus Test} 에 보인 유명한
+``independent reads of independent writes'' (IRIW) 리트머스 테스트를 해결할 수
+있지만, 그러기 위해선 최소 CPU 시간 14 시간을 필요로 하며 최소 10 gigabyte 상태
+공간을 생성합니다.
+그러나, 이상황은 이 문제를 풀기 위해선 방대한 레퍼런스 매뉴얼을 숙독하고 증명을
+시도하고 전문가들과 논의하고 그 마지막 결과에 대해 의심해야 했던,  PPCMEM 이
+발전하기 전 상황에 비하면 커다란 진보입니다.
+14시간이 긴 시간처럼 보일 수 있지만, 몇주 또는 심지어 몇달에 비하면 훨씬 짧은
+시간입니다.
+
+그러나, 이 필요한 시간은 두개의 별개 변수에 값을 저장하는 두개의 쓰레드와 이
+두개의 변수들에서 반대 순서로 읽기를 하는 두개의 또다른 쓰레드로 구성된 이
+리트머스 테스트의 간단성을 놓고 보면 약간 놀랍기도 합니다.
+단정문은 이 두개의 값 읽기 쓰레드가 두개의 값 저장의 순서에 대해 다른 의견을
+표출하면 터집니다.
+표준 메모리 순서 규칙 리트머스 테스트들 중에서도 이건 꽤 간단한 편입니다.
+
+\iffalse
+
 Although the PPCMEM tool can solve the famous ``independent reads of
 independent writes'' (IRIW) litmus test shown in
 Listing~\ref{lst:formal:IRIW Litmus Test}, doing so requires no less than
@@ -52,6 +71,27 @@ orders.
 The assertion triggers if the two loading threads disagree on the order
 of the two stores.
 Even by the standards of memory-order litmus tests, this is quite simple.
+
+\fi
+
+이 소모되는 시간과 공간의 양에 대한 한가지 이유는 PPCMEM 이 추적 기반의 전체
+상태 공간 탐색을 한다는 것으로, 이는 이 도구가 아키텍쳐 수준에서 발생 가능한
+모든 이벤트의 순서 조합을 생성하고 평가해야 함을 의미합니다.
+이 수준에서는 읽기와 스기가 모두 화려하게 장식된 이벤트와 동작들의 조합으로
+연관되어서, 완전히 탐색되어야만 하는 매우 거대한 상태 공간을 초래하며, 이는
+결국 큰 메모리와 CPU 소모로 이어집니다.
+
+물론, 이 추적들 중 많은 것들은 다른 것들과 비슷한데, 비슷한 추적들을 하나의
+이벤트로 취급하는게 성능을 개선할 수도 있음을 시사합니다.
+그런 한가지 접근법은 
+\pplsur{Jade}{Alglave} 등의~\cite{Alglave:2014:HCM:2594291.2594347} 공리적
+접근으로, 메모리 모델을 표현하기 위한 공리 집합을 만들고 리트머스 테스트들을 이
+공리들에 의해 증명될 수 있는 이론들로 변환합니다.
+그에 의해 만들어지는, ``herd'' 라 불리는 도구는
+Listing~\ref{lst:formal:IRIW Litmus Test} 에 보인 IRIW 리트머스 테스트를 포함해
+PPCMEM 같은 도구에 입력되는 것과 똑같은 리트머스 테스트를 받습니다.
+
+\iffalse
 
 One reason for the amount of time and space consumed is that PPCMEM does
 a trace-based full-state-space search, which means that it must generate
@@ -73,6 +113,8 @@ over this set of axioms.
 The resulting tool, called ``herd'',  conveniently takes as input the
 same litmus tests as PPCMEM, including the IRIW litmus test shown in
 Listing~\ref{lst:formal:IRIW Litmus Test}.
+
+\fi
 
 \begin{listing}[tb]
 \begin{fcvlabel}[ln:formal:Expanded IRIW Litmus Test]
@@ -106,7 +148,20 @@ exists
 \label{lst:formal:Expanded IRIW Litmus Test}
 \end{listing}
 
-However, where PPCMEM requires 14 CPU hours to solve IRIW, herd does so
+그러나, PPCMEM 은 IRIW 를 푸는데 14 CPU 시간을 소요하는데 반해 herd 는 17
+밀리세컨드만에 이를 완료하여, 백만배 이상의 속도향상을 보입니다.
+그렇다고는 하나, 이 문제는 근본적으로 지수적이어서 우린 herd 가 큰 문제에
+있어서는 지수적으로 속도하락을 보일 것이라 예상할 수 있습니다.
+그리고 이게 실제로 일어나는 일인데, 예를 들어,
+Listing~\ref{lst:formal:Expanded IRIW Litmus Test} 에 보인 것과 같이 쓰기 CPU
+마다 네개의 쓰기를 더하면, herd 는 50,000 배 이상 느려져서 15 \emph{분} 이 넘는
+CPU 시간을 필요로 합니다.
+쓰레드를 추가하는 것 역시 폭발적인 속도 하락을
+초래합니다~\cite{PaulEMcKenney2014weakaxiom}.
+
+\iffalse
+
+Howeved, where PPCMEM requires 14 CPU hours to solve IRIW, herd does so
 in 17 milliseconds, which represents a speedup of more than six orders
 of magnitude.
 That said, the problem is exponential in nature, so we should expect
@@ -118,6 +173,26 @@ herd slows down by a factor of more than 50,000, requiring more than
 15 \emph{minutes} of CPU time.
 Adding threads also results in exponential
 slowdowns~\cite{PaulEMcKenney2014weakaxiom}.
+
+\fi
+
+그 폭발적 본성에도 불구하고, PPCMEM 과 herd 는 모두 x86 시스템에서의
+queued-lock handoff 를 포함한 핵심 병렬 알고리즘을 검사하는데 상당히 유용함이
+증명되었습니다.
+herd 의 약점은 Section~\ref{sec:formal:PPCMEM Discussion} 에서 보인 PPCMEM 의
+그것과 비슷합니다.
+PPCMEM 과 herd 가 다른 결과를 내는 눈에 잘 안띄는 (그러나 분명 존재하는)
+경우들이 있으며, 2021년 기준으로 이런 서로 다른 결과의 문제들 중 전부는
+아니지만 많은 것들이 해결되었습니다.
+
+이 리트머스 테스트들이
+(Listing~\ref{lst:formal:PPCMEM Litmus Test} 처럼).
+어셈블리어가 아닌
+(Listing~\ref{lst:formal:Meaning of PPCMEM Litmus Test} 처럼)
+C 로 쓰여질 수 있다면 도움이 될 겁니다.
+이는 이제 가능한데, 다음 섹션에서 이를 다룹니다.
+
+\iffalse
 
 Despite their exponential nature, both PPCMEM and herd have proven quite
 useful for checking key parallel algorithms, including the queued-lock
@@ -134,6 +209,8 @@ It would be helpful if the litmus tests could be written in C
 rather than assembly
 (as in Listing~\ref{lst:formal:PPCMEM Litmus Test}).
 This is now possible, as will be described in the following sections.
+
+\fi
 
 \subsection{Axiomatic Approaches and Locking}
 \label{sec:formal:Axiomatic Approaches and Locking}
