@@ -215,6 +215,23 @@ This is now possible, as will be described in the following sections.
 \subsection{Axiomatic Approaches and Locking}
 \label{sec:formal:Axiomatic Approaches and Locking}
 
+공리적 접근법은
+Listing~\ref{lst:formal:Locking Example} (\path{C-Lock1.litmus}) 에 보인 락
+기반 리트머스 테스트로 보여지듯 더 높은 수준의 언어와 더 높은 수준의 동기화
+기능들에도 적용될 수 있습니다.
+이 리트머스 테스트는 리눅스 커널 메모리 모델 (Linux Kernel Memory Model:
+LKMM)~\cite{Alglave:2018:FSC:3173162.3177156,LucMaranget2018lock.cat} 로 모델링
+될 수 있습니다.
+예상되었듯, \co{herd} 의 결과는 \co{Never} 를 포함해서, \co{P1()} 이 \co{x} 가
+값 1을 가질 수 없음을 올바르게 파악해냅니다.\footnote{
+	\co{herd} 도구의 출력물은 PPCMEM 의 그것과 호환되므로, 출력물의 포맷을
+	보이는 예를 위해선
+	Listings~\ref{lst:formal:PPCMEM Detects an Error}
+	과~\ref{lst:formal:PPCMEM on Repaired Litmus Test} 를 보시기
+	바랍니다.}
+
+\iffalse
+
 Axiomatic approaches may also be applied to higher-level
 languages and also to higher-level synchronization primitives, as
 exemplified by the lock-based litmus test shown in
@@ -230,6 +247,8 @@ of one.\footnote{
 	and~\ref{lst:formal:PPCMEM on Repaired Litmus Test}
 	for examples showing the output format.}
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-Lock1@whole.fcv}
 \caption{Locking Example}
@@ -237,14 +256,33 @@ of one.\footnote{
 \end{listing}
 
 \QuickQuiz{
+	Listing~\ref{lst:formal:Locking Example} 에 보인 것과 같은 리트머스
+	테스트를 \co{herd} 로 돌리기 위해선 뭘 해야 하나요?
+
+	\iffalse
+
 	What do you have to do to run \co{herd} on litmus tests like
 	that shown in Listing~\ref{lst:formal:Locking Example}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	v4.17 (또는 그보다 최신의) 리눅스 커널 소스 코드를 가져오고, 필요한
+	도구들의 설치를 위해 \path{tools/memory-model/README} 의 설명을
+	따르세요.
+	이어서 여러분이 고른 리트머스 테스트를 위해 그 도구들을 수행시키기 위해
+	설명들을 더 따라가세요.
+
+	\iffalse
+
 	Get version v4.17 (or later) of the Linux-kernel source code,
 	then follow the instructions in \path{tools/memory-model/README}
 	to install the needed tools.
 	Then follow the further instructions to run these tools on the
 	litmus test of your choice.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tb]
@@ -253,6 +291,15 @@ of one.\footnote{
 \label{lst:formal:Broken Locking Example}
 \end{listing}
 
+물론,
+Listing~\ref{lst:formal:Broken Locking Example} (\path{C-Lock2.litmus}) 에 보인
+것처럼 \co{P0()} 와 \co{P1()} 이 다른 락을 사용한다면 모두 끝입니다.
+그리고 이 경우, \co{herd} 의 출력물은 \co{Sometimes} 를 포함해서 다른 락의
+사용이 \co{P1()} 으로 하여금 \co{x} 가 값 1을 갖는 것을 볼 수 있게 함을
+올바르게 알립니다.
+
+\iffalse
+
 Of course, if \co{P0()} and \co{P1()} use different locks, as shown in
 Listing~\ref{lst:formal:Broken Locking Example} (\path{C-Lock2.litmus}),
 then all bets are off.
@@ -260,10 +307,37 @@ And in this case, the \co{herd} tool's output features the string
 \co{Sometimes}, correctly indicating that use of different locks allows
 \co{P1()} to see \co{x} having a value of one.
 
+\fi
+
 \QuickQuiz{
+	왜 락킹을 직접 모델링해서 일을 복잡하게 만들죠?
+	어토믹 오퍼레이션을 이용해 간단히 락킹을 에뮬레이션 하는게 어떤가요?
+
+	\iffalse
+
 	Why bother modeling locking directly?
 	Why not simply emulate locking with atomic operations?
+
+	\fi
+
 }\QuickQuizAnswer{
+	한 단어로 말하자면
+	Table~\ref{tab:formal:Locking: Modeling vs. Emulation Time (s)}
+	에 보인 것과 같이 성능입니다.
+	첫번째 열은 모델링된 \co{herd} 프로세스의 수를 보입니다.
+	두번째 열은 \co{spin_lock()} 과 \co{spin_unlock()} 을 \co{herd} 의 cat
+	언어로 직접 모델링 했을 때 \co{herd} 수행시간을 보입니다.
+	세번째 열은 \co{spin_clock()} 을 \co{cmpxchg_acquire()} 로,
+	\co{spin_unlock()} 을 \co{smp_store_release()} 로 에뮬레이트 하고
+	\co{herd} \co{filter} 절을 락을 획득하는데 실패하는 수행을 취소시키기
+	위해 사용한 경우의 \co{herd} 수행시간을 보입니다.
+	네번째 열은 세번째 열과 같지만 \co{cmpxchg_acquire()} 대신
+	\co{xchg_acquire()} 를 사용합니다.
+	다섯번째와 여섯번째 열은 세번째와 네번째 열과 같지만 락을 획득하는데
+	실패한 수행을 취소시키기 위해 \co{herd} \co{exists} 절을 사용합니다.
+
+	\iffalse
+
 	In a word, performance, as can be seen in
 	Table~\ref{tab:formal:Locking: Modeling vs. Emulation Time (s)}.
 	The first column shows the number of \co{herd} processes modeled.
@@ -279,6 +353,8 @@ And in this case, the \co{herd} tool's output features the string
 	The fifth and sixth columns are like the third and fourth,
 	but instead using the \co{herd} \co{exists} clause to reject
 	executions that fail to acquire the lock.
+
+	\fi
 
 \begin{table}[tb]
 \rowcolors{10}{}{lightgray}
@@ -309,6 +385,25 @@ And in this case, the \co{herd} tool's output features the string
 \label{tab:formal:Locking: Modeling vs. Emulation Time (s)}
 \end{table}
 
+	\co{filter} 절의 사용은 \co{exists} 절의 사용에 비해 두배 가까이
+	빠름에 역시 유의하시기 바랍니다.
+	\co{filter} 절은 배제된 수행을 일찍 없애는 것을 가능하게 하므로 놀라운
+	일이 아닌데, 여기서 배제된 수행은 락이 두개 이상의 프로세스에 의해
+	동시에 획득된 경우들입니다.
+
+	더 중요한 것은, \co{spin_lock()} 과 \co{spin_unlock()} 을 직접
+	모델링하는 것은 락킹 에뮬레이션을 모델링 하는 것보다 다섯배에서 수백배
+	더 빠르다는 겁니다.
+	이 역시 놀라운 일이 아닐텐데, 직접 모델링 하는 것은 추상화의 수준을
+	높여서 \co{herd} 가 모델링 해야 하는 이벤트의 수를 줄이기 때문입니다.
+	\co{herd} 가 하는 거의 모든 일은 폭발적 계산 복잡도를 가지므로, 이벤트
+	수의 약간의 감소가 수행시간의 폭발적으로 큰 감소를 가능하게 합니다.
+
+	따라서, 정형적 검증에서는 병렬 프로그래밍 그 자체에서보다도 훨씬 더,
+	분할하고 정복하세요!!!
+
+	\iffalse
+
 	Note also that use of the \co{filter} clause is about twice
 	as fast as is use of the \co{exists} clause.
 	This is no surprise because the \co{filter} clause allows
@@ -328,11 +423,21 @@ And in this case, the \co{herd} tool's output features the string
 
 	Thus, in formal verification even more than in parallel
 	programming itself, divide and conquer!!!
+
+	\fi
+
 }\QuickQuizEnd
+
+하지만 락킹은 직접 모델링 될 수 있는 유일한 동기화 기능이 아닙니다:
+다음 섹션은 RCU 를 봅니다.
+
+\iffalse
 
 But locking is not the only synchronization primitive that can be
 modeled directly:
 The next section looks at RCU\@.
+
+\fi
 
 \subsection{Axiomatic Approaches and RCU}
 \label{sec:formal:Axiomatic Approaches and RCU}
