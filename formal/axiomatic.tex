@@ -443,6 +443,21 @@ The next section looks at RCU\@.
 \label{sec:formal:Axiomatic Approaches and RCU}
 
 \begin{fcvref}[ln:formal:C-RCU-remove:whole]
+공리적 접근법 역시 RCU 에 관련된 리트머스 테스트를 분석할 수
+있습니다~\cite{Alglave:2018:FSC:3173162.3177156}.
+그 결과,
+Listing~\ref{lst:formal:Canonical RCU Removal Litmus Test}
+(\path{C-RCU-remove.litmus})
+이 정통적인 RCU 로 조정되는 링크드 리스트 원소 삭제에 관련된 리트머스 테스트를
+보입니다.
+락킹 리트머스 테스트에서와 같이, 이 RCU 리트머스 테스트는 LKMM 에 의해 모델링
+가능한데, RCU 의 에뮬레이션 모델링 대비 비슷한 성능 이득을 갖습니다.
+라인~\lnref{head} 는 \co{x} 를 리스트 헤드로 보이며, 초기에는 \co{y} 를
+참조하는데, 라인~\lnref{tail:1} 에서 값 \co{2} 로 초기화 됩니다.
+
+\iffalse
+
+\begin{fcvref}[ln:formal:C-RCU-remove:whole]
 Axiomatic approaches can also analyze litmus tests involving
 RCU~\cite{Alglave:2018:FSC:3173162.3177156}.
 To that end,
@@ -457,11 +472,32 @@ Line~\lnref{head} shows \co{x} as the list head, initially
 referencing \co{y}, which in turn is initialized to the value
 \co{2} on line~\lnref{tail:1}.
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-RCU-remove@whole.fcv}
 \caption{Canonical RCU Removal Litmus Test}
 \label{lst:formal:Canonical RCU Removal Litmus Test}
 \end{listing}
+
+\Clnrefrange{P0start}{P0end} 의 \co{P0()} 는 이 리스트에서 원소 \co{y} 를 원소
+\co{z} 와 교체하고 (라인~\lnref{assignnewtail}), grace period 하나를 기다린 후
+(라인~\lnref{sync}), 마지막으로 \co{free()} 를 에뮬레이션 하기 위해 \co{y} 의
+값을 0으로 만들어 (라인~\lnref{free}) 원소 \co{y} 를 제거합니다.
+\Clnrefrange{P1start}{P1end} 의 \co{P1()} 은 RCU read-side 크리티컬 섹션 내에서
+(\clnrefrange{rl}{rul}) 구행되며, 리스트 헤드를 집어와 (라인~\lnref{rderef})
+다음 원소를 읽습니다 (라인~\lnref{read}).
+이 다음 원소는 0이 아니어야 하는데, 즉, 아직 메모리 해제되지 않았어야 합니다
+(라인~\lnref{exists_}).
+여러 다른 변수들은 디버깅 목적의 출력들입니다 (라인~\lnref{locations_}).
+
+이 리트머스 테스트를 돌려을 때 \co{herd} 툴의 출력물은 \co{Never} 를 포함해서,
+\co{P0()} 가 예상대로 메모리 해제된 원소에는 결코 액세스 하지 않음을 알립니다.
+역시 예상된 대로, 라인~\lnref{sync} 를 제거하는 것은 \co{P0()} 가 메모리 해제된
+원소를 액세스 하게 하는데, \co{herd} 출력물에 \co{Sometimes} 로 알려집니다.
+\end{fcvref}
+
+\iffalse
 
 \co{P0()} on \clnrefrange{P0start}{P0end}
 removes element \co{y} from the list by replacing it with element \co{z}
@@ -486,11 +522,27 @@ accessing a freed element, as indicated by the \co{Sometimes} in
 the \co{herd} output.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tb]
 \input{CodeSamples/formal/herd/C-RomanPenyaev-list-rcu-rr@whole.fcv}
 \caption{Complex RCU Litmus Test}
 \label{lst:formal:Complex RCU Litmus Test}
 \end{listing}
+
+\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
+\ppl{Roman}{Penyaev}~\cite{RomanPenyaev2018rrRCU} 에 의해 제안된 더 복잡한
+예제의 리트머스 테스트가
+Listing~\ref{lst:formal:Complex RCU Litmus Test}
+(\path{C-RomanPenyaev-list-rcu-rr.litmus}) 에 보여져 있습니다.
+이 예제에서, 읽기 쓰레드는 (\clnrefrange{P0start}{P0end} 의 \co{P0()} 로 모델링
+됩니다) 마지막으로 액세스 된 리스트 원소로의 포인터를 변수 \co{c} 에 ``흘리며''
+round-robin 형태로 이 링크드 리스트를 액세스 합니다.
+업데이트 쓰레드들은 (\clnrefrange{P1start}{P1end} 의 \co{P1()} 으로 모델링
+됩니다) 원소를 하나 제거하고, 현재 또는 미래 읽기 쓰레드를 방해하는 것을
+방지하려 주의합니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
 A litmus test for a more complex example proposed by
@@ -505,18 +557,51 @@ Updaters (modeled by \co{P1()} on \clnrefrange{P1start}{P1end})
 remove an element, taking care to avoid disrupting current or future
 readers.
 
+\fi
+
 \QuickQuiz{
+	잠깐요!!!
+	RCU read-side 크리티컬 섹션 바깥으로 포인터를 흘리는 건 치명적인 버그
+	아닌가요???
+
+	\iffalse
+
 	Wait!!!
 	Isn't leaking pointers out of an RCU read-side critical
 	section a critical bug???
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞아요, 그건 보통 치명적 버그입니다.
+	하지만, 이 경우 업데이트 쓰레드는 그런 포인터 누출을 적절히 처리하게끔
+	잘 구축되었습니다.
+	하지만 이런 일을 하는 버릇을 들이지는 마세요, 그리고 어떤 더 일반적인
+	접근법이 동작하게 하기 위한 충분한 생각없이는 특히나 이런 행위를 하지
+	마세요.
+
+	\iffalse
+
 	Yes, it usually is a critical bug.
 	However, in this case, the updater has been cleverly constructed
 	to properly handle such pointer leaks.
 	But please don't make a habit of doing this sort of thing, and
 	especially don't do this without having put a lot of thought
 	into making some more conventional approach work.
+
+	\fi
+
 }\QuickQuizEnd
+
+\Clnrefrange{listtail}{listhead} 는 초기의 링크드 리스트와 tail 을 정의합니다.
+리눅스 커널에서 이는 쌍방향 링크드 순환 리스트이지만, \co{herd} 는 현재로써는
+그런 복잡한 걸 모델링 할 수 없습니다.
+여기서의 전략은 그대신 그 끝이 결코 닿을 수 없을만큼 충분히 긴 단방향 링크드
+리스트를 사용하는 겁니다.
+라인~\lnref{rrcache} 는 변수 \co{c} 를 정의하는데, 뒤따르는 RCU read-side
+크리티컬 섹션들 사이의 리스트 포인터를 캐쉬하는데 사용됩니다.
+
+\iffalse
 
 \Clnrefrange{listtail}{listhead} define the initial linked
 list, tail first.
@@ -527,6 +612,27 @@ is long enough that the end is never reached.
 Line~\lnref{rrcache} defines variable \co{c}, which is used to
 cache the list pointer between successive RCU read-side critical
 sections.
+
+\fi
+
+여기서도 \clnrefrange{P0start}{P0end} 의 \co{P0()} 는 읽기 쓰레드를 모델링
+합니다.
+이 프로세스는 이 리스트를 round-robin 형태로 순회하는 한쌍의 읽기 쓰레드를
+모델링하는데, 첫번째 읽기 쓰레드는 \clnrefrange{rl1}{rul1} 에, 두번째 읽기
+쓰레드는 \clnrefrange{rl2}{rul2} 에 있습니다.
+라인~\lnref{rdcache} 는 \co{c} 에 캐쉬된 포인터를 읽어오고,
+라인~\lnref{rdckcache} 가 이 포인터가 \co{NULL} 인 것을 보게 되면
+라인~\lnref{rdinitcache} 는 이 리스트의 시작부터 재시작 합니다.
+어느 경우든, 라인~\lnref{rdnext} 는 다음 리스트 원소로 넘어가고,
+라인~\lnref{rdupdcache} 는 이 원소로의 포인터를 변수 \co{c} 에 다시 저장합니다.
+\Clnrefrange{rl1}{rul2} 는 이 프로세스를 반복하지만, \co{r1} 과 \co{r2} 대신
+레지스터 \co{r3} 와 \co{r4} 를 사용합니다.
+Listing~\ref{lst:formal:Canonical RCU Removal Litmus Test} 에서와 같이, 이
+리트머스 테스트는 \co{free()} 를 에뮬레이션 하기 위해 0을 저장하여,
+라인~\lnref{exists_} 는 이 네개의 레지스터 중 어느것이든 \co{NULL} 인지, 즉
+0인지 검사합니다.
+
+\iffalse
 
 Again, \co{P0()} on \clnrefrange{P0start}{P0end} models readers.
 This process models a pair of successive readers traversing round-robin
@@ -546,6 +652,25 @@ this litmus test stores zero to emulate \co{free()}, so
 line~\lnref{exists_} checks for any of these four registers being
 \co{NULL}, also known as zero.
 
+\fi
+
+\co{P0()} 는 RCU 로 보호되는 포인터를 첫번째 RCU read-side 크리티컬 섹션에서
+다음 것으로 누출하므로, \co{P1()} 은 그 업데이트를 (\co{x} 의 삭제) 매우
+조심스럽게 진행해야 합니다.
+라인~\lnref{updremove} 는 \co{w} 를 \co{y} 에 연결함으로써 \co{x} 를
+제거합니다.
+라인~\lnref{updsync1} 는 뒤따르는 읽기 쓰레드들 중 어느 것도 링크드 리스트를
+통해 \co{x} 로의 경로를 갖지 못할때까지 기다립니다.
+라인~\lnref{updrdcache} 는 \co{c} 를 읽어오고, 라인~\lnref{updckcache} 가
+\co{c} 가 이번에 제거된 \co{x} 를 참조함을 확인하면 라인~\lnref{updinitcache}
+에서 \co{c} 를 \co{NULL} 로 만들고 라인~\lnref{updsync2} 에서 다시 읽기
+쓰레드를 기다려서, 뒤따르는 읽기 쓰레드들 중 어느 것도 \co{c} 에서 \co{x} 를
+읽지 못하게 합니다.
+어느 경우든, 라인~\lnref{updfree} 는 \co{x} 에 0을 저장하여 \co{free()} 를
+에뮬레이션 합니다.
+
+\iffalse
+
 Because \co{P0()} leaks an RCU-protected pointer from its first
 RCU read-side critical section to its second, \co{P1()} must carry
 out its update (removing \co{x}) very carefully.
@@ -560,7 +685,18 @@ subsequent reader can fetch \co{x} from \co{c}.
 In either case, line~\lnref{updfree} emulates \co{free()} by storing
 zero to \co{x}.
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
+	Listing~\ref{lst:formal:Complex RCU Litmus Test} 에서, 읽기 쓰레드는 왜
+	\co{P1()} 이 라인~\lnref{updinitcache} 에서 \co{c} 를 0으로 만든 후
+	\co{c} 를 곧바로 읽어오고 나중에 이 같은 값을 \co{c} 에 그게 0이 된
+	직후에 저장하여 이 값 0으로 만들기 오퍼레이션을 무효화 하지 못하나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
 	In Listing~\ref{lst:formal:Complex RCU Litmus Test},
 	why couldn't a reader fetch \co{c} just before \co{P1()}
@@ -568,13 +704,33 @@ zero to \co{x}.
 	store this same value back into \co{c} just after it was
 	zeroed, thus defeating the zeroing operation?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
+	그 읽기 쓰레드는 라인~\lnref{rdnext} 에서 다음 원소로 넘어갔으므로,
+	같은 원소로의 포인터를 읽은대로 저장하는게 막아집니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
 	Because the reader advances to the next element on
 	line~\lnref{rdnext}, thus avoiding storing a pointer to the
 	same element as was fetched.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
+
+이 리트머스 테스트를 돌렸을 때 \co{herd} 의 결과는 \co{Never} 를 포함해서
+\co{P0()} 가 예상대로 결코 메모리 해제된 원소를 액세스 하지 않음을 알립니다.
+역시 예상대로, \co{synchronize_rcu()} 를 제거하는 것은 \co{P1()} 이 메모리 해제된 원소를 액세스 하게 하며, \co{herd} 결과에 \co{Sometimes} 로 알려집니다.
+\end{fcvref}
+
+\iffalse
 
 The output of the \co{herd} tool when running this litmus test features
 \co{Never}, indicating that \co{P0()} never accesses a freed element,
@@ -584,27 +740,71 @@ in \co{P1()} accessing a freed element, as indicated by \co{Sometimes}
 in the \co{herd} output.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
+	Listing~\ref{lst:formal:Complex RCU Litmus Test} 에서,
+	라인~\lnref{updfree} 바로 전에 \co{synchronize_rcu()} 를 한번만
+	호출하지 않는 이유가 뭐죠?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
 	In Listing~\ref{lst:formal:Complex RCU Litmus Test},
 	why not have just one call to \co{synchronize_rcu()}
 	immediately before line~\lnref{updfree}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
+	이는 \co{P0()} 가 메모리 해제된 원소에 액세스 하게 하기 때문입니다.
+	하지만 제 말만 믿지 마시고 \co{herd} 를 써서 시험해 보세요!
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
 	Because this results in \co{P0()} accessing a freed element.
 	But don't take my word for this, try it out in \co{herd}!
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
+	역시 Listing~\ref{lst:formal:Complex RCU Litmus Test} 에서,
+	라인~\lnref{updfree} 는 \co{smp_store_release()} 대신 \co{WRITE_ONCE()}
+	를 사용할 수 없나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
 	Also in Listing~\ref{lst:formal:Complex RCU Litmus Test},
 	can't line~\lnref{updfree} be \co{WRITE_ONCE()} instead
 	of \co{smp_store_release()}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerE{
+	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
+	훌륭한 질문입니다.
+	2021년 기준을, 답은 ``아무도 모른다'' 입니다.
+	이는 \ARMv8 의 conditional-move 명령의 의미에 달려있습니다.
+	이 명령의 의미가 분명해지길 기다리는 동안은 \co{smp_store_release()} 가
+	안전한 선택일 겁니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-RomanPenyaev-list-rcu-rr:whole]
 	That is an excellent question.
 	As of late 2021, the answer is ``no one knows''.
@@ -613,8 +813,22 @@ in the \co{herd} output.
 	While awaiting clarity on these semantics, \co{smp_store_release()}
 	is the safe choice.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 섹션들은 공리적 접근법이 어떻게 락킹과 RCU 같은 동기화 기능들을 C-언어
+리트머스 테스트를 사용해 성공적으로 모델링 할 수 있는지 보였습니다.
+더 장기적인 바람은 공리적 접근법이 심지어 더 높은 수준의 소프트웨어 제품들을
+모델링 해서 폭발적인 검증 속도 향상을 가능하게 하는 것입니다.
+이는 잠재적으로 훨씬 더 큰 소프트웨어 시스템에 대한 공리적 검증을 가능하게 할
+겁니다.
+또다른 대안은 이진 논리의 공리들을 다음 섹션에서 설명하는 것처럼 서비스로
+만드는 겁니다.
+
+\iffalse
 
 These sections have shown how axiomatic approaches can successfully
 model synchronization primitives such as locking and RCU in C-language
@@ -626,3 +840,5 @@ This could potentially allow axiomatic verification of much larger
 software systems.
 Another alternative is to press the axioms of boolean logic into service,
 as described in the next section.
+
+\fi
