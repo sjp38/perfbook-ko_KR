@@ -100,6 +100,27 @@ to a given software project.
 % to shift the concern to Robust-Fragile, and social epistemology to the
 % more serious problem of Sucker-Nonsucker.
 
+이 챕터에서 이야기한 정형 검증 기법들은 작은 병렬 알고리즘을 검증하는데 매우
+강력한 도구입니다만 그게 여러분의 도구상자의 유일한 도구여선 안됩니다.
+정형 검증에 전념한 수십년의 세월에도 불구하고 테스트는 거대 병렬 소프트웨어
+시스템의 검증 주력 도구로
+남아있습니다~\cite{JonathanCorbet2006lockdep,DaveJones2011Trinity,PaulEMcKenney2016Formal}.
+
+그렇지만 이게 영원할 거라는 보장은 없습니다.
+이를 위해, 2017년 기준으로 200억개가 넘는 리눅스 커널 인스턴스가 있을 것으로
+추정됨을 생각해 보십시오.
+리눅스 커널이 평균 백만년에 한번 일어나는 버그를 가지고 있다고 해봅시다.
+앞 챕터의 끝에서 이야기 되었듯, 이 버그는 이 전체 설치 기반에서 \emph{매일}
+50번씩 나타날 겁니다.
+하지만 대부분의 정형 검증 기법은 매우 작은 코드기반에서만 사용될 수 있다는
+사실도 여전합니다.
+그래서 동시성 코드를 짜는 사람들은 뭘 해야 할까요?
+
+첫번째 버그, 첫번째 연관된 버그, 마지막 연관된 버그, 그리고 마지막 버그를
+찾는다는 관점에서 생각해 보세요.
+
+\iffalse
+
 The formal-verification techniques described in this chapter
 are very powerful tools for validating small
 parallel algorithms, but they should not be the only tools in your toolbox.
@@ -120,6 +141,33 @@ So what is a concurrency coder to do?
 
 Think in terms of finding the first bug, the first relevant bug, the
 last relevant bug, and the last bug.
+
+\fi
+
+첫번째 버그는 보통 조사나 컴파일러 진단에 의해 찾아집니다.
+갈수록 정교해지는 컴파일러 진단 기능은 경량화된 일종의 정형 검증을 제공하긴
+하지만, 그것들을 그런 관점에서 생각하는 건 흔치 않습니다.
+이는 한편으로는 부분적으로 ``내가 그걸 사용한다면, 그건 정형 검증일 수 없다''
+고 말하는 사용자의 이상한 편견 때문이고, 다른 한편으로는 컴파일러 진단과 검증
+연구 사이의 큰 차이 때문입니다.
+
+첫번째 연관된 버그는 조사나 컴파일러 진단을 통해 찾아질 수도 있지만, 이 두개의
+단계가 오탈자나 거짓 양성만을 찾는건 일반적이지 않습니다.
+어느 쪽이던, 많은 연관된 버그들, 즉, 실제로 제품 환경에서 발생할 수 있는
+버그들은 테스트를 통해 발견됩니다.
+
+테스트가 예상된 또는 실제 사용 시나리오에 의해 만들어지는 경우, 마지막 연관
+버그가 테스트를 통해 찾아지는 건 드물지 않습니다.
+이 상황은 정형 검증에 대한 완전한 각하의 동기를 유발할 수도 있겠으나, 연관 없는
+버그들은 black-hat 공격 덕분에 가장 피곤한 순간에 연관되게 나타나는 짜증나는
+습관을 갖고 있습니다.
+따라서 계속해서 그 비중이 늘어나고 있는 보안에 치명적인 소프트웨어에서는 마지막
+버그를 찾고 고치기 위한 강한 동기가 있습니다.
+테스트는 마지막 버그를 찾을 수 없으며, 따라서 정형 검증의 역할이 존재할 것이며,
+정형 검증은 그 역할에 있어서 성장을 지속할 것을 가정할 수 있습니다.
+이 챕터가 보였듯, 현재의 정형 검증 시스템은 상당한 한계를 가지고 있습니다.
+
+\iffalse
 
 The first bug is normally found via inspection or compiler diagnostics.
 Although the increasingly sophisticated compiler diagnostics comprise
@@ -149,10 +197,32 @@ formal verification proves capable of growing into that role.
 As this chapter has shown, current formal verification systems are
 extremely limited.
 
+\fi
+
 \QuickQuiz{
+	하지만 충분히 낮은 단계의 소프트웨어는 모든 의도와 목적에 있어 black
+	hat 에 착취당하는데 면역이 있어야 하지 않나요?
+
+	\iffalse
+
 	But shouldn't sufficiently low-level software be for all intents
 	and purposes immune to being exploited by black hats?
+
+	\fi
+
 }\QuickQuizAnswer{
+	불행히도, 아닙니다.
+
+	한때 Paul E. McKenny 는 리눅스 커널 RCU 가 그런 공격으로부터 면역이
+	있다고 느꼈으나, Row Hammer 의 발전은 그렇지 않음을 그에게 보였습니다.
+	어쨌건, black hat 이 시스템의 DRAM 을 공격할 수 있다면, 모든 저수준
+	소프트웨어를 공격할 수 있는데, RCU 조차도 포함됩니다.
+
+	그리고 2018년, 이 가능성은 이론적 예측의 계곡에서 객관적 진실의 어렵고
+	빠른 계곡으로 옮겨졌습니다~\cite{McKenney:2019:CRS:3319647.3325836}.
+
+	\iffalse
+
 	Unfortunately, no.
 
 	At one time, Paul E. McKenny felt that Linux-kernel RCU
@@ -164,7 +234,25 @@ extremely limited.
 	And in 2018, this possibility passed from the realm of
 	theoretical speculation into the hard and fast realm of
 	objective reality~\cite{McKenney:2019:CRS:3319647.3325836}.
+
+	\fi
+
 }\QuickQuizEnd
+
+정형적 검증은 종종 테스트보다 이용되기가 훨씬 어려움을 유의하시기 바랍니다.
+이는 부분적으로 통념적 발언이며, 정형 검증이 더 익숙해져서 사용하기 쉬워지는
+날이 오길 바랄 이유가 됩니다.
+그러나, 매우 간단한 테스트 도구는 임의의 거대 소프트웨어 시스템에 있는 심각한
+버그를 찾을 수 있습니다.
+대조적으로, 정형 검증을 적용하는데 필요한 노력은 시스템 크기가 커질수록
+극적으로 증가하는 것으로 보입니다.
+
+저는 더도 덜도 아니고 지난 30년간 때때로 정형 검증을 사용하며 그 강력함을
+느꼈는데, 전체 소프트웨어를 구성하는 작은 부분에 대한 설계 시점 검증이 그런
+때였습니다.
+더 큰 전체 소프트웨어는 물론 테스트를 통해 검증되었습니다.
+
+\iffalse
 
 Please note that formal verification is often much harder to use than
 is testing.
@@ -182,11 +270,35 @@ namely design-time verification of small complex portions of the overarching
 software construct.
 The larger overarching software construct is of course validated by testing.
 
+\fi
+
 \QuickQuiz{
+	L4 마이크로 커널의 전체 검증을 놓고 보면, 정형 검증에 대한 이 제한적
+	시선은 약간 시대에 뒤쳐진 것 아닌가요?
+
+	\iffalse
+
 	In light of the full verification of the L4 microkernel,
 	isn't this limited view of formal verification just a little
 	bit obsolete?
+
+	\fi
+
 }\QuickQuizAnswer{
+	불행히도, 아닙니다.
+
+	L4 마이크로 커널의 전체 검증은 학생별로는 느린 속도로 진행된, 많은
+	Ph.D. 학생들이 일일이 손을 통해 코드를 검증한 역작이었습니다.
+	대부분의 소프트웨어 프로젝트는 변경이 너무 빨리 만들어지기 때문에 이런
+	수준의 노력을 적용할 수 없습니다.
+	더 나아가서, L4 마이크로커널이 정형 검증의 시선에서 보기에는 거대한
+	소프트웨어 작품이지만, LLVM, \GCC, 리눅스 커널, Hadoop, MongoDB, 그
+	외에도 수 많은 많은 프로젝트들에 비하면 아주 작습니다.
+	또한, 이 검증 역시 한계가 있는데, 연구자들도 이를 인정합니다:
+	\url{https://docs.sel4.systems/projects/sel4/frequently-asked-questions.html\#does-sel4-have-zero-bugs}.
+
+	\iffalse
+
 	Unfortunately, no.
 
 	The first full verification of the L4 microkernel was a tour de force,
@@ -202,6 +314,22 @@ The larger overarching software construct is of course validated by testing.
 	freely admit, to their credit:
 	\url{https://docs.sel4.systems/projects/sel4/frequently-asked-questions.html\#does-sel4-have-zero-bugs}.
 
+	\fi
+
+	정형 검증이 더 큰 수준의 자동화를 적용한 더 최근의 L4 검증을 포함해
+	어떤 성과를 마침내 거두기 시작하고 있지만 가시적 미래에 테스트를 완전히
+	대체할 기회는 현재로썬 없습니다.
+	그리고 전 이에 대해 틀렸기를 감히 바라겠습니다만, 그런 증명은 실제
+	소프트웨어를 검증하는 진짜 도구에 의한 형태이어야지, 화려한 수사의 몸통
+	형태여선 안될 겁니다.
+
+	아마도 언젠가 정형 검증은 검증을 위해 널리 사용될텐데, 현재 회귀
+	테스트라 알린 것들도 포함할 겁니다.
+	Section~\ref{sec:future:Formal Regression Testing?} 은 이 가능성을
+	현실로 만들기 위해 무엇이 필요할지 알아봅니다.
+
+	\iffalse
+
 	Although formal verification is finally starting to show some
 	promise, including more-recent L4 verifications involving greater
 	levels of automation, it currently has no chance of completely
@@ -215,6 +343,9 @@ The larger overarching software construct is of course validated by testing.
 	validation, including for what is now known as regression testing.
 	Section~\ref{sec:future:Formal Regression Testing?} looks at
 	what would be required to make this possibility a reality.
+
+	\fi
+
 }\QuickQuizEnd
 
 One final approach is to consider the following two definitions from
