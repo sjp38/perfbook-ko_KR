@@ -9,6 +9,17 @@
 	  hope and its salvation.}
 	 {\emph{Gertrude Stein}}
 
+레퍼런스 카운팅이 컨셉상으로는 간단한 기법이지만, 실제로 동시성 소프트웨어에
+적용하기에는 많은 어려움이 숨어있습니다.
+어쨌건, 어떤 객체가 이른 제거를 당하지 않는다면, 그걸 위한 레퍼런스 카운터를
+가질 이유 자체가 없습니다.
+하지만 그 객체가 제거될 수 있다면, 레퍼런스 획득 프로세스 자체를 제거하는 건
+뭘로 막나요?
+
+동시성 소프트웨어에서의 레퍼런스 카운터 사용을 재고하기 위한 여러 방법들이 있는데, 다음의 것들이 포함됩니다:
+
+\iffalse
+
 Although reference counting is a conceptually simple technique,
 many devils hide in the details when it is applied to concurrent
 software.
@@ -20,7 +31,29 @@ the reference-acquisition process itself?
 There are a number of ways to refurbish reference counters for
 use in concurrent software, including:
 
+\fi
+
 \begin{enumerate}
+\item	레퍼런스 카운트 조정 중에는 객체의 밖에 있는 락을 잡아야 합니다.
+\item	이 객체는 0이 아닌 레퍼런스 카운트를 가지고 생성되며, 새 레퍼런스는 이
+	레퍼런스 카운터의 값이 0이 아닐 때에만 획득될 수 있습니다.
+	어떤 쓰레드가 특정 객체로의 참조를 가지고 있지 않다면, 참조를 이미
+	가지고 있는 다른 쓰레드의 도움이 필요할 수 있습니다.
+\item	어떤 경우, 해저드 포인터가 레퍼런스 카운터의 자체 교체를 위해 사용될 수
+	있습니다.
+\item	객체를 위한 존재 보장 (existance guarantee) 이 제공되어서 어떤 다른
+	것이 참조를 얻으려 하는 사이에 이 객체가 메모리 해제되는 것을 막습니다.
+	존재 보장은 자동화된 garbage collector 에 의해 종종 제공되며,
+	\cref{sec:defer:Hazard Pointers,sec:defer:Read-Copy Update (RCU)}
+	에서 보았듯 해저드 포인터와 RCU 에 의해 각각 제공되기도 합니다.
+\item	타입 안전성 보장 (type-safety guarantee) 이 객체에 제공됩니다.
+	참조가 획득된 후에는 정체성 검사가 반드시 추가로 수행되어야 합니다.
+	타입 안전성은 특수 목적 메모리 할당자에 의해 제공될 수 있는데,
+	\cref{sec:defer:Read-Copy Update (RCU)} 에서 보인, 리눅스 커널에 있는
+	\co{SLAB_TYPESAFE_BY_RCU} 가 한 예가 되겠습니다.
+
+\iffalse
+
 \item	A lock residing outside of the object must be held while
 	manipulating the reference count.
 \item	The object is created with a non-zero reference count, and new
@@ -44,7 +77,17 @@ use in concurrent software, including:
 	memory allocators, for example, by the
 	\co{SLAB_TYPESAFE_BY_RCU} feature within the Linux kernel,
 	as is seen in \cref{sec:defer:Read-Copy Update (RCU)}.
+
+\fi
+
 \end{enumerate}
+
+물론, 존재 보장을 제공하는 모든 메커니즘은 그 정의에 따라 타입 안전성 보장도
+제공합니다.
+이는 레퍼런스 획득 보호를 위한 네개의 일반적 카테고리를 형성합니다:
+레퍼런스 카운팅, 해저드 포인터, 시퀀스 락킹, 그리고 RCU.
+
+\iffalse
 
 Of course, any mechanism that provides existence guarantees
 by definition also provides type-safety guarantees.
@@ -52,12 +95,41 @@ This results in four general categories of reference-acquisition
 protection:
 Reference counting, hazard pointers, sequence locking, and RCU\@.
 
+\fi
+
 \QuickQuiz{
+	레퍼런스 카운터가 0이 아닐 때에만 참조를 획득하는 간단한
+	compare-and-swap 오퍼레이션을 사용해 구현하는 건 어떤가요?
+
+	\iffalse
+
 	Why not implement reference-acquisition using
 	a simple compare-and-swap operation that only
 	acquires a reference if the reference counter is
 	non-zero?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이게 마지막 참조의 해제와 새 참조의 획득 사이의 경주는 해결할 수
+	있지만, 데이터 구조가 메모리 해제되고 어쩌면 심지어 어떤 완전 다른
+	타입의 구조로 재할당 되는 것을 막기 위한 일은 전혀 하지 않습니다.
+	``간단한 compare-and-swap 오퍼레이션'' 이 다른 타입의 구조에 적용되었을
+	때에는 정의되지 않은 결과를 낼 수 있을 겁니다.
+
+	요약하자면, compare-and-swap 같은 어토믹 오퍼레이션의 사용은 타입
+	안전성 또는 존재 보장을 필요로 합니다.
+
+	하지만 타입 변경을 허용할 필요가 있다면 어떨까요?
+
+	한가지 방법은 그런 타입 각자가 같은 위치에 레퍼런스 카운터를 갖게 해서,
+	재할당이 이 타입의 객체 그룹에서 수행된다면 모든게 안전하게 합니다.
+	이걸 C 에서 하려면 각 구조의 레퍼런스 카운터를 사용될 때마다 주석을
+	다시기 바랍니다.
+	C++ 에서는 상속과 템플릿을 사용하세요.
+
+	\iffalse
+
 	Although this can resolve the race between the release of
 	the last reference and acquisition of a new reference,
 	it does absolutely nothing to prevent the data structure
@@ -78,6 +150,9 @@ Reference counting, hazard pointers, sequence locking, and RCU\@.
 	If you do this in C, make sure you comment the reference counter
 	in each structure in which it appears.
 	In C++, use inheritance and templates.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{table}[tb]
@@ -106,6 +181,26 @@ Reference counting, hazard pointers, sequence locking, and RCU\@.
 \label{tab:together:Synchronizing Reference Counting}
 \end{table}
 
+핵심 레퍼런스 카운팅 문제는 참조의 획득과 객체의 메모리 해제 사이의
+동기화이므로,
+\cref{tab:together:Synchronizing Reference Counting}
+에 보인 것처럼 아홉개의 가능한 메코니즘 조합이 존재합니다.
+이 표는 레퍼런스 카운팅 메커니즘들을 다음의 넓은 카테고리들로 나눕니다:
+\begin{enumerate}
+\item	어토믹 오퍼레이션, 메모리 배리어, 정렬 제한 무엇도 없는 간단한 카운팅
+	(``$-$'').
+\item	메모리 배리어 없이 하는 원자적 카운팅 (``A'').
+\item	해제 시에만 메모리 배리어를 필요로 하는 원자적 카운팅 (``AM'').
+\item	원자적 획득과 결합된 검사를 가지며 해제 시에만 메모리 배리어를 필요로
+	하는 원자적 카운팅 (``CAM'').
+\item	원자적 획득 오퍼레이션과 검사가 결합된 원자적 카운팅 (``CA'').
+\item	전체 메모리 배리어와 검사가 결합된 간단한 카운팅 (``M'').
+\item	원자적 획득과 검사가 결합되고 획득 시에 메모리 배리어도 요구되는 원자적
+	카운팅 (``MCA'').
+\end{enumerate}
+
+\iffalse
+
 Given that the key reference-counting issue
 is synchronization between acquisition
 of a reference and freeing of the object, we have nine possible
@@ -130,6 +225,21 @@ divides reference-counting mechanisms into the following broad categories:
 	operation, and with memory barriers also required on acquisition
 	(``MCA'').
 \end{enumerate}
+
+\fi
+
+그러나, 값을 반환하는 모든 리눅스 커널의 원자적 오퍼레이션들은 메모리 배리어를
+포함하게 정의되어 있으므로,\footnote{
+	\co{atomic()} 와 \co{ATOMIC_INIT()} 는 예외입니다.}
+모든 해제 오퍼레이션은 메모리 배리어를 포함하며, 모든 검사되는 획득 오퍼레이션
+역시 메모리 배리어를 포함합니다.
+따라서, ``CA'' 와 ``MCA'' 는 ``CAM'' 과 동일해서, 첫번째 네개와 여섯번째의
+경우들에 대한 것들만 남습니다: ``$-$'', ``A'', ``AM'', ``CAM'', and ``M''.
+다음 섹션들은 참조 획득과 해제가 매우 빈번하고 레퍼런스 카운트가 0인지는 매우
+드물게 검사될 필요가 있을 때 성능을 개선할 수 있는 최적화 기법들을 소개합니다.
+
+\iffalse
+
 However, because all Linux-kernel atomic operations that return a
 value are defined to contain memory barriers,\footnote{
 	With \co{atomic_read()} and \co{ATOMIC_INIT()} being the
@@ -143,6 +253,8 @@ there are sections below for only the first four cases and the sixth case:
 Later sections describe optimizations that can improve performance
 if reference acquisition and release is very frequent, and the
 reference count need be checked for zero only very rarely.
+
+\fi
 
 \subsection{Implementation of Reference-Counting Categories}
 \label{sec:together:Implementation of Reference-Counting Categories}
