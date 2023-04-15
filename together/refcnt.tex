@@ -365,6 +365,22 @@ int sref_put(struct sref *sref,
 \subsubsection{Atomic Counting}
 \label{sec:together:Atomic Counting}
 
+간단한 원자적 카운팅은 참조를 얻는 모든 CPU 가 이미 참조를 쥐고 있을 때 사용될
+수 있습니다.
+이 스타일은 하나의 CPU 가 스스로의 사적 사용을 위해 객체를 생성하지만 다른 CPU,
+태스크, 타이머 핸들러 등에게 액세스를 허용해야만 할 때 사용됩니다.
+이 객체를 넘기는 모든 CPU 는 먼저 그걸 건네받을 쪽을 대신해 새로운 참조를
+획득하거나 건네기를 한 후에 액세스를 하기를 삼가야 합니다.
+리눅스 커널의 경우, \co{kref} 기능이 이 형태의 레퍼런스 카운팅을 구현하는데
+사용되는데,
+\cref{lst:together:Linux Kernel kref API} 에 보여진 바와 같습니다.\footnote{
+	리눅스 v4.10 기준입니다.
+	리눅스 v4.11 은 완화된 순서 규칙 플랫폼에서의 효율성을 개선한
+	\co{refcount_t} API 를 도입했는데, 기능적으로는 대체된 \co{atomic_t} 와
+	동일합니다.}
+
+\iffalse
+
 Simple atomic counting may be used in cases where any CPU acquiring
 a reference must already hold a reference.
 This style is used when a single CPU creates an object for its own private
@@ -380,6 +396,30 @@ this style of reference counting, as shown in
 	Linux v4.11 introduced a \co{refcount_t} API that improves
 	efficiency weakly ordered platforms, but which is functionally
 	equivalent to the \co{atomic_t} that it replaced.}
+
+\fi
+
+이 경우에는 락킹이 모든 레퍼런스 카운트 오퍼레이션을 보호하지 않으며, 이말은
+두개의 다른 CPU 가 동시에 레퍼런스 카운트를 조정할 수도 있음을 의미하기 때문에
+어토믹 카운팅이 필요합니다.
+평범한 값 증가/감소가 사용되었다면, 한쌍의 CPU 는 둘 다 동시에 레퍼런스
+카운트를 읽어와서 둘 다 값 ``3'' 을 얻을 수 있습니다.
+둘 모두 각자의 값을 증가시키면 둘 다 ``4'' 를 얻게 되고, 둘 다 이 값을 카운터에
+다시 저장하게 됩니다.
+이 카운터의 새로운 값은 ``5'' 여야 하므로, 값 증가 하나가 사라졌습니다.
+따라서, 어토믹 오퍼레이션은 카운터 증가와 감소 둘 다에 사용되어야만 합니다.
+
+해제가 락킹, 해저드 포인터, 또는 RCU 로 보호된다면, 메모리 배리어는 필요하지
+\emph{않지만}, 다른 이유 때문입니다.
+락킹의 경우, 락은 모든 필요한 메모리 배리어를 제공하고 (그리고 컴파일러
+최적화를 해제합니다), 또한 한쌍의 해제가 동시에 수행되는 것을 방지합니다.
+해저드 포인터와 RCU 의 경우, 정리는 뒤로 미뤄지며, 모든 필요한 메모리 배리어나
+컴파일러 최적화 해제는 해저드 퐁니터나 RCU 에 의해 제고오딥니다.
+따라서, 두개의 CPU 가 마지막 두개의 참조를 동시에 해제하려 하면, 실제 정리는 두
+CPU 모두 각자의 해저드 포인터를 해제하거나 RCU read-side 크리티컬 섹션을 끝낼
+때까지 미뤄질 겁니다.
+
+\iffalse
 
 Atomic counting is required in this case because locking does not protect
 all reference-count operations, which means that two different CPUs
@@ -406,15 +446,35 @@ Therefore, if two CPUs release the final two references concurrently, the
 actual cleanup will be deferred until both CPUs have released their hazard
 pointers or exited their RCU read-side critical sections, respectively.
 
+\fi
+
 \QuickQuiz{
+	한 CPU 가 마지막 참조를 해제한 직후에 다른 CPU 가 참조를 얻는 경우를
+	위한 보호는 왜 필요하지 않죠?
+
+	\iffalse
+
 	Why isn't it necessary to guard against cases where one CPU
 	acquires a reference just after another CPU releases the last
 	reference?
+
+	\fi
+
 }\QuickQuizAnswer{
+	합법적으로 또다른 참조를 얻기 위해서는 그 CPU 는 이미 참조를 가지고
+	있어야 하니까요.
+	따라서, 만약 어느 CPU 가 마지막 참조를 해제했다면, 새 참조를 얻을 수
+	있는 CPU 는 존재하지 않습니다!
+
+	\iffalse
+
 	Because a CPU must already hold a reference in order to legally
 	acquire another reference.
 	Therefore, if one CPU releases the last reference, there had
 	better not be any CPU acquiring a new reference!
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -455,6 +515,25 @@ kref_sub(struct kref *kref, unsigned int count,
 \end{listing}
 
 \begin{fcvref}[ln:together:Linux Kernel kref API]
+하나의 어토믹 데이터 항목으로 구성되는 \co{kref} 구조체가
+\cref{lst:together:Linux Kernel kref API} 의
+\clnrefrange{kref:b}{kref:e} 에 보여져 있습니다.
+\Clnrefrange{init:b}{init:e} 의 \co{kref_init()} 함수는 카운터를 값 ``1'' 로
+초기화 합니다.
+\co{atomic_set()} 기능은 단순한 값 할당으로, 그 이름은 \co{atomic_t} 데이터
+타입에서 기인했지 그 동작에서 기인한게 아님을 알아두시기 바랍니다.
+\co{kref_init()} 함수는 객체 생성 중에 그 객체가 다른 CPU 에게 사용가능해지기
+전에 호출되어야만 합니다.
+
+\Clnrefrange{get:b}{get:e} 의 \co{kref_get()} 함수는 무조건적으로 이 카운터를
+원자적으로 값 증가시킵니다.
+\co{atomic_inc()} 기능은 명시적으로 컴파일러 최적화를 모든 플랫폼에서 해제할
+필요는 없지만 \co{kref} 기능이 다른 모듈에 있고 리눅스 커널 빌드 프로세스는
+모듈간 최적화를 하지 않는다는 사실 때문에 사실상 같은 효과가 있습니다.
+
+\iffalse
+
+\begin{fcvref}[ln:together:Linux Kernel kref API]
 The \co{kref} structure itself, consisting of a single atomic
 data item, is shown in \clnrefrange{kref:b}{kref:e} of
 \cref{lst:together:Linux Kernel kref API}.
@@ -474,6 +553,18 @@ optimizations on all platforms, but the fact that the \co{kref}
 primitives are in a separate module and that the Linux kernel build
 process does no cross-module optimizations has the same effect.
 
+\fi
+
+\Clnrefrange{sub:b}{sub:e} 의 \co{kref_sub()} 함수는 원자적으로 카운터의 값을
+감소시키며, 그 결과가 0이면 \clnref{rel} 은 명시된 \co{release()} 함수를
+호출하고 \clnref{ret:1} 에서 리턴하여, 호출자에게 \co{release()} 가
+호출되었음을 알립니다.
+그렇지 않으면 \co{kref_sub()} 은 0을 리턴하여 호출자에게 \co{release()} 가
+호출되지 않았음을 알립니다.
+\end{fcvref}
+
+\iffalse
+
 The \co{kref_sub()} function on \clnrefrange{sub:b}{sub:e}
 atomically decrements the
 counter, and if the result is zero, \clnref{rel} invokes the specified
@@ -483,8 +574,19 @@ Otherwise, \co{kref_sub()} returns zero, informing the caller that
 \co{release()} was not called.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\begin{fcvref}[ln:together:Linux Kernel kref API]
+	\Cref{lst:together:Linux Kernel kref API}
+	의 \clnref{check} 에서 \co{atomic_sub_and_test()} 가 수행된 직후에,
+	어떤 다른 CPU 가 \co{kref_get()} 을 호출했다고 해봅시다.
+	다른 CPU 는 이제 해제된 객체로의 불법적인 참조를 갖게 되지 않나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:together:Linux Kernel kref API]
 	Suppose that just after the \co{atomic_sub_and_test()}
 	on \clnref{check} of
@@ -493,19 +595,50 @@ Otherwise, \co{kref_sub()} returns zero, informing the caller that
 	Doesn't this result in that other CPU now having an illegal
 	reference to a released object?
         \end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 함수들이 올바르게 사용되면 그런 일은 일어날 수 없습니다.
+	여러분이 이미 참조를 가지고 있지 않다면 \co{kref_get()} 을 호출하는건
+	불법인데, \co{kref_sub()} 이 카운터를 0으로 감소시키지 못할 겁니다.
+
+	\iffalse
+
 	This cannot happen if these functions are used correctly.
 	It is illegal to invoke \co{kref_get()} unless you already
 	hold a reference, in which case the \co{kref_sub()} could
 	not possibly have decremented the counter to zero.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	\co{kref_sub()} 이 0을 리턴해서 \co{release()} 함수가 호출되지 않았음을
+	알렸다고 해봅시다.
+	호출자는 어떤 조건에서 객체의 지속되는 존재를 믿을 수 있나요?
+
+	\iffalse
+
 	Suppose that \co{kref_sub()} returns zero, indicating that
 	the \co{release()} function was not invoked.
 	Under what conditions can the caller rely on the continued
 	existence of the enclosing object?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	호출자는 최소 하나의 참조가 계속 존재할 걸 아는게 아니라면 지속되는
+	존재를 믿을 수 없습니다.
+	일반적으로, 호출자는 이를 알 방법이 없으며, 따라서 \co{kref_sub()} 호출
+	후에 객체로의 참조를 하는 것을 주의깊게 막아야만 합니다.
+
+	관심 있는 독자 여러분은 이 제한을 RCU, 특히 \co{call_rcu()} 를 사용해
+	해결해 보시기 바랍니다.
+
+	\iffalse
+
 	The caller cannot rely on the continued existence of the
 	object unless it knows that at least one reference will
 	continue to exist.
@@ -515,16 +648,37 @@ Otherwise, \co{kref_sub()} returns zero, informing the caller that
 
 	Interested readers are encouraged to work around this limitation
 	using RCU, in particular, \co{call_rcu()}.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	간단하게 해제 함수로 \co{kfree()} 를 넘기지 않는 이유가 뭐죠?
+
+	\iffalse
+
 	Why not just pass \co{kfree()} as the release function?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	일반적으로 \co{kref} 구조체는 더 큰 구조체에 내재되므로, 그리고
+	\co{kref} 필드만이 아니라 전체 구조체를 메모리 해제해야 하기
+	때문입니다.
+	이는 일반적으로 \co{container_of()} 에 이어 \co{kfree()} 를 호출하는
+	wrapper 함수로 정의됩니다.
+
+	\iffalse
+
 	Because the \co{kref} structure normally is embedded in
 	a larger structure, and it is necessary to free the entire
 	structure, not just the \co{kref} field.
 	This is normally accomplished by defining a wrapper function
 	that does a \co{container_of()} and then a \co{kfree()}.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
