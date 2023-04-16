@@ -1027,6 +1027,20 @@ existence while an in-object reference count is being incremented.
 \subsection{Counter Optimizations}
 \label{sec:together:Counter Optimizations}
 
+값 증가와 감소가 흔한, 그러나 0인지 검사가 드문 어떤 경우들에선
+\cref{chp:Counting} 에서 이야기 된 것처럼 CPU 또는 태스크별 카운터를 갖는게
+유용합니다.
+예를 들어, 이 기법을 RCU 에 적용한 sleepable read-copy update (SRCU)
+논문을~\cite{PaulEMcKenney2006c} 보시기 바랍니다.
+이 방법은 값 증가와 감소 기능들에서의 어토믹 명령들이나 메모리 배리어의 필요를
+제거합니다만, 여전히 코드를 변경하는 컴파일러 최적화는 해제되어야 합니다.
+또한, 합쳐진 레퍼런스 카운트가 0이 되는지 검사하는 \co{synchronize_srcu()} 같은
+기능은 상당히 느릴 수 있습니다.
+이는 이 기법들이 참조가 흔하에 얻어지고 해제되지만 0 레퍼런스 카운트 검사는
+가끔만 필요해지는 상황을 위해 설계되었음을 강조합니다.
+
+\iffalse
+
 In some cases where increments and decrements are common, but checks
 for zero are rare, it makes sense to maintain per-CPU or per-task
 counters, as was discussed in \cref{chp:Counting}.
@@ -1043,7 +1057,21 @@ for situations where the references are frequently acquired and
 released, but where it is rarely necessary to check for a zero
 reference count.
 
+\fi
+
 % @@@ Difficulty of managing reference counts: leaks, premature freeing.
+
+하지만, 레퍼런스 카운트의 사용이 그렇지 않으면 읽기만 해도 될 데이터 구조에
+(많은 경우 원자적으로) 쓰기를 요구하게 되는게 흔합니다.
+이 경우, 레퍼런스 카운트는 읽기 쓰레드에게 비싼 캐쉬 미스를 유발시킵니다.
+
+따라서 읽기 쓰레드들이 횡단하는 데이터 구조에 쓰기를 하지 않아도 되는 동기화
+메커니즘을 찾아볼 가치가 있습니다.
+그런 한가지 가능성은
+\cref{sec:defer:Hazard Pointers} 에서 다룬 해저드 포인터이고, 또다른 하나는
+\cref{sec:defer:Read-Copy Update (RCU)} 에서 다룬 RCU 입니다.
+
+\iffalse
 
 However, it is usually the case that use of reference counts requires
 writing (often atomically) to a data structure that is otherwise
@@ -1058,3 +1086,5 @@ One possibility is the hazard pointers covered in
 \cref{sec:defer:Hazard Pointers}
 and another is RCU, which is covered in
 \cref{sec:defer:Read-Copy Update (RCU)}.
+
+\fi
