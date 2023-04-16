@@ -789,6 +789,19 @@ of the rules for using these two primitives.
 \subsubsection{Atomic Counting With Check and Release Memory Barrier}
 \label{sec:together:Atomic Counting With Check and Release Memory Barrier}
 
+호출자가 어떤 객체로의, 지금은 가지고 있지 않은 새 참조를 획득할 수 있어야만
+하는데, 그 객체의 존재는 보장되어 있는 상황을 생각해봅시다.
+초기의 레퍼런스 카운트 획득은 이제 레퍼런스 카운트 해제와 동시에 수행될 수
+있다는 사실이 복잡도를 증가시킵니다.
+한 레퍼런스 카운트 해제 오퍼레이션이 이 레퍼런스 카운트의 새 값이 0임을
+확인해서 이 객체를 정리해도 안전하다는 신호를 날렸다고 해봅시다.
+그런 정리가 시작된 후에는 레퍼런스 카운트 획득을 허용하지 않아야 하는게
+분명하므로, 그 획득은 레퍼런스 카운트가 0인지에 대한 검사를 포함해야 합니다.
+이 검사는 어토믹 값 증가 오퍼레이션의 한 부분이어야 하는데, 아래에 보이는 것과
+같습니다.
+
+\iffalse
+
 Consider a situation where the caller must be able to acquire a new
 reference to an object to which it does not already hold a reference,
 but where that object's existence is guaranteed.
@@ -803,11 +816,32 @@ must include a check for a zero reference count.
 This check must be part of the atomic increment operation,
 as shown below.
 
+\fi
+
 \QuickQuiz{
+	왜 0 레퍼런스 카운트 검사는 \tco{then} 절에서 어토믹 값 증가를 하는
+	간단한 \tco{if} 문을 통해서 이뤄질 수 없죠?
+
+	\iffalse
+
 	Why can't the check for a zero reference count be
 	made in a simple \tco{if} statement with an atomic
 	increment in its \tco{then} clause?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\tco{if} 조건이 레퍼런스 카운터 값은 1이라고 확인하고 완료되었다고
+	해봅시다.
+	이때 해제 오퍼레이션이 수행되어, 이 레퍼런스 카운터의 값을 0으로
+	감소시키고 따라서 정리 오퍼레이션을 시작합니다.
+	하지만 이제 \tco{then} 절은 이 카운터를 다시 1로 증가시켜서 이 객체가
+	정리된 다음에 사용될 수 있게 합니다.
+
+	이 use-after-cleanup 버그는 use-after-free 버그 만큼이나 나쁩니다.
+
+	\iffalse
+
 	Suppose that the \tco{if} condition completed, finding
 	the reference counter value equal to one.
 	Suppose that a release operation executes, decrementing
@@ -819,7 +853,21 @@ as shown below.
 
 	This use-after-cleanup bug is every bit as bad as a
 	full-fledged use-after-free bug.
+
+	\fi
+
 }\QuickQuizEnd
+
+리눅스 커널의 \co{fget()} 과 \co{fput()} 기능은 이런 형태의 레퍼런스 카운팅을
+사용합니다.
+이 함수들의 간략화된 버전이
+\cref{lst:together:Linux Kernel fget/fput API} 에 보여져 있습니다.\footnote{
+	리눅스 v2.6.38 기준입니다.
+	추가적인 \co{O_PATH} 기능이 v2.6.39 에 추가되었고, v3.14 에서
+	refactoring 이 이루어졌으며 v4.1 에서는 \co{mmap_sem} 경쟁을
+	완화시켰습니다.}
+
+\iffalse
 
 The Linux kernel's \co{fget()} and \co{fput()} primitives
 use this style of reference counting.
@@ -829,6 +877,8 @@ Simplified versions of these functions are shown in
 	Additional \co{O_PATH} functionality was added in v2.6.39,
 	refactoring was applied in v3.14, and \co{mmap_sem} contention
 	was reduced in v4.1.}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:together:Linux Kernel fget/fput API]
@@ -881,6 +931,25 @@ static void file_free_rcu(struct rcu_head *head)
 \end{listing}
 
 \begin{fcvref}[ln:together:Linux Kernel fget/fput API]
+\co{fget()} 의 \clnref{fetch} 는 현재 프로세스의 파일 디스크립터 테이블로의
+포인터를 가져오는데 이는 다른 프로세스들과 공유될수도 있습니다.
+\Clnref{rrl} 은 RCU read-side 크리티컬 섹션을 진입하는 \co{rcu_read_lock()} 을
+수행합니다.
+모든 뒤따르는 \co{call_rcu()} 기능에서의 콜백 함수는 여기에 맞는
+\co{rcu_read_unlock()} 이 호출될 때까지 (이 예에서는 \clnref{rru1}
+또는~\lnref{rru2}) 미루어질 겁니다.
+\Clnref{lookup} 은 \co{fd} 인자에 의해 명시된 파일 디스크립터에 연관된 파일
+구조체를 탐색하는데, 뒤에서 설명됩니다.
+이 명시된 파일 디스크립터에 연관된 열린 파일이 있다면 \clnref{acq} 는
+원자적으로 레퍼런스 카운트를 획득하려 시도합니다.
+여기에 실패하면, \clnrefrange{rru1}{ret:null} 은 이 RCU read-side 크리티컬
+섹션을 빠져나와 실패를 알립니다.
+그렇지 않고 이 시도가 성공적이었다면 \clnrefrange{rru2}{ret:file} 은 이
+read-side 크리티컬 섹션을 빠져나오고 이 파일 구조체로의 포인터를 리턴합니다.
+
+\iffalse
+
+\begin{fcvref}[ln:together:Linux Kernel fget/fput API]
 \Clnref{fetch} of \co{fget()} fetches the pointer to the current
 process's file-descriptor table, which might well be shared
 with other processes.
@@ -899,6 +968,33 @@ section and report failure.
 Otherwise, if the attempt is successful, \clnrefrange{rru2}{ret:file}
 exit the read-side
 critical section and return a pointer to the file structure.
+
+\fi
+
+\co{fcheck_files()} 기능은 \co{fget()} 을 위한 도움을 주는 함수입니다.
+\Clnref{deref:fdt} 는 이 태스크의 현재 파일 디스크립터 테이블로의 RCU 로
+보호되는 포인터를 안전하게 읽어오기 위해 \co{rcu_dereference()} 를 사용하며,
+\clnref{range} 는 이 명시된 파일 디스크립터가 범위 내에 있는지 확인합니다.
+그렇다면 \clnref{deref:fd} 는 이 파일 구조체로의 포인터를 읽어오는데, 여기서도
+\co{rcu_dereference()} 기능을 사용합니다.
+\Clnref{ret:file2} 는 이어서 성공 시에는 파일 구조체로의 포인터를, 실패 시에는
+\co{NULL} 을 리턴합니다.
+
+\co{fput()} 기능은 파일 구조체로의 참조를 해제합니다.
+\Clnref{dec} 는 이 레퍼런스 카운트를 원자적으로 감소시키며, 그 결과가 0이
+된다면 \clnref{call} 은 이 파일 구조체를 모든 현재 수행중인 RCU read-side
+크리티컬 섹션이 완료된 후에, 즉 한 RCU grace period 가 지난 후에 메모리
+해제하기 위해 \co{call_rcu()} 를 호출합니다 (\co{call_rcu()} 의 두번째 인자로
+명시되는 \co{file_free_rcu()} 함수를 통해).
+
+이 grace period 가 완료되면, \co{file_free_rcu()} 함수는 \clnref{obtain} 에서
+이 파일 구조체로의 포인터를 얻어와서 \clnref{free} 에서 이를 메모리 해제합니다.
+\end{fcvref}
+
+따라서 이 코드 조각은 객체 내의 레퍼런스 카운트가 증가되는 동안 그 존재를
+보장하기 위해 어떻게 RCU 가 사용될 수 있는지 보입니다.
+
+\iffalse
 
 The \co{fcheck_files()} primitive is a helper function for
 \co{fget()}.
@@ -925,6 +1021,8 @@ on \clnref{free}.
 
 This code fragment thus demonstrates how RCU can be used to guarantee
 existence while an in-object reference count is being incremented.
+
+\fi
 
 \subsection{Counter Optimizations}
 \label{sec:together:Counter Optimizations}
