@@ -86,6 +86,26 @@ Page~\pageref{lst:count:Per-Thread Statistical Counters}.
 
 \subsubsection{Design}
 
+여기서 우리가 원하는건 \co{inc_count()} 만이 아니라 \co{read_count()} 에서도
+훌륭한 성능과 확장성을 얻기 위해 \co{read_count()} 에서 순회를 하는 쓰레드를
+\co{final_mutex} 가 아닌 RCU 를 사용하게 하는 겁니다.
+그러나, 계산된 값에 대한 정확도를 놓치고 싶지도 않습니다.
+특히, 특정 쓰레드가 종료될 때, 우린 분명 이 종료되는 쓰레드의 값을 잃고 싶지
+않고, 그걸 중복해 셀수도 없습니다.
+그런 오류는 결과의 완전한 예측과 동일한 비정확성을 초래한느데 달리 말하면 그런
+오류는 그 결과를 완전히 쓸모없게 만들 겁니다.
+그리고 실제로, \co{final_mutex} 의 목적 중 하나는 쓰레드가 \co{read_count()}
+수행 중간에 왔다가 갔다가 하지 않음을 보장하는 겁니다.
+
+따라서, \co{final_mutex} 를 제거하고자 한다면, 일관성을 보장하는 어떤 다른
+방법을 사용해야 합니다.
+한가지 방법은 앞서 종료된 모든 쓰레드를 위한 전체 카운트와 쓰레드별 카운터로의
+포인터들의 배열을 하나의 구조체에 두는 겁니다.
+그런 구조체는 일단 \co{read_count()} 에서 사용 가능하게 하고 일관성을
+유지한다면 \co{read_count()} 가 일관된 데이터를 볼 수 있게 합니다.
+
+\iffalse
+
 The hope is to use RCU rather than \co{final_mutex} to protect the
 thread traversal in \co{read_count()} in order to obtain excellent
 performance and scalability from \co{read_count()}, rather than just
@@ -107,6 +127,8 @@ threads and the array of pointers to the per-thread counters into a single
 structure.
 Such a structure, once made available to \co{read_count()}, is
 held constant, ensuring that \co{read_count()} sees consistent data.
+
+\fi
 
 \subsubsection{Implementation}
 
