@@ -19,6 +19,22 @@ This section looks at some special uses of sequence locks.
 \subsection{Correlated Data Elements}
 \label{sec:together:Correlated Data Elements}
 
+두개 이상의 원소들을 연관지어 봐야 하는 해쉬 테이블을 가지고 있다고 해봅시다.
+이 원소들은 함께 업데이트 되며, 첫번째 원소의 기존 버전을 다른 원소의 새 버전과
+함께 보고 싶지 않습니다.
+예를 들어, Schr\"odinger 는 그의 in-memory 데이터베이스에 그의 동물들에 더해
+확장된 가족을 넣고 싶습니다.
+Schr\"odinger 는 결혼과 이혼이 급작스럽게 일어나지는 않음을 알지만, 그는 또한
+전통주의자이기도 합니다.
+따라서, 그는 그의 데이터베이스가 신부는 결혼했는데 신랑은 그렇지 않은, 또는 그
+반대의 경우를 보이기를 원치 않습니다.
+또한, Schr\"odinger 가 전통주의자라 생각한다면, 여러분은 그의 가족 구성원들 중
+일부와 대화해 보세요!
+달리 말하자면, Schr\"odinger 는 그의 데이터베이스가 결혼에 있어 일관적이길
+원합니다.
+
+\iffalse
+
 Suppose we have a hash table where we need correlated views of two or
 more of the elements.
 These elements are updated together, and we do not want to see an old
@@ -34,6 +50,32 @@ Plus, if you think Schr\"odinger is a traditionalist, you just
 try conversing with some of his family members!
 In other words, Schr\"odinger wants to be able to carry out a
 wedlock-consistent traversal of his database.
+
+\fi
+
+한가지 방법은 시퀀스 락을 사용해서
+(\cref{sec:defer:Sequence Locks} 를 참고하세요),
+결혼에 관련된 업데이트가 \co{write_seqlock()} 의 보호 아래 진행되고 결혼
+일관성이 피료한 읽기는 \co{read_seqbegin()} / \co{read_seqretry()} 반복문
+아래에서 진행되게 하는 겁니다.
+시퀀스 락은 RCU 보호의 대체제가 아님에 유의하세요:
+시퀀스 락은 동시의 수정으로부터 보호를 해줍니다만, 동시의 삭제로부터의 보호를
+위해선 여전히 RCU 가 필요합니다.
+
+이 방법은 연관된 원소의 수가 작고 원소들에의 읽기 시간이 짧으며, 업데이트
+비율이 낮을 때 상당히 잘 작동합니다.
+그렇지 않다면, 읽기 쓰레드가 영원히 완료되지 못할 수도 있게끔 업데이트가
+빈번하게 이러날 수도 있습니다.
+Schr\"odinger 는 이런 문제가 일어날 만큼 그의 가장 덜 정상적인 지인들이
+결혼하고 곧바로 이혼할 거라 생각하지 않지만, 그는 이 문제가 다른 환경에서는
+일어날 수 있음을 알고 있습니다.
+이 읽기 쓰레드 starvation 문제를 해결하는 한가지 방법은 읽기 쓰레드가 너무 많은
+재시도를 했다면 업데이트 쪽 기능을 사용하게 하는 것입니다만, 이는 성능과
+확장성을 모두 악화시킬 수 있습니다.
+Starvation 을 막는 다른 방법은 여러 시퀀스 락을 상요하는 것으로, 이
+Schr\"odinger 의 경우엔 종당 하나가 될 수 있겠습니다.
+
+\iffalse
 
 One approach is to use sequence locks
 (see \cref{sec:defer:Sequence Locks}),
@@ -58,6 +100,29 @@ but this can degrade both performance and scalability.
 Another way to avoid starvation is to have multiple sequence locks,
 in Schr\"odinger's case, perhaps one per species.
 
+\fi
+
+또한, 만약 업데이트 쪽 기능이 너무 자주 사용된다면, 락 컨텐션으로 인해 낮은
+성능과 확장성이 초래될 겁니다.
+이를 막는 한가지 방법은 원소별 시퀀스 락을 두고 부부의 결혼 상태를 업데이트 할
+때 부부 두명의 락을 모두 잡는 겁니다.
+읽기 쓰레드는 이 한쌍의 멤버들의 결혼 상태에 대한 모든 변화에 대해 안정적인
+읽기를 위해 이 부부의 락들 중 하나만 가지고 재시도 반복을 할 수 있습니다.
+이는 높은 결혼과 이혼율에 의한 컨텐션을 막을 수 있으나, 데이터베이스의 한번의
+스캔 동안의 모든 결혼 상태에 대한 일관적 시각을 얻기를 복잡하게 만듭니다.
+
+결혼 상태가 그러길 바라듯이 원소 그룹 짓기가 잘 정의되었고 영구적이라면, 가능한
+한가지 방법은 데이터 원소로의 포인터들을 더해서 특정 그룹의 멤버들을 함께
+연결짓는 겁니다.
+그러면 읽기 쓰레드는 첫번째 원소가 발견되면 같은 그룹의 데이터 원소들을
+접근하기 위해 이 포인터들을 따라갈 수 있습니다.
+
+이 기법은 리눅스 커널에서 널리 사용되는데, dcache subsystem
+에서~\cite{NeilBrown2015RCUwalk} 특히 그렇습니다.
+비슷한 방법이 해저드 포인터를 통해서도 동작할 수 있음을 알아 두시기 바랍니다.
+
+\iffalse
+
 In addition, if the update-side primitives are used too frequently,
 poor performance and scalability will result due to lock contention.
 One way to avoid this is to maintain a per-element sequence lock,
@@ -81,6 +146,32 @@ notably in the dcache subsystem~\cite{NeilBrown2015RCUwalk}.
 Note that it is likely that similar schemes also work with hazard
 pointers.
 
+\fi
+
+또다른 방법은 데이터 원소들을 파편화 하고 각 업데이트가 그 업데이트로 영향 받는
+모든 데이터 원소를 위한 모든 시퀀스 락에 대해 쓰기 권한 획득을 하게 하는
+겁니다.
+물론, 이 쓰기 권한 획득은 데드락을 막기 위해 신중히 가해져야 합니다.
+읽기 쓰레드는 여러 시퀀스 락에 대한 읽기 권한 획득을 필요로 하겠습니다만 읽기
+쓰레드가 하나의 데이터 원소만 읽어야 하는 놀랍도록 흔한 상황에서는 하나의
+시퀀스 락에 대해서만 읽기 권한 획득이 필요합니다.
+
+이 방법은 성공한 읽기 쓰레드에게 sequential consistency 를 제공하여, 각자는
+특정 업데이트의 효과를 보거나 보지 못하며, 모든 중간의 업데이트는 읽기 쪽
+재시도를 하게 합니다.
+Sequential consistency 는 극단적으로 강력한 보장으로, 동일하게 강한 제한과 높은
+오버헤드를 수반합니다.
+이 경우, 우린 읽기 쓰레드가 starvation 에 빠질 수 있거나 업데이트 쪽 락을
+획득해야 할수도 있음을 보았습니다.
+업데이트가 흔하지 않은 경우에 이는 잘 동작하지만, 이는 업데이트가 재시도되는
+읽기 쓰레드가 액세스하는 데이터에는 여향을 주지도 않은 업데이트에조차 재시도를
+불필요하게 강제합니다.
+따ㅓ라서 \cref{sec:together:Correlated Fields} 는 읽기 쓰레드의 starvation 을
+막을 뿐 아니라 모든 형태의 읽기 쪽 재시도를 막는 완화된 형태의 일관성을
+다룹니다.
+
+\iffalse
+
 Another approach is to shard the data elements, and then have each update
 write-acquire all the sequence locks needed to cover the data elements
 affected by that update.
@@ -103,6 +194,8 @@ affect any of the data that a retried reader accesses.
 \Cref{sec:together:Correlated Fields} therefore covers a much weaker form
 of consistency that not only avoids reader starvation, but also avoids
 any form of read-side retry.
+
+\fi
 
 \subsection{Upgrade to Writer}
 \label{sec:together:Upgrade to Writer}
