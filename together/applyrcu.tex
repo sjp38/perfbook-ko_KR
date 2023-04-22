@@ -27,6 +27,19 @@ performance and scalability, and in still other cases, both.
 \label{sec:together:RCU and Per-Thread-Variable-Based Statistical Counters}
 
 \Cref{sec:count:Per-Thread-Variable-Based Implementation}
+는 단순한 값 증가의 (C 의 \co{++} 연산자) 것만큼이나 훌륭한 성능과 선형적
+확장성을 제공하는---그러나 \co{inc_count()} 를 통한 값 증가 시에만---통계적
+카운터의 구현을 보였습니다.
+불행히도, \co{read_count()} 를 통해 값을 읽어야 하는 쓰레드는 전역 락을
+획득해야 했으며, 따라서 높은 오버헤드를 일으키고 낮은 확장성으로 고통받아야
+했습니다.
+이 락 기반의 구현 코드는
+Page~\pageref{lst:count:Per-Thread Statistical Counters} 의
+\cref{lst:count:Per-Thread Statistical Counters} 에 있습니다.
+
+\iffalse
+
+\Cref{sec:count:Per-Thread-Variable-Based Implementation}
 described an implementation of statistical counters that provided
 excellent
 performance, roughly that of simple increment (as in the C \co{++}
@@ -39,9 +52,26 @@ The code for the lock-based implementation is shown in
 \cref{lst:count:Per-Thread Statistical Counters} on
 Page~\pageref{lst:count:Per-Thread Statistical Counters}.
 
+\fi
+
 \QuickQuiz{
+	대체 왜 우린 전역 락을 필요로 했죠?
+
+	\iffalse
+
 	Why on earth did we need that global lock in the first place?
+
+	\fi
+
 }\QuickQuizAnswer{
+	특정 쓰레드의 \co{__thread} 변수는 그 쓰레드가 종료될 때 사라집니다.
+	따라서 다른 쓰레드의 \co{__thread} 변수에 접근하는 모든 오퍼레이션을
+	쓰레드 종료와 동기화 시킬 필요가 있었습니다.
+	그런 동기화가 없다면 금방 종료된 쓰레드의 \co{__thread} 변수로의 접근은
+	segmentation fault 를 초래합니다.
+
+	\iffalse
+
 	A given thread's \co{__thread} variables vanish when that
 	thread exits.
 	It is therefore necessary to synchronize any operation that
@@ -49,6 +79,9 @@ Page~\pageref{lst:count:Per-Thread Statistical Counters}.
 	thread exit.
 	Without such synchronization, accesses to \co{__thread} variable
 	of a just-exited thread will result in segmentation faults.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Design}
