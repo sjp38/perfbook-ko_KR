@@ -133,6 +133,17 @@ held constant, ensuring that \co{read_count()} sees consistent data.
 \subsubsection{Implementation}
 
 \begin{fcvref}[ln:count:count_end_rcu:whole]
+\Cref{lst:together:RCU and Per-Thread Statistical Counters}
+의 \clnrefrange{struct:b}{struct:e} 는 \co{countarray} 구조체를 보이는데, 이
+구조체는 앞서 종료된 쓰레드들로부터의 카운트를 위한 \co{->total} 필드와 현재
+수행 중인 쓰레드 각각으로의 쓰레드별 \co{counter} 로의 포인터 배열인
+\co{counterp[]} 를 갖습니다.
+이 구조체는 특정 \co{read_count()} 수행이 파악된 수행중인 쓰레드 집합에 일관된
+전체를 볼 수 있게 합니다.
+
+\iffalse
+
+\begin{fcvref}[ln:count:count_end_rcu:whole]
 \Clnrefrange{struct:b}{struct:e} of
 \cref{lst:together:RCU and Per-Thread Statistical Counters}
 show the \co{countarray} structure, which contains a
@@ -143,11 +154,24 @@ This structure allows a given execution of \co{read_count()}
 to see a total that is consistent with the indicated set of running
 threads.
 
+\fi
+
 \begin{listing}[bp]
 \input{CodeSamples/count/count_end_rcu@whole.fcv}
 \caption{RCU and Per-Thread Statistical Counters}
 \label{lst:together:RCU and Per-Thread Statistical Counters}
 \end{listing}
+
+\Clnrefrange{perthread:b}{perthread:e} 는 쓰레드별 \co{counter} 변수, 현재
+\co{countarray} 구조체를 참조하는 전역 포인터 \co{countarrayp}, 그리고
+\co{final_mutex} 스핀락의 정의를 답고 있습니다.
+
+\Clnrefrange{inc:b}{inc:e} 는
+\cref{lst:count:Per-Thread Statistical Counters} 에서 달라지지 않은
+\co{inc_count()} 를 보입니다.
+\end{fcvref}
+
+\iffalse
 
 \Clnrefrange{perthread:b}{perthread:e}
 contain the definition of the per-thread \co{counter}
@@ -158,6 +182,24 @@ the \co{final_mutex} spinlock.
 \Clnrefrange{inc:b}{inc:e} show \co{inc_count()}, which is unchanged from
 \cref{lst:count:Per-Thread Statistical Counters}.
 \end{fcvref}
+
+\fi
+
+\begin{fcvref}[ln:count:count_end_rcu:whole:read]
+\Clnrefrange{b}{e} 는 \co{read_count()} 를 보이는데, 상당히 달라졌습니다.
+\Clnref{rrl,rru} 는 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 을 사용해
+\co{final_mutex} 의 획득과 해제를 대체합니다.
+\Clnref{deref} 는 현재 \co{countarray} 구조체를 지역 변수 \co{cap} 으로 스냅샷
+하기 위해 \co{rcu_dereference()} 를 사용합니다.
+RCU 의 올바른 사용은 이 \co{countarray} 구조체가 \clnref{rru} 에서의 현재 RCU
+read-side 크리티컬 섹션의 종료까지는 남아 있을 것을 보장합니다.
+\Clnref{init} 는 \co{sum} 을 \co{cap->total} 로 초기화하는데, 이는 앞서 종료된
+쓰레드의 카운트의 합입니다.
+\Clnrefrange{add:b}{add:e} 는 현재 수행중인 쓰레드들에 연관된 쓰레드별 카운터를
+더하며, 마지막으로 \clnref{ret} 에서 이 합을 리턴합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_end_rcu:whole:read]
 \Clnrefrange{b}{e} show \co{read_count()}, which has changed significantly.
@@ -175,6 +217,25 @@ to currently
 running threads, and, finally, \clnref{ret} returns the sum.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:count:count_end_rcu:whole:init]
+\co{countarrayp} 의 초기 값은 \clnrefrange{b}{e} 에서의 \co{count_init()} 을
+통해 제공됩니다.
+이 함수는 첫번째 쓰레드가 생성되기 전에 수행되어, 초기 구조체를 할당하고 0으로
+초기화 하며 \co{countarrayp} 로 그 포인터를 할당합니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:count:count_end_rcu:whole:reg]
+\Clnrefrange{b}{e} 는 \co{count_register_thread()} 함수를 보이는데, 이 함수는
+새로 생성된 쓰레드 각각에 의해 호출됩니다.
+\Clnref{idx} 는 현재 쓰레드의 인덱스를 얻어오고, \clnref{acq} 는
+\co{final_mutex} 를 획득하며, \clnref{set} 은 이 쓰레드의 \co{counter} 로의
+포인터를 설치하고 \clnref{rel} 은 \co{final_mutex} 를 해제합니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:count:count_end_rcu:whole:init]
 The initial value for \co{countarrayp} is
 provided by \co{count_init()} on \clnrefrange{b}{e}.
@@ -191,7 +252,20 @@ is invoked by each newly created thread.
 \co{counter}, and \clnref{rel} releases \co{final_mutex}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:count:count_end_rcu:whole:reg]
+	여보세요!!!
+	\Cref{lst:together:RCU and Per-Thread Statistical Counters}
+	의 \clnref{set} 은 앞서서부터 존재한 \co{countarray} 구조의 값을
+	수정하잖아요!
+	이 구조체는 일단 \co{read_count()} 에게 접근 가능해지면 일관적인 상태로
+	남는다고 하지 않았나요???
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:count:count_end_rcu:whole:reg]
 	Hey!!!
 	\Clnref{set} of
@@ -200,7 +274,34 @@ is invoked by each newly created thread.
 	Didn't you say that this structure, once made available to
 	\co{read_count()}, remained constant???
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그렇게 말씀드렸습니다.
+	그리고 \co{count_register_thread()} 가 \co{count_unregister_thread()}
+	처럼 새 구조체를 할당받게 하는 것도 가능할 겁니다.
+
+	하지만 이는 불필요합니다.
+	\co{read_count()} 의 오류 범위의 유도는 메모리의 스냅샷에서 기초함을
+	기억하시기 바랍니다.
+	새 쓰레드는 값 0인 초기 \co{counter} 값으로 시작하므로,
+	\co{read_count()} 의 수행 도중에 새 쓰레드를 넣는다 해도 그 유도식은
+	유지됩니다.
+	따라서, 흥미롭게도 새 쓰레드를 더할 때, 이 구현은 실제로 할당을 하지는
+	않지만 새 구조체를 할당하는 것과 같은 효과를 냅니다.
+
+	\begin{fcvref}[ln:count:count_end_rcu:whole:unreg]
+	다른 한편, \co{count_unregister_thread()} 는 빠져나가는 쓰레드의 일이
+	중복으로 카운트 되게 할 수 있습니다.
+	이는 \co{read_count()} 가 라인~\clnref{add} 와~\clnref{null} 사이에서
+	호출될 때 발생 가능합니다.
+	이 중복 카운트를 막는 효율적인 방법들이 있습니다만, 그건 독자 여러분의
+	연습문제로 남겨두겠습니다.
+	\end{fcvref}
+
+	\iffalse
+
 	Indeed I did say that.
 	And it would be possible to make \co{count_register_thread()}
 	allocate a new structure, much as \co{count_unregister_thread()}
@@ -224,7 +325,32 @@ is invoked by each newly created thread.
 	There are efficient ways of avoiding this double-counting, but
 	these are left as an exercise for the reader.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:count:count_end_rcu:whole:unreg]
+\Clnrefrange{b}{e} 는 \co{count_unregister_thread()} 를 보이는데, 이 함수는 각
+쓰레드가 종료되기 직전에 호출됩니다.
+\Clnrefrange{alloc:b}{alloc:e} 는 새 \co{countarray} 구조체를 할당하고,
+\clnref{acq} 는 \co{final_mutex} 를 획득하고 \clnref{rel} 에서 해제합니다.
+\Clnref{copy} 는 현재 \co{countarray} 의 내용을 새로 할당된 버전에 복사하며,
+\clnref{add} 는 종료되고 있는 쓰레드의 \co{counter} 를 새 구조체의 \co{->total}
+에 더하며, \clnref{null} 은 이 종료되는 중인 쓰레드의 \co{counterp[]} 배열
+원소를 \co{NULL} 로 만듭니다.
+\Clnref{retain} 은 이어서 현재 (곧 과거 버전이 될) \co{countarray} 구조체로의
+포인터를 보존하고, \clnref{assign} 은 \co{countarray} 구조체의 새 버전을
+설치하기 위해 \co{rcu_assign_pointer()} 를 사용합니다.
+\Clnref{sync} 는 하나의 grace period 가 지나가길, 그래서 동시에
+\co{read_count()} 를 수행 중일 수 있는, 따라서 기존 \co{countarray} 구조체로의
+참조를 가지고 있을 수도 있는 쓰레드들이 각자의 RCU read-side 크리티컬 섹션을
+빠져나와 모든 그런 참조를 내려놓을 때까지 기다립니다.
+\Clnref{free} 는 이제 기존의 \co{countarray} 구조체를 안전하게 메모리 해제할 수
+있습니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:count:count_end_rcu:whole:unreg]
 \Clnrefrange{b}{e} show \co{count_unregister_thread()}, which is invoked
@@ -246,16 +372,37 @@ references.
 \Clnref{free} can then safely free the old \co{countarray} structure.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	고정된 크기의 \co{counterp} 배열을 가지고, 이 코드는 어떻게 쓰레드의
+	수의 고정된 최대 한계 문제를 어떻게 회피하나요?
+
+	\iffalse
+
 	Given the fixed-size \co{counterp} array, exactly how does this
 	code avoid a fixed upper bound on the number of threads???
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞아요, 그 배열은 실제로 고정된 최대 한계를 만듭니다.
+	이 한계는 쓰레드들을 userspace RCU~\cite{MathieuDesnoyers2012URCU} 에서
+	그러는 것처럼 링크드 리스트를 사용해 쓰레드를 추적하는 것으로 회피될 수
+	있습니다.
+	그와 비슷한 일을 하는건 독자 여러분의 연습문제로 남겨둡니다.
+
+	\iffalse
+
 	You are quite right, that array does in fact reimpose the fixed
 	upper limit.
 	This limit may be avoided by tracking threads with a linked list,
 	as is done in userspace RCU~\cite{MathieuDesnoyers2012URCU}.
 	Doing something similar for this code is left as an exercise for
 	the reader.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Discussion}
