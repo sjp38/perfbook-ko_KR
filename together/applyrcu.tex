@@ -501,6 +501,18 @@ complexity seen by users of \co{__thread} variables.
 \label{sec:together:RCU and Counters for Removable I/O Devices}
 
 \Cref{sec:count:Applying Exact Limit Counters}
+는 제거 가능한 기기로의 I/O 액세스를 세기 위한 한쌍의 코드 조각을 보였습니다.
+이 코드 조각들은 reader-writer 락을 획득함으로써 생기는 fastpath (I/O 시작)
+에서의 높은 오버헤드로 고통받았습니다.
+
+이 섹션은 이 오버헤드를 막기 위해 RCU 가 어떻게 사용될 수 있는지 보입니다.
+
+I/O 를 수행하는 코드는 원래의 것과 상당히 비슷한데 원본에서의 reader-writer 락
+read-side 크리티컬 섹션이 RCU read-side 크리티컬 섹션으로 대체되었습니다:
+
+\iffalse
+
+\Cref{sec:count:Applying Exact Limit Counters}
 showed a fanciful pair of code fragments for dealing with counting
 I/O accesses to removable devices.
 These code fragments suffered from high overhead on the fastpath
@@ -512,6 +524,8 @@ This section shows how RCU may be used to avoid this overhead.
 The code for performing an I/O is quite similar to the original, with
 an RCU read-side critical section being substituted for the reader-writer
 lock read-side critical section in the original:
+
+\fi
 
 \begin{VerbatimN}[tabsize=8]
 rcu_read_lock();
@@ -527,10 +541,19 @@ if (removing) {
 \end{VerbatimN}
 \vspace{5pt}
 
+이 RCU read-side 기능들은 최소한의 오버헤드를 가지며, 따라서 희망한대로
+fastpath 속도를 증가시킵니다.
+
+기기를 제거하는 코드 조각의 업데이트된 버전은 다음과 같습니다:
+
+\iffalse
+
 The RCU read-side primitives have minimal overhead, thus speeding up
 the fastpath, as desired.
 
 The updated code fragment removing a device is as follows:
+
+\fi
 
 \begin{fcvlabel}[ln:together:applyrcu:Removing Device]
 \begin{VerbatimN}[tabsize=8,commandchars=\\\[\]]
@@ -547,6 +570,18 @@ remove_device();
 \end{fcvlabel}
 
 \begin{fcvref}[ln:together:applyrcu:Removing Device]
+여기서 우리는 reader-writer 락을 배타적 스핀락으로 교체하고 모든 RCU read-side
+크리티컬 섹션이 완료되기를 기다리기 위해 \co{synchronize_rcu()} 를 추가합니다.
+\co{synchronize_rcu()} 때문에, 우리가 일단 \clnref{nextofsync} 에 다다르면 모든
+남아있는 I/O 는 세어졌음을 압니다.
+
+물론, \co{synchronize_rcu()} 의 오버헤드는 클 수 있으나, 기기의 제거가 상당히
+드물게 이어질 것이란 걸 생각하면 이는 좋은 트레이드오프입니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:together:applyrcu:Removing Device]
 Here we replace the reader-writer lock with an exclusive spinlock and
 add a \co{synchronize_rcu()} to wait for all of the RCU read-side
 critical sections to complete.
@@ -558,6 +593,8 @@ Of course, the overhead of \co{synchronize_rcu()} can be large,
 but given that device removal is quite rare, this is usually a good
 tradeoff.
 \end{fcvref}
+
+\fi
 
 \FloatBarrier
 \subsection{Array and Length}
