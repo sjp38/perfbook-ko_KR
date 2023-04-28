@@ -600,11 +600,21 @@ tradeoff.
 \subsection{Array and Length}
 \label{sec:together:Array and Length}
 
+\Cref{lst:together:RCU-Protected Variable-Length Array} 에 보인 것과 같은
+RCU 로 보호되는 유동 길이 배열이 있다고 해봅시다.
+배열 \co{->a[]} 의 길이는 언제든 동적으로 변화할 수 있고, 그 길이는
+\co{->length} 필드에 의해 주어집니다.
+물론, 이는 다음과 같은 race condition 을 만듭니다:
+
+\iffalse
+
 Suppose we have an RCU-protected variable-length array, as shown in
 \cref{lst:together:RCU-Protected Variable-Length Array}.
 The length of the array \co{->a[]} can change dynamically, and at any
 given time, its length is given by the field \co{->length}.
 Of course, this introduces the following race condition:
+
+\fi
 
 \begin{listing}[tbp]
 \begin{VerbatimL}[tabsize=8]
@@ -618,6 +628,17 @@ struct foo {
 \end{listing}
 
 \begin{enumerate}
+\item	이 배열은 초기엔 16 캐릭터 길이이며, 따라서 \co{->length} 는 16 입니다.
+\item	CPU~0 이 \co{->length} 의 값을 읽어와 16을 얻습니다.
+\item	CPU~1 이 이 배열의 길이를 8로 줄이고, 이 새 8-캐릭터 블록 메모리로의
+	포인터를 \co{->a[]} 에 할당합니다.
+\item	CPU~0 이 \co{->a[]} 로의 새 포인터를 가져오고 새 값을 원소 12 에
+	저장합니다.
+	이 원소는 8개 캐릭터만 가지므로 이는 SEGV 또는 (더 나쁜) 메모리 오염을
+	일으킵니다.
+
+\iffalse
+
 \item	The array is initially 16 characters long, and thus \co{->length}
 	is equal to 16.
 \item	CPU~0 loads the value of \co{->length}, obtaining the value 16.
@@ -627,7 +648,20 @@ struct foo {
 	new value into element 12.
 	Because the array has only 8 characters, this results in
 	a SEGV or (worse yet) memory corruption.
+
+\fi
+
 \end{enumerate}
+
+이걸 어떻게 막을 수 있을까요?
+
+한가지 방법은
+\cref{chp:Advanced Synchronization: Memory Ordering} 에서 다룬 메모리 배리어를
+주의 깊게 사용하는 겁니다.
+이는 동작하지만, 읽기 쪽의 오버헤드를 일으키며, 어쩌면 더 나쁘게도 명시적
+메모리 배리어의 사용을 핑료로 합니다.
+
+\iffalse
 
 How can we prevent this?
 
@@ -635,6 +669,8 @@ One approach is to make careful use of memory barriers, which are
 covered in \cref{chp:Advanced Synchronization: Memory Ordering}.
 This works, but incurs read-side overhead and, perhaps worse, requires
 use of explicit memory barriers.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{VerbatimL}[tabsize=8]
@@ -651,6 +687,16 @@ struct foo {
 \label{lst:together:Improved RCU-Protected Variable-Length Array}
 \end{listing}
 
+더 나은 방법은
+\cref{lst:together:Improved RCU-Protected Variable-Length Array}~\cite{Arcangeli03}
+에 보인 것처럼 값과 배열을 같은 구조체에 넣는 것입니다.
+그러면 새 배열을 (\co{foo_a} 구조체) 할당하는 것은 자동적으로 그 배열의 길이를
+위한 공간을 제공합니다.
+이는 어떤 CPU 가 \co{->fa} 로의 참조를 얻으면 \co{->length} 는 \co{->a[]} 에
+맞을 것이 보장됨을 의미합니다.
+
+\iffalse
+
 A better approach is to put the value and the array into the same structure,
 as shown in
 \cref{lst:together:Improved RCU-Protected Variable-Length Array}~\cite{Arcangeli03}.
@@ -659,7 +705,22 @@ a new place for the array length.
 This means that if any CPU picks up a reference to \co{->fa}, it is
 guaranteed that the \co{->length} will match the \co{->a[]}.
 
+\fi
+
 \begin{enumerate}
+\item	이 배열은 초기에 16 캐릭터 길이이므로, \co{->length} 는 16 입니다.
+\item	CPU~0 이 \co{->fa} 의 값을 읽어 값 16 과 16 바이트 배열을 갖는
+	구조체로의 포인터를 얻어옵니다.
+\item	CPU~0 이 \co{->fa->length} 를 읽어 값 16을 얻습니다.
+\item	CPU~1 이 이 배열을 길이 8로 줄이고, 8 캐릭터 메모리 블록을 에 담고 있는
+	새로운 \co{foo_a} 구조체로의 포인터를 \co{->fa} 에 할당합니다.
+\item	CPU~0 이 \co{->a[]} 로부터 새로운 포인터를 가져오고, 새 값을 원소 12 에
+	저장합니다.
+	하지만 CPU~0 은 여전히 16 바이트 배열을 갖는 기존의 \co{foo_a} 구조체를
+	참조하고 있으므로 아무 문제 없습니다.
+
+\iffalse
+
 \item	The array is initially 16 characters long, and thus \co{->length}
 	is equal to 16.
 \item	CPU~0 loads the value of \co{->fa}, obtaining a pointer to
@@ -672,12 +733,23 @@ guaranteed that the \co{->length} will match the \co{->a[]}.
 	new value into element 12.
 	But because CPU~0 is still referencing the old \co{foo_a}
 	structure that contains the 16-byte array, all is well.
+
+\fi
+
 \end{enumerate}
+
+물론, 두 경우 모두 CPU~1 은 기존 배열을 메모리 해제하기 전에 하나의 grace
+period 를 기다려야만 합니다.
+이 방법의 더 범용적인 버전을 다음 섹션에서 보입니다.
+
+\iffalse
 
 Of course, in both cases, CPU~1 must wait for a grace period before
 freeing the old array.
 
 A more general version of this approach is presented in the next section.
+
+\fi
 
 \subsection{Correlated Fields}
 \label{sec:together:Correlated Fields}
