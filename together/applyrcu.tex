@@ -755,6 +755,26 @@ A more general version of this approach is presented in the next section.
 \label{sec:together:Correlated Fields}
 \OriginallyPublished{Section}{sec:together:Correlated Fields}{Correlated Fields}{Oregon Graduate Institute}{PaulEdwardMcKenneyPhD}
 
+Sch\"odinger 의 동물들 각각이
+\cref{lst:together:Uncorrelated Measurement Fields} 에 보인 데이터 원소로
+표현된다고 해봅시다.
+\co{meas_1}, \co{meas_2}, 그리고 \co{meas_3} 필드는 주기적으로 업데이트 되는
+연관된 츨정의 집합입니다.
+읽기 쓰레드들은 이 세개의 값을 단일한 측정 업데이트로부터 본다는 게 굉장히
+중요합니다: 만약 어떤 읽기 쓰레드가 \co{meas_1} 의 기존 값을 읽지만 \co{meas_2}
+와 \co{meas_3} 의 새 값을 읽는다면, 그 읽기 쓰레드는 완전한 혼란에 빠질 겁니다.
+읽기 쓰레드가 이 세개의 값의 연관 집합을 보는걸 어떻게 보장할 수
+있을까요?\footnote{
+	이 상황은
+	앞의 \lcnamecref{sec:together:Correlated Data Elements} 에서는 데이터
+	원소들의 그룹에 대한 일관된 모습을 봐야 했던 것과 달리 여기선 읽기
+	쓰레드가 특정 데이터 원소의 일관된 모습을 보기만 하면 된다는 걸
+	제외하면
+	\cref{sec:together:Correlated Data Elements} 에서 이야기한 것과
+	비슷합니다.}
+
+\iffalse
+
 Suppose that each of Sch\"odinger's animals is represented by the
 data element shown in
 \cref{lst:together:Uncorrelated Measurement Fields}.
@@ -773,6 +793,8 @@ three values?\footnote{
 	group of data elements that was required in that earlier
 	\lcnamecref{sec:together:Correlated Data Elements}.}
 
+\fi
+
 \begin{listing}[tbp]
 \begin{VerbatimL}[tabsize=8]
 struct animal {
@@ -788,6 +810,16 @@ struct animal {
 \label{lst:together:Uncorrelated Measurement Fields}
 \end{listing}
 
+한가지 방법은 새로운 \co{animal} 구조체를 할당하고, 기존 구조체를 새 구조체에
+복사한 후, 새 구조체의 \co{meas_1}, \co{meas_2}, 그리고 \co{meas_3} 필드를
+업데이트 한 후 포인터를 업데이트 함으로써 기존 구조체를 새 구조체로 교체하는
+겁니다.
+이는 모든 읽기 쓰레드가 측정값들의 연관 집합을 볼 것을 보장합니다만,
+\co{->photo[]} 필드 때문에 큰 구조체의 복사를 필요로 합니다.
+이 복사는 받아들여질 수 없을 정도로 큰 오버헤드를 일으킬 수도 있습니다.
+
+\iffalse
+
 One approach would be to allocate a new \co{animal} structure,
 copy the old structure into the new structure, update the new
 structure's \co{meas_1}, \co{meas_2}, and \co{meas_3} fields,
@@ -797,6 +829,8 @@ This does guarantee that all readers see coordinated sets of
 measurement values, but it requires copying a large structure due
 to the \co{->photo[]} field.
 This copying might incur unacceptably large overhead.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{VerbatimL}[tabsize=8]
@@ -817,6 +851,18 @@ struct animal {
 \label{lst:together:Correlated Measurement Fields}
 \end{listing}
 
+또다른 방법은
+\cref{lst:together:Correlated Measurement Fields}~\cite[Section 5.3.4]{PaulEdwardMcKenneyPhD}
+에서 보인 것처럼 우회의 단계를 사용하는 겁니다.
+새로운 측정값이 취해질 때, 새로운 \co{measurement} 구조체가 할당되고, 새
+측정값으로 채워지며, \co{animal} 구조체의 \co{->mp} 필드는
+\co{rcu_assign_pointer()} 를 사용해 이 새로운 \co{measurement} 구조체를
+가리키게 업데이트 됩니다.
+하나의 grace period 가 지난 후, 기존의 \co{measurement} 구조체는 메모리 해제될
+수 있습니다.
+
+\iffalse
+
 Another approach is to impose a level of indirection, as shown in
 \cref{lst:together:Correlated Measurement Fields}~\cite[Section 5.3.4]{PaulEdwardMcKenneyPhD}.
 When a new measurement is taken, a new \co{measurement} structure
@@ -826,13 +872,31 @@ structure's \co{->mp} field is updated to point to this new
 After a grace period elapses, the old \co{measurement} structure
 can be freed.
 
+\fi
+
 \QuickQuiz{
+	하지만
+	\cref{lst:together:Correlated Measurement Fields}
+	에 보인 방법은 추가적인 캐쉬 미스를 일으켜서 추가적인 읽기 쪽
+	오버헤드를 일으키지 않나요?
+
+	\iffalse
+
 	But cant't the approach shown in
 	\cref{lst:together:Correlated Measurement Fields}
 	result in extra cache misses, in turn resulting in additional
 	read-side overhead?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그럴 수 있습니다.
+
+	\iffalse
+
 	Indeed it can.
+
+	\fi
 
 \begin{listing}[tbp]
 \begin{VerbatimL}[tabsize=8]
@@ -854,6 +918,17 @@ struct animal {
 \label{lst:together:Localized Correlated Measurement Fields}
 \end{listing}
 
+	이 캐쉬 미스 오버헤드를 막는 한가지 방법이
+	\cref{lst:together:Localized Correlated Measurement Fields} 에 보여
+	있습니다:
+	단순히 \co{measurement} 구조체의 인스턴스를 \co{meas} 라는 이름으로
+	\co{animal} 구조체에 내장시키고 \co{->mp} 필드를 이 \co{->meas} 필드를
+	가리키게 하는 겁니다.
+
+	그럼 측정값 업데이트는 다음과 같이 될 수 있습니다:
+
+	\iffalse
+
 	One way to avoid this cache-miss overhead is shown in
 	\cref{lst:together:Localized Correlated Measurement Fields}:
 	Simply embed an instance of a \co{measurement} structure
@@ -863,7 +938,25 @@ struct animal {
 
 	Measurement updates can then be carried out as follows:
 
+	\fi
+
 	\begin{enumerate}
+	\item	새로운 \co{measurement} 구조체를 할당하고 새 측정값을 그 안에
+		넣습니다.
+	\item	\co{->mp} 가 이 새 구조체를 가리키게 \co{rcu_assign_pointer()}
+		를 사용합니다.
+	\item	하나의 grace period 가 지나기를 기다리는데, 예를 들어
+		\co{synchronize_rcu()} 나 \co{call_rcu()} 를 사용할 수
+		있습니다.
+	\item	새 \co{measurement} 구조체로부터 측정값을 내장 \co{->meas}
+		필드로 복사합니다.
+	\item	\co{rcu_assign_pointer()} 를 사용해 \co{->mp} 가 다시 기존대로
+		내장 \co{->meas} 필드를 가리키게 합니다.
+	\item	또하나의 grace period 를 기다리고, 새 \co{measurement} 구조체를
+		메모리 해제합니다.
+
+	\iffalse
+
 	\item	Allocate a new \co{measurement} structure and place
 		the new measurements into it.
 	\item	Use \co{rcu_assign_pointer()} to point \co{->mp} to
@@ -876,18 +969,39 @@ struct animal {
 		back to the old embedded \co{->meas} field.
 	\item	After another grace period elapses, free up the
 		new \co{measurement} structure.
+
+	\fi
+
 	\end{enumerate}
+
+	이 방법은 일반적인 경우의 추가적 캐쉬 미스를 제거하기 위해 좀 더 무거운
+	업데이트 과정을 수행합니다.
+	이 추가적 캐쉬 미스는 업데이트가 진행중인 동안에만 일어날 겁니다.
+
+	\iffalse
 
 	This approach uses a heavier weight update procedure to eliminate
 	the extra cache miss in the common case.
 	The extra cache miss will be incurred only while an update is
 	actually in progress.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 방법은 읽기 쓰레드가 선택된 필드들의 연관 값들을 볼 수 있게 하지만, 최소한의
+읽기 쪽 오버헤드를 일으킵니다.
+이 데이터 원소별 일관성은 읽기 쓰레드가 각 데이터 원소만 바라보는 흔한 경우에는
+충분합니다.
+
+\iffalse
 
 This approach enables readers to see correlated values for selected
 fields, but while incurring minimal read-side overhead.
 This per-data-element consistency suffices in the common case where
 a reader looks only at a single data element.
+
+\fi
 
 % @@@ Birthstone/tombstone for moving records when readers cannot be permitted
 % to see extraneous records.
