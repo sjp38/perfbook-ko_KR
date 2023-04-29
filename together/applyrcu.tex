@@ -1107,6 +1107,21 @@ update rates.
 \subsection{Scalable Reference Count Two}
 \label{sec:together:Scalable Reference Count Two}
 
+레퍼런스 카운트가 성능 또는 확장성의 병목이 되고 있다고 해봅시다.
+뭘 할 수 있을까요?
+
+또다른 방법은 각 레퍼런스 카운트를 위한 CPU 별 카운터를 사용하는 것으로,
+\cref{chp:Counting} 의 알고리즘, 특히
+\cref{sec:count:Exact Limit Counters} 의 정확한 한계 카운터와 어떤 점에서
+비슷합니다.
+이 카운터들을 위한 CPU 별 모드와 전역 모드 사이의 전환의 필요는 한편에서는 비싼
+값 증가와 감소를 초래하거나
+(\cref{sec:count:Atomic Limit Counter Implementation})
+다른 편에선 POSIX 시그널의 사용을 초래합니다
+(\cref{sec:count:Signal-Theft Limit Counter Design}).
+
+\iffalse
+
 Suppose a reference count is becoming a performance or scalability
 bottleneck.
 What can you do?
@@ -1121,6 +1136,20 @@ results either in expensive increments and decrements on the one hand
 or in the use of POSIX signals on the other
 (\cref{sec:count:Signal-Theft Limit Counter Design}).
 
+\fi
+
+또다른 대안은 CPU 별과 글로벌 모드 사이의 전환을 RCU 로 조정하는 겁니다.
+각 업데이트는 RCU read-side 크리티컬 섹션 내에서 진행되며, 각 업데이트는 CPU 별
+카운터를 업데이트 할지 전역 값을 업데이트 할지 알리는 플래그를 검사합니다.
+모드를 전환하기 위해선 플래그를 업데이트 하고, 하나의 grace period 를 기다린
+후, 남아있는 모든 카운트를 CPU 별 카운터에서 글로벌 카운터로, 그리고 그 반대의
+경우에도 마찬가지로 옮깁니다.
+
+리눅스 커널은 \co{percpu_ref} 형태의 레퍼런스 카운터에 이 방법을 사용하는데,
+관심있는 독자 여러분은 참고하시기 바랍니다.
+
+\iffalse
+
 Another alternative is to use RCU to mediate the switch between per-CPU
 and global counting modes.
 Each update is carried out within an RCU read-side critical section,
@@ -1132,6 +1161,8 @@ counter or vice versa.
 
 The Linux kernel uses this approach in its \co{percpu_ref} style of
 reference counter, to which interested readers are referred.
+
+\fi
 
 % @@@ RCU link counts
 % @@@ Minimize memory footprint, for example, SRCU.
