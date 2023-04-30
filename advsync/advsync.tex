@@ -415,6 +415,17 @@ errors.
 
 \begin{fcvref}[ln:advsync:lifo_push:whole]
 \Cref{lst:advsync:NBS Stack Algorithm}
+는 NBS 스택을 이루는 lock-free push 와 bounded wait-free pop 을 뽐내는 LIFO
+push 알고리즘 (\path{lifo-push.c}) 을 보입니다.
+이 알고리즘의 원조는 알려지지 않았으나, 1975년에 얻어진
+특허~\cite{PaulJBrown1975LIFOpush} 에서 참조되었습니다.
+이 특허는 1973년에 청구되었는데 여러분의 편집자가 하나의 CPU 만을 가지고 있던
+그의 첫 컴퓨터를 구매하기 몇달 전이었습니다.
+
+\iffalse
+
+\begin{fcvref}[ln:advsync:lifo_push:whole]
+\Cref{lst:advsync:NBS Stack Algorithm}
 shows the LIFO push algorithm, which boasts lock-free push and
 bounded wait-free pop (\path{lifo-push.c}), forming an NBS stack.
 The origins of this algorithm are unknown, but it was referred to in
@@ -422,11 +433,33 @@ a patent granted in 1975~\cite{PaulJBrown1975LIFOpush}.
 This patent was filed in 1973, a few months before your editor
 saw his first computer, which had but one CPU\@.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/advsync/lifo_push@whole.fcv}
 \caption{NBS Stack Algorithm}
 \label{lst:advsync:NBS Stack Algorithm}
 \end{listing}
+
+\Clnrefrange{struct:b}{struct:e} 는 임의의 값과 스택의 다음 구조체로의 포인터를 
+포함하는 \co{node_t} 구조체를 보이며 \clnref{top} 은 스택 꼭대기 포인터를
+보입니다.
+
+\co{list_push()} 함수가 \clnrefrange{push:b}{push:e} 에 펼쳐져 있습니다.
+\Clnref{push:alloc} 은 새 노드를 할당하고 \clnref{push:initialize} 는 이를
+초기화 합니다.
+\Clnref{push:next} 는 새로 할당된 노드의 \co{->next} 포인터를 초기화 하고,
+\clnref{push:cmpxchg} 는 이를 스택에 밀어넣으려 합니다.
+\Clnref{push:check} 가 \co{cmpxchg()} 가 실패했음을 파악하면, 반복문을 통한
+또다른 시도가 이루어집니다.
+그렇지 않다면, 이 새 노드는 성공적으로 넣어졌으며, 이 함수는 호출자에게
+리턴됩니다.
+\Clnref{push:check} 는 두개의 동시의 \co{list_push()} 인스턴스가 스택에 push 를
+하려는 시도로 인한 경주 상황을 해결함을 유의하십시오.
+\co{cmpxchg()} 는 하나에는 성공하고 다른 하나에는 실패할 것이어서 그 다른 쪽은
+재시도를 하게 하며, 따라서 스택의 두 노드에 대한 임의의 순서를 선택합니다.
+
+\iffalse
 
 \Clnrefrange{struct:b}{struct:e} show the \co{node_t} structure,
 which contains an arbitrary value and a pointer to the next structure
@@ -447,6 +480,30 @@ instances of \co{list_push()} attempt to push onto the stack.
 The \co{cmpxchg()} will succeed for one and fail for the other,
 causing the other to retry, thereby selecting an arbitrary order for
 the two node on the stack.
+
+\fi
+
+\co{list_pop_all()} 함수가 \clnrefrange{popall:b}{popall:e} 에 있습니다.
+\Clnref{popall:xchg} 의 \co{xchg()} 문은 원자적으로 스택의 모든 노드를
+제거하고, 그 결과 만들어지는 리스트의 head 를 지역 변수 \co{p} 에 저장하고
+\co{top} 을 \co{NULL} 로 만듭니다.
+이 어토믹 오퍼레이션은 \co{list_pop_all()} 로의 동시 호출들을 줄세웁니다:
+그 중 하나는 리스트를 얻을 것이고, 다른 것들은 \co{NULL} 포인터를 얻을 것인데
+동시의 \co{list_push()} 호출이 없었다는 가정 하에서입니다.
+
+\co{p} 에 비어있지 않은 리스트를 얻는 \co{list_pop_all()} 인스턴스는 이
+리스트를 \clnrefrange{popall:loop:b}{popall:loop:e} 에 놓여진 반복문을 통해
+처리합니다.
+\Clnref{popall:next} 는 \co{->next} 포인터를 읽어오고, \clnref{popall:foo} 는
+\co{foo()} 에 의해 참조되는 함수를 현재 노드에 대해 호출하고,
+\clnref{popall:free} 는 현재 노드를 메모리 해제하며, \clnref{popall:pnext} 는
+\co{p} 를 이 반복문의 다음 회차를 위해 설정합니다.
+
+하지만 한쌍의 \co{list_push()} 인스턴스가 단일 \Node{A} 를 초기에 담고 있는
+리스트에 동시의 \co{list_pop_all()} 과 함께 호출되었다고 해봅시다.
+이 시나리오가 만들 수 있는 한 방법은 아래와 같습니다:
+
+\iffalse
 
 The \co{list_pop_all()} function spans \clnrefrange{popall:b}{popall:e}.
 The \co{xchg()} statement on \clnref{popall:xchg} atomically removes
@@ -469,6 +526,8 @@ But suppose that a pair of \co{list_push()} instances run concurrently
 with a \co{list_pop_all()} with a list initially containing a single
 \Node{A}.
 Here is one way that this scenario might play out:
+
+\fi
 
 \begin{enumerate}
 \item	The first \co{list_push()} instance pushes a new \Node{B},
