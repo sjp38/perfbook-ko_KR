@@ -323,6 +323,20 @@ Linux kernel.
 \label{sec:advsync:Half-NBS Queue}
 
 \begin{fcvref}[ln:count:NBS Enqueue Algorithm]
+또다른 흔한 NBS 알고리즘은 userspace-RCU 라이브러리
+구현~\cite{MathieuDesnoyers2009URCU} 을 보이는
+\cref{lst:count:NBS Enqueue Algorithm} 에 보인 것과 같이 원소들이 원자적 교환
+인스트럭션을 이용해 넣어지고~\cite{MagedMichael1993JPDC}, 이어서 이 새 원소의 앞
+원소의 \co{->next} 포인터가 저장되는 원자적 queue 일 겁니다.
+\Clnref{tail} 은 tail 포인터를 새 원소를 참조하게 업데이트하면서 지역 변수
+\co{old_tail} 에 그 앞 원소로의 참조를 저장합니다.
+\Clnref{pred} 는 이어서 앞 원소의 \co{->next} 포인터가 이 새로 추가된 원소를
+참조하게 업데이트 하고, 마지막으로 \clnref{ret} 는 이 queue 가 초기에 비어
+있었는지 여부를 알리는 값을 리턴합니다.
+
+\iffalse
+
+\begin{fcvref}[ln:count:NBS Enqueue Algorithm]
 Another common NBS algorithm is the atomic queue where elements are
 enqueued using an atomic exchange instruction~\cite{MagedMichael1993JPDC},
 followed by a store into the \co{->next} pointer of the new element's
@@ -336,6 +350,8 @@ local variable \co{old_tail}.
 reference the newly added element, and finally \clnref{ret}
 returns an indication as to whether or not the queue was initially
 empty.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:count:NBS Enqueue Algorithm]
@@ -367,6 +383,18 @@ _cds_wfcq_enqueue(struct cds_wfcq_head *head,
 \label{lst:count:NBS Enqueue Algorithm}
 \end{listing}
 
+하나의 원소를 dequeue  하기 위해선 상호적 배타가 필요하지만 (따라서 dequeue 는
+block 됩니다), 이 queued 의 전체 내용에 대한 non-blocking 제거가 가능합니다.
+불가능한 건 특정 원소를 non-blocking 형식으로 dequeue 하는 겁니다: enqueue 를
+한 쓰레드는 \clnref{tail,pred} 사이에서 실패했을 수도, 따라서 요청된 원소는
+부분적으로 enqueue 되었을 수도 있습니다.
+이는 enqueue 는 NBS 이지만 dequeue 는 blocking 인 half-NBS 알고리즘이 됩니다.
+그러나 이 알고리즘은 현실에서 널리 쓰이고 있는데, 부분적으로는 대부분의 제품
+소프트웨어가 임의의 fail-stop 오류들에 내성을 가질 필요를 갖지 않기 때문입니다.
+\end{fcvref}
+
+\iffalse
+
 Although mutual exclusion is required to dequeue a single element
 (so that dequeue is blocking), it is possible to carry out a non-blocking
 removal of the entire contents of the queue.
@@ -379,6 +407,8 @@ This algorithm is nevertheless heavily used in practice, in part because
 most production software is not required to tolerate arbitrary fail-stop
 errors.
 \end{fcvref}
+
+\fi
 
 \subsubsection{NBS Stack}
 \label{sec:advsync:NBS Stack}
