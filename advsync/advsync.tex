@@ -530,6 +530,20 @@ Here is one way that this scenario might play out:
 \fi
 
 \begin{enumerate}
+\item	첫번째 \co{list_push()} 인스턴스는 새 \Node{B} 를 밀어넣고,
+	\clnref{push:next} 를 지나 수행되어, \Node{A} 로의 포인터를 \Node{B} 의
+	\co{->next} 포인터에 저장합니다.
+\item	\co{list_pop_all()} 인스턴스가 완료되어, \co{top} 을 \co{NULL} 로
+	설정하고 \Node{A} 를 메모리 해제합니다.
+\item	두번째 \co{list_push()} 인스턴스가 완료되어, 새 \Node{C} 를 밀어넣지만
+	\Node{A} 에 속했던 메모리를 할당받게 됩니다.
+\item	첫번째 \co{list_push()} 인스턴스가 \clnref{push:cmpxchg} 에서
+	\co{cmpxchg()} 를 수행합니다.
+	새 \Node{C} 는 새로 메모리 해제된 \Node{A} 와 동일한 주소를 가지므로 이
+	\co{cmpxchg()} 는 성공하고 이 \co{list_push()} 인스턴스는 완료됩니다.
+
+\iffalse
+
 \item	The first \co{list_push()} instance pushes a new \Node{B},
 	executing through \clnref{push:next}, having just stored
 	a pointer to \Node{A} into \Node{B}'s \co{->next} pointer.
@@ -543,7 +557,29 @@ Here is one way that this scenario might play out:
 	Because new \Node{C} has the same address as the newly freed \Node{A},
 	this \co{cmpxchg()} succeeds and this \co{list_push()} instance
 	runs to completion.
+
+\fi
+
 \end{enumerate}
+
+두개의 밀어넣기와 전체 꺼내기가 \Node{A} 의 메모리의 재사용에도 불구하고 모두
+성공적으로 수행되었음을 유의하세요.
+이는 일반적이지 않은 특성입니다: 대부분의 데이터 구조는 ABA 문제라고 종종
+불리는 문제에 대한 보호를 필요로 합니다.
+
+하지만 이는 어셈블리어로 쓰인 알고리즘에만 적용됩니다.
+슬픈 사실은 대부분의 언어들이 (C 와 C++ 포함) \Node{B} 의 \co{->next} 포인터에
+저장된 기존 \Node{A} 로의 포인터 같은, 수명이 끝난 객체로의 포인터를 지원하지
+않는다는 것입니다.
+실제로, 컴파일러는 두 포인터가 (\co{p} 와 \co{q} 라고 해봅시다) \co{malloc()}
+에 대한 두개의 다른 호출에서 리턴되었다면 그 포인터들은 동일하지 않아야 한다고
+가정할 권리를 갖습니다.
+실제 컴파일러들은 정말로 \co{p==q} 비교에 응답으로 항상 \co{false} 를 생성할
+겁니다.
+메모리 해제되었지만 호환 가능한 타입의 객체로 재할당된 객체로의 포인터는
+\emph{좀비 보인터} 라고 명명됩니다.
+
+\iffalse
 
 Note that both pushes and the popall all ran successfully despite the
 reuse of \Node{A}'s memory.
@@ -563,6 +599,20 @@ response to a \co{p==q} comparison.
 A pointer to an object that has been freed, but whose memory has been
 reallocated for a compatibly typed object is termed a \emph{zombie pointer}.
 
+\fi
+
+많은 동시성 어플리케이션이 주의 깊게 메모리 할당자를 컴파일러로부터 숨겨서
+컴파일러가 옳지 않은 가정을 하는 것을 방지함으로써 이 문제를 막습니다.
+이런 난독화 시도는 현재 실전에서 잘 동작합니다만, 언젠가는 갈수록 강화되어가는
+최적화 기법들의 희생자가 될수도 있습니다.
+이 문제를 해결하기 위한 C 와 C++ 표준 위원회의 노력이
+진행중입니다~\cite{PaulEMcKenney2019PointerLifetimeEndZap,PaulEMcKenney2020PointerLifetimeEndZapCpp}.
+그동안은, ABA에 내성이 있는 알고리즘을 아주 주의하며 짜도록 연습해 주시기
+바랍니다.
+\end{fcvref}
+
+\iffalse
+
 Many concurrent applications avoid this problem by carefully hiding the
 memory allocator from the compiler, thus preventing the compiler from
 making inappropriate assumptions.
@@ -575,15 +625,35 @@ In the meantime, please exercise great care when coding ABA-tolerant
 algorithms.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	왜 C 와 C++ 같은 고전 언어를 더 현대적인 걸로 대체하지 않죠?
+
+	\iffalse
+
 	So why not ditch antique languages like C and C++ for something
 	more modern?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그 더 현대적인 언어의 제안자가 그들 스스로의 컴파일러 백엔드를 작성할
+	만큼 에너지가 넘치지 않는다면 도움이 되지 않을 겁니다.
+	기존에 존재하는 백엔드를 재사용하는 일반적인 방법은 또한 수명이 종료된
+	객체로의 퐁니터를 지원하길 거절하는 것과 같은 매력적인 속성 역시
+	재사용합니다.
+
+	\iffalse
+
 	That won't help unless the more-modern languages proponents
 	are energetic enough to write their own compiler backends.
 	The usual practice of re-using existing backends also reuses
 	charming properties such as refusal to support pointers to
 	lifetime-ended objects.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Applicability of NBS Benefits}
