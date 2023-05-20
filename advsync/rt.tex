@@ -507,6 +507,27 @@ often handled in software.
 \paragraph{Workload Constraints}
 \label{sec:advsync:Workload Constraints}
 
+사람들과 마찬가지로 부하를 지나치게 줌으로써 리얼타임 시스템이 기한을 지키지
+못하게 하는게 종종 가능합니다.
+예를 들어, 시스템이 너무 자주 인터럽트 된다면, 리얼타임 어플리케이션을
+처리하기에 CPU 대역폭이 부족할 수 있습니다.
+이 문제에 대한 하드웨어 해결책은 인터럽트가 시스템에 전달되는 비율에 제한을
+가하는 것일 수도 있습니다.
+가능한 소프트웨어 해결책은 인터럽트가 너무 자주 ㄷ르어오면 잠깐 인터럽트를
+꺼버리거나, 너무 빈번한 인터럽트를 발생시키는 기기를 리셋하거나, 인터럽트를
+아예 막고 polling 을 하는 방법 등이 있습니다.
+
+과부하는 또한 queueing 효과로 인해 응답 시간을 악화시켜서 리얼타임 시스템이 CPU
+대역폭을 지나치게 사용하게 하지 않는게 일반적이므로 동작 중인 시스템은
+(말하자면) 80\,\% idle 시간을 갖게 합니다.
+이 방법은 저장장치와 네트워크 장치에도 적용됩니다.
+어떤 경우, 별도의 저장장치와 네트워크 장치는 리얼타임 어플리케이션의 높은
+우선순위 부분에의 전용을 위해 예약될 수도 있습니다.
+요약하자면, 리얼타임 시스템에서는 처리량보다 응답시간이 더 중요하므로
+하드웨어가 거의 idle 상태가 되는건 드문 일이 아닙니다.
+
+\iffalse
+
 Just as with people, it is often possible to prevent a real-time system
 from meeting its deadlines by overloading it.
 For example, if the system is being interrupted too frequently, it might
@@ -528,13 +549,47 @@ In short, it is not unusual for this hardware to be mostly idle, given
 that response time is more important than throughput in
 real-time systems.
 
+\fi
+
 \QuickQuiz{
+	하지만 queueing 이론에서의 결론을 놓고 보면, 낮은 사용율은 최악의 경우
+	응답시간을 개선하기보다는 평균 응답시간을 개선할 뿐이지 않나요?
+	그리고 최악의 경우 응답시간이 리얼타임 시스템에서 정말 신경쓰는 것이지
+	않나요?
+
+	\iffalse
+
 	But given the results from queueing theory, won't low utilization
 	merely improve the average response time rather than improving
 	the worst-case response time?
 	And isn't worst-case response time all that most
 	real-time systems really care about?
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞습니다, 그러나 \ldots
+
+	그런 queueing 이론 결과들은 리눅스 커널에서는 무한한 태스크에 연관되는
+	무한의 ``호출자'' 를 가정합니다.
+	2021년 초 기준으로 어떤 실제 시스템도 무한의 태스크를 지원하지 않으므로
+	무한의 호출자를 가정하는 결과는 무한보다는 작은 적용성을 가질 것이라
+	기대되어야 합니다.
+
+	다른 queueing 이론 결과들은 \emph{유한한} 호출자를 갖는데, 깔끔하게
+	상한이 만들어진 응답시간을 갖습니다~\cite{Hillier86}.
+	이 결과들은 실제 시스템을 더 잘 모델링 하며, 이 모델들은 사용율이
+	줄어듬에 따라 평균과 최악의 경우 응답 시간이 모두 줄어들 것으로
+	예측합니다.
+	이 결과들은 락킹과 같은 동기화 메커니즘을 사용하는 동시성 시스템
+	모델링으로 확장될 수
+	있습니다~\cite{BjoernBrandenburgPhD,DipankarSarma2004OLSscalability}.
+
+	요약하자면, 실제 세계의 리얼타임 시스템을 정확하게 묘사하는 queueing
+	이론은 최악의 경우의 응답시간이 사용율 감소에 따라 줄어듦을 보입니다.
+
+	\iffalse
+
 	Yes, but \ldots
 
 	Those queueing-theory results assume infinite ``calling populations'',
@@ -557,11 +612,22 @@ real-time systems.
 	In short, queueing-theory results that accurately describe
 	real-world real-time systems show that worst-case response
 	time decreases with decreasing utilization.
+
+	\fi
+
 }\QuickQuizEnd
+
+물론, 충분히 낮은 사용율을 유지하는 것은 설계와 구현 전반에 상당한 주의를
+필요로 합니다.
+기한을 어기게 만드는 작은 기능상의 문제 같은 건 없습니다.
+
+\iffalse
 
 Of course, maintaining sufficiently low utilization requires great
 discipline throughout the design and implementation.
 There is nothing quite like a little feature creep to destroy deadlines.
+
+\fi
 
 \paragraph{Application Constraints}
 \label{sec:advsync:Application Constraints}
