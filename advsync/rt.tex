@@ -1220,6 +1220,20 @@ Ways of meeting this challenge are outlined in the following section.
 \subsection{Implementing Parallel Real-Time Systems}
 \label{sec:advsync:Implementing Parallel Real-Time Systems}
 
+우리는 두개의 주요 리얼타임 시스템, 즉 event-driven 과 polling 을 살펴볼
+겁니다.
+Event-driven 리얼타임 시스템은 대부분의 시간을 idle 상태로 지내며 운영체제에
+의해 어플리케이션에 전달된 이벤트에 리얼타임으로 반응합니다.
+대안적으로, 이 시스템은 비 리얼타임 워크로드를 뒤에서 수행할 수 있습니다.
+Polling 리얼타임 시스템은 CPU 에 제한되어 있고 입력을 읽어오고 출력을
+업데이트하는 짧은 반복문을 갖는 리얼타임 쓰레드를 가집니다.
+이 짧은 polling 반복은 종종 완전히 사용자 모드에서 동작해서 어플리케이션의
+user-mode 주소 공간에 매핑된 하드웨어 레지스터를 읽고 쓸 수 있습니다.
+대안적으로, 어떤 어플리케이션들은 이 polling 반복을 커널에 위치시키는데 예를
+들면 load 할 수 있는 커널 모듈을 사용하는 겁니다.
+
+\iffalse
+
 We will look at two major styles of real-time systems, event-driven and
 polling.
 An event-driven real-time system remains idle much of the time, responding
@@ -1236,12 +1250,42 @@ application's address space.
 Alternatively, some applications place the polling loop into the kernel,
 for example, using loadable kernel modules.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{advsync/rt-regimes}}
 \caption{Real-Time Response Regimes}
 \label{fig:advsync:Real-Time Response Regimes}
 \end{figure}
+
+선택된 스타일과 관계 없이, 리얼타임 시스템을 구현하는데 사용되는 방법은 기한에
+종속적일텐데, 예를 들면
+\cref{fig:advsync:Real-Time Response Regimes} 에 보인 것과 같습니다.
+이 그림의 꼭대기로부터 보면, 여러분이 1초가 넘는 응답시간에도 문제 없다면
+여러분의 리얼타임 어플리케이션을 구현하는데 스크립트 언어를 사용할 수도 있을
+겁니다---그리고 스크립트 언어는 놀랍도록 자주 사용됩니다만, 제가 이를 꼭
+추천해야 할 이유는 아닙니다.
+요구되는 응답시간이 수십 밀리세컨드를 넘는다면 오래된 2.4 버전의 리눅스 커널이
+사용될 수 있는데, 역시 제가 이를 꼭 추천해야 할 이유는 아닙니다.
+특수한 리얼타임 Java 구현은 garbage collector 를 사용하면서도 수 밀리세컨드의
+리얼타임 응답시간을 제공할 수 있습니다.
+리눅스 2.6.x 와 3.x 커널은 주의 깊게 구성되고 튜닝되고 리얼타임 친화적
+하드웨어에서 수행된다면 수백 마이크로세컨드의 리얼타임 응답시간을 제공할 수
+있습니다.
+특수 리얼타임 Java 구현은 garbage collector 의 사용이 주의 깊게 막아진다면 100
+마이크로세컨드 미만의 리얼타임 응답시간을 제공할 수 있습니다.
+(하지만 garbage collector 의 사용을 제한함은 Java 의 거대한 표준 라이브러리
+사용을 막아서 Java 의 생산성 이득을 막음을 알아두십시오.)
+리눅스 4.x 와 5.x 커널은 100 밀리세컨드 미만의 응답시간을 제공합니다만 2.6.x 와
+3.x 커널과 같은 주의가 필요합니다.
+\rt\ 패치셋을 포함한 리눅스 커널은 20 마이크로세컨드 미만의 응답시간을 제공할
+수 있으며, MMU 없이 동작하는 특수 리얼타임 운영체제들은 (RTOS들) 10
+마이크로세컨드 미만의 응답시간을 제공할 수 있습니다.
+마이크로세컨드 미만 응답시간을 얻는데에는 손으로 짜여진 어셈블리나 심지어 특수
+목적 하드웨어가 필요합니다.
+
+\iffalse
 
 Regardless of the style chosen, the approach used to implement a real-time
 system will depend on the deadlines, for example, as shown in
@@ -1273,6 +1317,8 @@ running without MMUs can provide sub-ten-microsecond
 latencies.
 Achieving sub-microsecond latencies typically requires hand-coded assembly
 or even special-purpose hardware.
+
+\fi
 
 Of course, careful configuration and tuning are required all the way down
 the stack.
