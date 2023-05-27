@@ -1377,6 +1377,24 @@ the next section.
 \label{fig:advsync:Linux Ported to RTOS}
 \end{figure}
 
+리얼타임 시스템을 구현하기 위한 여러 전략이 있습니다.
+한가지 방법은 범용 비 리얼타임 OS 를 특수 목적 리얼타임 운영체제 (RTOS) 위에
+포팅하는 것으로,
+\cref{fig:advsync:Linux Ported to RTOS} 에 보여진 것과 같습니다.
+초록색 ``Linux Process'' 박스들은 리눅스 커널에서 돌아가는 비 리얼타임
+프로세스를 나타내며, 노란 ``RTOS Process'' 박스들은 RTOS 에서 돌아가는 리얼타임
+프로세스들을 나타냅니다.
+
+이는 리눅스 커널이 리얼타임 기능을 얻기 전까지 매우 대중적인 전략이었으며,
+여전히 사용됩니다~\cite{Xenomai2014,VictorYodaiken2004a}.
+그러나, 이 방법은 어플리케이션이 RTOS 에서 돌아가는 부분과 리눅스에서 돌아가는
+부분으로 분리될 것을 필요로 합니다.
+예를 들어 RTOS 로부터의 POSIX 시스템콜을 리눅스에서 도는 관리 쓰레드로 넘기는
+것과 같이 두 환경을 비슷해 보이게 하는 것은 가능하나, 언제나 깔끔하게 떨어지지
+않는 부분이 있습니다.
+
+\iffalse
+
 There are a number of strategies that may be used to implement a
 real-time system.
 One approach is to port a general-purpose non-real-time OS on top
@@ -1395,6 +1413,19 @@ Although it is possible to make the two environments look similar,
 for example, by forwarding POSIX system calls from the RTOS to a
 utility thread running on Linux, there are invariably rough edges.
 
+\fi
+
+또한, RTOS 는 하드웨어와 리눅스 커널 둘 다와 상호작용해야 해서, 하드웨어와 커널
+양쪽에의 변경에 대한 상당한 관리를 요합니다.
+더 나아가, 그런 RTOS 각각은 종종 자신만의 시스템콜 인터페이스와 시스템
+라이브러리 집합을 가져서, 에코시스템과 개발자들을 분열시킬 수 있습니다.
+실제로, 이 문제들은 RTOS 와 리눅스의 결합을 이끈 것으로 보여지는데, 이 방법은
+RTOS 의 완전한 리얼타임 능력에의 접근을 허용하는 한편 어플리케이션의 비
+리얼타임 코드는 리눅스의 오픈소스 에코시스템에 완전한 접근을 허용했기
+때문입니다.
+
+\iffalse
+
 In addition, the RTOS must interface to both the hardware and to
 the Linux kernel, thus requiring significant maintenance with
 changes in both hardware and kernel.
@@ -1406,12 +1437,32 @@ RTOSes with Linux, as this approach allowed access to the full real-time
 capabilities of the RTOS, while allowing the application's non-real-time
 code full access to Linux's open-source ecosystem.
 
+\fi
+
 \begin{figure*}[p]
 \centering
 \resizebox{4.4in}{!}{\includegraphics{advsync/preemption}}
 \caption{Linux-Kernel Real-Time Implementations}
 \label{fig:advsync:Linux-Kernel Real-Time Implementations}
 \end{figure*}
+
+RTOS 와 리눅스 커널을 결합시키는 건 리눅스 커널이 최소한의 리얼타임 기능만을
+가지고 있던 때에는 영리하고 유용한 단기적 방법이었습니다만, 이는 또한 리눅스
+커널에 리얼타임 기능을 추가하는 동기가 되었습니다.
+이 목표를 향한 진행이
+\cref{fig:advsync:Linux-Kernel Real-Time Implementations} 에 보여 있습니다.
+윗열은 preemption 이 불능화된, 따라서 리얼타임 기능을 갖지 못한 리눅스 커널을
+보입니다.
+가운데 열은 preemption 이 허용된 상태에서의 메인라인 리눅스 커널의 리얼타임
+기능이 늘어나는 과정을 보입니다.
+마지막으로, 아랫열은 \rt\ 패치셋이 적용되어 리얼타임 기능이 최대화 된 상태의
+리눅스 커널을 보입니다.
+\rt\ 패치셋으로부터의 기능이 메인라인에 더해졌으므로, 메인라인 리눅스 커널의
+기능은 시간에 따라 점차 늘어가고 있습니다.
+그러나, 가장 필요한 리얼타임 어플리케이션은 \rt\ 패치셋을 계속 사용하고
+있습니다.
+
+\iffalse
 
 Although pairing RTOSes with the Linux kernel was a clever and useful
 short-term response during the time that the Linux kernel had minimal
@@ -1430,6 +1481,20 @@ hence the increasing capabilities of the mainline Linux kernel over time.
 Nevertheless, the most demanding real-time applications continue to use
 the \rt\ patchset.
 
+\fi
+
+\cref{fig:advsync:Linux-Kernel Real-Time Implementations}
+의 꼭대기에 보인 preemption 불가 커널은 \co{CONFIG_PREEMPT=n} 과 함께
+빌드외어서 리눅스 커널 내에서의 수행은 preemption 될 수 없습니다.
+이는 커널의 리얼타임 응답시간은 리눅스 커널의 가장 긴, 실제로도 긴, 코드 경로에
+제한됨을 의미합니다.
+그러나, 사용자 모드 수행은 preemption 가능하므로 우상단에 보인 리얼타임 리눅스
+프로세스들은 좌상단에 보인 비 리얼타임 리눅스 프로세스를 비 리얼타임 리눅스
+프로세스가 사용자 모드에서 수행중인 동안에는 언제든 preempt 시킬 수 있을
+겁니다.
+
+\iffalse
+
 The non-preemptible kernel shown at the top of
 \cref{fig:advsync:Linux-Kernel Real-Time Implementations}
 is built with \co{CONFIG_PREEMPT=n}, so that execution within the Linux
@@ -1440,6 +1505,26 @@ However, user-mode execution is preemptible, so that one of the
 real-time Linux processes shown in the upper right may preempt any of the
 non-real-time Linux processes shown in the upper left anytime the
 non-real-time process is executing in user mode.
+
+\fi
+
+\cref{fig:advsync:Linux-Kernel Real-Time Implementations}
+의 가운데 열은 리눅스의 preemption 가능한 커널 개발 과정의 세 단계 (왼쪽에서
+오른쪽으로) 를 보입니다.
+세 단계 모두에서, 리눅스 커널의 대부분의 프로세스 단계 코드는 preeemption 될 수
+있습니다.
+이는 물론 리얼타임 응답시간을 크게 개선합니다만 여전히 RCU read-side 크리티컬
+섹션, spinlock 크리티컬 섹션, 인터럽트 핸들러, 인터럽트가 불능화된 코드 구역,
+그리고 preemption 이 불능화된 코드 구역에서는 이 그림의 가운데 열의 가장 왼쪽의
+빨간 박스들로 보인 것처럼 여전히 preemption 이 불가능합니다.
+Preemption 가능한 RCU 의 발전은 가장 오른쪽 다이어그램이 보이듯 RCU read-side
+크리티컬 섹션이 preemption 가능하게 만들었습니다.
+물론, 다른 리얼타임 기능이 시간의 흐름에 따라 더해졌습니다만, 이 모두를 이
+다이어그램에 쉽게 보일 수가 없습니다.
+그에 대해서는
+\cref{sec:advsync:Event-Driven Real-Time Support} 에서 이야기 하겠습니다.
+
+\iffalse
 
 The middle row of
 \cref{fig:advsync:Linux-Kernel Real-Time Implementations}
@@ -1465,6 +1550,20 @@ diagram.
 It will instead be discussed in
 \cref{sec:advsync:Event-Driven Real-Time Support}.
 
+\fi
+
+\cref{fig:advsync:Linux-Kernel Real-Time Implementations}
+의 아랫열은 쓰레드화된 (그리고 따라서 preemption 가능한) 많은 기기를 위한
+인터럽트 핸들러를 갖는, 따라서 이 드라이버들의 ``인터럽트 불능화된'' 영역들을
+preemption 가능하게 하는 \rt\ 패치셋을 보입니다.
+이 드라이버들은 각 드라이버의 프로세스 단계 부분들을 쓰레드화된 인터럽트
+핸들러와 동기화 시키기 위해 락킹을 대신 사용합니다.
+마지막으로, 어떤 경우에는 preemption 의 불능화가 migration 불능화로 대체됩니다.
+이는 \rt\ 패치셋을 사용해 수행되는 많은 시스템에서의 상당한 응답시간 개선을
+보입니다~\cite{Reghenzani:2019:RLK:3309872.3297714,DanielBristot2019RTtrace}.
+
+\iffalse
+
 The bottom row of
 \cref{fig:advsync:Linux-Kernel Real-Time Implementations}
 shows the \rt\ patchset, which features threaded (and thus preemptible)
@@ -1477,12 +1576,34 @@ disabling of migration.
 These measures result in excellent response times in many systems running
 the \rt\ patchset~\cite{Reghenzani:2019:RLK:3309872.3297714,DanielBristot2019RTtrace}.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{advsync/nohzfull}}
 \caption{CPU Isolation}
 \label{fig:advsync:CPU Isolation}
 \end{figure}
+
+마지막 방법은 리얼타임 프로세스를 방해할 수 있는 모든 것을 치우는 것으로,
+\cref{fig:advsync:CPU Isolation} 에 보인 것처럼 이 프로세스가 필요한 모든 CPU
+로부터 다른 일들을 모두 제거해 버리는 겁니다.
+이는 3.10 리눅스 커널에서 \co{CONFIG_NO_HZ_FULL} Kconfig 패러미터를 통해
+구현되었습니다~\cite{JonCorbet2013NO-HZ-FULL,FredericWeisbecker2013nohz}.
+이 방법은 최소 하나의 \emph{관리 CPU}, 예를 들면 커널 daemon 같은 것이 뒤에서
+수행되게 할 것을 필요로 함을 알아두는게 중요합니다.
+그러나, 비 관리 CPU 에서 수행될 수 있는 태스크가 단 하나일 때에는 스케쥴링 클락
+인터럽트가 해당 CPU 에서는 꺼져버려서 상관과 \emph{OS jitter} 의 중요한 원천이
+제거됩니다.
+일부 예외와 함께, 이 커널은 다른 일들이 비 관리 CPU 로부터 사라지게 하지는
+않으나 특정 CPU 에 하나의 태스크만 수행 가능할 때의 성능을 낫게 만들어 줍니다.
+여러 userspace 도구들이 특정 CPU 가 두개 이상의 수행 가능 태스크를 갖지 못하게
+만드는데 사용될 수 있습니다.
+올바르게 구성된다면, \co{CONFIG_NO_HZ_FULL} 은 베어메탈 시스템의 그것에
+근접하는 리얼타임 쓰레드 수준의 성능을
+제공합니다~\cite{AbdullahAljuhni2018nohzfull}.
+
+\iffalse
 
 A final approach is simply to get everything out of the way of the
 real-time process, clearing all other processing off of any CPUs that
@@ -1504,6 +1625,20 @@ If configured properly, a non-trivial undertaking, \co{CONFIG_NO_HZ_FULL}
 offers real-time threads levels of performance that come close to those of
 bare-metal systems~\cite{AbdullahAljuhni2018nohzfull}.
 
+\fi
+
+물론, 이 방법들 가운데 무엇이 리얼타임 시스템을 위한 최고의 방법인지에 대해선
+상당한 논쟁이 있었으며 그 논쟁은 상당한 시간동안
+진행되었습니다~\cite{JonCorbet2004RealTimeLinuxPart1,JonCorbet2004RealTimeLinuxPart2}.
+보통 그렇듯, 답은 ``경우에 따라 다르다'' 인 듯 보이는데, 다음 섹션들에서 이를
+다룹니다.
+\Cref{sec:advsync:Event-Driven Real-Time Support}
+는 이벤트 주도 리얼타임 시스템을 다루고,
+\Cref{sec:advsync:Polling-Loop Real-Time Support}
+는 CPU-제한 polling 반복문을 사용하는 리얼타임 시스템을 알아봅니다.
+
+\iffalse
+
 There has of course been much debate over which of these approaches
 is best for real-time systems, and this debate has been going on for
 quite some
@@ -1514,6 +1649,8 @@ following sections.
 considers event-driven real-time systems, and
 \Cref{sec:advsync:Polling-Loop Real-Time Support}
 considers real-time systems that use a CPU-bound polling loop.
+
+\fi
 
 \subsubsection{Event-Driven Real-Time Support}
 \label{sec:advsync:Event-Driven Real-Time Support}
