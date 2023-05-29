@@ -2069,6 +2069,32 @@ comes great responsibility.
 
 \fi
 
+\paragraph{Priority inheritance} 는 다른것들 가운데에서도 preemption 가능한
+인터럽트 핸들러에서 획득되는 락들로 인해 일어날 수
+있는 우선순위 역전을~\cite{LuiSha1990PriorityInheritance} 처리하기 위해
+사용됩니다.
+낮은 우선순위 쓰레드가 락을 잡았는데 중간 우선순위의 쓰레드당 최소 하나는 되는
+쓰레드들에 의해 preemption 당한다고 생각해 봅시다.
+인터럽트가 발생하면 높은 우선순위 \IRQ\ 쓰레드가 이 중간 우선순위 쓰레드들
+가운데 하나를 preempt 하지만 낮은 우선순위 쓰레드가 쥐고 있는 락을 획득하려
+히기 전까지만입니다.
+불행히도, 이 낮은 우선순위 쓰레드는 수행을 시작하기 전까지 이 락을 높을 수
+없는데, 중간 우선순위 쓰레드가 그걸 못하게 하고 있습니다.
+따라서 높은 우선순위 \IRQ\ 쓰레드는 중간 우선순위 쓰레드들 중 하나가 CPU 를
+놓기 전까지 이 락을 획득하지 못합니다.
+요약하자면, 중간 우선순위 쓰레드가 간접적으로 높은 우선순위 \IRQ\ 쓰레드를 막고
+있게 되어, 고전적인 우선순위 역전이 형성됩니다.
+
+이 우선순위 역전은 낮은 우선순위 쓰레드는 락을 잡고 있는 동안 인터럽트를 불능화
+시켜야 할 것이어서 중간 우선순위 쓰레드가 preempt 시키는 걸 막을 것이기 때문에
+쓰레드화 되지 않은 인터럽트에서도 발생될 수 있음을 알아두십시오.
+
+우선순위 계승 (priority-inheritance) 해결책에서, 락을 획득하려는 높은 우선순위
+쓰레드는 자신의 우선순위를 그 락을 잡고 있는 낮은 우선순위 쓰레드에게 그 락이
+해제될 때까지 기부해서 장기간의 우선순위 역전을 막습니다.
+
+\iffalse
+
 \paragraph{Priority inheritance} is used to handle priority inversion,
 which can be caused by, among other things, locks acquired by
 preemptible interrupt handlers~\cite{LuiSha1990PriorityInheritance}.
@@ -2095,12 +2121,34 @@ to acquire the lock donates its priority to the low-priority thread holding
 the lock until such time as the lock is released, thus preventing long-term
 priority inversion.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3.4in}{!}{\includegraphics{cartoons/Priority_Boost_2}}
 \caption{Priority Inversion and User Input}
 \ContributedBy{Figure}{fig:advsync:Priority Inversion and User Input}{Melissa Broussard}
 \end{figure}
+
+물론, 우선순위 계승은 자신의 한계를 가지고 있습니다.
+예를 들어, 여러분이 여러분의 어플리케이션을 우선순위 역전을 완전히 막게 설계할
+수 있다면, 여러분은 뭔가 더 높은 응답시간을 얻을
+겁니다~\cite{VictorYodaiken2004a}.
+우선순위 계승은 최악의 경우 응답시간에 한쌍의 컨텍스트 전환을 더하므로 이는
+놀랍지 않습니다.
+그러나, 우선순위 계승은 응답시간의 무한한 대기를 제한된 증가로 변환시키며
+우선순위 계승의 소프트웨어 엔지니어링 이득은 많은 어플리케이션이 있어 그
+응답시간 비용보다 큰 이득을 줄 겁니다.
+
+또다른 한계는 특정 운영체제의 문맥 내에서의 락 기반 우선순위 역전만을
+해결한다는 겁니다.
+이게 해결할 수 없는 우선순위 역전 시나리오 중 하나는 CPU를 사용하는 중간
+우선순위 프로세스 집합에 의해 preemption 당한 낮은 우선순위 프로세스에 의해
+쓰,여질 메세지를 네트워크 소켓에서 기다리는 높은 우선순위 쓰레드입니다.
+또한, 우선순위 계승을 사용자 입력에 적용하는 것의 한가지 잠재적 단점이
+\cref{fig:advsync:Priority Inversion and User Input} 에 그려져 있습니다.
+
+\iffalse
 
 Of course, priority inheritance does have its limitations.
 For example, if you can design your application to avoid priority
@@ -2123,6 +2171,23 @@ In addition, a potential disadvantage of applying priority inheritance
 to user input is fancifully depicted in
 \cref{fig:advsync:Priority Inversion and User Input}.
 
+\fi
+
+마지막 한계는 reader-writer 락킹에 연관됩니다.
+우리가 매우 큰 수의, 예를 들어 수천개의, 낮은 우선순위 쓰레드를 가지고 있으며
+이들 각각은 특정 reader-writer 락을 읽기 모드로 잡는다고 해봅시다.
+이 쓰레드가 모두 CPU 당 최소 하나는 되는 중간 우선순위 쓰레드 집합에 의해
+preemption 당한다고 해봅시다.
+마지막으로, 높은 우선순위 쓰레드가 깨어나서 이 reader-writer 락을 쓰기 모드로
+획득하려 한다고 해봅시다.
+이 락을 읽기 모드로 쥐고 있는 쓰레드의 우선순위를 얼마나 열심히 높이는가에
+관계없이, 이는 높은 우선순위 쓰레드가 쓰기모드 락 획득을 완료하기까지는 긴
+시간이 걸릴 수 있을 겁니다.
+
+이 reader-writer 락 우선순위 역전 난제에 대한 여러 해결책이 있습니다:
+
+\iffalse
+
 A final limitation involves reader-writer locking.
 Suppose that we have a very large number of low-priority threads, perhaps
 even thousands of them, each
@@ -2138,7 +2203,23 @@ thread can complete its write-acquisition.
 There are a number of possible solutions to this reader-writer lock
 priority-inversion conundrum:
 
+\fi
+
 \begin{enumerate}
+\item	한번에 하나의 reader-writer 락의 읽기 모드 획득만을 허용합니다.  (이는
+	리눅스 커널의 \rt\ 패치셋에서 전통적으로 취해진 방법입니다.)
+\item	한번에 특정 reader-writer 락의 $N$ 개 읽기 모드 획득만을 허용하며, $N$
+	은 CPU 갯수가 되게 합니다.
+\item	한번에 특정 reader-writer 락의 $N$ 개 읽기 모드 획득만을 허용하며, $N$
+	은 개발자에 의해 어떻게든 정해질 수 있게 합니다.
+	리눅스 커널의 \rt\ 패치셋이 이 방법을 취할 기회가 있습니다.
+\item	높은 우선순위 쓰레드가 낮은 우선순위 쓰레드에 의해 읽기 모드로 획득될
+	수 있는 reader-writer 락을 쓰기 모드로 획득하는 걸 금합니다.
+	(이는 \emph{우선순위 제한}
+	프로토콜~\cite{LuiSha1990PriorityInheritance} 의 한 변종입니다.)
+
+\iffalse
+
 \item	Only allow one read-acquisition of a given reader-writer lock
 	at a time.  (This is the approach traditionally taken by
 	the Linux kernel's \rt\ patchset.)
@@ -2155,13 +2236,40 @@ priority-inversion conundrum:
 	priorities.
 	(This is a variant of the \emph{priority ceiling}
 	protocol~\cite{LuiSha1990PriorityInheritance}.)
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	하지만 한번에 하나의 reader-writer 락 읽기 모드 획득만을 허용한다면,
+	그건 배타적 락과 동일한 거 아닌가요???
+
+	\iffalse
+
 	But if you only allow one reader at a time to read-acquire
 	a reader-writer lock, isn't that the same as an exclusive
 	lock???
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 그렇습니다, API 만 다를 뿐이죠.
+	그리고 이 API 는 리눅스 커널이 \rt\ 패치셋을 말도 안되게 커지게 하지
+	않고도 리얼타이 기능을 제공하게 하므로 중요합니다.
+
+	그러나, 이 방법은 분명하고 큰 읽기 쪽 확장성 제한을 갖습니다.
+	리눅스 커널의 \rt\ 패치셋은 여러 이유로 이 제한을 가지고도 사용될 수
+	있었습니다: (1)~리얼타임 시스템은 전통적으로 상대적으로 작았고,
+	(2)~리얼타임 시스템은 일반적으로 프로세스 제어에 집중했으므로 I/O
+	서브시스템에서의 확장성 제한에 영향 받지 않았고, (3)~리눅스 커널의 많은
+	reader-writer 락은 RCU 로 변환되었습니다.
+
+	그러나, 이 퀴즈를 뒤따르는 글에서 서령되듯이 동시의 읽기 쓰레드를
+	허용해야 할 분명한 필요가 드러났습니다.
+
+	\iffalse
+
 	Indeed it is, other than the API\@.
 	And the API is important because it allows the Linux kernel
 	to offer real-time capabilities without having the \rt\ patchset
@@ -2180,7 +2288,24 @@ priority-inversion conundrum:
 	However, the day came when it was absolutely necessary to
 	permit concurrent readers, as described in the text following
 	this quiz.
+
+	\fi
+
 }\QuickQuizEnd
+
+동시의 읽기 쓰레드를 허용하지 않는 제약은 결국 허용 불가능하게 되었으므로, \rt\
+개발자들은 리눅스 커널이 reader-writer spinlock 을 어떻게 사용하는지 주의 깊게
+들여다 보았습니다.
+그들은 시간에 치명적인 코드는 reader-writer 락을 쓰기 모드로 획득하는 커널
+부분을 드물게만 사용하므로 쓰기 쓰레드의 starvation 의 가능성은 모든걸 망칠
+정도는 아님을 배웠습니다.
+따라서 그들은 쓰기 모드 획득이 다른 것들 가운데 우선순위 계승을 사용하지만 읽기
+모드 획득은 쓰기 모드 획득들보다 높은 우선순위를 갖는 리얼타임 reader-writer
+락을 만들었습니다.
+이 방법은 실전에서 잘 동작하는 것으로 보였으며, 여러분의 사용자가 정말로 필요한
+게 무엇인지 분명히 이해하는게 중요하다는 또다른 교훈입니다.
+
+\iffalse
 
 The no-concurrent-readers restriction eventually became intolerable, so
 the \rt\ developers looked more carefully at how the Linux kernel uses
@@ -2195,6 +2320,31 @@ write-side acquisitions.
 This approach appears to be working well in practice, and is another
 lesson in the importance of clearly understanding what your users
 really need.
+
+\fi
+
+이 구현의 한가지 흥미로운 세부사항은 \co{rt_read_lock()} 과
+\co{rt_write_lock()} 함수들이 RCU read-side 크리티컬 섹션을 진입하며
+\co{rt_read_unlock()} 과 \co{rt_write_unlock()} 함수들이 이 크리티컬 섹션을
+빠져아온다는 점입니다.
+비 리얼타임 커널의 reader-writer 락킹 함수는 크리티컬 섹션 내에서 preemption 을
+금하기 때문에 필요하며, \co{synchronize_rcu()} 는 모든 앞서 존재한
+reader-writer 락 크리티컬 섹션들이 완료될 때까지 기다릴 것이라는 사실에
+의존하는 reader-writer locking 사용처기 정말 존재합니다.
+이를 여러분을 위한 교훈으로 삼으세요:
+여러분의 사용자들이 정말 필요한게 무엇인지 이해하는 것은 성능만이 아니라 운영을
+고치는데 매우 중요합니다.
+그뿐만이 아니라, 여러분의 사용자가 정말로 필요한건 시간에 따라 변합니다.
+
+이는 \rt\ 커널의 reader-writer 락킹 크리티컬 섹션이 RCU 우선순위 높이기에 영향
+받는다는 부가 작용을 일으킵니다.
+이는 reader-writer 락 읽기 스레드가 연장된 시간 동안 preemption 당하는 문제에
+대한 부분적 해결책을 제공합니다.
+
+또한 reader-writer 락을 RCU 로 변환함으로써 reader-writer 락 우선순위 역전을
+막는 것도 가능한데, 다음 섹션에서 간단히 이야기 합니다.
+
+\iffalse
 
 One interesting detail of this implementation is that both the
 \co{rt_read_lock()} and the \co{rt_write_lock()} functions enter an RCU
@@ -2218,6 +2368,8 @@ lock readers being preempted for extended periods of time.
 It is also possible to avoid reader-writer lock priority inversion by
 converting the reader-writer lock to RCU, as briefly discussed in the
 next section.
+
+\fi
 
 \paragraph{Preemptible RCU}
 can sometimes be used as a replacement for reader-writer
