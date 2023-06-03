@@ -2372,6 +2372,21 @@ next section.
 \fi
 
 \paragraph{Preemptible RCU}
+는 가끔
+\cref{sec:defer:Read-Copy Update (RCU)} 에서 이야기 되었듯 reader-writer 락킹의
+대체제로 사용될 수
+있습니다~\cite{PaulEMcKenney2007WhatIsRCUFundamentally,PaulMcKenney2012RCUUsage,PaulEMcKenney2014RCUAPI}.
+사용될 수 있는 곳에서라면, 그것은 읽기 쓰레드와 쓰기 쓰레드가 동시에 수행되는
+것을 허용하는데, 이는 낮은 우선순위 읽기 쓰레드가 높은 우선순위 업데이트
+쓰레드에게 어떤 종류의 우선순위 역전 행위를 일으키는 것도 막아줍니다.
+그러나, 이게 유용하려면 오래 수행되는 RCU read-side 크리티컬 섹션을 preempt
+시킬 수 있어야 합니다~\cite{DinakarGuniguntala2008IBMSysJ}.
+그러지 않는다면 긴 RCU read-side 크리티컬 섹션은 상당한 리얼타임 응답시간을
+초래할 겁니다.
+
+\iffalse
+
+\paragraph{Preemptible RCU}
 can sometimes be used as a replacement for reader-writer
 locking~\cite{PaulEMcKenney2007WhatIsRCUFundamentally,PaulMcKenney2012RCUUsage,PaulEMcKenney2014RCUAPI},
 as was discussed in \cref{sec:defer:Read-Copy Update (RCU)}.
@@ -2383,6 +2398,8 @@ long-running RCU read-side critical
 sections~\cite{DinakarGuniguntala2008IBMSysJ}.
 Otherwise, long RCU read-side critical sections would result in
 excessive real-time latencies.
+
+\fi
 
 \begin{listing}[tb]
 \begin{fcvlabel}[ln:advsync:Preemptible Linux-Kernel RCU]
@@ -2408,6 +2425,24 @@ void __rcu_read_unlock(void)		        \lnlbl[unl:b]
 \label{lst:advsync:Preemptible Linux-Kernel RCU}
 \end{listing}
 
+그래서 preemption 가능한 RCU 구현이 리눅스 커널에 추가되었습니다.
+이 구현은 커널 내의 모든 태스크 각각의 상태를 개별적으로 추적해야 할 필요를
+preempt 된 태스크들의 리스트를 그것들의 현재 RCU read-side 크리티컬 섹션 내에
+유지함으로써 막았습니다.
+Grace period 는 다음의 경우에 종료될 수 있습니다: (1)~모든 CPU 가 현재 grace
+period 시작 이전부터 효과를 발휘한 RCU read-side 크리티컬 전부를 완료했다면,
+그리고
+(2)~그런 앞서서부터 존재한 크리티컬 섹션 내에서 preemp 되었던 태스크들이 그들을
+그들의 리스트에서 제거했다면.
+이 구현의 간략화된 버전이
+\cref{lst:advsync:Preemptible Linux-Kernel RCU} 에 보여져 있습니다.
+\begin{fcvref}[ln:advsync:Preemptible Linux-Kernel RCU]
+\co{__rcu_read_lock()} 함수는 \clnrefrange{lock:b}{lock:e} 에 있고
+\co{__rcu_read_unlock()} 함수는 \clnrefrange{unl:b}{unl:e} 에 있습니다.
+\end{fcvref}
+
+\iffalse
+
 A preemptible RCU implementation was therefore added to the Linux kernel.
 This implementation avoids the need to individually track the state of
 each and every task in the kernel by keeping lists of tasks that have
@@ -2424,6 +2459,28 @@ A simplified version of this implementation is shown in
 The \co{__rcu_read_lock()} function spans \clnrefrange{lock:b}{lock:e} and
 the \co{__rcu_read_unlock()} function spans \clnrefrange{unl:b}{unl:e}.
 \end{fcvref}
+
+\fi
+
+\begin{fcvref}[ln:advsync:Preemptible Linux-Kernel RCU:lock]
+\co{__rcu_read_lock()} 의 \clnref{inc} 는 중첩된 \co{rcu_read_lock()} 호출의
+횟수를 담는 태스크별 카운터의 값을 증가시키고, \clnref{bar} 는 컴파일러가 RCU
+read-side 크리티컬 섹션의 뒤따르는 코드를 \co{rcu_read_lock()} 앞으로 재배치
+하는 걸 막습니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:advsync:Preemptible Linux-Kernel RCU:unl]
+\co{__rcu_read_unlock()} 의 \clnref{bar1} 은 컴파일러가 크리티컬 섹션 내의
+코드를 이 함순의 나머지와 재배치 시키는 것을 막습니다.
+\Clnref{decchk} 는 중첩 카운트의 값을 감소시키고 그게 0이 되었는지 검사하는데,
+달리 말하자면 이게 중첩 집합의 가장 바깥 \co{rcu_read_unlock()} 에 연관되었는지
+확인합니다.
+그렇다면, \clnref{bar2} 는 컴파일러가 이 중첩 상태 업데이트를 \clnref{chks} 의
+특별 처리 검사와 재배치 하는 걸 막습니다.
+특별 처리가 필요하다면, \lnref{unls} 의 \co{rcu_read_unlock_special()} 이 이를
+처리합니다.
+
+\iffalse
 
 \begin{fcvref}[ln:advsync:Preemptible Linux-Kernel RCU:lock]
 \Clnref{inc} of \co{__rcu_read_lock()} increments a per-task count of the
@@ -2444,6 +2501,23 @@ update with \clnref{chks}'s check for special handling.
 If special handling is required, then the call to
 \co{rcu_read_unlock_special()} on \lnref{unls} carries it out.
 
+\fi
+
+필요할 수 있는 특별한 처리가 여러 종류 있지만, 우린 RCU read-side 크리티컬
+섹션이 preemption 되었을 때 필요한 것에만 집중하겠습니다.
+이 경우, 그 태스크는 스스로를 자신의 RCU read-side 크리티컬 섹션 내에서 처음
+preemption 되었을 때 자신이 추가된 리스트에서 스스로를 제거해야 합니다.
+그러나, 이 리스트는 락으로 보호됨에 유의할 필요가 있는데, 이는
+\co{rcu_read_unlock()} 이 더이상 lockless 가 아님을 의미합니다.
+그러나, 가장 높은 우선순위 쓰레드는 preemption 되지 않을 것이며, 따라서 그런
+최고 우선순위 쓰레드에게 \co{rcu_read_unlock()} 은 어떤 락도 획득하려 하지 않을
+겁니다.
+또한, 주의 깊게 구현된다면 락킹은 리얼타임 소프트웨어를 동기화 하는데 사용될 수
+있습니다~\cite{BjoernBrandenburgPhD,DipankarSarma2004OLSscalability}.
+\end{fcvref}
+
+\iffalse
+
 There are several types of special handling that can be required, but
 we will focus on that required when the RCU read-side critical section
 has been preempted.
@@ -2459,7 +2533,21 @@ In addition, if implemented carefully, locking can be used to synchronize
 real-time software~\cite{BjoernBrandenburgPhD,DipankarSarma2004OLSscalability}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:advsync:Preemptible Linux-Kernel RCU:unl]
+	\Cref{lst:advsync:Preemptible Linux-Kernel RCU}
+	의 \clnref{chks} 의 \co{t->rcu_read_unlock_special.s} 의 로드 직후에
+	preemption 이 일어났다고 해봅시다.
+	그럼 그 태스크는 \co{rcu_read_unlock_special()} 을 호출하지 못하게 될
+	수도 있고, 따라서 현재 grace period 를 막고 있는 태스크들의 리스트에서
+	스스로를 제거할 수 없게 되어서 그 grace period 가 무한히 연장되게 하지
+	않을까요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:advsync:Preemptible Linux-Kernel RCU:unl]
 	Suppose that preemption occurs just after the load from
 	\co{t->rcu_read_unlock_special.s} on \clnref{chks} of
@@ -2469,13 +2557,42 @@ real-time software~\cite{BjoernBrandenburgPhD,DipankarSarma2004OLSscalability}.
 	from the list of tasks blocking the current grace period,
 	in turn causing that grace period to extend indefinitely?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	그건 실제 문제이고, RCU 의 스케쥴러 후킹을 통해 해결되었습니다.
+	해당 스케쥴러 훅이 \co{t->rcu_read_lock_nesting} 값이 음수임을 확인하면
+	해당 컨텍스트 스위치가 완료되기 전에 필요하다면
+	\co{rcu_read_unlock_special()} 을 호출합니다.
+
+	\iffalse
+
 	That is a real problem, and it is solved in RCU's scheduler hook.
 	If that scheduler hook sees that the value of
 	\co{t->rcu_read_lock_nesting} is negative, it invokes
 	\co{rcu_read_unlock_special()} if needed before allowing
 	the context switch to complete.
+
+	\fi
+
 }\QuickQuizEnd
+
+RCU 의 또다른 중요한 리얼타임 기능은 RCU 콜백 수행을 커널 쓰레드로 넘기는
+겁니다.
+이를 사용하기 위해선 여러분의 커널은 \co{CONFIG_RCU_NOCB_CPU=y} 와 함께
+빌드되고 어떤 CPU 에게 넘겨질 것인지 명시하는 \co{rcu_nocbs=} 커널 부팅
+패러미터와 함께 부팅되어야 합니다.
+대안적으로,
+\cref{sec:advsync:Polling-Loop Real-Time Support} 에서 이야기 된
+\co{nohz_full=} 커널 부팅 패러미터에 의해 명시되는 모든 CPU 는 또한 그들의 RCU
+콜백들을 떠넘기게 됩니다.
+
+요약하자면, 이 preemption 가능한 RCU 구현은 읽기가 대부분인 데이터 구조에 대해
+큰 수의 읽기 쓰레드에게 우선순위 높이기를 할 때 피할 수 없는 지연 없이, 그리고
+콜백 수행으로 인한 지연 없이 리얼타임 응답을 가능하게 합니다.
+
+\iffalse
 
 Another important real-time feature of RCU, whether preemptible or
 not, is the ability to offload RCU callback execution to a kernel
@@ -2492,6 +2609,8 @@ In short, this preemptible RCU implementation enables real-time response for
 read-mostly data structures without the delays inherent to priority
 boosting of large numbers of readers, and also without delays due to
 callback invocation.
+
+\fi
 
 \paragraph{Preemptible spinlocks}
 are an important part of the \rt\ patchset due to the long-duration
