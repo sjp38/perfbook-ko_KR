@@ -2736,6 +2736,16 @@ of the Linux kernel augmented by the \rt\ patchset.
 \subsubsection{Polling-Loop Real-Time Support}
 \label{sec:advsync:Polling-Loop Real-Time Support}
 
+첫 인상으로는, polling 반복문의 사용은 모든 가능한 운영체제 간섭 문제를 없앨
+것으로 보일 수도 있습니다.
+어쨌건, 어떤 CPU 가 절대 커널에 들어가지 않는다면, 커널은 완전히 그림 밖에
+있습니다.
+그리고 커널을 밖에 두는 전통적인 방법은 단순히 커널을 갖지 않는 것으로, 많은
+리얼타임 어플리케이션이 실제로 기계 바로 위에서 돌아가는데, 특히 8비트
+마이크로컨트롤러에서 수행되는 것들이 그렇습니다.
+
+\iffalse
+
 At first glance, use of a polling loop might seem to avoid all possible
 operating-system interference problems.
 After all, if a given CPU never enters the kernel, the kernel is
@@ -2744,6 +2754,24 @@ And the traditional approach to keeping the kernel out of the way is
 simply not to have a kernel, and many real-time applications do
 indeed run on bare metal, particularly those running on eight-bit
 microcontrollers.
+
+\fi
+
+어떤 사람들은 현대의 운영체제 커널에서 단순히 하나의 CPU 에 성능이 종속되는
+사용자 모드 쓰레드를 특정 CPU 위에서 돌림으로써 모든 간섭 원인을 제거하고 순수
+기계 성능을 얻을 수 있기를 바랄 수도 있습니다.
+실제는 물론 더 복잡하지만, Frederic Weisbecker 에 의해 구현이 이끌어졌고 리눅스
+커널에 3.10 버전에 받아들여진
+\co{NO_HZ_FULL}~\cite{JonCorbet2013NO-HZ-FULL,FredericWeisbecker2013nohz}
+덕분에 정말 그렇게 하는게 가능해지고 있습니다.
+그렇다고 하나, 있을 수 있는 여러 OS jitter 의 원인을 제어해야 하기 때문에 그런
+환경을 올바르게 구성하기 위해선 상당한 주의가 필요합니다.
+아래의 이야기는 여러 OS jitter 원인을 다루는데, 기기 인터럽트, 커널 쓰레드와
+daemon, 스케쥴러 리얼타임 쓰로틀링 (이건 버그가 아니라 기능입니다!), 타이머, 비
+리얼타임 디바이스 드라이버, 커널 내부 전역 동기화, 스케쥴링 클락 인터럽트,
+페이지 폴트, 그리고 마지막으로 비 리얼타임 하드웨어와 펌웨어를 포함합니다.
+
+\iffalse
 
 One might hope to get bare-metal performance on a modern operating-system
 kernel simply by running a single CPU-bound user-mode thread on a
@@ -2763,6 +2791,19 @@ timers, non-real-time device drivers, in-kernel global synchronization,
 scheduling-clock interrupts, page faults, and finally, non-real-time
 hardware and firmware.
 
+\fi
+
+인터럽트는 OS jitter 의 많은 부분의 훌륭한 원천입니다.
+불행히도, 인터럽트는 시스템이 바깥 세상과 소통하기 위해 절대적으로 필요합니다.
+이 OS jitter 와 바깥 세상과의 연락을 유지하는 것 사이의 충돌을 해결하는 한가지
+방법은 작은 수의 최소 운영 CPU 를 예약하고 모든 인터럽트를 이 CPU 들로 향하도록
+강제하는 겁니다.
+리눅스 소스 트리의 \path{Documentation/IRQ-affinity.txt} 파일은 어떻게 기기
+인터럽트를 특정 CPU 로 향하게 할 수 있는지 설명하는데, 2021년 초 기준으로는
+다음과 같습니다:
+
+\iffalse
+
 Interrupts are an excellent source of large amounts of OS jitter.
 Unfortunately, in most cases interrupts are absolutely required in order
 for the system to communicate with the outside world.
@@ -2773,9 +2814,23 @@ The \path{Documentation/IRQ-affinity.txt} file in the Linux source tree
 describes how to direct device interrupts to specified CPU,
 which as of early 2021 involves something like the following:
 
+\fi
+
 \begin{VerbatimU}
 $ echo 0f > /proc/irq/44/smp_affinity
 \end{VerbatimU}
+
+이 커맨드는 인터럽트 \#44 를 CPU~0--3 에 가둡니다.
+스케쥴링 클락 인터럽트는 특수한 처리를 필요로 하며, 이 섹션의 뒷부분에서 다룸을
+알아두십시오.
+
+OS jitter 의 두번째 원천은 커널 쓰레드와 daemon 입니다.
+RCU 의 grace-period kthread (\co{rcu_bh}, \co{rcu_preempt}, 그리고
+\co{rcu_sched}) 와 같은 개별 커널 쓰레드는 \co{taskset} 커맨드,
+\co{sched_setaffinity()} 시스템콜, 또는 \co{cgroups} 를 통해 어떤 CPU 에게든
+할당될 수 있습니다.
+
+\iffalse
 
 This command would confine interrupt \#44 to CPUs~0--3.
 Note that scheduling-clock interrupts require special handling, and are
@@ -2786,6 +2841,30 @@ Individual kernel threads, such as RCU's grace-period kthreads
 (\co{rcu_bh}, \co{rcu_preempt}, and \co{rcu_sched}), may be forced
 onto any desired CPUs using the \co{taskset} command, the
 \co{sched_setaffinity()} system call, or \co{cgroups}.
+
+\fi
+
+Per-CPU kthread 는 종종 더 어려우며, 가끔은 하드웨어 구성과 워크로드 배치를
+강제합니다.
+이런 kthread 로부터의 OS jitter 를 막기 위해선 특정 종류의 하드웨어가 리얼타임
+시스템에 부착되지 않았거나 모든 인터럽트와 I/O 초기화가 최소 운영용 CPU 에서만
+처리되거나, 일들이 실제 일을 하는 CPU 에서 처리되지 않게끔 특수한 커널 Kconfig
+또는 부팅 패러미터를 선택하거나, 실제 일을 하는 CPU 가 결코 커널에 들어가지
+않게 해야 합니다.
+특정 per-kthread 를 위한 조언을 리눅스 커널 소스 \path{Documentation}
+디렉토리의 \path{admin-guide/kernel-per-CPU-kthreads.rst} 에서 찾을 수 있을
+겁니다.
+
+리얼타임 우선순위를 가지고 수행되는 CPU 를 주로 사용하는 쓰레드에 대한 OS
+jitter 의 세번째 원천은 스케쥴러 자신입니다.
+이는 의도적인 디버깅 기능으로, 리얼타임 어플리케이션이 무한 반복문 버그가 있다
+해도 비 리얼타임 작업이 초당 최소 50 밀리세컨드는 시간을 얻음을 보장하기
+위해서입니다.
+그러나, 여러분이 polling 반복문 스타일의 리얼타임 어플리케이션을 수행 중일
+때에는 이 디버깅 기능을 꺼야 할 겁니다.
+이는 다음과 같이 될 수 있습니다:
+
+\iffalse
 
 Per-CPU kthreads are often more challenging, sometimes constraining
 hardware configuration and workload layout.
@@ -2809,9 +2888,23 @@ However, when you are running a polling-loop-style real-time application,
 you will need to disable this debugging feature.
 This can be done as follows:
 
+\fi
+
 \begin{VerbatimU}
 $ echo -1 > /proc/sys/kernel/sched_rt_runtime_us
 \end{VerbatimU}
+
+이 커맨드를 수행하기 위해선 여러분은 물론 root 권한을 가지고 있어야 하며, 또한
+앞서 이야기된 스파이더맨 원칙을 주의 깊게 고려해야 할 겁니다.
+위험을 최소화 하는 한가지 방법은 앞의 문단에서 이야기된 것처럼 인터럽트와 커널
+쓰레드/daemon 을 CPU 를 주로 사용하는 리얼타임 쓰레드가 수행되는 모든 CPU
+로부터 격리시키는 것입니다.
+또한, \path{Documentation/scheduler} 디렉토리의 것들을 주의깊게 읽어야 합니다.
+\path{sched-rt-group.rst} 파일의 내용은 특히 중요한데, 여러분이
+\co{CONFIG_RT_GROUP_SCHED} Kconfig 패러미터를 통해 켜지는 \co{cgroups} 리얼타임
+기능을 사용한다면 더욱 그렇습니다.
+
+\iffalse
 
 You will of course need to be running as root to execute this command,
 and you will also need to carefully consider the aforementioned Spiderman
@@ -2825,6 +2918,23 @@ The material in the \path{sched-rt-group.rst} file is particularly
 important, especially if you are using the \co{cgroups} real-time features
 enabled by the \co{CONFIG_RT_GROUP_SCHED} Kconfig parameter.
 
+\fi
+
+OS jitter 의 네번째 원천은 타이머에서 옵니다.
+많은 경우, 특정 CPU 를 커널 바깥에 두는 것은 타이머가 해당 CPU 에 스케쥴 되는
+것을 막습니다.
+한가지 중요한 예외는 반복되는 타이머로, 특정 타이머 핸들러가 같은 타이머의 다음
+발생을 예약하는 경우입니다.
+그런 타이머가 어떤 이유로든 특정 CPU 에서 시작된다면, 그 타이머는 해당 CPU 에서
+주기적으로 수행을 계속해서 무한히 OS jitter 를 가할 겁니다.
+반복되는 타이머를 다른 곳으로 넘기는
+한가지 잔인하지만 효과적인 방법은 CPU 를 주로 사용하는 리얼타임 어플리케이션
+쓰레드를 수행하는 모든 작업용 CPU 를 CPU hotplug 기능을 이용해 offline 시키고,
+이 같은 CPU 를 다시 online 시킨 후, 여러분의 리얼타임 어플리케이션을 시작하는
+겁니다.
+
+\iffalse
+
 A fourth source of OS jitter comes from timers.
 In most cases, keeping a given CPU out of the kernel will prevent
 timers from being scheduled on that CPU\@.
@@ -2837,6 +2947,26 @@ One crude but effective way to offload recurring timers is to
 use CPU hotplug to offline all worker CPUs that are to run CPU-bound
 real-time application threads, online these same CPUs, then start
 your real-time application.
+
+\fi
+
+OS jitter 의 다섯번째 원천은 리얼타임용으로 개발되지 않은 디바이스 드라이버에
+의해 제공됩니다.
+오래된 정식 예를 들어보면, 2005년 VGA 드라이버는 인터럽트를 끈 채 프레임 버퍼를
+0으로 채움으로써 화면을 깜빡였는데, 이는 수십 밀리세컨드의 OS jitter 를
+발생시켰습니다.
+디바이스 드라이버가 일으키는 OS jitter 를 막는 한가지 방법은 리얼타임시스템에서
+많이 사용된, 따라서 리얼타임 버그가 수정된 기기를 주의 깊게 선택하는 겁니다.
+또다른 방법은 해당 기기의 인터럽트와 해당 기기를 사용하는 모든 코드를 지정된
+최소 운영용 CPU 에 가두는 겁니다.
+세번째 방법은 이 기기의 리얼타임 워크로드 지원을 위한 기능을 테스트 하고
+리얼타임 버그를 고치는 겁니다.\footnote{
+	여러분이 이 방법을 선택한다면, 다른 사람들의 이익을 위해 여러분의
+	수정을 업스트림에 보내주시기 바랍니다.
+	어쨌건, 여러분의 어플리케이션을 나중 버전의 리눅스 커널에 포팅하려면,
+	\emph{여러분은} 그런 ``다른 사람들'' 이 될 겁니다.}
+
+\iffalse
 
 A fifth source of OS jitter is provided by device drivers that were
 not intended for real-time use.
@@ -2856,6 +2986,17 @@ workloads and fix any real-time bugs.\footnote{
 	a later version of the Linux kernel, \emph{you} will be one of those
 	``others''.}
 
+\fi
+
+OS jitter 의 여섯번째 원천은 일부 커널 내부 전체 시스템 동기화 알고리즘에 의해
+제공되는데, 가장 눈에 띄는 건 아마도 전역 TLB-flush 알고리즘일 겁니다.
+이는 메모리 언매핑 오퍼레이션, 특히 커널 내에서의 언매핑 오퍼레이션을 막는
+것으로 회피될 수 있습니다.
+2021년 초 기준으로 커널 내부 언매핑 오퍼레이션을 막는 방법은 커널 모듈 언로딩을
+막는 겁니다.
+
+\iffalse
+
 A sixth source of OS jitter is provided by some in-kernel
 full-system synchronization algorithms, perhaps most notably
 the global TLB-flush algorithm.
@@ -2863,6 +3004,27 @@ This can be avoided by avoiding memory-unmapping operations, and especially
 avoiding unmapping operations within the kernel.
 As of early 2021, the way to avoid in-kernel
 unmapping operations is to avoid unloading kernel modules.
+
+\fi
+
+OS jitter 의 일곱번째 원천은 스케쥴러 클락 인터럽트와 RCU 콜백 수행에 의해
+제공됩니다.
+이것들은 여러분의 커널을 \co{NO_HZ_FULL} Kconfig 파러미터를 켠 채로 빌드하고
+\co{nohz_full=} 패러미터가 리얼타임 쓰레드를 수행하게 될 작업용 CPU 들의
+리스트를 명시하게 함으로써 막아질 수 있습니다.
+예를 들어, \co{nohz_full=2-7} 은 CPU~2, 3, 4, 5, 6, 그리고~7 을 작업용 CPU 로
+지적하여서 CPU~0 과~1 을 최소 운영용 CPU 로 둡니다.
+작업용 CPU 는 각 작업용 CPU 에 두개 이상의 수행 가능 태스크가 있지 않은 한
+스케쥴링 클락 인터럽트를 일으키지 않으며, 각 작업용 CPU 의 RCU 콜백은 최소
+운영용 CPU 중 하나에서 수행될 겁니다.
+스케쥴링 클락 인터럽트를 끈 CPU 는 거기 하나의 수행 가능 태스크만 있을 것이기
+때문에 그 CPU 는 \emph{adaptive ticks mode} 또는 \co{nohz_full} 모드에 있다고
+이야기 됩니다.
+시스템의 나머지 부분들에 의해 발생될 최소 운영 로드를 처리하기 충분한 최소
+운영용 CPU 를 보장하는게 중요한데, 이를 위해선 주의 깊은 벤치마크와 튜닝이
+필요할 겁니다.
+
+\iffalse
 
 A seventh source of OS jitter is provided by
 scheduling-clock interrrupts and RCU callback invocation.
@@ -2882,6 +3044,8 @@ only being one runnable task on that CPU is said to be in
 It is important to ensure that you have designated enough
 housekeeping CPUs to handle the housekeeping load imposed by the
 rest of the system, which requires careful benchmarking and tuning.
+
+\fi
 
 An eighth source of OS jitter is page faults.
 Because most Linux implementations use an MMU for memory protection,
