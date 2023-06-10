@@ -3047,6 +3047,19 @@ rest of the system, which requires careful benchmarking and tuning.
 
 \fi
 
+OS jitter 의 여덟번째 원천은 페이지폴트입니다.
+대부분의 리눅스 구현은 메모리 보호를 위해 MMU 를 사용하므로, 이런 시스템에서
+돌아가는 리얼타임 어플리케이션은 페이지폴트를 당할 수 있습니다.
+\co{mlock()} 과 \co{mlockall()} 시스템콜을 사용해서 여러분의 어플리케이션의
+페이지를 메모리에 고정시켜서 페이지폴트를 막으십시오.
+물론, 스파이더맨 원칙이 적용되는데, 너무 많은 메모리를 고정시키는 것은 시스템이
+다른 일을 하는걸 막기 때문입니다.
+
+OS jitter 의 아홉번째 원천은 불행히도 하드웨어와 펌웨어입니다.
+따라서 리얼타임 사용을 위해 설계된 시스템을 사용하는게 중요합니다.
+
+\iffalse
+
 An eighth source of OS jitter is page faults.
 Because most Linux implementations use an MMU for memory protection,
 real-time applications running on these systems can be subject
@@ -3059,6 +3072,8 @@ too much memory may prevent the system from getting other work done.
 A ninth source of OS jitter is unfortunately the hardware and firmware.
 It is therefore important to use systems that have been designed for
 real-time use.
+
+\fi
 
 \begin{listing}[tb]
 \begin{fcvlabel}[ln:advsync:Locating Sources of OS Jitter]
@@ -3073,6 +3088,22 @@ cat per_cpu/cpuN/trace			\lnlbl[cat]
 \caption{Locating Sources of OS Jitter}
 \label{lst:advsync:Locating Sources of OS Jitter}
 \end{listing}
+
+\begin{fcvref}[ln:advsync:Locating Sources of OS Jitter]
+불행히도, OS jitter 원천의 리스트는 결코 완벽할 수 없는데, 커널의 새로운 버전이
+나옴에 따라 바뀔 것이기 때문입니다.
+이는 OS jitter 의 새로운 원천을 추적할 수 있을 필요를 만듭니다.
+CPU 를 주로 사용하는 사용자모드 쓰레드가 돌아가는 CPU $N$ 이 있다면,
+\cref{lst:advsync:Locating Sources of OS Jitter} 에 보인 커맨드는 이 CPU 가
+커널에 진입한 모든 시간의 리스트를 만들 겁니다.
+물론, \clnref{cat} 의 \co{N} 은 문제의 CPU 의 숫자로 바뀌어야 하며,
+\clnref{echo1} 의 \co{1} 은 커널 내에서의 함수 호출 단계를 추가적으로 보기 위해
+높아질 수 있습니다.
+결과로 나오는 트레이스는 OS jitter 의 원천을 추적해 들어가는걸 도울 수
+있습니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:advsync:Locating Sources of OS Jitter]
 Unfortunately, this list of OS-jitter sources can never be complete,
@@ -3090,6 +3121,20 @@ to show additional levels of function call within the kernel.
 The resulting trace can help track down the source of the OS jitter.
 \end{fcvref}
 
+\fi
+
+항상 그렇듯, 공짜 점심은 없고 \co{NO_HZ_FULL} 도 예외가 아닙니다.
+앞서 언급되었듯, \co{NO_HZ_FULL} 은 커널/유저 전환 비용을 더 높게 하는데 델타
+프로세스 처리와 RCU 같은 커널 서브시스템에게 그 전환을 알려야 하는 필요
+때문입니다.
+거친 경험적 법칙으로, \co{NO_HZ_FULL} 은 많은 종류의 리얼타임과 컴퓨팅이 주인
+워크로드에 도움이 됩니다만, 높은 비율로 시스템콜과 I/O 를 사용하는 워크로드를
+해칩니다~\cite{AbdullahAljuhni2018nohzfull}.
+추가적인 제한, 트레이드오프, 그리고 구성상의 조언이 리눅스 소스 트리의
+\path{Documentation/timers/no_hz.rst} 에서 얻어질 수 있습니다.
+
+\iffalse
+
 As always, there is no free lunch, and \co{NO_HZ_FULL} is no exception.
 As noted earlier,
 \co{NO_HZ_FULL} makes kernel/user transitions more expensive due to the
@@ -3102,6 +3147,18 @@ I/O~\cite{AbdullahAljuhni2018nohzfull}.
 Additional limitations, tradeoffs, and configuration advice may be
 found in \path{Documentation/timers/no_hz.rst} file in the Linux source tree.
 
+\fi
+
+봐왔듯이, CPU 위주의 리얼타임 쓰레드를 리눅스와 같은 범용 OS 에서 돌리면서 기계
+수준의 성능을 얻는 것은 세세한 부분에 대한 상당한 주의를 필요로 합니다.
+자동화는 도움이 되겠고 어떤 자동화는 적용되었습니다만, 상대적으로 적은
+사용자들을 놓고 볼 때, 자동화는 상대적으로 느리게 적용될 거라 예상될 수
+있습니다.
+그러나, 범용 운영체제를 돌리면서 기계에 근접한 성능을 얻는 것은 어떤 종류의
+리얼타임 시스템에 대한 제한을 완화시킬 것이라 기대됩니다.
+
+\iffalse
+
 As you can see, obtaining bare-metal performance when running
 CPU-bound real-time threads on a general-purpose OS such as Linux
 requires painstaking attention to detail.
@@ -3111,6 +3168,8 @@ expected to appear relatively slowly.
 Nevertheless, the ability to gain near-bare-metal performance while
 running a general-purpose operating system promises to ease construction
 of some types of real-time systems.
+
+\fi
 
 \subsection{Implementing Parallel Real-Time Applications}
 \label{sec:advsync:Implementing Parallel Real-Time Applications}
