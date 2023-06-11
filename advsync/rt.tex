@@ -3696,6 +3696,26 @@ unforgiving.
 \subsubsection{The Role of RCU}
 \label{sec:advsync:The Role of RCU}
 
+기온, 습도, 그리고 기압 등의 변화 등에 의해 점진적으로 변화할 수 있는
+데이터로의 접근이 필요한 병렬 리얼타임 어플리케이션을 작성한다고 생각해 봅시다.
+이 프로그램에 대한 리얼타임 응답 제약은 스피닝이나 블로킹이 허용되지 않을
+정도로 가혹해서, 락킹도 쓸 수 없고, 재시도 반복문도 허용되지 않으므로 시퀀스
+락킹이나 해저드 포인터도 쓸 수 없습니다.
+다행히도, 기온과 기압은 일반적으로 제어될 수 있으므로, 하드코딩된 기본값
+데이터가 보통 충분합니다.
+
+그러나, 기온, 습도, 그리고 기압은 가끔 기본값으로부터 너무 멀리 변화될 수
+있으며, 그런 상황에서는 기본값을 대체하는 데이터가 제공되어야 합니다.
+기온, 습도, 그리고 기압은 점진적으로 변화하므로, 업데이트된 값을 제공하는 건
+수분 내에는 일어나야만 하지만 급한 건 아닙니다.
+이 프로그램은 상상컨대 \co{cur_cal} 이라 이름 지어진, 정적으로 할당되고 초기화
+되었으며 \co{a}, \co{b}, 그리고 \co{c} 라 이름지어진 필드에 기본 조정값을 담고
+있는 \co{default_cal} 을 참조하는 전역 포인터를 사용할 수 있을 겁니다.
+그렇지 않다면, \co{cur_cal} 은 현재 조정값을 제공하는 동적으로 할당된 구조체를
+가리킵니다.
+
+\iffalse
+
 Suppose that you are writing a parallel real-time application that needs
 to access
 data that is subject to gradual change, perhaps due to changes in
@@ -3719,6 +3739,8 @@ and initialized structure that contains the default calibration values
 in fields imaginatively named \co{a}, \co{b}, and \co{c}.
 Otherwise, \co{cur_cal} points to a dynamically allocated
 structure providing the current calibration values.
+
+\fi
 
 \begin{listing}[tb]
 \begin{fcvlabel}[ln:advsync:Real-Time Calibration Using RCU]
@@ -3766,6 +3788,17 @@ bool update_cal(short a, short b, short c)		\lnlbl[upd:b]
 
 \begin{fcvref}[ln:advsync:Real-Time Calibration Using RCU]
 \Cref{lst:advsync:Real-Time Calibration Using RCU}
+는 RCU 가 이 문제를 해결하기 위해 어떻게 사용될 수 있는지 보입니다.
+탐색은 \clnrefrange{calc:b}{calc:e} 의 \co{calc_control()} 에 보인 것과 같이
+소요시간이 결정되어 있으며 리얼타임 요구사항과 일관되어 있습니다.
+업데이트는 더 복잡한데, \clnrefrange{upd:b}{upd:e} 의 \co{update_cal()} 에 보인
+것과 같습니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:advsync:Real-Time Calibration Using RCU]
+\Cref{lst:advsync:Real-Time Calibration Using RCU}
 shows how RCU can be used to solve this problem.
 Lookups are deterministic, as shown in \co{calc_control()}
 on \clnrefrange{calc:b}{calc:e}, consistent with real-time requirements.
@@ -3773,13 +3806,34 @@ Updates are more complex, as shown by \co{update_cal()}
 on \clnrefrange{upd:b}{upd:e}.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	리얼타임 시스템은 종종 안전에 치명적인 어플리케이션을 위해 사용된다는
+	점, 그리고 수행시간 메모리 할당은 많은 안전에 치명적인 상황에서
+	금지되었다는 점을 놓고 볼 때, \co{malloc()} 은 뭘 위한거죠???
+
+	\iffalse
+
 	Given that real-time systems are often used for safety-critical
 	applications, and given that runtime memory allocation is
 	forbidden in many safety-critical situations, what is with
 	the call to \co{malloc()}???
+
+	\fi
+
 }\QuickQuizAnswerB{
+	2016년 초, 수행시간 메모리 할당을 금지한 프로젝트들은 멀티쓰레드
+	컴퓨팅에 관심조차 없었습니다.
+	따라서 수행시간 메모리 할당은 안전에 치명적인 상황을 위한 추가적인
+	장애가 아닙니다.
+
+	그러나, 2020년에 이르러서는 멀티코어 리얼타임 시스템에서의 수행시간
+	메모리 할당이 약간 매력을 얻고 있습니다.
+
+	\iffalse
+
 	In early 2016, projects forbidding runtime memory allocation
 	were also not at all interested in multithreaded computing.
 	So the runtime memory allocation is not an additional
@@ -3787,22 +3841,50 @@ on \clnrefrange{upd:b}{upd:e}.
 
 	However, by 2020 runtime memory allocation in multi-core
 	real-time systems was gaining some traction.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\co{update_cal()} 을 보호하기 위한 어떤 동기화가 필요하지 않나요?
+
+	\iffalse
+
 	Don't you need some kind of synchronization to protect
 	\co{update_cal()}?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	실제로 그렇고, 여러분은 이 책의 앞에서 이야기된 어떤 기법이든 사용할 수
+	있습니다.
+	그런 기법 중 하나는 단일 업데이트 쓰레드의 사용으로,
+	\cref{lst:advsync:Real-Time Calibration Using RCU} 의 \co{update_cal()}
+	에 보인 코드와 정확히 같은 결과를 낼 겁니다.
+
+	\iffalse
+
 	Indeed you do, and you could use any of a number of techniques
 	discussed earlier in this book.
 	One of those techniques is use of a single updater thread,
 	which would result in exactly the code shown in \co{update_cal()}
 	in \cref{lst:advsync:Real-Time Calibration Using RCU}.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
+이 예제는 어떻게 RCU 가 리얼타임 프로그램에 소요 시간이 결정된 읽기쪽 데이터
+구조 액세스를 제공할 수 있는지 보입니다.
+
+\iffalse
+
 This example shows how RCU can provide deterministic read-side
 data-structure access to real-time programs.
+
+\fi
 
 \subsection{Real Time vs. Real Fast: How to Choose?}
 \label{sec:advsync:Real Time vs. Real Fast: How to Choose?}
