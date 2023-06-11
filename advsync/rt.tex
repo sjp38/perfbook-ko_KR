@@ -3576,6 +3576,17 @@ data from their input FIFOs, the advice of the next section applies.
 \subsubsection{Event-Driven Applications}
 \label{sec:advsync:Event-Driven Applications}
 
+중간 크기의 산업계 엔진으로 연료를 주입하는 것을 이벤트 주도 어플리케이션의 한
+예로 들어 보겠습니다.
+일반적인 운영 환경에서, 이 엔진은 연료가 상자점을 둘러싸 1도 간격으로 주입되게
+해야 합니다.
+1,500 RPM 회전율을 가정한다면 초당 25 회전 또는 초당 9,000 도 회전을 하는데,
+이는 도당 111 마이크로세컨드를 의미합니다.
+따라서 우린 이 연료 주입을 약 100 마이크로세컨드 시간 간격으로 스케쥴 해야
+합니다.
+
+\iffalse
+
 We will use fuel injection into a mid-sized industrial engine as a
 fanciful example for event-driven applications.
 Under normal operating conditions, this engine requires that the fuel
@@ -3585,6 +3596,8 @@ or about 9,000 degrees of rotation per second, which translates to
 111 microseconds per degree.
 We therefore need to schedule the fuel injection to within a time
 interval of about 100 microseconds.
+
+\fi
 
 \begin{listing}[tb]
 \begin{fcvlabel}[ln:advsync:Timed-Wait Test Program]
@@ -3607,6 +3620,23 @@ if (clock_gettime(CLOCK_REALTIME, &timeend) != 0) {
 \label{lst:advsync:Timed-Wait Test Program}
 \end{listing}
 
+연료 주입을 주도하기 위해 시간 기반 대기가 사용되었고 여러분이 엔진을 만드는
+중이라 하더라도, 전 회전 센서가 제공되길 바란다고 가정해 봅시다.
+우린 이 시간 기반 대기 기능을 테스트 해야 하는데,
+\cref{lst:advsync:Timed-Wait Test Program} 에 보인 것과 같은 테스트 프로그램을
+사용해볼 수 있을 겁니다.
+불행히도, 우리가 이 프로그램을 수행하면 우린 \rt\ 커널에서조차 용납 불가능한
+타이머 jitter 를 얻게 됩니다.
+
+한가지 문제는 \co{CLOCK_REALTIME} 으로, 이상하게 들리겠지만 이는 리얼타임에
+사용되라고 만들어지지 않았습니다.
+대신, 이것은 프로세스나 쓰레드에 의해 소요된 CPU 시간량에 반대되는 의미의
+``리얼타임'' 을 의미합니다.
+리얼타임 컴퓨팅에 사용되기 위해선 \co{CLOCK_MONOTONIC} 이 사용되어야 합니다.
+그러나, 이 변경을 가지고서도 결과는 여전히 충분치 않습니다.
+
+\iffalse
+
 Suppose that a timed wait was to be used to initiate fuel injection,
 although if you are building an engine, I hope you supply a rotation
 sensor.
@@ -3622,6 +3652,25 @@ Instead, it means ``realtime'' as opposed to the amount of CPU time
 consumed by a process or thread.
 For real-time use, you should instead use \co{CLOCK_MONOTONIC}.
 However, even with this change, results are still unacceptable.
+
+\fi
+
+또다른 문제는 이 쓰레드가 \co{sched_setscheduler()} 시스템콜을 사용해 리얼타임
+우선순위가 되어야만 한다는 겁니다.
+그러나 우린 여전히 페이지폴트를 보게 되므로 이 변화만으로는 불충분합니다.
+우린 또한 페이지폴트를 막기 위해 \co{mlockall()} 시스템 콜을 사용해 이
+어플리케이션의 메모리를 고정시켜야 합니다.
+이 모든 변화를 가지고서야 결과는 마침내 받아들여질 수도 있습니다.
+
+다른 상황에서는 추가적인 변경이 필요할 수도 있ㅅ브니다.
+시간이 치명적인 쓰레드를 각자의 CPU 에 고정시켜야 할수도 있고, 인터럽트는 그
+CPU 들 외의 것에 고정시켜야 할수도 있습니다.
+하드웨어와 드라이버를 주의 깊게 선택해야 하고 커널 설정을 주의 깊게 선택해야
+할수도 있습니다.
+
+이 예에서 볼 수 있듯, 리얼타임 컴퓨팅은 상당히 무자비할 수 있습니다.
+
+\iffalse
 
 Another problem is that the thread must be raised to a real-time
 priority by using the \co{sched_setscheduler()} system call.
@@ -3641,6 +3690,8 @@ configuration.
 
 As can be seen from this example, real-time computing can be quite
 unforgiving.
+
+\fi
 
 \subsubsection{The Role of RCU}
 \label{sec:advsync:The Role of RCU}
