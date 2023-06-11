@@ -3509,6 +3509,23 @@ general-purpose operating system is to use the Linux kernel's
 \subsubsection{Streaming Applications}
 \label{sec:advsync:Streaming Applications}
 
+빅데이터 리얼타임 어플리케이션의 한가지 유형은 다양한 소스로부터 입력을 취하고
+그걸 내부적으로 처리해서, 경고와 요약을 출력합니다.
+이런 \emph{스트리밍 어플리케이션} 은 종종 고도로 병렬적이며, 동시에 다른 정보
+소스를 처리합니다.
+
+스트리밍 어플리케이션을 구현하는 한가지 접근법은 밀도 높은 순환형 FIFO 배열을
+다른 처리 단계에 연결하는 겁니다~\cite{AdrianSutton2013LCA:Disruptor}.
+그런 FIFO 각각은 내부로 생산을 하는 하나의 쓰레드와 그걸 소비하는 (아마도 다른)
+하나의 쓰레드를 갖습니다.
+Fan-in 과 fan-out 지점들은 데이터 구조보다 쓰레드를 사용하여서, 여러 FIFO 의
+출력이 병합되어야 한다면 별도의 쓰레드가 그것들로부터 입력을 받아 이 별도
+쓰레드가 유일한 생산자가 되게끔 또다른 FIFO 에 출력을 합니다.
+비슷하게, 특정 FIFO 의 출력이 쪼개져야 한다면, 별도의 쓰레드가 이 FIFO 로부터
+입력을 받아와 여러 FIFO 로 필요한대로 출력을 냅니다.
+
+\iffalse
+
 One type of big-data real-time application takes input from numerous
 sources, processes it internally, and outputs alerts and summaries.
 These \emph{streaming applications} are often highly parallel, processing
@@ -3526,6 +3543,21 @@ this separate thread was the sole producer.
 Similarly, if the output of a given FIFO needed to be split, a separate
 thread would input from this FIFO and output to several FIFOs as needed.
 
+\fi
+
+이 방법은 제한적으로 보일 수도 있겠습니다만, 이는 쓰레드간의 통신을 취소한의
+동기화 오버헤드를 가지고 가능하게 하며, 최소한의 동기화 오버헤드는 맞추기 쉽지
+않은 응답시간 제약을 맞추기 위해 중요합니다.
+이는 각 단계를 위한 처리양이 작아서 동기화 오버헤드가 처리 오버헤드에 비해
+상당할 때 특히 사실입니다.
+
+개별 쓰레드는 CPU 를 주로 사용할 수도 있는데, 이 경우라면
+\cref{sec:advsync:Polling-Loop Applications} 의 조언이 적용됩니다.
+다른 한편, 개별 쓰레드가 각자의 입력 FIFO 로부터의 데이터를 기다리고 있다면,
+다음 섹션의 조언이 적용됩니다.
+
+\iffalse
+
 This discipline might seem restrictive, but it allows communication
 among threads with minimal synchronization overhead, and minimal
 synchronization overhead is important when attempting to meet
@@ -3538,6 +3570,8 @@ The individual threads might be CPU-bound, in which case the advice in
 \cref{sec:advsync:Polling-Loop Applications} applies.
 On the other hand, if the individual threads block waiting for
 data from their input FIFOs, the advice of the next section applies.
+
+\fi
 
 \subsubsection{Event-Driven Applications}
 \label{sec:advsync:Event-Driven Applications}
