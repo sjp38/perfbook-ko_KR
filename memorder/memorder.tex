@@ -9,6 +9,22 @@
 %
 \Epigraph{The art of progress is to preserve order amid change and to preserve change amid order.}{\emph{Alfred North Whitehead}}
 
+인과관계와 순서관계는 매우 직관적이며, 해커들은 종종 이 컨셉에 사로잡혀
+있습니다.
+이 직관은 순차적 코드만이 아니라 락킹과 같이 표준적인 상호 배제 메커니즘을
+사용하는 병렬 코드를 작성하고 분석하고 디버깅할 때에 상당히 도움이 됩니다.
+불행히도, 이 직관은 그런 메커니즘을 사용할 수 없는 코드에서는 완전히
+망가집니다.
+그런 코드 구현의 한가지 예는 표준 상호 배제 메커니즘 그 자체이며, 다른 예는
+완화된 동기화를 사용하는 빠른 수행경로 구현들입니다.
+직관에 대한 모욕에도 불구하고, 어떤 사람들은 그런 완화됨이 덕목이라고
+주장합니다~\cite{JadeAlglave2013-WeaknessIsVirtue}.
+덕목이든 악덕이든, 이 챕터는 여러분이 메모리 순서 규칙에 대한 이해를 도울텐데
+이는 연습과 함께 동기화 기능과 성능에 치명적인 빠른 수행경로를 구현하는데
+충분할 겁니다.
+
+\iffalse
+
 Causality and sequencing are deeply intuitive, and hackers often
 have a strong grasp of these concepts.
 These intuitions can be quite helpful when writing, analyzing, and
@@ -24,6 +40,24 @@ virtue~\cite{JadeAlglave2013-WeaknessIsVirtue}.
 Virtue or vice, this chapter will help you gain an understanding of
 memory ordering, that, with practice, will be sufficient to implement
 synchronization primitives and performance-critical fast paths.
+
+\fi
+
+\Cref{sec:memorder:Ordering: Why and How?}
+는 실제 컴퓨터 시스템이 메모리 참조를 재배치 할 수 있음을 보이고, 왜 그러는지
+이유를 보이며, 바라지 않는 재배치를 어떻게 막는지에 대한 정보를 제공합니다.
+\Cref{sec:memorder:Tricks and Traps,%
+sec:memorder:Compile-Time Consternation}
+는 그걸 모르는 병렬 프로그래머를 고통스럽게 할 수 있는 하드웨어와 컴파일러에서
+발생하는 문제들을 각각 다룹니다.
+\Cref{sec:memorder:Higher-Level Primitives}
+는 메모리 순서 규칙을 높은 수준의 추상화로 모델링 하는 것의 장점을 봅니다.
+\Cref{sec:memorder:Hardware Specifics}
+는 일부 하드웨어 플랫폼에서의 볻 ㅏ자세한 부분을 다룹니다.
+마지막으로, \cref{sec:memorder:Where is Memory Ordering Needed?}
+는 일부 유용한 경험적 법칙을 제공합니다.
+
+\iffalse
 
 \Cref{sec:memorder:Ordering: Why and How?}
 will demonstrate that real computer systems can reorder memory references,
@@ -41,10 +75,32 @@ follows up with more detail on a few representative hardware platforms.
 Finally, \cref{sec:memorder:Where is Memory Ordering Needed?}
 provides some useful rules of thumb.
 
+\fi
+
 \QuickQuiz{
+	이 챕터는 첫번째 판본 이후로 다시 작성되었습니다.
+	메모리 순서 규칙은 2014년 이후로 \emph{그렇게나} 바뀌었나요?
+
+	\iffalse
+
 	This chapter has been rewritten since the first edition.
 	Did memory ordering change all \emph{that} since 2014?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이전의 메모리 순서규칙 섹션은 2005년의 Linux Journal 기사
+	두편~\cite{PaulMcKenney2005i,PaulMcKenney2005j} 에 그 기원을 두고
+	있었습니다.
+	그 이후, C 와 C++ 메모리 모델이~\cite{PeteBecker2011N3242} 정형화
+	되었고 (그리고
+	비평되었고~\cite{MarkBatty2013OOTA-WorkingNote,Boehm:2014:OGA:2618128.2618134,Vafeiadis:2015:CCO:2775051.2676995,conf/esop/BattyMNPS15,Lahav:2017:RSC:3140587.3062352,OlivierGiroux2017-P0668R1}),
+	컴퓨터 시스템을 위한 수행 가능한 정형적 메모리 모델이 표준화
+	되었으며~\cite{Maranget2012TutorialARMPower,PaulEMcKenney2011ppcmem,test6-pdf,JadeAlglave2011ppcmem,Alglave:2013:SVW:2450268.2450306,JadeAlglave2013-cav,Alglave:2014:HCM:2594291.2594347,PaulEMcKenney2014weakaxiom,Flur:2017:MCA:3093333.3009839,ARMv8A:2017},
+	리눅스 커널을 위한 메모리 모델조차 존재하게 되었는데~\cite{JadeAlglave2017LWN-LKMM-1,JadeAlglave2017LWN-LKMM-2,Alglave:2018:FSC:3173162.3177156},
+	이를 바탕으로 C11 과 리눅스 메모리 모델의 차이를 설명하는 논문도
+	나왔습니다~\cite{PaulEMcKenney2016P0124R6-LKMM}.
+
 	The earlier memory-ordering section had its roots in a pair of
 	Linux Journal articles~\cite{PaulMcKenney2005i,PaulMcKenney2005j}
 	dating back to 2005.
