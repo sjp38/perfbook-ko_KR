@@ -643,6 +643,17 @@ This is the subject of the next section.
 \subsection{How to Force Ordering?}
 \label{sec:memorder:How to Force Ordering?}
 
+\emph{메모리 배리어} (예를 들어, 리눅스 커널의 \co{smp_mb()}) 를 사용해 순서의
+환상을 지키는데 필요한 컴파일러 지시어와 동기화 기능 (예를 들어 락킹과 RCU) 이
+존재함이 드러났습니다.
+이 메모리 배리어들은
+\ARM, \Power{}, Itanium, 그리고 Alpha 에서와 같이 명시적 명령일 수 있고, x86
+에서 종종 그런 것처럼 다른 명령에 내포될 수도 있습니다.
+이런 표준 동기화 기능은 순서의 환상을 지키므로, 여러분이 가장 쉽게 일을 끝내는
+방법은 그저 이 기능들을 사용하고 이 섹션은 그만 읽는 겁니다.
+
+\iffalse
+
 It turns out that there are compiler directives and synchronization
 primitives (such as locking and RCU) that are responsible for maintaining
 the illusion of ordering through use of \emph{memory barriers} (for
@@ -654,11 +665,31 @@ Since these standard synchronization primitives preserve the illusion of
 ordering, your path of least resistance is to simply use these primitives,
 thus allowing you to stop reading this section.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-SB+o-mb-o+o-mb-o@whole.fcv}
 \caption{Memory Ordering: Store-Buffering Litmus Test}
 \label{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
 \end{listing}
+
+그러나, 여러분이 그 동기화 기능들 자체를 구현해야 한다면, 또는 여러분이 메모리
+순서잡기가 어떻게 동작하는지 이해하는데 관심 있다면, 계속 읽으세요!
+이 여정의 첫번째 정류장은
+\cref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
+(\path{C-SB+o-mb-o+o-mb-o.litmus}) 인데, 여기선 \co{P0()} 와 \co{P1()} 의
+스토어와 로드 사이에 리눅스 커널 전체 메모리 배리어인 \co{smp_mb()} 를 놓는다는
+점 외에는
+\cref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 와
+동일합니다.
+이 배리어들은 제 x86 랩톱에서 100,000,000 회 시도 끝에 일어나는 반직관적 결과를
+막습니다.
+흥미롭게도, 이 배리어들로 인해 더해진 오버헤드는 두 로드가 값 2를 리턴하는
+올바른 결과를 800,000 회 넘게 일어나게 하는데, 배리어가 없는
+\cref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 에서의 167
+회와 상당히 다른 결과입니다.
+
+\iffalse
 
 However, if you need to implement the synchronization primitives
 themselves, or if you are simply interested in understanding how memory
@@ -683,6 +714,8 @@ legal outcome where both loads return the value two to happen more
 than 800,000 times, as opposed to only 167 times for the
 barrier-free code in
 \cref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}.
+
+\fi
 
 \begin{table*}[tbp]
 \rowcolors{6}{}{lightgray}
@@ -714,6 +747,28 @@ barrier-free code in
 \label{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events}
 \end{table*}
 
+이 배리어들은 순서 규칙에 중요한 효과를 일으키는데,
+\cref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events} 에 보인
+것과 같습니다.
+처음 두 열은
+\cref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+에 보인 것과 같지만, 그리고 세번째 열의 \co{smp_mb()} 명령은 상태를 바꾸지
+않지만, 그것들은 스토어들이 (네번째와 다섯번째 열) 로드 (여섯번째 열) 이전에
+완료되게 해서
+\cref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+에 보인 반직관적 결과를 막습니다.
+변수 \co{x0} 와 \co{x1} 은 여전히 두번째 열에서 두개 이상의 값을 갖지만 앞서
+약속된대로, \co{smp_mb()} 호출은 결과적으로 일을 간단하게 만들어줌을 유의하시기
+바랍니다.
+
+\co{smp_mb()} 와 같은 전체 배리어가 굉장히 강한 순서 보장을 제공하지만, 그
+위력은 하드웨어와 컴파일러 최적화 측면에서는 높은 비용으로 제공됩니다.
+매우 많은 상황이 훨씬 저렴한 메모리 순서규칙 명령을 사용하는, 또는 아예 메모리
+순서 강제 명령을 사용하지 않는 훨씬 완화된 순서 규칙 보장으로 처리될 수
+있습니다.
+
+\iffalse
+
 These barriers have a profound effect on ordering, as can be seen in
 \cref{tab:memorder:Memory Ordering: Store-Buffering Sequence of Events}.
 Although the first two rows are the same as in
@@ -734,6 +789,8 @@ of foregone hardware and compiler optimizations.
 A great many situations can be handled with much weaker ordering guarantees
 that use much cheaper memory-ordering instructions, or, in some case, no
 memory-ordering instructions at all.
+
+\fi
 
 \begin{table*}[tbp]
 \small
