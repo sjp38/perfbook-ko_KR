@@ -307,6 +307,24 @@ But that topic will be taken up later in
 \subsection{Why Hardware Misordering?}
 \label{sec:memorder:Why Hardware Misordering?}
 
+하지만 일단 왜 잘못된 메모리 순서잡기가 일어나는 걸까요?
+CPU 는 스스로 순서를 추적할 수 없나요?
+무언가를 추적하는 것, 그게 어쨌건 우리가 컴퓨터를 갖는 이유 아닌가요?
+
+실제로 많은 사람들이 그들의 컴퓨터가 사물을 추적하고 있을 것을 기대합니다만,
+또한 많은 사람들은 사물을 빠르게 추적할 것을 강요합니다.
+그러나, \cref{chp:Hardware and its Habits} 에서 보았듯이, 메인메모리는
+메모리로부터 하나의 변수를 읽어오는데 필요한 시간동안 수백개의 명령을 수행할 수
+있는 현대의 CPU 속도를 따라가지 못합니다.
+따라서 CPU 들은 계속해서 커져가는 캐쉬를 사용하는데,
+\cref{fig:cpu:System Hardware Architecture} 에서 본 것과 같으며, 이는 특정 CPU
+에 의한 특정 변수의 첫번째 읽기는
+\cref{sec:cpu:Cache Misses} 에서 본 것처럼 비싼 \emph{캐쉬 미스} 를 일으키지만
+해당 CPU 에서의 뒤따르는 그 변수에 대한 반복된 읽기는 최초의 캐쉬 미스가 그
+변수를 그 CPU 의 캐쉬에 적재시켰으므로 매우 빠르게 처리될 겁니다.
+
+\iffalse
+
 But why does memory misordering happen in the first place?
 Can't CPUs keep track of ordering on their own?
 Isn't that why we have computers in the first place, to keep track of things?
@@ -326,6 +344,19 @@ repeated loads from that variable by that CPU might execute
 very quickly because the initial cache miss will have loaded that
 variable into that CPU's cache.
 
+\fi
+
+하지만, 여러 CPU 로부터의 공유된 변수들로의 빈번한 동시의 스토어를 처리할 필요
+또한 생깁니다.
+일관된 캐쉬 시스템에서는 캐쉬들이 특정 변수에 대한 여러 복사본을 쥐고 있다면 그
+변수에 대한 모든 복사본이 같은 값을 가져야만 합니다.
+이는 동시의 로드를 위해선 굉장히 잘 동작하지만 동시의 스토어에 대해서는 그렇지
+않습니다: 각 스토어는 기존 값을 갖는 모든 복사본에 대해 뭔가를 해야만 하는데
+(또다른 캐쉬 미스!), 유한한 빛의 속도와 원자적 물질의 본성을 생각하면, 성격
+급한 소프트웨어 해커가 원하는 것보다는 더 느릴 겁니다.
+
+\iffalse
+
 However, it is also necessary to accommodate frequent concurrent stores
 from multiple CPUs to a set of shared variables.
 In cache-coherent systems, if the caches hold multiple copies of a given
@@ -336,12 +367,24 @@ copies of the old value (another cache miss!), which, given the finite
 speed of light and the atomic nature of matter, will be slower
 than impatient software hackers would like.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.5in}{!}{\includegraphics{memorder/SystemArchSB}}
 \caption{System Architecture With Store Buffers}
 \label{fig:memorder:System Architecture With Store Buffers}
 \end{figure}
+
+따라서 CPU 들은
+\cref{fig:memorder:System Architecture With Store Buffers} 에 보인 것처럼
+스토어 버퍼를 사용합니다.
+특정 CPU 가 해당 CPU 의 캐쉬에 존재하지 않는 변수에 스토어를 할 때, 그 새 값은
+해당 CPU 의 스토어 버퍼에 위치해집니다.
+그러면 CPU 는 이 스토어가 다른 CPU 들의 캐쉬에 있는 변수들의 기존 값들 모두와
+뭔가를 할동안 기다리지 않고 곧바로 다음 명령을 수행할 수 있습니다.
+
+\iffalse
 
 CPUs therefore come equipped with store buffers, as shown in
 \cref{fig:memorder:System Architecture With Store Buffers}.
@@ -352,6 +395,8 @@ The CPU can then proceed immediately, without having to wait for the
 store to do something about all the old values of that variable
 residing in other CPUs' caches.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{2.4in}{!}{\includegraphics{cartoons/r-2014-Out-of-order}}
@@ -359,10 +404,19 @@ residing in other CPUs' caches.
 \ContributedBy{Figure}{fig:memorder:CPUs Can Do Things Out of Order}{Melissa Broussard}
 \end{figure}
 
+스토어 버퍼가 성능을 크게 향상시킬 수 있지만, 이는 명령들과 메모리 참조가
+알맞지 않은 순서로 수행될 수 있게 하는데, 이는 결국
+\cref{fig:memorder:CPUs Can Do Things Out of Order} 에 보인 것처럼 상당한
+혼란을 야기할 수 있습니다.
+
+\iffalse
+
 Although store buffers can greatly increase performance, they can cause
 instructions and memory references to execute out of order, which can
 in turn cause serious confusion, as fancifully illustrated in
 \cref{fig:memorder:CPUs Can Do Things Out of Order}.
+
+\fi
 
 \begin{table*}[tbp]
 \rowcolors{6}{}{lightgray}
@@ -392,6 +446,23 @@ in turn cause serious confusion, as fancifully illustrated in
 \label{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
 \end{table*}
 
+특히, 스토어 버퍼는
+\cref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}
+에 보인 것과 같은 메모리 순서 잘못잡기를 일으킵니다.
+\Cref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+가 이 잘못된 순서잡기를 일으키는 단계를 보입니다.
+첫번째 열은 최초 상태를 보이는데, CPU~0 는 자신의 캐쉬에 \co{x1} 을 갖고 CPU~1
+은 자신의 캐쉬에 \co{x0} 를 갖는데 두 변수 모두 값 0을 갖습니다.
+\begin{fcvref}[ln:formal:C-SB+o-o+o-o:whole]
+두번째 열은 각 CPU 의 스토어
+(\cref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 의
+\clnref{st0,st1}) 로 인한 상태 변화를 보입니다.
+어느 CPU 도 캐쉬 내에 스토어의 대상 변수를 갖지 않으므로, 두 CPU 는 각자의
+스토어를 각자의 스토어 버퍼에 저장해 둡니다.
+\end{fcvref}
+
+\iffalse
+
 In particular, store buffers cause the memory misordering
 illustrated by
 \cref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test}.
@@ -406,21 +477,55 @@ Because neither CPU has the stored-to variable in its cache, both CPUs
 record their stores in their respective store buffers.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	기다려요!!!
+	\Cref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
+	의 두번째 열에서 \co{x0} 와 \co{x1} 둘 다 동시에 두 값, 즉 0 과 2를
+	갖습니다.
+	이게 어떻게 동작할 수 있죠???
+
+	\iffalse
+
 	But wait!!!
 	On row~2 of
 	\cref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events}
 	both \co{x0} and \co{x1} each have two values at the same time,
 	namely zero and two.
 	How can that possibly work???
+
+	\fi
+
 }\QuickQuizAnswer{
+	일을 간단하게 만들어주는 캐쉬 일관성 프로토콜이 아랫단에 있는데,
+	\cref{sec:app:whymb:Cache-Coherence Protocols}
+	에서 다뤄졌습니다.
+	하지만 동시에 두개의 값을 갖는 변수가 신기하다면,
+	\cref{sec:memorder:Variables With Multiple Values} 까지 기다리세요!
+
+	\iffalse
+
 	There is an underlying cache-coherence protocol that straightens
 	things out, which are discussed in
 	\cref{sec:app:whymb:Cache-Coherence Protocols}.
 	But if you think that a given variable having two values at
 	the same time is surprising, just wait until you get to
 	\cref{sec:memorder:Variables With Multiple Values}!
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:formal:C-SB+o-o+o-o:whole]
+세번째 열은 두개의 로드
+(\cref{lst:memorder:Memory Misordering: Store-Buffering Litmus Test} 의
+\clnref{ld0,ld1}) 을 보입니다.
+각 CPU 에 의해 읽혀지는 변수는 각 CPU 의 캐쉬에 있어서, 각 로드는 즉시 캐쉬
+내의 값을 리턴하는데, 그 값은 두 경우 모두 0입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-SB+o-o+o-o:whole]
 Row~3 shows the two loads (\clnref{ld0,ld1} of
@@ -429,6 +534,25 @@ Because the variable being loaded by each CPU is in that CPU's cache,
 each load immediately returns the cached value, which in both cases
 is zero.
 \end{fcvref}
+
+\fi
+
+하지만 CPU 의 일은 끝나지 않았습니다: 금방이든 나중이든, 그것들은 각자의 스토어
+버퍼를 비워야만 합니다.
+캐쉬는 \emph{캐쉬라인} 이라 불리는 상대적으로 큰 블록 단위로 데이터를 옮기므로,
+그리고 각 캐쉬라인은 여러 변수를 담을 수 있으므로, 각 CPU 는 자신의 스토어 버퍼
+내에 있는 변수에 연관된 캐쉬라인의 부분을 업데이트 할 수 있게끔, 그러나 해당
+캐쉬라인의 다른 부분을 망치지 않게끔 자신의 캐쉬에 해당 캐쉬라인을 가져야만
+합니다.
+각 CPU 는 또한 해당 캐쉬라인이 다른 CPU 의 캐쉬에 존재하지 않음을 보장해야
+하는데, 이를 위해 읽기 무효화 (read invalidation) 오퍼레이션이 사용됩니다.
+네번째 열에서 보인 것처럼, 두 읽기 무효화 오퍼레이션이 완료된 후, 두 CPU 는
+캐쉬라인을 주고받아서, CPU~0 의 캐쉬는 이제 \co{x0} 를 가지고 있고 CPU~1 의
+캐쉬는 \co{x1} 을 가지고 있게 됩니다.
+이 두 변수가 새 집에 일단 도착하면, 각 CPU 는 각자의 스토어 버퍼를 연관된 캐쉬
+라인으로 비워낼 수 있어서, 각 변수를 다섯번째 열에 보인 최종 값으로 만듭니다.
+
+\iffalse
 
 But the CPUs are not done yet: Sooner or later, they must empty their
 store buffers.
@@ -447,16 +571,53 @@ Once these two variables are in their new homes, each CPU can flush
 its store buffer into the corresponding cache line, leaving each
 variable with its final value as shown on row~5.
 
+\fi
+
 \QuickQuiz{
+	하지만 그 값들은 캐쉬에서 메인 메모리로도 비워져야 하지 않나요?
+
+	\iffalse
+
 	But don't the values also need to be flushed from the cache
 	to main memory?
+
+	\fi
+
 }\QuickQuizAnswer{
+	놀라울 수 있지만, 꼭 그렇진 않습니다!
+	일부 시스템에서는 그 두 변수가 무척 많이 사용된다면, 그것들은 CPU 들의
+	캐쉬들 사이에서만 오갈뿐, 메인 메모리에는 결코 도착하지 않을 수도
+	있습니다.
+
+	\iffalse
+
 	Perhaps surprisingly, not necessarily!
 	On some systems,
 	if the two variables are being used heavily, they might
 	be bounced back and forth between the CPUs' caches and never
 	land in main memory.
+
+	\fi
+
 }\QuickQuizEnd
+
+요약하자면, 스토어 버퍼는 CPU 들이 스토어 명령을 효율적으로 처리할 수 있게 하기
+위해 필요하지만, 그게 반직관적인 메모리 순서 잘못잡기를 초래할 수 있습니다.
+
+하지만 여러분의 알고리즘이 정말로 메모리 참조가 순서잡히기를 필요로 한다면 뭘
+할겁니까?
+예를 들어, 여러분이 하나는 드라이버가 수행 중인지 말하고 다른 하나는 그
+드라이버를 위해 대기중인 요청이 있는지 말하는 두개의 플래그를 사용해 드라이버와
+통신하려 한다고 생각해 봅시다.
+요청자는 요청 대기 플래그를 먼저 올리고, 이어서 드라이버 수행중 플래그를
+검사해야 하며, 필요하면 그 드라이버를 깨워야 합니다.
+드라이버는 모든 대기중 요청을 처리하고 나면, 드라이버 수행중 플래그를 내리고
+재시작 되어야 하는지 보기 위해 요청 대기중 플래그를 검사해야 합니다.
+이 매우 합리적인 방법은 하드웨어가 스토어와 로드를 순서대로 처리함을 어떻게든
+보장하지 않고서는 동작하지 않습니다.
+이게 다음 섹션의 주제입니다.
+
+\iffalse
 
 In summary, store buffers are needed to allow CPUs to handle
 store instructions efficiently, but they can result in
@@ -476,6 +637,8 @@ flag to see if it needs to restart.
 This very reasonable approach cannot work unless there is some way
 to make sure that the hardware processes the stores and loads in order.
 This is the subject of the next section.
+
+\fi
 
 \subsection{How to Force Ordering?}
 \label{sec:memorder:How to Force Ordering?}
