@@ -855,6 +855,28 @@ memory-ordering instructions at all.
 \end{table*}
 
 \Cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+는 리눅스 커널의 순서규칙 기능과 그것들의 보장사항에 대한 요약입니다.
+각 열은 순서 규칙을 제공할수도 안할수도 있는 기능 또는 기능들의 카테고리를
+보이며, ``Prior Ordered Operation'' 과 ``Subsequent Ordered Operation'' 로
+라벨링 된 행은 그에 대해 순서가 잡힐수도 또는 안잡힐 수도 있는 오퍼레이션들을 
+보입니다.
+``Y'' 를 포함하는 칸은 무조건적으로 순서 규칙이 제공됨을 나타내며 다른 글자들은
+순서규칙이 부분적으로 또는 조건적으로 제공됨을 나타냅니다.
+빈 칸은 순서규칙이 제공되지 않음을 나타냅니다.
+
+``Store'' 열은 atomic RMW 오퍼레이션의 스토어 부분도 포함합니다.
+그에 더해, ``Load'' 열은 성공한 값을 반환하는 \co{_relaxed()} RMW 어토믹
+오퍼레이션의 로드 부분을 포함하는데 결합된 ``\co{_relaexed()} RMW operation''
+열은 값을 반환하는 경우에 대한 간편한 결합된 레퍼런스를 제공합니다.
+성공하지 못한 값을 반환하는 atomic RMW 오퍼레이션을 수행하는 CPU 는 연관된
+변수를 모든 다른 CPU 의 캐쉬에서 무효화 시켜야만 합니다.
+따라서, 성공하지 못한 값을 반환하는 atomic RMW 오퍼레이션은 스토어의 속성을
+많이 갖게 되는데, 이는 ``\co{_relaxed() RMW operation'' 열은 성공하지 못한 값을
+반환하는 atomic RMW 오퍼레이션에도 적용됨을 의미합니다.
+
+\iffalse
+
+\Cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 provides a cheatsheet of the Linux kernel's ordering primitives and their
 guarantees.
 Each row corresponds to a primitive or category of primitives that might
@@ -878,6 +900,27 @@ of the properties of a store, which means that the ``\co{_relaxed()}
 RMW operation'' line also applies to unsuccessful value-returning atomic
 RMW operations.
 
+\fi
+
+\co{*_acquire} 열은 \co{smp_load_acquire()}, \co{cmpxchg_acquire()},
+\co{xchg_acquire()}, 등의 것을 포함합니다; \co*_release} 열은
+\co{smp_store_release()}, \co{rcu_assign_pointer()}, \co{cmpxchg_release()},
+\co{xchg_release()} 등을 포함합니다;
+``Successful full-strength non-\co{void} RMW'' 열은 \co{atomic_add_return()},
+\co{atomic_add_unless()}, \co{atomic_dec_and_test()}, \co{cmpxchg()},
+\co{xchg()} 등을 포함합니다.
+``Successful'' 이란 단어는 \co{atomic_add_unless()}, \co{cmpxchg_acquire()},
+그리고 \co{cmpxchg_release()} 같은, 실패를 파악했을 때에는 메모리나 순서에 어떤
+영향도 끼치지 않는 기능들에 적용되는데, 앞의 ``\co{_relaxed()} RMW operation''
+열에서 나타내진 것과 같습니다.
+
+``C'' 행은 누적성과 전파성을 나타내는데,
+\cref{sec:memorder:Cumulativity,sec:memorder:Propagation} 에서 설명된 바와
+같습니다.
+최대 두개의 쓰레드만 관여될 때에는 이 행은 무시될 수 있습니다.
+
+\iffalse
+
 The \co{*_acquire} row covers \co{smp_load_acquire()},
 \co{cmpxchg_acquire()}, \co{xchg_acquire()}, and so on; the \co{*_release}
 row covers \co{smp_store_release()}, \co{rcu_assign_pointer()},
@@ -895,13 +938,43 @@ Column ``C'' indicates cumulativity and propagation, as explained in
 In the meantime, this column can usually be ignored when there
 are at most two threads involved.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\Cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+	의 열들은 꽤 무작위적이고 혼란스럽게 느껴지네요.
+	이 표의 개념적 기반이 있다면 무엇이죠???
+
+	\iffalse
+
 	The rows in
 	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 	seem quite random and confused.
 	Whatever is the conceptual basis of this table???
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 열들은 대략적으로 전력과 오버헤드를 증가시키는 하드웨어 메커니즘에
+	연관됩니다.
+
+	\co{WRITE_ONCE()} 열은 단일 변수로의 액세스는 항상 완벽하게
+	순서잡힌다는 사실을 보이는데, ``SV'' 행으로 나타내진 바와 같습니다.
+	여러 변수로의 액세스에 대한 순서를 제공하는 모든 다른 오퍼레이션들도 이
+	같은-변수 순서규칙을 제공함을 알아두십시오.
+
+	\co{READ_ONCE()} 열은 (2021년 기준으로) 컴파일러와 CPU 는 사용자에게
+	보이는 투기적 스토어를 사용하지 않아서 앞의 로드에 주소, 데이터, 또는
+	수행 측면에서 종속적인 모든 스토어는 이 로드가 완료된 후에 일어나는
+	것이 보장됩니다.
+	그러나, 이 보장은 이 의존성이
+	\cref{sec:memorder:Address- and Data-Dependency Difficulties,%
+	sec:memorder:Control-Dependency Calamities}
+	에서 설명된 것처럼 주의 깊게 구성되었을 것을 가정합니다.
+
+	\iffalse
+
 	The rows correspond roughly to hardware mechanisms of increasing
 	power and overhead.
 
@@ -920,6 +993,25 @@ are at most two threads involved.
 	\cref{sec:memorder:Address- and Data-Dependency Difficulties,%
 	sec:memorder:Control-Dependency Calamities}.
 
+	\fi
+
+	``\co{_relaxed()} RMW operation'' 열은 값을 반환하는 \co{_relaxed()}
+	RMW 가 각각 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 만큼 훌륭한 로드와
+	스토어를 한다는 사실을 보입니다.
+
+	\co{*_dereference()} 열은 \co{rcu_dereference()} 와 그 친구들에 의해
+	제공되는 주소와 데이터 종속성 순서규칙을 보입니다.
+	다시 말하지만 이 종속성은
+	\cref{sec:memorder:Address- and Data-Dependency Difficulties} 에서
+	설명한 것처럼 주의깊게 구성되어야 합니다.
+
+	``Successful \co{*_acquire()}'' 열은 많은 CPU 가 특별한 ``acquire''
+	형태의 로드와 atomic RMW 인스트럭션을 가지고 있으며 많은 다른 CPU 는
+	앞의 로드를 뒤의 로드와 스토어에 대해 순서잡는 가벼운 메모리 배리어
+	명령을 가지고 있음을 보입니다.
+
+	\iffalse
+
 	The ``\co{_relaxed()} RMW operation'' row captures the fact
 	that a value-returning \co{_relaxed()} RMW has done a load and a
 	store, which are every bit as good as a \co{READ_ONCE()} and a
@@ -937,6 +1029,30 @@ are at most two threads involved.
 	and that many other CPUs have lightweight memory-barrier
 	instructions that order prior loads against subsequent loads
 	and stores.
+
+	\fi
+
+	``Successful \co{*_release()}'' 열은 많은 CPU 가 특별한 ``release''
+	형태의 스토어와 atomic RMW 인스트럭션을 가지며 많은 다른 CPU 들은 앞의
+	로드와 스토어를 뒤따르는 스토어에 대해 순서잡는 가벼운 메모리 배리어
+	명령을 가짐을 보입니다.
+
+	\co{smp_rmb()} 열은 많은 CPU 가 앞의 로드를 뒤따르는 로드에 대해
+	순서잡는 가벼운 메모리 배리어 명령을 가짐을 보입니다.
+	비슷하게, \co{smp_wmb()} 열은 많은 CPU 가 앞의 스토어를 뒤따르는
+	스토어에 대해 순서 잡는 가벼운 메모리 배리어 명령을 가짐을 보입니다.
+
+	지금까지 설명한 순서 오퍼레이션들 중 어느 것도 앞의 스토어가 뒤따르는
+	로드에 대해 순서를 잡을 것을 요구하지 않는데, 이는 이 오퍼레이션은 실제
+	주요 목적은 앞의 스토어를 뒤따르는 로드에 대해 순서를 바꾸기 위함인
+	스토어 버퍼와 상관할 필요가 없음을 말합니다.
+	이 오퍼레이션의 가벼움은 정확히 스토어 버퍼에 상관하지 않는다는 정책
+	덕입니다.
+	그러나, 앞에서 이야기 되었듯 앞의 스토어가 뒤의 스토어와 순서 바뀌는
+	것을 방지하기 위해 스토어 버퍼와 상관해야 할때가 생기는데, 이게 이 표의
+	나머지 열을 필요하게 합니다.
+
+	\iffalse
 
 	The ``Successful \co{*_release()}'' row captures the fact that many
 	CPUs have special ``release'' forms of stores and of atomic RMW
@@ -963,6 +1079,26 @@ are at most two threads involved.
 	reordered against later stores, which brings us to the remaining
 	rows in this table.
 
+	\fi
+
+	\co{smp_mb()} 열은 Itanium 은 예외지만 대부분의 플랫폼에서 존재하는
+	전체 메모리 배리어에 연관됩니다.
+	그러나 Itanium 에서조차 \co{smp_mb()} 는
+	\cref{sec:memorder:Itanium} 에서 이야기 되듯 \co{READ_ONCE()} 와
+	\co{WRITE_ONCE()} 에 대해서는 완전한 순서를 제공합니다.
+
+	``Successful full-strength non-\co{void} RMW'' 열은 일부 플랫폼에서
+	(x86 등) atomic RMW 명령은 앞과 뒤에 모두 완전한 순서를 제공함을
+	보입니다.
+	따라서 리눅스 커널은 full-strength non-\co{void} atomic RMW
+	오퍼레이션이 성공했을 때에는 완전한 순서를 제공할 것을 필요로 합니다.
+	(Full-strength atomic RMW operation 의 이름은 \co{_relaxed},
+	\co{_acquire}, 또는 \co{_release} 로 끝나지 않습니다.)
+	앞에서 이야기 되었듯, 이 오퍼레이션이 성공하지 못하는 경우는
+	``\co{_relaxed()} RMW operation'' 열에서 다루어집니다.
+
+	\iffalse
+
 	The \co{smp_mb()} row corresponds to the full memory barrier
 	available on most platforms, with Itanium being the exception
 	that proves the rule.
@@ -980,6 +1116,27 @@ are at most two threads involved.
 	\co{_relaxed}, \co{_acquire}, or \co{_release}.)
 	As noted earlier, the case where these operations do not succeed
 	is covered by the ``\co{_relaxed()} RMW operation'' row.
+
+	\fi
+
+	그러나, 리눅스 커널은 \co{void} 나 \co{_relaxed()} atomic RMW
+	오퍼레이션에게 어떤 순서규칙도 요구하지 않으며, 그 표준 예가
+	\co{atomic_inc()} 입니다.
+	따라서, 실패하는 non-\co{void} atomic RMW operation 를 포함해 이
+	오퍼레이션은 앞이나 뒤의 모든 액세스에 대해 완전한 순서를 제공하기
+	위해선 앞에 \co{smp_mb__before_atomic()} 를, 뒤에
+	\co{smp_mb__after_atomic()} 를 배체해야 합니다.
+	\co{smp_mb__before_atomic()} (또는, 비슷하게
+	\co{smp_mb__after_atomic()}) 와 atomic RMW 오퍼레이션 사이에는 이 표의
+	\co{smp_mb__before_atomic()} 과 \co{smp_mb__after_atomic()} 열의 ``a''
+	항목으로 나타내어졌듯 어떤 순서도 제공될 이유가 없습니다.
+
+	요약하자면, 이 표의 구조는
+	\cref{chp:Hardware and its Habits} 에서 다루어진 물리 법칙에 의해
+	제한되는 아랫단 하드웨어의 특성에 기반해 만들어졌습니다.
+	즉, 이 표는 무작위적이지 않지만, 여러분이 혼란스러울 수는 있을 겁니다.
+
+	\iffalse
 
 	However, the Linux kernel does not require that either \co{void}
 	or \co{_relaxed()} atomic RMW operations provide any ordering
@@ -1000,6 +1157,9 @@ are at most two threads involved.
 	\cref{chp:Hardware and its Habits}.
 	That is, the table is not random, although it is quite possible
 	that you are confused.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
