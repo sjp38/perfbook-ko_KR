@@ -1251,6 +1251,15 @@ present some basic rules of thumb.
 \subsection{Basic Rules of Thumb}
 \label{sec:memorder:Basic Rules of Thumb}
 
+이 섹션은 매우 많은 상황에 ``좋고 충분한'' 일부 기본적 경험적 법칙을
+제공합니다.
+실제로 여러분은 이 경험적 법칙 외에는 별다른 것 없이도 훌륭한 성능과 확장성을
+갖는 동시성 코드를 작성할 수 있습니다.
+더 잘 정리된 경험적 법칙들은
+\cref{sec:memorder:Where is Memory Ordering Needed?} 에서 제공됩니다.
+
+\iffalse
+
 This section presents some basic rules of thumb that are ``good and
 sufficient'' for a great many situations.
 In fact, you could write a great deal of concurrent code having
@@ -1259,13 +1268,42 @@ than these rules of thumb.
 More sophisticated rules of thumb will be presented in
 \cref{sec:memorder:Where is Memory Ordering Needed?}.
 
+\fi
+
 \QuickQuiz{
+	하지만 특정 프로젝트가 이 경험적 법칙에 근거해 설계되고 작성될 수
+	있는지는 어떻게 하나요?
+
+	\iffalse
+
 	But how can I know that a given project can be designed
 	and coded within the confines of these rules of thumb?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 챕터의 나머지 부분들이 정확히 그 질문에 답변하기 위해
+	만들어졌습니다!
+
+	\iffalse
+
 	Much of the purpose of the remainder of this chapter is
 	to answer exactly that question!
+
+	\fi
+
 }\QuickQuizEnd
+
+\paragraph{쓰레드는 자신의 액세스는 순서대로 보게 된다.}
+이 규칙은 공유 변수로의 로드와 스토어가 각각 \co{READ_ONCE()} 과
+\co{WRITE_ONCE()} 를 사용한다고 가정합니다.
+그렇지 않다면, 컴파일러는 근본적으로 여러분의 코드를 휘저어 버릴 수
+있으며\footnote{
+	많은 컴파일러 작성자들은 이를 ``최적화'' 라 부르길 선호합니다.}
+가끔은 CPU 역시 \cref{sec:memorder:Itanium} 에서 이야기된 것처럼 약간 일을
+흐트러트릴 수 있습니다.
+
+\iffalse
 
 \paragraph{A given thread sees its own accesses in order.}
 This rule assumes that loads and stores from/to shared variables use
@@ -1275,12 +1313,25 @@ Otherwise, the compiler can profoundly scramble\footnote{
 your code, and sometimes the CPU can do a bit of scrambling as well,
 as discussed in \cref{sec:memorder:Itanium}.
 
+\fi
+
 \begin{figure}[tb]
 \centering
 \resizebox{3in}{!}{\includegraphics{memorder/memorybarrier}}
 \caption{Memory Barriers Provide Conditional If-Then Ordering}
 \label{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
 \end{figure}
+
+\paragraph{순서 규칙은 조건적 if-then 규칙을 갖습니다.}
+\Cref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
+가 이 메모리 배리어를 보입니다.
+두 메모리 배리어가 충분히 강력하다고 가정하고, CPU~1 의 Y1 액세스가 CPU~0 의
+액세스 Y0 후에 이루어졌다면, CPU~1 의 액세스 X1 은 CPU~0 의 X0 액세스 후에
+일어날 것이 보장됩니다.
+어떤 메모리 배리어가 충분히 강력한지 모르겠다면, \co{smp_mb()} 가 비용이 높긴
+하지만 항상 필요한 일을 해줍니다.
+
+\iffalse
 
 \paragraph{Ordering has conditional if-then semantics.}
 \Cref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
@@ -1291,15 +1342,54 @@ to happen after CPU~0's access X0.
 When in doubt as to which memory barriers are strong enough, \co{smp_mb()}
 will always do the job, albeit at a price.
 
+\fi
+
 \QuickQuiz{
+	특정 사용처에 있어 어떤 메모리 배리어가 충분히 강력한지 어떻게 알 수
+	있죠?
+
+	\iffalse
+
 	How can you tell which memory barriers are strong enough for
 	a given use case?
+
+	\fi
+
 }\QuickQuizAnswer{
+	아, 그건 대답하는데 이 챕터의 나머지 대부분이 필요할 정도로 깊은
+	질문입니다.
+	하지만 짧게 대답하자면 \co{smp_mb()} 가 비용이 높긴 하지만 거의 항상
+	충분히 강합니다.
+
+	\iffalse
+
 	Ah, that is a deep question whose answer requires most of the
 	rest of this chapter.
 	But the short answer is that \co{smp_mb()} is almost always
 	strong enough, albeit at some cost.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:formal:C-SB+o-mb-o+o-mb-o:whole]
+\Cref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
+이 그런 케이스입니다.
+\Clnref{P0:mb,P1:mb} 에서의 \co{smp_mb()} 가 그 배리어로 동작하여,
+\clnref{P0:st} 에서의 \co{x0} 로의 스토어는 X0 이고, \clnref{P1:st} 에서의
+\co{x1} 으로의 스토어는 Y1 이며, \clnref{P1:ls} 에서의 \co{x0} 로드는 X1
+입니다.
+이 if-then 규칙을 단계별로 적용하면, 우린 \clnref{P1:st} 에서의 \co{x1}
+스토어가 \co{P0()} 의 지역변수 \co{r2} 가 값 0으로 되어 있다면 \clnref{P0:ld}
+에서의 \co{x1} 로드보다 나중에 벌어졌음을 알게 됩니다.
+그러면 이 if-then 규칙은 \clnref{P1:ld} 에서의 \co{x0} 로드는 \clnref{P0:st}
+에서의 \co{x0} 스토어보다 나중에 벌어질 거라 말합니다.
+달리 말하자면 \co{P1()} 의 지역변수 \co{r2} 는 \co{P0()} 의 지역변수 \co{r2} 가
+값 0으로 끝날 \emph{때에만} 값 2로 끝납니다.
+이는 메모리 순서 규칙 보장이 절대적이 아니라 조건적이라는 지점을 강조합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-SB+o-mb-o+o-mb-o:whole]
 \Cref{lst:memorder:Memory Ordering: Store-Buffering Litmus Test}
@@ -1321,10 +1411,31 @@ This underscores the point that memory ordering guarantees are
 conditional, not absolute.
 \end{fcvref}
 
+\fi
+
+비록
+\cref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
+이 특별히 메모리 배리어를 언급하지만, 이 동일한 if-then 규칙이 리눅스 커널의
+순서규칙 오퍼레이션 나머지에도 적용됩니다.
+
+\iffalse
+
 Although
 \cref{fig:memorder:Memory Barriers Provide Conditional If-Then Ordering}
 specifically mentions memory barriers, this same if-then rule applies
 to the rest of the Linux kernel's ordering operations.
+
+\fi
+
+\paragraph{순서규칙 오퍼레이션은 반드시 짝을 이루어야 합니다.}
+여러분이 한 쓰레드에서의 오퍼레이션을 주의깊게 순서 맞췄지만 다른 쓰레드에서는
+그렇게 하지 못했다면, 거기엔 순서가 없습니다.
+이 if-then 규칙이 적용되게 하려면 두 쓰레드 모두 순서를 제공해야
+합니다.\footnote{
+	\Cref{sec:memorder:Propagation} 에서 짝 맞추기는 사이클로 일반화 될
+	겁니다.}
+
+\iffalse
 
 \paragraph{Ordering operations must be paired.}
 If you carefully order the operations in one thread, but then fail to do
@@ -1332,6 +1443,23 @@ so in another thread, then there is no ordering.
 Both threads must provide ordering for the if-then rule to apply.\footnote{
 	In \cref{sec:memorder:Propagation}, pairing will be
 	generalized to cycles.}
+
+\fi
+
+\paragraph{순서규칙 오퍼레이션은 거의 항상 무언가를 빠르게 만들지 않습니다.}
+앞의 스토어가 메모리에 더 빠르게 비워지게 하려고 메모리 배리어를 더하고
+싶어진다면, 저항하세요!
+순서규칙을 더하는건 일반적으로 속도를 느리게 만듭니다.
+물론,
+page~\pageref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR} 의
+\cref{fig:defer:Pre-BSD Routing Table Protected by RCU QSBR} 에서 보았듯 명령을
+더하는게 속도를 높이는 경우도 있습니다만, 그런 경우에는 주의 깊은 벤치마킹이
+필요합니다.
+그리고 그럴때 조차도, \emph{여러분의} 시스템에서는 속도를 약간 향상시켰더라도,
+여러분의 사용자들의 시스템에서는 상당한 속도 저하를 일으켰을 수도 있습니다.
+또는 여러분의 미래의 시스템에서요.
+
+\iffalse
 
 \paragraph{Ordering operations almost never speed things up.}
 If you find yourself tempted to add a memory barrier in an attempt
@@ -1347,6 +1475,18 @@ a little bit on \emph{your} system, you might well have slowed things
 down significantly on your users' systems.
 Or on your future system.
 
+\fi
+
+\paragraph{순서규칙 오퍼레이션은 마법이 아닙니다.}
+여러분의 프로그램이 어떤 경주 조건 때문에 실패한다면, 여러분은 종종 버그를
+제거하기 위해 메모리 순서규칙 오퍼레이션을 몇개 집어넣어지고 싶을 겁니다.
+그보다 훨씬 나은 반응은 더 높은 단계의 기능들을 주의깊게 설계된 형식으로
+사용하는 겁니다.
+동시성 프로그래밍에 있어서, 버그가 존재하지 않게끔 설계를 하는게 버그 확률을
+낮추기 위해 해킹을 하는 것보다 거의 항상 낫습니다.
+
+\iffalse
+
 \paragraph{Ordering operations are not magic.}
 When your program is failing due to some race condition, it is often
 tempting to toss in a few memory-ordering operations in an attempt
@@ -1355,6 +1495,24 @@ A far better reaction is to use higher-level primitives in a carefully
 designed manner.
 With concurrent programming, it is almost always better to design your
 bugs out of existence than to hack them down to lower probabilities.
+
+\fi
+
+\paragraph{오직 대략적 경험적 법칙만이 존재합니다.}
+이 경험적 법칙들이 다른 경험적 법칙들과 마찬가지로 상당한 실제 상황에서 사용될
+수 있지만 여기에도 한계가 있습니다.
+다음 섹션은 여러분의 이해를 높이는 반면 여러분의 직관을 괴롭히려는 의도로
+만들어진 리트머스 테스트를 소개함으로써 이런 한계를 보일 겁니다.
+이 리트머스 테스트는
+\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 에서 보인 리눅스
+커널 메모리 순서규칙 요약본에 의해 설명된 많은 개념을 명확히 할 것이며, 올바른
+도구들을 사용하면~\cite{Alglave:2018:FSC:3173162.3177156} 자동으로 분석될 수
+있습니다.
+\Cref{sec:memorder:Where is Memory Ordering Needed?} 는 이 요약본으로
+되돌아와서 이 모든 사이에 있는 트릭과 함정들로부터의 배움에서 나오는 보다 잘
+정리된 경험적 법칙들을 선보입니다.
+
+\iffalse
 
 \paragraph{These are only rough rules of thumb.}
 Although these rules of thumb cover the vast majority of situations
@@ -1373,16 +1531,37 @@ circle back to this cheat sheet, presenting a more sophisticated set of
 rules of thumb in light of learnings from all the intervening tricks
 and traps.
 
+\fi
+
 \QuickQuiz{
+	기다려요!!!
+	리트머스 테스트를 자동으로 분석하는 도구를 어디서 구할 수 있나요???
+
+	\iffalse
+
 	Wait!!!
 	Where do I find this tooling that automatically analyzes
 	litmus tests???
+
+	\fi
+
 }\QuickQuizAnswer{
+	거기 필요한 도구들을 설치하기 위해선 v4.17 (또는 그보다 최신) 의 리눅스
+	커널 소스코드를 구하고 \path{tools/memory-model/README} 의 내용을
+	따르세요.
+	그리고 여러분이 고른 리트머스 테스트를 이 도구들로 수행하기 위해선
+	나머지 내용을 더 읽으세요.
+
+	\iffalse
+
 	Get version v4.17 (or later) of the Linux-kernel source code,
 	then follow the instructions in \path{tools/memory-model/README}
 	to install the needed tools.
 	Then follow the further instructions to run these tools on the
 	litmus test of your choice.
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Tricks and Traps}
