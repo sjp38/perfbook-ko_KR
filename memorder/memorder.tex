@@ -1163,11 +1163,45 @@ are at most two threads involved.
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	왜
+	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+	는 \co{smp_mb__after_unlock_lock()} 과 \co{smp_mb__after_spinlock()} 을
+	포함하고 있지 않죠?
+
+	\iffalse
+
 	Why is
 	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 	missing \co{smp_mb__after_unlock_lock()} and
 	\co{smp_mb__after_spinlock()}?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	이 두 기능은 특수한 경우를 위한 것이며
+	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 에
+	들어가기엔 조금 다른 것으로 보입니다.
+	\co{smp_mb__after_unlock_lock()} 기능은 락 획득 직후에 놓여질 목적으로
+	만들어졌으며, 모든 CPU 가 앞의 크리티컬 섹션에서의 액세스를
+	\co{smp_mb__after_unlock_lock()} 뒤의 액세스보다, 그리고 뒤의 크리티컬
+	섹션의 모든 액세스보다 전에 일어난 것으로 보게끔 보장합니다.
+	여기서 ``모든 CPU'' 는 그 락을 쥐고 있지 않은 CPU 들 역시 포함하며
+	``앞의 크리티컬 섹션'' 은 해당 락을 위한 모든 앞의 크리티컬 섹션은
+	물론이고 \co{smp_mb__after_unlock_lock()} 을 수행한 CPU 에 의해 해제된
+	모든 다른 락을 위한 앞의 크리티컬 섹션까지 포함합니다.
+
+	\co{smp_mb__after_spinlock()} 은 \co{smp_mb__after_unlock_lock()} 과
+	동일한 보장사항을 제공하지만, \co{smp_mb__after_spinlock()} 을 수행한
+	CPU 에 의해 수행된 다른 액세스들에 대한 추가적 시각 보장을 제공합니다.
+	어떤 스토어 S 가 모든 앞의 락 획득 전에 수행되었고 어떤 로드 L 이
+	\co{smp_mb__after_spinlock()} 후에 수행되었다고 하면, 모든 CPU 는 S 를
+	L 전에 일어난 것으로 보게 됩니다.
+	달리 말하자면, 어떤 CPU 가 스토어 S 를 수행하고, 락을 획득하고
+	\co{smp_mb__after_spinlock()} 을 수행하고, 로드 L 을 수행하면, 모든 CPU
+	는 S 가 L 전에 수행된 것으로 보게 됩니다.
+
+	\iffalse
+
 	These two primitives are rather specialized, and at present
 	seem difficult to fit into
 	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
@@ -1192,8 +1226,18 @@ are at most two threads involved.
 	In other words, if a CPU performs a store S, acquires a lock,
 	executes an \co{smp_mb__after_spinlock()}, then performs a
 	load L, all CPUs will see S as happening before~L\@.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 표는 요약일 뿐이며, 따라서 메모리 순서 규칙에 대한 충분한 이해를 대체할 수
+없습니다.
+그런 이해를 얻기 위해서 다음 섹션이 기본적인 경험적 법칙들을 일부 제공합니다.
+\IfTwoColumn{\FloatBarrier}{}
+
+\iffalse
 
 It is important to note that this table is just a cheat sheet,
 and is therefore in no way a replacement for a good understanding
@@ -1201,6 +1245,8 @@ of memory ordering.
 To begin building such an understanding, the next section will
 present some basic rules of thumb.
 \IfTwoColumn{\FloatBarrier}{}
+
+\fi
 
 \subsection{Basic Rules of Thumb}
 \label{sec:memorder:Basic Rules of Thumb}
