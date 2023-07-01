@@ -1609,6 +1609,32 @@ variable might have at a single point in time.
 \subsection{Variables With Multiple Values}
 \label{sec:memorder:Variables With Multiple Values}
 
+한 변수가 잘 정의된 값의 연속을 잘 정의된 전역적 순서로 가질거라 생각하는건
+자연스러운 일입니다.
+불행히도, 이 여정의 다음 단계는 이 안락한 환상에 ``안녕'' 이라고 말합니다.
+바라건대, 이미 여러분은
+\cref{tab:memorder:Memory Misordering: Store-Buffering Sequence of Events,%
+tab:memorder:Memory Ordering: Store-Buffering Sequence of Events} 의 두번째
+열을 통해 이미 ``안녕'' 이라고 말하기 시작했을 수도 있고, 그렇다면 이 섹션의
+목적은 이 요점을 집으로 가져가는 것입니다.
+
+\begin{fcvref}[ln:memorder:Software Logic Analyzer]
+이를 위해,
+\cref{lst:memorder:Software Logic Analyzer}
+에 보인 코드 조각을 봅시다.
+이 코드 조각은 여러 CPU 들에 의해 병렬적으로 수행됩니다.
+\Clnref{setid} 는 현재 CPU 의 ID로 공유 변수를 설정하며, \clnref{init} 는 모든
+CPU 들 사이에서 동기화 되는 (불행히도 모든 CPU 군에서 가능한 일은 아닙니다!)
+세밀하게 조정되는 하드웨어 ``timebase'' 카운터의 값을 전달하는 \co{gettb()}
+함수로부터 여러 변수들을 초기화 하며, \clnrefrange{loop:b}{loop:e} 의 반복문은
+이 변수에 이 CPU 가 할당한 값이 얼마나 오래 유지되는지 기록합니다.
+물론, CPU 들 가운데 하나는 ``승리'' 할 것이고, 따라서
+\clnrefrange{iftmout}{break} 에서의 검사를 통과하지 못해 이 반복문을 빠져나오지
+못할 겁니다.
+\end{fcvref}
+
+\iffalse
+
 It is natural to think of a variable as taking on a well-defined
 sequence of values in a well-defined, global order.
 Unfortunately, the next stop on the journey says ``goodbye'' to this comforting fiction.
@@ -1632,11 +1658,31 @@ Of course, one of the CPUs will ``win'', and would thus never exit
 the loop if not for the check on \clnrefrange{iftmout}{break}.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\Cref{lst:memorder:Software Logic Analyzer}
+	의 코드 조각이 가지고 있는 실제 하드웨어에서는 옳지 못할 수도 있는
+	잘못된 가정은 무엇입니까?
+
+	\iffalse
+
 	What assumption is the code fragment
 	in \cref{lst:memorder:Software Logic Analyzer}
 	making that might not be valid on real hardware?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 코드는 특정 CPU 가 자신의 값을 보는걸 멈추게 된다면 모두가 합의한
+	최종 값을 즉시 보게 될 거라 가정합니다.
+	실제 하드웨어에서, CPU 중 일부는 마지막 값으로 수렴하기 전의 중간
+	결과들을 여럿 볼수도 있습니다.
+	이 섹션의 뒤에서 이야기될 그림의 데이터를 만드는게 사용된 실제 코드는
+	따라서 조금 더 복잡합니다.
+
+	\iffalse
+
 	The code assumes that as soon as a given CPU stops
 	seeing its own value, it will immediately see the
 	final agreed-upon value.
@@ -1645,6 +1691,9 @@ the loop if not for the check on \clnrefrange{iftmout}{break}.
 	The actual code used to produce the data in the figures
 	discussed later in this section was therefore somewhat more
 	complex.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -1664,6 +1713,21 @@ while (state.variable == mycpu) {	\lnlbl[loop:b]
 \label{lst:memorder:Software Logic Analyzer}
 \end{listing}
 
+반복문의 종료에 이어, \co{firsttb} 는 할당 잠시 후 취한 시간값을 가지고
+\co{lasttb} 는 할당된 값을 아직 유지하고 있는 공유 변수의 마지막 샘플링 전에
+취한 시간값, 또는 이 반복문에 진입하기 전에 이 공유변수의 값이 바뀌었다면
+\co{firsttb} 와 같은 값을 취합니다.
+이는 각 CPU 의 \co{state.variable} 의 값에 대한 각 CPU 의 532 나노세컨드 동안의
+시각을 그릴 수 있게 하는데,
+\cref{fig:memorder:A Variable With Multiple Simultaneous Values} 이 그것입니다.
+이 데이터는 각자 한쌍의 하드웨어 쓰레드를 갖는 여덟개 코어를 가진 1.5\,GHz
+\Power{5} 시스템을 이용해 2006년에 수집되었습니다.
+CPU~1, 2, 3, 그리고~4 는 이 값을 기록했으며, CPU~0 은 테스트를 제어했습니다.
+시간값 카운터 주기는 약 5.32\,ns 이었는데, 중간 캐쉬 상태의 관측을 허용하기
+충분히 세밀했습니다.
+
+\iffalse
+
 Upon exit from the loop, \co{firsttb} will hold a timestamp
 taken shortly after the assignment and \co{lasttb} will hold
 a timestamp taken before the last sampling of the shared variable
@@ -1678,12 +1742,25 @@ CPUs~1, 2, 3, and~4 recorded the values, while CPU~0 controlled the test.
 The timebase counter period was about 5.32\,ns, sufficiently fine-grained
 to allow observations of intermediate cache states.
 
+\fi
+
 \begin{figure}[htb]
 \centering
 \resizebox{3in}{!}{\includegraphics{memorder/MoreThanOneValue}}
 \caption{A Variable With Multiple Simultaneous Values}
 \label{fig:memorder:A Variable With Multiple Simultaneous Values}
 \end{figure}
+
+각 수평 막대는 특정 CPU 의 시간에 따른 관측 결과를 나타내는데, 왼쪽 회색 영역은
+연관 CPU 의 첫번째 측정 전의 시간을 표시합니다.
+첫 5\,ns 동안은 CPU~3 만이 이 변수의 값에 대한 의견이 있었습니다.
+다음 10\,ns 동안, CPU~2 와~3 은 이 변수의 값에 대해 동의하지 않았으나, 결국은
+그 값이 ``2'' 라는데 동의했는데, 이는 실제로 최종적으로 모두가 동의하게 된
+값이었습니다.
+그러나, CPU~1 은 이 값이 ``1'' 이라고 거의 300\,ns 동안 믿었으며 CPU~4 는 거의
+500\,ns 동안 그 값이 ``4'' 라고 믿었습니다.
+
+\iffalse
 
 Each horizontal bar represents the observations of a given CPU over time,
 with the gray regions to the left indicating the time before the
@@ -1696,11 +1773,36 @@ the final agreed-upon value.
 However, CPU~1 believes that the value is~``1'' for almost 300\,ns, and
 CPU~4 believes that the value is~``4'' for almost 500\,ns.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	어떻게 CPU 들이 같은 변수에서 \emph{같은 시각} 에 다른 값을 볼 수
+	있습니까?
+
+	\iffalse
+
 	How could CPUs possibly have different views of the
 	value of a single variable \emph{at the same time?}
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\Cref{sec:memorder:Why Hardware Misordering?} 에서 이야기한 바와 같이,
+	많은 CPU 가 최근 저장된 값을 기록하는 스토어 버퍼를 가지는데, 이는
+	연관된 캐쉬 라인이 해당 CPU 에 도달하기 전까지는 해당 값이 전역적으로
+	보이지 않게 합니다.
+	따라서, 각 CPU 가 특정 변수에 대한 (자신의 스토어 버퍼 내에 있는)
+	자신의 값을 동일한 시각에 보고 있는게---그리고 메인 메모리는 또다른
+	값을 가지고 있는게---상당히 가능합니다.
+	메모리 배리어가 발명된 이유 중 하나는 소프트웨어가 이런 상황을 우아하게
+	처리할 수 있게 하기 위함이었습니다.
+
+	당행히도, 소프트웨어는 여러 CPU 가 같은 변수에 대해 여러 값을 볼수도
+	있다는 사실에 별 신경을 쓰지 않습니다.
+
+	\iffalse
+
 	As discussed in
 	\cref{sec:memorder:Why Hardware Misordering?},
 	many CPUs have store buffers that record the values of
@@ -1715,12 +1817,35 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 
 	Fortunately, software rarely cares about the fact that multiple
 	CPUs might see multiple values for the same variable.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	CPU~2 와~3 은 왜 그리 빨리 동의에 도달했으며, CPU~1 과~4 는 그리 오래
+	걸렸나요?
+
+	\iffalse
+
 	Why do CPUs~2 and~3 come to agreement so quickly, when it
 	takes so long for CPUs~1 and~4 to come to the party?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	CPU~2 와~3 은 같은 코어 내의 한쌍의 하드웨어 쓰레드로, 동일한 캐쉬
+	계층을 공유하고 따라서 매우 낮은 통신 응답시간을 갖습니다.
+	이는 NUMA, 또는, 더 정확히 말하면 NUCA 효과입니다.
+
+	이는 왜 CPU~2 와~3 은 동의하지 않았는지에 대한 답을 이끌어 줍니다.
+	한가지 가능한 이유는 그것들 각각은 커다란 공유 캐쉬에 더해 작은 개별
+	캐쉬를 가질 수도 있다는 겁니다.
+	이 코드 내에 메모리 순서 잡기 오퍼레이션이 부재함과 동의하지 않는 짧은
+	10-나노세컨드 시간을 생각하면 또다른 가능한 이유는 명령 재배치 입니다.
+
+	\iffalse
+
 	CPUs~2 and~3 are a pair of hardware threads on the same
 	core, sharing the same cache hierarchy, and therefore have
 	very low communications latencies.
@@ -1733,8 +1858,29 @@ CPU~4 believes that the value is~``4'' for almost 500\,ns.
 	Another possible reason is instruction reordering, given the
 	short 10-nanosecond duration of the disagreement and the
 	total lack of memory-ordering operations in the code fragment.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+그리고 네개 CPU 의 상황이 흥미로웠다면, 같은 상황이지만 15개 CPU 가 각자
+시간~$t=0$ 에 하나의 공유 변수에 각자의 수를 할당하는 경우를 보이는
+\cref{fig:memorder:A Variable With More Simultaneous Values} 를 보시기
+바랍니다.
+이 그림의 두 다이어그램은 모두
+\cref{fig:memorder:A Variable With Multiple Simultaneous Values} 에서와 같은
+방법으로 그려졌습니다.
+유일한 차이는 수평 축의 단위가 시간단위 틱이란 것으로, 각 틱은 약
+5.3~나노세컨드입니다.
+따라서 전체 수행은 CPU 수의 증가에 맞춰
+\cref{fig:memorder:A Variable With Multiple Simultaneous Values}
+에 기록된 이벤트에 비해 조금 더 오래 지속됩니다.
+위 다이어그램은 전체 그림을 보이며, 아래의 것은 첫 50~틱을 확대해 보입니다.
+다시 말하지만, CPU~0 은 이 테스트를 조율하며, 따라서 어떤 값도 기록하지
+않습니다.
+
+\iffalse
 
 And if you think that the situation with four CPUs was intriguing, consider
 \cref{fig:memorder:A Variable With More Simultaneous Values},
@@ -1751,12 +1897,26 @@ The upper diagram shows the overall picture, while the lower one zooms
 in on the first 50~timebase ticks.
 Again, CPU~0 coordinates the test, so does not record any values.
 
+\fi
+
 \begin{figure*}
 \centering
 \resizebox{5in}{!}{\includegraphics{memorder/MoreThanOneValue-15CPU}}
 \caption{A Variable With More Simultaneous Values}
 \ContributedBy{Figure}{fig:memorder:A Variable With More Simultaneous Values}{Akira Yokosawa}
 \end{figure*}
+
+모든 CPU 가 결국은 마지막 값은 9 라는데 동의했습니다만 그 전에는 값~15 와~12 가
+초기를 이끌었습니다.
+아래 다이어그램에 수직선으로 표시된 시간~21 에는 이 변수의 값에 대한 14개의
+다른 의견이 있었음을 보십시오.
+또한 모든 CPU 가
+\cref{fig:memorder:Possible Global Orders With More Simultaneous Values}
+에 보인 방향 있는 그래프로 보인 것처럼 순서는 일관적임을 보십시오.
+더도 아니고 덜도 아니고, 이 그림들은 메모리 순서 오퍼레이션의 올바른 사용의
+중요성을 강조합니다.
+
+\iffalse
 
 All CPUs eventually agree on the final value of~9, but not before
 the values~15 and~12 take early leads.
@@ -1768,12 +1928,33 @@ the directed graph shown in
 Nevertheless, these figures underscore the importance of
 proper use of memory-ordering operations.
 
+\fi
+
 \begin{figure}[htb]
 \centering
 \resizebox{2.0in}{!}{\includegraphics{memorder/store15tred}}
 \caption{Possible Global Orders With More Simultaneous Values}
 \label{fig:memorder:Possible Global Orders With More Simultaneous Values}
 \end{figure}
+
+한 시점에 하나의 변수는 얼마나 많은 값을 가질 수 있을까요?
+시스템의 스토어 버퍼당 하나입니다!
+따라서 우리는 변수의 값과 시간의 흐름에 대한 안락한 직관에 작별을 고해야 하는
+체계에 진입했습니다.
+이는 메모리 순서 오퍼레이션이 필요한 체계입니다.
+
+그러나
+\cref{chp:Hardware and its Habits,%
+cha:Partitioning and Synchronization Design} 에서의 교훈을 기억하십시오.
+모든 CPU 가 같은 변수에 동시에 값을 저장하는 것은 병렬 프로그램을 설계하는
+방법이 전혀 아닌데, 최소한 성능과 확장성이 여러분에게 중요한게 아니라면
+그렇습니다.
+
+불행히도, 메모리 순서 규칙은 여러분의 직관을 망치는 다른 많은 방법들을 갖고 이
+방법들이 모두 성능과 확장성을 망치지는 않습니다.
+다음 섹션은 관계없는 메모리 참조의 순서 재배치를 알아봅니다.
+
+\iffalse
 
 How many values can a single variable take on at a single point in
 time?
@@ -1793,6 +1974,8 @@ Unfortunately, memory ordering has many other ways of insulting your
 intuition, and not all of these ways conflict with performance and
 scalability.
 The next section overviews reordering of unrelated memory reference.
+
+\fi
 
 \subsection{Memory-Reference Reordering}
 \label{sec:memorder:Memory-Reference Reordering}
