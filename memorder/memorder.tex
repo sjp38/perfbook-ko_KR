@@ -2272,15 +2272,45 @@ thus preventing the \co{exists} clause from triggering.
 \subsection{Address Dependencies}
 \label{sec:memorder:Address Dependencies}
 
+\emph{주소 종속성 (address dependency)} 는 로드 명령에 의해 반환된 값이 뒤의
+메모리 참조 명령에 의해 사용될 주소를 계산하는데 사용될 때 발생합니다.
+
+\iffalse
+
 An \emph{address dependency} occurs when the value returned by a load
 instruction is used to compute the address used by a later memory-reference
 instruction.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-MP+o-wmb-o+o-addr-o@whole.fcv}
 \caption{Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}
 \label{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}
 \end{listing}
+
+\begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-addr-o:whole]
+\Cref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}
+(\path{C-MP+o-wmb-o+o-addr-o.litmus})
+는 메세지 패싱 패턴의 연결 기반 변종을 보입니다.
+헤드 포인터는 \co{x1} 으로, \co{int} 변수 \co{y} 를 참조하도록 초기화 되며
+(\clnref{init:x1}), \co{y} 는 $1$ 으로 초기화 되어 있습니다 (\clnref{init:y}).
+\co{P0()} 는 헤드 포인터 \co{x1} 이 \co{x0} 를 참조하도록 업데이트 하지만
+(\clnref{P0:x1}), 그것을 $2$ 로 초기화 한 후이며 (\clnref{P0:x0}) 그 순서를
+강제합니다 (\clnref{P0:wmb}).
+\co{P1()} 은 헤드 포인터 \co{x1} 을 가져오고 (\clnref{P1:x1}), 이어서 참조된
+값을 로드합니다 (\clnref{P1:ref}).
+따라서 \clnref{P1:x1} 에서의 로드로부터 \clnref{P1:ref} 사이에 주소 종속성이
+존재합니다.
+이 경우, \clnref{P1:x1} 에 의해 반환되는 값은 \clnref{P1:ref} 에 의해 사용되는
+주소값이지만, 많은 변종이 가능한데,
+\end{fcvref}
+C-언어 \co{->} 오퍼레이터를 통한 필드 액세스, 더하기, 빼기, 그리고 배열
+인덱싱이 포함됩니다.\footnote{
+	하지만 리눅스 커널에서 주소 종속성은 배열로의 포인터를 통해
+	이루어져야지 배열 인덱스를 통해 이루어져선 안됩니다.}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-addr-o:whole]
 \Cref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}
@@ -2305,6 +2335,22 @@ addition, subtraction, and array indexing.\footnote{
 	be carried through the pointer to the array, not through the
 	array index.}
 
+\fi
+
+\begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-addr-o:whole]
+어떤 사람들은 \clnref{P1:x1} 의 헤드 포인터로부터의 로드가 \clnref{P1:ref} 의
+역참조 전으로 순서잡히길 바랄 수도 있겠는데, 리눅스 v4.15 이후에서는 실제로
+그렇습니다.
+그러나, v4.15 전에는 DEC Alpha 에서는 그렇지 않은데,
+\cref{sec:memorder:Alpha} 에서 자세한 사항이 이야기되어 있듯이 의존적 로드에
+예측된 값을 사용하게 할 수 있습니다.
+따라서, 오래된 버전의 리눅스에서는
+\cref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering
+Before v4.15)} 의 \co{exists} 절이 발동될 수 \emph{있습니다}.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-addr-o:whole]
 One might hope that \clnref{P1:x1}'s load from the head pointer would be ordered
 before \clnref{P1:ref}'s dereference, which is in fact the case on Linux v4.15
@@ -2316,6 +2362,8 @@ Therefore, on older versions of Linux,
 \cref{lst:memorder:Message-Passing Address-Dependency Litmus Test (No Ordering Before v4.15)}'s
 \co{exists} clause \emph{can} trigger.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)]
@@ -2350,6 +2398,21 @@ exists (1:r2=x0 /\ 1:r3=1)
 
 \begin{fcvref}[ln:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)]
 \Cref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
+는 \clnref{read} 의 \co{READ_ONCE()} 를 DEC Alpha 를 제외한 모든 플랫폼에서는
+\co{READ_ONCE()} 로 동작하지만 DEC Alpha 에서는 \co{READ_ONCE()} 에 이어
+\co{smp_mb()} 를 수행하며 따라서 모든 플랫폼에서 필요한 순서를 강제하게 되는
+\co{lockless_dereference()} 로 교체함으로써 v4.15 이전 리눅스 커널에서도 이게
+DEC Alpha 에서 안정적으로 동작하게끔 하는 방법을,\footnote{
+	\co{lockless_dereference()} 는 v4.15 이후 버전에서는 필요치 않으며,
+	따라서 그 리눅스 커널들에서는 존재하지 않음을 알아두시기 바랍니다.
+	또한 이 문장을 담고 있는 이 책의 버전에서도 필요치 않습니다.}
+즉 \co{exists} 절이 발동되는 걸 막는 방법을 보입니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)]
+\Cref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
 % \path{C-MP+o-wmb-o+ld-addr-o.litmus} available at commit bc4b1c3f3b35
 % ("styleguide: Loosen restriction on comment in litmus test")
 shows how to make this work reliably on pre-v4.15 Linux kernels running on
@@ -2364,11 +2427,26 @@ thereby forcing the required ordering on all platforms, in turn
 preventing the \co{exists} clause from triggering.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-S+o-wmb-o+o-addr-o@whole.fcv}
 \caption{S Address-Dependency Litmus Test}
 \label{lst:memorder:S Address-Dependency Litmus Test}
 \end{listing}
+
+\begin{fcvref}[ln:formal:C-S+o-wmb-o+o-addr-o:whole]
+하지만 그 의존적 오퍼레이션이 로드가 아닌 스토어라면, 예를 들어
+\cref{lst:memorder:S Address-Dependency Litmus Test}
+(\path{C-S+o-wmb-o+o-addr-o.litmus}) 에 보인 것과 같은 \emph{S} 리트머스
+테스트~\cite{JadeAlglave2011ppcmem} 같은 경우라면 어떨까요?
+어떤 제품 수준 플랫폼도 스토어를 예측하진 않기 때문에, \clnref{P0:x0} 의
+\co{WRITE_ONCE()} 는 \clnref{P1:r2} 의 \co{WRITE_ONCE()} 를 덮어쓸 수 없으며,
+이는 \clnref{exists} 의 \co{exists} 절이 발동될 수 없음을, 심지어 DEC Alpha
+에서도, v4.15 전의 리눅스 커널에서도 그러함을 의미합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-S+o-wmb-o+o-addr-o:whole]
 But what happens if the dependent operation is a store rather than
@@ -2382,6 +2460,8 @@ the \co{WRITE_ONCE()} on \clnref{P1:r2}, meaning that the \co{exists}
 clause on \clnref{exists} cannot trigger, even on DEC Alpha, even
 in pre-v4.15 Linux kernels.
 \end{fcvref}
+
+\fi
 
 \QuickQuizSeries{%
 \QuickQuizB{
