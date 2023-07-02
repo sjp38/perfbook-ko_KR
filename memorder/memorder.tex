@@ -2196,6 +2196,26 @@ the \co{exists} clause on \clnref{exists} never triggers.
 
 \Cref{lst:memorder:Message-Passing Litmus Test; No Writer Ordering (No Ordering)}
 (\path{C-MP+o-o+o-rmb-o.litmus})
+는 다시 고전적인 message-passing 리트머스 테스트를 보이는데, \co{P1()} 의
+로드를 위해선 \co{smp_rmb()} 를 제공하지만 \co{P0()} 의 스토어에는 어떤
+순서규칙도 주지 않습니다.
+여기서도 상대적으로 강한 순서규칙의 아키텍쳐는 순서를 강제합니다만 완화된
+순서규칙의 아키텍쳐는 꼭 그러지만은 않는데~\cite{JadeAlglave2011ppcmem}, 이는
+\co{exists} 절이 발동될 수 있음을 의미합니다.
+그런 재배치가 도움될 수 있는 한가지 상황은 스토어 버퍼가 꽉차있고, 또다른
+스토어가 수행될 준비가 되어있지만 가장 예전 스토어를 위한 캐쉬라인은 아직 사용
+불가할 때입니다.
+이런 경우, 스토어가 순서와 다르게 완료될 수 있게 하는건 수행이 진행될 수 있게
+합니다.
+따라서, 이식성 있는 코드는 명시적으로 스토어의 순서를 맞춰줘야 하는데, 예를
+들면
+\cref{lst:memorder:Enforcing Order of Message-Passing Litmus Test} 에 보인 것과
+같아서, \co{exists} 절이 발동되는 걸 막습니다.
+
+\iffalse
+
+\Cref{lst:memorder:Message-Passing Litmus Test; No Writer Ordering (No Ordering)}
+(\path{C-MP+o-o+o-rmb-o.litmus})
 once again shows the classic message-passing litmus test, with the
 \co{smp_rmb()} providing ordering for \co{P1()}'s loads, but without
 any ordering for \co{P0()}'s stores.
@@ -2213,17 +2233,40 @@ example, as shown in
 \cref{lst:memorder:Enforcing Order of Message-Passing Litmus Test},
 thus preventing the \co{exists} clause from triggering.
 
+\fi
+
 \QuickQuiz{
+	강한 순서규칙의 시스템은 왜 불필요한 \co{smp_rmb()} 와 \co{smp_wmb()}
+	수행이라는 성능 비용을 지불해야 하죠?
+	완화된 순서규칙의 시스템이 그들의 잘못된 순서잡기 선택의 완전한 비용을
+	책임져야 하지 않나요???
+
+	\iffalse
+
 	Why should strongly ordered systems pay the performance price
 	of unnecessary \co{smp_rmb()} and \co{smp_wmb()} invocations?
 	Shouldn't weakly ordered systems shoulder the full cost of
 	their misordering choices???
+
+	\fi
+
 }\QuickQuizAnswer{
+	그게 정확한 실제 상황입니다.
+	강한 순서규칙의 시스템에서 \co{smp_rmb()} 와 \co{smp_wmb()} 는 명령을
+	생성하지 않지만 그저 컴파일러에게 제약을 겁니다.
+	따라서, 이 경우 완화된 순서규칙의 시스템은 실제로 그들의 메모리 순서
+	규칙 선택의 완전한 비용을 내고 있습니다.
+
+	\iffalse
+
 	That is in fact exactly what happens.
 	On strongly ordered systems, \co{smp_rmb()} and \co{smp_wmb()}
 	emit no instructions, but instead just constrain the compiler.
 	Thus, in this case, weakly ordered systems do in fact shoulder
 	the full cost of their memory-ordering choices.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Address Dependencies}
