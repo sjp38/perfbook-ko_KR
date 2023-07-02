@@ -2009,6 +2009,26 @@ loads and stores.
 \begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-o:whole]
 \Cref{lst:memorder:Message-Passing Litmus Test (No Ordering)}
 (\path{C-MP+o-wmb-o+o-o.litmus})
+는 고전적인 \emph{message-passing} 리트머스 테스트를 보이는데, \co{x0} 는
+메세지이고 \co{x1} 은 메세지가 있는지 없는지 알리는 플래그입니다.
+이 테스트에서, \co{smp_wmb()} 는 \co{P0()} 의 스토어가 순서잡히게 강제하지만,
+로드를 위해선 어떤 순서규칙도 명시되지 않았습니다.
+x86 같은 상대적으로 강한 순서규칙의 아키텍쳐에서는 순서가 강제됩니다.
+그러나, 완화된 순서 규칙의 아키텍쳐에서는 종종 그러지
+않습니다~\cite{JadeAlglave2011ppcmem}.
+따라서, 이 리스트의 \clnref{exists} 에서의 \co{exists} 절은 발동될 수
+\emph{있습니다}.
+\end{fcvref}
+
+다른 위치로부터의 로드들을 재배치하는 이유 중 하나는 그렇게 하는게 앞의 로드가
+캐쉬 미스를 일으키지만 뒤의 로드는 이미 존재하는 경우 수행을 빠르게 해준다는
+겁니다.
+
+\iffalse
+
+\begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-o:whole]
+\Cref{lst:memorder:Message-Passing Litmus Test (No Ordering)}
+(\path{C-MP+o-wmb-o+o-o.litmus})
 shows the classic \emph{message-passing} litmus test, where \co{x0} is
 the message and \co{x1} is a flag indicating whether or not a message
 is available.
@@ -2025,12 +2045,34 @@ One rationale for reordering loads from different locations is that doing
 so allows execution to proceed when an earlier load misses the cache,
 but the values for later loads are already present.
 
+\fi
+
 \QuickQuiz{
+	하지만 왜 load-load 재배치를 사용자에게 보이게 하죠?
+	중간에 스토어가 없는 흔한 경우에는 수행이 진행되게끔 투기적 수행
+	(speculative execution) 을 하게 해서 순서 재배치가 안보이게끔 하는게
+	어떤가요?
+
+	\iffalse
+
 	But why make load-load reordering visible to the user?
 	Why not just use speculative execution to allow execution to
 	proceed in the common case where there are no intervening
 	stores, in which case the reordering cannot be visible anyway?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그럴 수 있고 많은 경우에 그럽니다, 그러지 않으면 강한 순서규칙의 CPU 는
+	실제로 느려질 거거든요.
+	그러나, 투기적 수행은 그것만의 단점이 있는데, 특히 투기적 수행이 자주
+	롤백되어야 하는 경우, 더구나 배터리 기반 시스템이면 그렇습니다.
+	하지만 미래의 시스템은 이 단점을 극복할 수 있을 겁니다.
+	그 전까지는, 벤더들이 완화된 순서규칙의 CPU 를 계속 생산할 거라 예상할
+	수 있습니다.
+
+	\iffalse
+
 	They can and many do, otherwise systems containing
 	strongly ordered CPUs would be slow indeed.
 	However, speculative execution does have its downsides, especially
@@ -2040,6 +2082,9 @@ but the values for later loads are already present.
 	disadvantages.
 	Until then, we can expect vendors to continue producing
 	weakly ordered CPUs.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{listing}[tbp]
@@ -2049,6 +2094,17 @@ but the values for later loads are already present.
 \end{listing}
 
 \begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-rmb-o:whole]
+따라서, 순서 잡힌 로드에 의존하는 이식성 있는 코드는 명시적 순서 규칙을 더해야
+하는데, 예를 들면
+\cref{lst:memorder:Enforcing Order of Message-Passing Litmus Test}
+(\path{C-MP+o-wmb-o+o-rmb-o.litmus})
+의 \clnref{rmb} 에 보인 \co{smp_rmb()} 를 더하는 것으로, 이는 \co{exists} 절이
+발동되는 것을 막습니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:formal:C-MP+o-wmb-o+o-rmb-o:whole]
 Thus, portable code relying on ordered loads must
 add explicit ordering, for example, the \co{smp_rmb()} shown on
 \clnref{rmb} of
@@ -2056,6 +2112,8 @@ add explicit ordering, for example, the \co{smp_rmb()} shown on
 (\path{C-MP+o-wmb-o+o-rmb-o.litmus}), which prevents
 the \co{exists} clause from triggering.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-LB+o-o+o-o@whole.fcv}
