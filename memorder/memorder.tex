@@ -2465,11 +2465,45 @@ in pre-v4.15 Linux kernels.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	하지만 \emph{모든} 플랫폼이
+	\cref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15),%
+	lst:memorder:S Address-Dependency Litmus Test}
+	의 \co{exists} 절을 정말로 발동시키지 않음을 어떻게 알죠?
+
+	\iffalse
+
 	But how do we know that \emph{all} platforms really avoid
 	triggering the \co{exists} clauses in
 	\cref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15),%
 	lst:memorder:S Address-Dependency Litmus Test}?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	여기에 답하기 위해선 세개의 주요 플랫폼 그룹을 정의하는게 필요합니다:
+	(1)~Total-store-order (TSO) 플랫폼,
+	(2)~Weakly ordered (완화된 순서의) 플랫폼, 그리고
+	(3)~DEC Alpha.
+
+	\begin{fcvref}[ln:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)]
+	TSO 플랫폼은 모든 메모리 참조 쌍의 순서를 지키는데 앞의 스토어와 뒤의
+	로드에 대해서만은 예외입니다.
+	\Cref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
+	의 \clnref{deref,read} 에서의 주소 종속성은 로드에 뒤이어 다른 로드가
+	오는 것이므로, TSO 플랫폼은 이 주소 종속성을 지킵니다.
+	\end{fcvref}
+	\begin{fcvref}[ln:formal:C-S+o-wmb-o+o-addr-o:whole]
+	이것들은 또한
+	\cref{lst:memorder:S Address-Dependency Litmus Test}
+	의 \clnref{P1:x1,P1:r2} 에서의 주소 종속성 역시 지키는데 이는 로드 뒤에
+	스토어가 따라오는 것이기 때문입니다.
+	주소 종속성은 로드로부터 시작되어야 하므로, TSO 플랫폼은 암시적이지만
+	완벽하게 이를 지킵니다만 컴파일러 최적화는 가능하므로 \co{READ_ONCE()}
+	는 필요합니다.
+	\end{fcvref}
+
+\iffalse
+
 	Answering this requires identifying three major groups of platforms:
 	(1)~Total-store-order (TSO) platforms,
 	(2)~Weakly ordered platforms, and
@@ -2492,6 +2526,18 @@ in pre-v4.15 Linux kernels.
 	optimizations, hence the need for \co{READ_ONCE()}.
 	\end{fcvref}
 
+\fi
+
+	완화된 순서의 플랫폼은 연관없는 액세스의 순서는 지키지 않을 수
+	있습니다.
+	그러나,
+	\cref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15),%
+	lst:memorder:S Address-Dependency Litmus Test}
+	의 주소 종속성은 연관없지 않습니다: 주소 종속성이 존재합니다.
+	하드웨어는 종속성을 추적하고 필요한 순서를 지켜줍니다.
+
+	\iffalse
+
 	Weakly ordered platforms don't necessarily maintain ordering of
 	unrelated accesses.
 	However, the address dependencies in
@@ -2500,6 +2546,25 @@ in pre-v4.15 Linux kernels.
 	are not unrelated: There is an address dependency.
 	The hardware tracks dependencies and maintains the needed
 	ordering.
+
+	\fi
+
+	\begin{fcvref}[ln:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)]
+	이 완화된 순서규칙 플랫폼의 규칙에 대한 하나의 (유명한) 예외가 있는데,
+	그 예외는 DEC Alpha 의 로드 대 로드 주소 종속성입니다.
+	그리고 이게 왜 v4.15 전의 리눅스 커널에서 DEC Alpha 는 이제는 사용되지 않는,
+	\cref{lst:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)}
+	의 \clnref{deref} 에 보인 \co{lockless_dereference()} 에 의해 메모리
+	배리어를 명시적으로 필요했던 이유입니다.
+	\end{fcvref}
+	\begin{fcvref}[ln:formal:C-S+o-wmb-o+o-addr-o:whole]
+	그러나, DEC Alpha 역시 로드 대 스토어 주소 종속성은 추적하는데,
+	\cref{lst:memorder:S Address-Dependency Litmus Test}
+	의 \clnref{P1:x1} 에서 v4.15 전의 리눅스 커널에서도
+	\co{lockless_dereference()} 를 필요로 하지 않는 이유입니다.
+	\end{fcvref}
+
+	\iffalse
 
 	\begin{fcvref}[ln:memorder:Enforced Ordering of Message-Passing Address-Dependency Litmus Test (Before v4.15)]
 	There is one (famous) exception to this rule for weakly ordered
@@ -2518,6 +2583,17 @@ in pre-v4.15 Linux kernels.
 	kernels predating v4.15.
 	\end{fcvref}
 
+	\fi
+
+	정리하자면, 현재의 플랫폼들은 TSO 플랫폼들 (x86, mainframe,
+	SPARC,~\dots) 에서처럼 주소 종속성을 묵시적으로 지켜주거나, 주소
+	종속성을 위한 하드웨어 추적 기능을 가지거나 (\ARM, PowerPC,
+	MIPS,~\dots), \co{READ_ONCE()} (v4.15 이후 리눅스 커널에서의 DEC
+	Alpha) 또는 \co{rcu_dereference()} (v4.14 이전 리눅스 커널에서의 DEC
+	Alpha) 에 의해 제공되는 메모리 배리어를 필요로 합니다.
+
+	\iffalse
+
 	To sum up, current platforms either respect address dependencies
 	implicitly, as is the case for TSO platforms (x86, mainframe,
 	SPARC,~\dots), have hardware tracking for address dependencies
@@ -2525,25 +2601,56 @@ in pre-v4.15 Linux kernels.
 	supplied by \co{READ_ONCE()} (DEC Alpha in Linux kernel v4.15 and
 	later), or supplied by
 	\co{rcu_dereference()} (DEC Alpha in Linux kernel v4.14 and earlier).
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	SP, MP, LB, 이제는~S 까지.
+	이 리트머스 테스트 약자들은 어디서 왔고 누가 이걸 따라갈 수 있겠습니까?
+
+	\iffalse
+
 	SP, MP, LB, and now~S\@.
 	Where do all these litmus-test abbreviations come from and
 	how can anyone keep track of them?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	최고의 일람표는
+	\co{test6.pdf}~\cite{test6-pdf} 입니다.
+	불행히도, 모든 약자가 SB (store buffering), MP (message passing),
+	그리고 LB (load buffering) 처럼 알기 쉬운 확장을 갖지는 않으나, 최소한
+	약자들의 리스트는 이미 사용 가능합니다.
+
+	\iffalse
+
 	The best scorecard is the infamous
 	\co{test6.pdf}~\cite{test6-pdf}.
 	Unfortunately, not all of the abbreviations have catchy
 	expansions like SB (store buffering), MP (message passing),
 	and LB (load buffering), but at least the list of abbreviations
 	is readily available.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+그러나,
+\cref{sec:memorder:Address- and Data-Dependency Difficulties} 에서 이야기 했듯
+주소 종속성은 잘못 짜이기 쉽고 컴파일러 최적화에 의해 쉽게 깨짐에 유의하는게
+중요합니다.
+
+\iffalse
 
 However, it is important to note that address dependencies can
 be fragile and easily broken by compiler optimizations, as discussed in
 \cref{sec:memorder:Address- and Data-Dependency Difficulties}.
+
+\fi
 
 \subsection{Data Dependencies}
 \label{sec:memorder:Data Reordering}
