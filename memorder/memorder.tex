@@ -2801,17 +2801,42 @@ compiler from breaking them.
 \subsection{Control Dependencies}
 \label{sec:memorder:Control Dependencies}
 
+\emph{Control dependency (제어 종속성)} 은 로드 명령에 의해 반환되는 값이 뒤의
+스토어 명령이 수행될지 말지를 결정하기 위해 검사될 때 발생합니다.
+``뒤의 스토어 명령'' 에 주목하세요: 많은 플랫폼이 로드 대 로드 제어 종속성을
+지키지 않습니다.
+
+\iffalse
+
 A \emph{control dependency} occurs when the value returned by a load
 instruction is tested to determine whether or not a later store instruction
 is executed.
 Note well the ``later store instruction'': Many platforms do not respect
 load-to-load control dependencies.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-LB+o-r+o-ctrl-o@whole.fcv}
 \caption{Load-Buffering Control-Dependency Litmus Test}
 \label{lst:memorder:Load-Buffering Control-Dependency Litmus Test}
 \end{listing}
+
+\begin{fcvref}[ln:formal:C-LB+o-r+o-ctrl-o:whole]
+\Cref{lst:memorder:Load-Buffering Control-Dependency Litmus Test}
+(\path{C-LB+o-r+o-ctrl-o.litmus})
+는 또다른 로드 버퍼링 예를 보이는데, 이번에는 \clnref{ld} 에서의 로드와
+\clnref{st} 에서의 스토어의 순서를 맞추기 위해 제어 종속성을 (\clnref{if})
+사용합니다.
+이 순서 강제는 \co{exists} 절이 발동되는걸 막기에 충분합니다.
+\end{fcvref}
+
+그러나, 제어 종속성은 데이터 종속성보다도 최적화로 사라지기 쉬우며,
+\cref{sec:memorder:Control-Dependency Calamities}
+가 여러분의 컴파일러가 제어 종속성을 깨버리는 걸 막기 위해 따라야 할 규칙들을
+설명합니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-LB+o-r+o-ctrl-o:whole]
 \Cref{lst:memorder:Load-Buffering Control-Dependency Litmus Test}
@@ -2828,11 +2853,28 @@ out of existence than are data dependencies, and
 describes some of the rules that must be followed in order to prevent
 your compiler from breaking your control dependencies.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-MP+o-r+o-ctrl-o@whole.fcv}
 \caption{Message-Passing Control-Dependency Litmus Test (No Ordering)}
 \label{lst:memorder:Message-Passing Control-Dependency Litmus Test (No Ordering)}
 \end{listing}
+
+\begin{fcvref}[ln:formal:C-MP+o-r+o-ctrl-o:whole]
+제어 종속성은 로드에서 스토어로의 순서만을 제공함을 반복할 가치가 있습니다.
+따라서,
+\cref{lst:memorder:Message-Passing Control-Dependency Litmus Test (No Ordering)}
+(\path{C-MP+o-r+o-ctrl-o.litmus})
+의 \clnrefrange{ld1}{ld2} 에 보인 제어 종속성은 순서를 제공하지 \emph{않으며},
+따라서 \co{exists} 절이 발동되는 것을 막지 \emph{않습니다}.
+\end{fcvref}
+
+요약하자면, 제어 종속성은 유용할 수 있으나 관리하기 어려운 항목입니다.
+따라서 여러분은 성능 고려사항이 다른 해법을 허용치 않을 때에만 그걸 사용해야
+합니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-MP+o-r+o-ctrl-o:whole]
 It is worth reiterating that control dependencies provide ordering only
@@ -2849,12 +2891,29 @@ high-maintenance items.
 You should therefore use them only when performance considerations
 permit no other solution.
 
+\fi
+
 \QuickQuiz{
+	제어 종속성은 언어 표준에 의해 강제시 된다면 더 강해지지 않을까요?
+
+	\iffalse
+
 	Wouldn't control dependencies be more robust if they were
 	mandated by language standards???
+
+	\fi
+
 }\QuickQuizAnswer{
+	물론입니다!
+	그리고 아마도 충분한 미래에는 그렇게 될겁니다.
+
+	\iffalse
+
 	But of course!
 	And perhaps in the fullness of time they will be so mandated.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Cache Coherence}
