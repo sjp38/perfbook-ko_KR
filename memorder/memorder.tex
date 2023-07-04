@@ -2655,6 +2655,13 @@ be fragile and easily broken by compiler optimizations, as discussed in
 \subsection{Data Dependencies}
 \label{sec:memorder:Data Reordering}
 
+\emph{Data dependency (데이터 종속성)} 은 어떤 로드 명령에 의해 반환된 값이
+뒤의 스토어 명령에 의해 저장되는 데이터를 계산하는데 사용될 때 발생합니다.
+앞의 ``데이터'' 에 유의하세요: 어떤 로드에 의해 반환된 값이 뒤의 스토어 명령에
+의해 사용되는 주소를 계산하는데 사용된다면 그건 주소 종속성이 됩니다.
+
+\iffalse
+
 A \emph{data dependency} occurs when the value returned by a load
 instruction is used to compute the data stored by a later store
 instruction.
@@ -2662,11 +2669,27 @@ Note well the ``data'' above: If the value returned by a load
 was instead used to compute the address used by a later store
 instruction, that would instead be an address dependency.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-LB+o-r+o-data-o@whole.fcv}
 \caption{Load-Buffering Data-Dependency Litmus Test}
 \label{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
 \end{listing}
+
+\begin{fcvref}[ln:formal:C-LB+o-r+o-data-o:whole]
+\Cref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+(\path{C-LB+o-r+o-data-o.litmus})
+는
+\cref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
+와 유사하지만 \co{P1()} 의 \clnref{ld,st} 사이 순서가 acquire load 대신 데이터
+종속성으로 강제된다는 점이 다릅니다:
+\Clnref{ld} 에 의해 로드되는 값이 \clnref{st} 에서 스토어 하는 값입니다.
+이 데이터 종속성에 의해 제공되는 순서 규칙은 \co{exists} 절이 발동되는 것을
+막는 데에 충분합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-LB+o-r+o-data-o:whole]
 \Cref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
@@ -2679,6 +2702,22 @@ The value loaded by \clnref{ld} is what \clnref{st} stores.
 The ordering provided by this data dependency is sufficient to prevent
 the \co{exists} clause from triggering.
 \end{fcvref}
+
+\fi
+
+\Cref{sec:memorder:Address- and Data-Dependency Difficulties} 
+에서 이야기했듯, 주소 종속성에서와 마찬가지로 데이터 종속성은 잘못 짜이기 쉽고
+컴파일러 최적화에 의해 쉽게 부서집니다.
+실제로, 데이터 종속성은 주소 종속성보다도 더 잘못 짜이기가 쉽습니다.
+그 이유는 주소 종속성은 일반적으로 포인터 값을 사용하기 때문입니다.
+대조적으로,
+\cref{lst:memorder:Load-Buffering Data-Dependency Litmus Test} 에서 보인 것과
+같이 데이터 종속성을 단하나의 값을 통해 옮기고 싶어지게 마련이며, 이는
+컴파일러가 이를 최적화해 제거해 버리기 충분합니다.
+한가지만 예를 들자면, 로드된 정수가 상수 0으로 곱해진다면, 컴파일러는 그 결과가
+0임을 알아서 로드된 값을 0으로 치환하여 이 종속성을 깨버릴 수 있습니다.
+
+\iffalse
 
 Just as with address dependencies, data dependencies are
 fragile and can be easily broken by compiler optimizations, as discussed in
@@ -2696,7 +2735,20 @@ zero, the compiler would know that the result was zero, and could therefore
 substitute the constant zero for the value loaded, thus breaking
 the dependency.
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:formal:C-LB+o-r+o-data-o:whole]
+	하지만 기다려요!!!
+	\Cref{lst:memorder:Load-Buffering Data-Dependency Litmus Test}
+	의 \clnref{ld} 는 이 로드를 휘발성으로 기록하는 \co{READ_ONCE()} 를
+	사용하는데, 이는 컴파일러가 그 값이 나중에 0으로 곱해짐을 안다 하더라도
+	로드 명령을 만들어야 함을 의미합니다.
+	그런데 어떻게 컴파일러가 이 데이터 종속성을 깰 수 있죠?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-LB+o-r+o-data-o:whole]
 	But wait!!!
 	\Clnref{ld} of
@@ -2706,7 +2758,21 @@ the dependency.
 	instruction even if the value is later multiplied by zero.
 	So how can the compiler possibly break this data dependency?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞습니다, 컴파일러느 휘발성 로드를 위해 로드 명령을 반드시 만들어야
+	합니다.
+	하지만 그 값을 0으로 곱한다면 이 컴파일러는 그 곱셈의 결과를 0으로
+	대체할 수가 있는데, 이는 많은 플랫폼에서 데이터 종속성을 깨버릴 겁니다.
+
+	더 나쁠 수 있는게, 종속된 스토어가 \co{WRITE_ONCE()} 를 사용하지
+	않는다면 컴파일러는 이를 로드 앞으로 옮겨버릴 수 있어서 TSO
+	플랫폼에서조차 순서를 제공하지 못하게 할 수 있습니다.
+
+	\iffalse
+
 	Yes, the compiler absolutely must emit a load instruction for
 	a volatile load.
 	But if you multiply the value loaded by zero, the compiler is
@@ -2717,10 +2783,20 @@ the dependency.
 	Worse yet, if the dependent store does not use \co{WRITE_ONCE()},
 	the compiler could hoist it above the load, which would cause
 	even TSO platforms to fail to provide ordering.
+
+	\fi
+
 }\QuickQuizEnd
+
+요약하자면, 여러분은 컴파일러가 데이터 종속성을 깨버리는 걸 막을 때에만 거기
+의존할 수 있습니다.
+
+\iffalse
 
 In short, you can rely on data dependencies only if you prevent the
 compiler from breaking them.
+
+\fi
 
 \subsection{Control Dependencies}
 \label{sec:memorder:Control Dependencies}
