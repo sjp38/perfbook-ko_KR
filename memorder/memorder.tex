@@ -3623,6 +3623,14 @@ is the subject of
 \subsubsection{Cumulativity}
 \label{sec:memorder:Cumulativity}
 
+\Cref{lst:memorder:WRC Litmus Test With Dependencies (No Ordering)}
+에 보인 세개 쓰레드의 예는 \emph{누적되는 (cumulative)} 순서, 또는
+\emph{cumulativity} 를 필요로 합니다.
+누적되는 메모리 순서 오퍼레이션은 그것을 앞서는 액세스만이 아니라 같은 변수에
+대한 모든 쓰레드의 이전 액세스의 순서를 잡습니다.
+
+\iffalse
+
 The three-thread example shown in
 \cref{lst:memorder:WRC Litmus Test With Dependencies (No Ordering)}
 requires \emph{cumulative} ordering, or \emph{cumulativity}.
@@ -3630,11 +3638,39 @@ A cumulative memory-ordering operation orders not just any given
 access preceding it, but also earlier accesses by any thread to that
 same variable.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-WRC+o+o-r+a-o@whole.fcv}
 \caption{WRC Litmus Test With Release}
 \label{lst:memorder:WRC Litmus Test With Release}
 \end{listing}
+
+종속성은 cumulativity 를 제공하지 않는데,
+page~\pageref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 의
+\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 에 있는
+\co{READ_ONCE()} 열의 ``C'' 칸이 비어있는 이유입니다.
+그러나, ``C'' 칸의 ``C'' 로 나타내진 것처럼, release 오퍼레이션은 cumulativity
+를 제공합니다.
+따라서,
+\cref{lst:memorder:WRC Litmus Test With Release}
+(\path{C-WRC+o+o-r+a-o.litmus})
+는
+\cref{lst:memorder:WRC Litmus Test With Dependencies (No Ordering)} 의 데이터
+종속성을 release 오퍼레이션으로 교체합니다.
+\begin{fcvref}[ln:formal:C-WRC+o+o-r+a-o:whole]
+Release 오퍼레이션은 cumulative 하므로 그 순서는
+\cref{lst:memorder:WRC Litmus Test With Release} 의 \clnref{P1:x} 에서의
+\co{P1()} 에 의한 \co{x} 로드만이 아니라 \clnref{P0:x} 에서의 \co{P0()} 의
+\co{x} 스토어에도 순서가 적용됩니다---그러나 그 로드가 스토어 된 값을 반환했을
+때만 그런데, 이는 \clnref{exists} 의 \co{exists} 절의 \co{1:r1=1} 과
+맞아떨어집니다.
+이는 \co{P2()} 의 load-acquire 가 \clnref{P2:x} 에서의 \co{x} 로드가
+\clnref{P0:x} 에서의 스토어 뒤에 일어나게 강제하여, 반환된 값은 1이며,
+\co{2:r3=0} 에 맞지 않게 되므로, 결국 \co{exists} 절이 발동되는걸 막습니다.
+\end{fcvref}
+
+\iffalse
 
 Dependencies do not provide cumulativity,
 which is why the ``C'' column is blank for the \co{READ_ONCE()} row
@@ -3661,12 +3697,30 @@ the value returned is one, which does not match \co{2:r3=0}, which
 in turn prevents the \co{exists} clause from triggering.
 \end{fcvref}
 
+\fi
+
 \begin{figure*}[tbp]
 \centering
 \includegraphics{memorder/memorybarriercum}
 \caption{Cumulativity}
 \label{fig:memorder:Cumulativity}
 \end{figure*}
+
+\begin{fcvref}[ln:formal:C-WRC+o+o-r+a-o:whole]
+이 순서 규칙은
+\cref{fig:memorder:Cumulativity} 에 그림으로 그려져 있습니다.
+또한 cumulativity 는 시간상의 한 단계에만 제한되지 않음을 알아두세요.
+\clnref{P0:x} 의 스토어 전에 어떤 쓰레드에 의해서든 \co{x} 로의 스토어나 로드가
+있었다면 그 앞의 로드나 스토어는 \clnref{P2:x} 에서의 로드 전으로 순서잡힐
+겁니다, \co{r1} 과 \co{r2} 가 둘 다 값 \co{1} 을 가지고 있을 경우에만 그렇긴
+하지만요.
+\end{fcvref}
+
+요약하자면, cumulative 순서 오퍼레이션을 사용하는 것은 일부 상황에서
+non-multicopy-atomic 행동을 제거할 수 있습니다.
+그러나 cumulativity 역시 제한이 있는데, 다음 섹션에서 이를 알아봅니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-WRC+o+o-r+a-o:whole]
 These ordering constraints are depicted graphically in
@@ -3681,6 +3735,8 @@ be ordered before the load on \clnref{P2:x}, though only if both \co{r1} and
 In short, use of cumulative ordering operations can suppress
 non-multicopy-atomic behaviors in some situations.
 Cumulativity nevertheless has limits, which are examined in the next section.
+
+\fi
 
 \subsubsection{Propagation}
 \label{sec:memorder:Propagation}
