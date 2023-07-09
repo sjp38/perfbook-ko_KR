@@ -3744,6 +3744,21 @@ Cumulativity nevertheless has limits, which are examined in the next section.
 \begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
 \Cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
 (\path{C-W+RWC+o-r+a-o+o-mb-o.litmus})
+는 심지어 완전한 메모리 배리어가 있다 하더라도 발생하는 cumulativity 와
+store-release 의 한계를 보입니다.
+문제는 \clnref{P0:sr} 의 \co{smp_store_release()} 가 cumulativity 를 갖는다
+해도, 그리고 그 cumulativity 가 \clnref{P2:ld} 의 \co{P2()} 의 로드를
+순서잡는다 해도, \co{smp_store_release()} 의 순서는 \co{P1()} 의 로드
+(\clnref{P1:ld}) 와 \co{P2()} 의 스토어 (\clnref{P2:st}) 를 거쳐 전파될 수
+없다는 겁니다.
+이는 \clnref{exists} 의 \co{exists} 절이 정말로 발동될 수 있음을 의미합니다.
+\end{fcvref}
+
+\iffalse
+
+\begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
+\Cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+(\path{C-W+RWC+o-r+a-o+o-mb-o.litmus})
 shows the limitations of cumulativity and store-release,
 even with a full memory barrier.
 The problem is that although the \co{smp_store_release()} on
@@ -3754,6 +3769,8 @@ load (\clnref{P1:ld}) and \co{P2()}'s store (\clnref{P2:st}).
 This means that the \co{exists} clause on \clnref{exists} really can trigger.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-W+RWC+o-r+a-o+o-mb-o@whole.fcv}
 \caption{W+RWC Litmus Test With Release (No Ordering)}
@@ -3761,8 +3778,16 @@ This means that the \co{exists} clause on \clnref{exists} really can trigger.
 \end{listing}
 
 \QuickQuiz{
+	하지만 그 리트머스 테스트에 최소 세개의 쓰레드가 존재하지 않는다면
+	전파에 대해선 걱정할 필요가 없을 거예요, 그렇죠?
+
+	\iffalse
+
 	But it is not necessary to worry about propagation unless
 	there are at least three threads in the litmus test, right?
+
+	\fi
+
 }\QuickQuizAnswer{
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-R+o-wmb-o+o-mb-o@whole.fcv}
@@ -3770,6 +3795,25 @@ This means that the \co{exists} clause on \clnref{exists} really can trigger.
 \label{lst:memorder:R Litmus Test With Write Memory Barrier (No Ordering)}
 \end{listing}%
 %
+	틀렸습니다.
+
+	\begin{fcvref}[ln:formal:C-R+o-wmb-o+o-mb-o:whole]
+	\Cref{lst:memorder:R Litmus Test With Write Memory Barrier (No Ordering)}
+	(\path{C-R+o-wmb-o+o-mb-o.litmus})
+	가 한쌍의 쓰레드 사이에 store-to-store 와 load-to-store 연결만이
+	존재하기 때문에 전파를 필요로 하는 두개 쓰레드 리트머스 테스트를
+	보입니다.
+	\co{P0()} 가 \co{smp_wmb()} 를 사용하고 \co{P1()} 이 \co{smp_mb()} 를
+	사용해 완전하게 순서잡혀 있지만, 일시적이지 않은 연결의 본성은
+	\clnref{exists} 의 \co{exists} 절이 정말 발동될 수 있음을 의미합니다.
+	이 발동을 막으려면, \clnref{wmb} 의 \co{smp_wmb()} 는 \co{smp_mb()} 가
+	되어서 각 임시적이지 않은 연결에 한번씩 해서 두번 전파가 이루어지게
+	해야 합니다.
+	\end{fcvref}
+
+	\iffalse
+
+
 	Wrong.
 
 	\begin{fcvref}[ln:formal:C-R+o-wmb-o+o-mb-o:whole]
@@ -3786,6 +3830,9 @@ This means that the \co{exists} clause on \clnref{exists} really can trigger.
 	must become an \co{smp_mb()}, bringing propagation into play
 	twice, once for each non-temporal link.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
 
 \QuickQuizLabel{\MemorderQQLitmusTestR}
@@ -3796,6 +3843,18 @@ This means that the \co{exists} clause on \clnref{exists} really can trigger.
 \caption{Load-to-Store is Counter-Temporal}
 \label{fig:memorder:Load-to-Store is Counter-Temporal}
 \end{figure}
+
+이 상황이 완전히 반직관적으로 보일 수도 있겠습니다만, 빛의 속도는 유한하고
+컴퓨터의 크기는 0이 아님을 기억하세요.
+따라서 \co{P2()} 의 \co{z} 로의 스토어의 효과가 \co{P1()} 에 전파되기 위해선
+시간이 걸리며, 이는 \co{P1()} 의 \co{z} 읽기가 훨씬 나중에 이루어질 수 있으나
+여전히 과거 값인 0을 읽을 수 있음을 의미합니다.
+이 상황은
+\cref{fig:memorder:Load-to-Store is Counter-Temporal} 에 보여져 있습니다:
+로드가 이전 값을 봄은 이 로드가 새 값의 스토어보다 시간상으로 먼저 이루어졌음을
+의미하지 \emph{않습니다}.
+
+\iffalse
 
 This situation might seem completely counter-intuitive, but keep
 in mind that the speed of light is finite and computers are of
@@ -3809,6 +3868,34 @@ This situation is depicted in
 Just because a load sees the old value does \emph{not} mean that
 this load executed at an earlier time than did the store of the
 new value.
+
+\fi
+
+\Cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+또한 두개가 아닌 세개의 프로세스가 존재할 때의 메모리 배리어 짝 맞추기 한계를
+보입니다.
+이 더 복잡한 리트머스 테스트는 \emph{사이클} 이 존재한다고도 말해질 수 있는데,
+메모리 배리어 짝맞추기는 두개 쓰레드 사이클의 특수한 경우입니다.
+\begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
+\Cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)} 의 사이클은
+\co{P0()} (\clnref{P0:st, P0:sr}), \co{P1()} (\clnref{P1:la,P1:ld}), \co{P2()}
+(\clnref{P2:st,P2:mb,P2:ld}), 그리고 다시 \co{P0()} (\clnref{P0:st}) 를 거쳐
+이루어집니다.
+\co{exists} 절이 이 사이클을 파악합니다:
+\co{1:r1=1} 은 \clnref{P1:la} 에서의 \co{smp_load_acquire()} 이 \clnref{P0:sr}
+에서의 \co{smp_store_release()} 에 의해 저장된 값을 반환했음을 의미하고,
+\co{1:r2=0} 는 \clnref{P2:st} 에서의 \co{WRITE_ONCE()} 가 \clnref{P1:ld} 에서의
+\co{READ_ONCE()} 에 의해 반환된 값에 영향을 미치기엔 너무 늦게 이루어졌으며
+마지막으로 \co{2:r3=0} 가 \clnref{P0:st} 에서의 \co{WRITE_ONCE()} 는
+\clnref{P2:ld} 에서의 \co{READ_ONCE()} 에 의해 반환되는 값에 영향을 끼치기엔
+너무 늦었음을 나타냅니다.
+이 경우, \co{exists} 절이 발동될 수 있다는 사실은 이 사이클이 \emph{허가}
+되었음을 의미합니다.
+대조적으로, \co{exists} 절이 발동될 수 없는 경우에는 사이클이 \emph{금지}
+되었다고 말해집니다.
+\end{fcvref}
+
+\iffalse
 
 Note that
 \cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
@@ -3835,11 +3922,28 @@ In contrast, in cases where the \co{exists} clause cannot trigger,
 the cycle is said to be \emph{prohibited}.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-W+RWC+o-mb-o+a-o+o-mb-o@whole.fcv}
 \caption{W+WRC Litmus Test With More Barriers}
 \label{lst:memorder:W+WRC Litmus Test With More Barriers}
 \end{listing}
+
+\begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
+하지만
+\cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}?
+의 \clnref{exists} 에 있는 \co{exists} 절을 유지해야 한다면 어떻게 될까요?
+한가지 방법은 \co{P0()} 의 \co{smp_store_release()} 를
+\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+이 cumulativity 만이 아니라 전파 (propagation) 도 갖는다고 말하는 \co{smp_mb()}
+로 교체하는 것입니다.
+\end{fcvref}
+그 결과는
+\cref{lst:memorder:W+WRC Litmus Test With More Barriers}
+(\path{C-W+RWC+o-mb-o+a-o+o-mb-o.litmus}) 에 보여져 있습니다.
+
+\iffalse
 
 \begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
 But what if we need to keep the \co{exists} clause on \clnref{exists} of
@@ -3853,14 +3957,48 @@ The result is shown in
 \cref{lst:memorder:W+WRC Litmus Test With More Barriers}
 (\path{C-W+RWC+o-mb-o+a-o+o-mb-o.litmus}).
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
+	\co{smp_mb()} 가 전파 속성을 갖는데 왜
+	\cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+	의 \clnref{P2:mb} 에 있는 \co{smp_mb()} 는 왜 \co{exists} 절의 발동을
+	막지 않죠?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
 	But given that \co{smp_mb()} has the propagation property,
 	why doesn't the \co{smp_mb()} on \clnref{P2:mb} of
 	\cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
 	prevent the \co{exists} clause from triggering?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
+	대략적 경험적 법칙으로써, \co{smp_mb()} 배리어의 전파 속성은 프로세스
+	간의 하나의 load-to-store 연결에만 순서를 유지하기에 충분합니다.
+	불행히도,
+	\cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}
+	는 하나가 아닌 두개의 load-to-store 링크를 갖는데, 첫번째는
+	\clnref{P1:ld} 에서의 \co{READ_ONCE()} 로부터 \clnref{P2:st} 의
+	\co{WRITE_ONCE()} 로의 것이며 두번째 것은 \clnref{P2:ld} 의
+	\co{READ_ONCE()} 로부터 \clnref{P0:st} 의 \co{WRITE_ONCE()} 로의
+	것입니다.
+	따라서, \co{exists} 절의 발동을 막기 위해선 하나가 아닌 두개의
+	\co{smp_mb()} 가 필요합니다.
+	\end{fcvref}
+
+	이 경험적 법치에 대한 특수한 예외로, release-acquire 연결은 프로세스
+	간에 하나의 load-to-store 링크를 가질 수 있어서 여전히 사이클을 막을 수
+	있습니다.
+
+	\iffalse
+
 	\begin{fcvref}[ln:formal:C-W+RWC+o-r+a-o+o-mb-o:whole]
 	As a rough rule of thumb, the \co{smp_mb()} barrier's
 	propagation property is sufficient to maintain ordering
@@ -3881,6 +4019,9 @@ The result is shown in
 	As a special exception to this rule of thumb, a release-acquire
 	chain can have one load-to-store link between processes
 	and still prohibit the cycle.
+
+	\fi
+
 }\QuickQuizEnd
 
 \begin{figure}[tbp]
@@ -3889,6 +4030,17 @@ The result is shown in
 \caption{Store-to-Store is Counter-Temporal}
 \label{fig:memorder:Store-to-Store is Counter-Temporal}
 \end{figure}
+
+완벽성을 위해,
+\cref{fig:memorder:Store-to-Store is Counter-Temporal}
+는 동일한 변수로의 스토어 그룹들 가운데 ``이기는'' 스토어가 가장 나중에 시작된
+스토어일 필요는 없음을 보입니다.
+이는
+page~\pageref{fig:memorder:A Variable With More Simultaneous Values} 의
+\cref{fig:memorder:A Variable With More Simultaneous Values}
+를 주의 깊게 본 사람에겐 놀랍지 않을 겁니다.
+
+\iffalse
 
 For completeness,
 \cref{fig:memorder:Store-to-Store is Counter-Temporal}
@@ -3899,6 +4051,8 @@ This should not come as a surprise to anyone who carefully examined
 on
 page~\pageref{fig:memorder:A Variable With More Simultaneous Values}.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-2+2W+o-wmb-o+o-wmb-o@whole.fcv}
 \caption{2+2W Litmus Test With Write Barriers}
@@ -3906,6 +4060,15 @@ page~\pageref{fig:memorder:A Variable With More Simultaneous Values}.
 \end{listing}
 
 \QuickQuiz{
+	하지만
+	\cref{lst:memorder:2+2W Litmus Test With Write Barriers}
+	(\path{C-2+2W+o-wmb-o+o-wmb-o.litmus}) 에 보인 것처럼 순서잡힌 스토어만
+	갖는 리트머스 테스트에서, 연구자들은 \ARM\ 과 Power 같은 완화된 순서
+	규칙의 시스템에서도 사이클이 금지됨을 보였습니다~\cite{test6-pdf}.
+	그런데 store-to-store 가 정말 \emph{항상} 임시적이지 않나요???
+
+	\iffalse
+
 	But for litmus tests having only ordered stores, as shown in
 	\cref{lst:memorder:2+2W Litmus Test With Write Barriers}
 	(\path{C-2+2W+o-wmb-o+o-wmb-o.litmus}),
@@ -3913,7 +4076,26 @@ page~\pageref{fig:memorder:A Variable With More Simultaneous Values}.
 	ordered systems such as \ARM\ and Power~\cite{test6-pdf}.
 	Given that, are store-to-store really \emph{always}
 	counter-temporal???
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 리트머스 테스트는 실제로 매우 흥미롭습니다.
+	이것의 순서는 일반적인 완화된 순서 규칙 하드웨어 설계에서도 자연스럽게
+	이루어지는 것으로 보인느데, 이는 연관된 물리 법칙과 캐쉬 일관성
+	프로토콜 수학으로부터의 소중한 선물로 여겨질 수 있겠습니다.
+
+	\begin{fcvref}[ln:formal:C-2+2W+o-wmb-o+o-wmb-o:whole]
+	불행히도, 훨씬 나은 대안적 구현을 갖는 이 선물을 위한 소프트웨어
+	사용처를 누구도 찾지 못했습니다.
+	따라서, C11 도 리눅스 커널 메모리 모델도
+	\cref{lst:memorder:2+2W Litmus Test With Write Barriers} 에 연관된 어떤
+	보장을 제공하지 않습니다.
+	이는 \clnref{exists} 의 \co{exists} 절이 발동될 수 있음을 의미합니다.
+	\end{fcvref}
+
+	\iffalse
+
 	This litmus test is indeed a very interesting curiosity.
 	Its ordering apparently occurs naturally given typical
 	weakly ordered hardware design, which would normally be
@@ -3931,19 +4113,37 @@ page~\pageref{fig:memorder:A Variable With More Simultaneous Values}.
 	trigger.
 	\end{fcvref}
 
+	\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-2+2W+o-o+o-o@whole.fcv}
 \caption{2+2W Litmus Test (No Ordering)}
 \label{lst:memorder:2+2W Litmus Test (No Ordering)}
 \end{listing}
 
+	물론, 배리어 없이는 순서 보장도 없는데
+	\cref{lst:memorder:2+2W Litmus Test (No Ordering)}
+	(\path{C-2+2W+o-o+o-o.litmus}) 에 보인 것처럼 실제 완화된 순서 규칙의
+	하드웨어에서조차 그렇습니다.
+
+	\iffalse
+
 	Of course, without the barrier, there are no ordering
 	guarantees, even on real weakly ordered hardware, as shown in
 	\cref{lst:memorder:2+2W Litmus Test (No Ordering)}
 	(\path{C-2+2W+o-o+o-o.litmus}).
+
+	\fi
+
 }\QuickQuizEnd
 
+하지만 가끔 시간은 우리 편입니다.  계속 읽으세요!
+
+\iffalse
+
 But sometimes time really is on our side.  Read on!
+
+\fi
 
 \subsubsection{Happens-Before}
 \label{sec:memorder:Happens-Before}
