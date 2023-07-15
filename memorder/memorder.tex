@@ -4266,6 +4266,20 @@ next section.
 \subsubsection{Release-Acquire Chains}
 \label{sec:memorder:Release-Acquire Chains}
 
+최소한의 release-acquire 연결이
+page~\pageref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
+의
+\cref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
+에 보여 있습니다만, 이 연결은
+\cref{lst:memorder:Long LB Release-Acquire Chain}
+(\path{C-LB+a-r+a-r+a-r+a-r.litmus})
+에 보인 것처럼 훨씬 더 길어질 수 있습니다.
+이 release-acquire 연결이 더 길어질수록, 시간의 흐름으로부터 더 많은 순서가
+얻어져서 얼마나 많은 쓰레드가 연관되는지에 관계 없이 연관된 \co{exists} 절은
+발동될 수 없습니다.
+
+\iffalse
+
 A minimal release-acquire chain was shown in
 \cref{lst:memorder:Enforcing Ordering of Load-Buffering Litmus Test}
 on
@@ -4277,11 +4291,41 @@ The longer the release-acquire chain, the more ordering is gained
 from the passage of time, so that no matter how many threads are
 involved, the corresponding \co{exists} clause cannot trigger.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-LB+a-r+a-r+a-r+a-r@whole.fcv}
 \caption{Long LB Release-Acquire Chain}
 \label{lst:memorder:Long LB Release-Acquire Chain}
 \end{listing}
+
+Release-acquire 연결은 본성적으로 스토어에서 로드로의 생성체이지만, 하나의
+로드로부터 스토어로의 단계를 허용할 수 있음이, 그런 단계는 반-임시적이어야 하긴
+하지만,
+page~\pageref{fig:memorder:Load-to-Store is Counter-Temporal} 의
+\cref{fig:memorder:Load-to-Store is Counter-Temporal}
+에 보인 것처럼 드러났습니다.
+예를 들어,
+\cref{lst:memorder:Long ISA2 Release-Acquire Chain}
+(\path{C-ISA2+o-r+a-r+a-r+a-o.litmus})
+는 세 단계 release-acquire 연결을 보입니다만, \co{P3()} 의 마지막 액세스는
+\co{x0} 로부터의 \co{READ_ONCE()} 인데, 이는 \co{P0()} 의 \co{WRITE_ONCE()} 에
+의해 액세스되는 것이어서 반 임시적인 로드에서 스토어로의 연결을 이 두 프로세스
+사이에 만듭니다.
+\begin{fcvref}[ln:formal:litmus:C-ISA2+o-r+a-r+a-r+a-o:whole]
+그러나, \co{P0()} 의 \co{smp_store_release()} (\clnref{P0:rel}) 은 cumulative
+하므로, \co{P3()} 의 \co{READ_ONCE()} 가 0을 리턴했다면, 이 cumulativity 는
+\co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()} 전으로 순서 잡힐 것을
+강제합니다.
+더해서, 이 release-acquire 연결은
+(\clnref{P0:rel,P1:acq,P1:rel,P2:acq,P2:rel,P3:acq})
+\co{P3()} 의 \co{READ_ONCE()} 가 \co{P0()} 의 \co{smp_store_release()} 뒤로
+순서잡히게 강제합니다.
+\co{P3()} 의 \co{READ_ONCE()} 는 \co{P0()} 의 \co{smp_store_release()} 전후에
+다 있을 수 는 없으므로, 둘 중 하나는 사실이어야 합니다:
+\end{fcvref}
+
+\iffalse
 
 Although release-acquire chains are inherently store-to-load creatures,
 it turns out that they can tolerate one load-to-store step, despite
@@ -4310,6 +4354,8 @@ Because \co{P3()}'s \co{READ_ONCE()} cannot be both before and after
 be true:
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-ISA2+o-r+a-r+a-r+a-o@whole.fcv}
 \caption{Long ISA2 Release-Acquire Chain}
@@ -4317,6 +4363,14 @@ be true:
 \end{listing}
 
 \begin{enumerate}
+\item	\co{P3()} 의 \co{READ_ONCE()} 는 \co{P0()} 의 \co{WRITE_ONCE()} 다음에
+	왔어서, \co{READ_ONCE()} 는 값 2를 반환했어서, \co{exists} 절의
+	\co{3:r2=0} 는 거짓입니다.
+\item	이 release-acquire 연결은 이루어지지 않아서, 즉 \co{exists} 절의
+	\co{1:r2=2}, \co{2:r2=2}, 또는 \co{3:r1=2} 는 거짓입니다.
+
+\iffalse
+
 \item	\co{P3()}'s \co{READ_ONCE()} came after \co{P0()}'s
 	\co{WRITE_ONCE()}, so that the \co{READ_ONCE()} returned
 	the value two, so that the \co{exists} clause's \co{3:r2=0}
@@ -4324,7 +4378,19 @@ be true:
 \item	The release-acquire chain did not form, that is, one or more
 	of the \co{exists} clause's \co{1:r2=2}, \co{2:r2=2}, or \co{3:r1=2}
 	is false.
+
+\fi
+
 \end{enumerate}
+
+어느 쪽이든, \co{exists} 절은 발동될 수 없는데, 이 리트머스 테스트가 악명높은
+로드에서 스토어로의 연결을 \co{P3()} 와 \co{P0()} 사이에 가지고 있음에도
+그렇습니다.
+그러나 release-acquire 연결은
+\cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)} 에 보인 것처럼
+하나의 로드에서 스토어로의 연결만을 가질 수 있음을 결코 잊지 마십시오.
+
+\iffalse
 
 Either way, the \co{exists} clause cannot trigger, despite this litmus
 test containing a notorious load-to-store link between
@@ -4333,11 +4399,27 @@ But never forget that release-acquire chains can tolerate only one
 load-to-store link, as was seen in
 \cref{lst:memorder:W+RWC Litmus Test With Release (No Ordering)}.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-Z6.2+o-r+a-r+a-r+a-o@whole.fcv}
 \caption{Long Z6.2 Release-Acquire Chain}
 \label{lst:memorder:Long Z6.2 Release-Acquire Chain}
 \end{listing}
+
+Release-acquire 연결은 또한
+\cref{lst:memorder:Long Z6.2 Release-Acquire Chain}
+(\path{C-Z6.2+o-r+a-r+a-r+a-o.litmus}) 에 보인 것처럼 하나의 스토어에서
+스토어로의 단계 하나를 허용할 수 있습니다.
+\begin{fcvref}[ln:formal:C-Z6.2+o-r+a-r+a-r+a-o:whole]
+앞의 예에서와 같이, \co{smp_store_release()} 의 cumulativity 가 release-acquire
+연결이 임시적 본성과 결합되어 \clnref{exists} 의 \co{exists} 절이 발동되는 것을
+막습니다.
+하지만 주의하세요: 두번째 스토어에서 스토어로의 단계를 더하는 것은 연관된
+업데이트된 \co{exists} 절이 발동되는 걸 허가할 수 있습니다.
+\end{fcvref}
+
+\iffalse
 
 Release-acquire chains can also tolerate a single store-to-store step,
 as shown in
@@ -4351,6 +4433,8 @@ But beware: Adding a second store-to-store step would allow the correspondingly
 updated \co{exists} clause to trigger.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-Z6.2+o-r+a-o+o-mb-o@whole.fcv}
 \caption{Z6.0 Release-Acquire Chain (Ordering?)}
@@ -4359,12 +4443,38 @@ updated \co{exists} clause to trigger.
 
 \QuickQuizSeries{%
 \QuickQuizB{
+	\Cref{lst:memorder:Z6.0 Release-Acquire Chain (Ordering?)}
+	에 보인 것처럼 우리가 하나의 로드에서 스토어로의 연결과 하나의
+	스토어에서 스토어로의 링크와 함께 짧은 release-acquire 연결을 갖는다고
+	해봅시다.
+	스토어에서 로드로의 연결이 아닌 종류의 것은 하나씩만 있으므로
+	\co{exists} 는 발동될 수 없습니다, 맞죠?
+
+	\iffalse
+
 	Suppose we have a short release-acquire chain along with one
 	load-to-store link and one store-to-store link, like that shown in
 	\cref{lst:memorder:Z6.0 Release-Acquire Chain (Ordering?)}.
 	Given that there is only one of each type of non-store-to-load
 	link, the \co{exists} cannot trigger, right?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	틀렸습니다.
+	중요한 건 스토어에서 로드로의 것이 아닌 연결들의 갯수입니다.
+	단 하나의 스토어에서 로드로의 것이 아닌 연결이 있다면, release-acquire
+	연결은 \co{exists} 절이 발동되는 걸 막을 수 있습니다.
+	그러나, 두개 이상의 스토어에서 로드로의 것이 아닌 연결이 있다면 그게
+	스토어에서 스토어로든 로드에서 스토어로든 또는 어떤 조합이든간에 각
+	스토어에서 로드로의 것이 아닌 연결 사이에 완전한 배리어 (\co{smp_mb()}
+	또는 그보다 나은 것) 가 필요합니다.
+	\Cref{lst:memorder:Z6.0 Release-Acquire Chain (Ordering?)} 에서,
+	\co{exists} 절이 발동되는 것을 막기 위해선 \co{P0()} 또는 \co{P1()}
+	액세스 사이에 완전한 배리어를 추가할 것이 필요합니다.
+
+	\iffalse
+
 	Wrong.
 	It is the number of non-store-to-load links that matters.
 	If there is only one non-store-to-load link, a release-acquire
@@ -4378,13 +4488,35 @@ updated \co{exists} clause to trigger.
 	preventing the \co{exists} clause from triggering therefore requires
 	an additional full barrier between either \co{P0()}'s or
 	\co{P1()}'s accesses.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	스토어에서 로드로의 연결, 로드에서 스토어로의 연결, 그리고 스토어에서
+	스토어로의 연결이 있습니다.
+	하지만 로드에서 로드로의 연결은 어떻습니까?
+
+	\iffalse
+
 	There are store-to-load links, load-to-store links, and
 	store-to-store links.
 	But what about load-to-load links?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	로드에서 로드로의 연결이라는 개념의 문제는 그 두개의 같은 변수로부터의
+	로드가 같은 값을 반환한다면, 그것들 사이의 순서를 파악할 방법이 없다는
+	겁니다.
+	그것들의 순서를 파악할 유일한 방법은 그것들이 다른 값을 반환했을 때로,
+	그 사이에 중간의 스토어가 있었을 때입니다.
+	그리고 그 중간의 스토어는 로드에서 로드로의 연결이 아니라 로드에서
+	스토어로의 연결 뒤에 스토어에서 로드로의 링크가 있었음을 의미합니다.
+
+	\iffalse
+
 	The problem with the concept of load-to-load links is that
 	if the two loads from the same variable return the same
 	value, there is no way to determine their ordering.
@@ -4394,12 +4526,22 @@ updated \co{exists} clause to trigger.
 	And that intervening store means that there is no load-to-load
 	link, but rather a load-to-store link followed by a
 	store-to-load link.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+요약하자면, 올바르게 구성된 release-acquire 연결은 더 복잡한 메모리 순서 규약의
+상당히 반직관적인 바다에 의해 둘러싸인 직관적 행복의 평화로운 섬을 형성합니다.
+
+\iffalse
 
 In short, properly constructed release-acquire chains form a peaceful
 island of intuitive bliss surrounded by a strongly counter-intuitive
 sea of more complex memory-ordering constraints.
+
+\fi
 
 % @@@ Exercises?
 % @@@ Hardware details from Appendix?
