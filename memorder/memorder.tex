@@ -4155,6 +4155,15 @@ But sometimes time really is on our side.  Read on!
 \label{fig:memorder:Store-to-Load is Temporal}
 \end{figure}
 
+\Cref{fig:memorder:Store-to-Load is Temporal} 에 보인 것처럼, 사용자에게 보이는
+예측이 없는 플랫폼에서 로드가 특정 스토어로부터의 값을 리턴하면 빛의 유한한
+속도와 현대 컴퓨팅 시스템의 크기 존재 덕분에 그 스토어는 로드가 행해진 것보다
+이른 시간에 수행되었어야만 합니다.
+이는 주의 깊게 짜여진 프로그램은 시간의 흐름 자체를 메모리 순서 오퍼레이션으로
+사용하여 의존할 수 있음을 의미합니다.
+
+\iffalse
+
 As shown in
 \cref{fig:memorder:Store-to-Load is Temporal},
 on platforms without user-visible speculation, if a load returns the value
@@ -4164,11 +4173,30 @@ to have executed at an earlier time than did the load.
 This means that carefully constructed programs can rely on the
 passage of time itself as an memory-ordering operation.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-LB+a-o+o-data-o+o-data-o@whole.fcv}
 \caption{LB Litmus Test With One Acquire}
 \label{lst:memorder:LB Litmus Test With One Acquire}
 \end{listing}
+
+물론, 스토어에서 로드로의 연결 외에는 아무것도 없는
+page~\pageref{lst:memorder:Load-Buffering Litmus Test (No Ordering)} 의
+\cref{lst:memorder:Load-Buffering Litmus Test (No Ordering)}
+에서 보이는 것처럼 시간의 흐름 그자체만으로는 충분치 않은데, 이는 어떤 순서도
+제공하지 않아서 여전히 \co{exists} 절을 발동시킬 수 있기 때문입니다.
+그러나, 각 쓰레드가 가장 약한 순서만 제공할 때라도 \co{exists} 절은 발동될 수
+없습니다.
+예를 들어,
+\cref{lst:memorder:LB Litmus Test With One Acquire}
+(\path{C-LB+a-o+o-data-o+o-data-o.litmus})
+는 \co{P0()} 가 \co{smp_load_acquire()} 로 순서잡히고 \co{P1()} 과 \co{P2()} 가
+모두 데이터 종속성으로 순서잡힌 걸 보입니다.
+\Cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 의 가장 위에 보인
+것과 비슷한 이 순서 규칙들은 \co{exists} 절이 발동되는 걸 막기 충분합니다.
+
+\iffalse
 
 Of course, just the passage of time by itself is not enough, as
 was seen in
@@ -4188,15 +4216,35 @@ These orderings, which are close to the top of
 \cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet},
 suffice to prevent the \co{exists} clause from triggering.
 
+\fi
+
 \QuickQuiz{
+	\Cref{lst:memorder:LB Litmus Test With One Acquire}
+	에 보인 것과 같은 종속성 \emph{만을} 사용하는 리트머스 테스트를 만들 수
+	있습니까?
+
+	\iffalse
+
 	Can you construct a litmus test like that in
 	\cref{lst:memorder:LB Litmus Test With One Acquire}
 	that uses \emph{only} dependencies?
+
+	\fi
+
 }\QuickQuizAnswer{
+	\Cref{lst:memorder:LB Litmus Test With No Acquires}
+	는 무의미하지만 매우 실제적인 예입니다.
+	더 유용한 (그러나 여전히 실제적인) 리트머스 테스트를 만드는 건 독자
+	여러분의 몫으로 남겨둡니다.
+
+	\iffalse
+
 	\Cref{lst:memorder:LB Litmus Test With No Acquires}
 	shows a somewhat nonsensical but very real example.
 	Creating a more useful (but still real) litmus test is left
 	as an exercise for the reader.
+
+	\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-LB+o-data-o+o-data-o+o-data-o@whole.fcv}
@@ -4205,8 +4253,15 @@ suffice to prevent the \co{exists} clause from triggering.
 \end{listing}
 }\QuickQuizEnd
 
+메모리 액세스를 순서잡기 위한 더 중요한 시간의 사용은 다음 섹션에서
+다루어집니다.
+
+\iffalse
+
 An important use of time for ordering memory accesses is covered in the
 next section.
+
+\fi
 
 \subsubsection{Release-Acquire Chains}
 \label{sec:memorder:Release-Acquire Chains}
