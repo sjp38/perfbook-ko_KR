@@ -4842,11 +4842,39 @@ your compiler from breaking your dependencies.
 \fi
 
 \subsubsection{Give your dependency chain a good start}
+여러분의 종속성 연결을 시작하는 로드는 적절한 순서를 지켜야 하는데, 예를 들면
+\co{rcu_dereference()} 나 \co{READ_ONCE()} 를 사용하는 겁니다.
+이 규칙을 지키는데 실패하면 심각한 부작용이 있을 수 있습니다:
+
+\iffalse
+
 The load that heads your dependency chain must use proper
 ordering, for example \co{rcu_dereference()} or \co{READ_ONCE()}.
 Failure to follow this rule can have serious side effects:
 
+\fi
+
 \begin{enumerate}
+\item	\Cref{sec:memorder:Alpha} 에서 이야기 되었듯, DEC Alpha 에서, 종속적
+	로드는 종속성 연결을 시작하는 로드에 대해 순서잡히지 않을수도 있습니다.
+\item	종속성 연결을 시작하는 로드가 C11 non-volatile
+	\co{memory_order_relaxed} 로드라면, 컴파일러는 그 로드를 제거할 수
+	있는데, 예를 들면 과거에 로드된 값을 사용하는 겁니다.
+\item	종속성 연결을 시작하는 로드가 평범한 로드라면, 컴파일러는 이 로드를
+	제거할 수 있는데, 앞에서와 마찬가지로 과거에 로드된 값을 사용하는
+	식입니다.
+	더 나쁜 것이, 로드를 한번이 아니라 두번 행할 수 있어서, 여러분의 코드의
+	다른 부분이 다른 값을 보게 할 수 있습니다---그리고 컴파일러는 정말로 이
+	일을 하는데, 특히 레지스터가 부족할 때 그렇습니다.
+\item	종속성 연결의 시작에서 로드된 값은 포인터여야만 합니다.
+	이론상으로는, 그렇습니다, 여러분은 정수형을 로드할 수 있는데, 아마도
+	배열 인덱스로 이를 사용하기 위해서일 겁니다.
+	현실에서는, 컴파일러는 정수형에 대해 너무 많은 걸 알아서, 여러분의
+	종속성 연결을 깨부실 너무 많은 기회를 갖고
+	있습니다~\cite{PaulEMcKennneyConsumeP0190R4}.
+
+\iffalse
+
 \item	On DEC Alpha, a dependent load might not be ordered with
 	the load heading the dependency chain, as described in
 	\cref{sec:memorder:Alpha}.
@@ -4868,6 +4896,9 @@ Failure to follow this rule can have serious side effects:
 	In practice, the compiler knows too much about integers,
 	and thus has way too many opportunities to break your
 	dependency chain~\cite{PaulEMcKennneyConsumeP0190R4}.
+
+\fi
+
 \end{enumerate}
 
 \subsubsection{Avoid arithmetic dependency breakage}
