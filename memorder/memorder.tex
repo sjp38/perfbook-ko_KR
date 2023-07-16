@@ -4599,6 +4599,26 @@ describes how to protect those delicate control dependencies.
 \subsection{Memory-Reference Restrictions}
 \label{sec:memorder:Memory-Reference Restrictions}
 
+\Cref{sec:toolsoftrade:Accessing Shared Variables} 에서 이야기 되었듯, 별달리
+이야기 되지 않는다면 컴파일러는 그 코드가 접근하는 변수에 다른 것들은 영향을
+끼치지 않는다고 가정합니다.
+더 나아가서, 이 가정은 단순한 설계 오류가 아니라 여러 표준에서 소중히 간직되는
+것입니다.\footnote{
+	또는 어쩌면 이는 표준 설계 오류입니다.}
+다음 섹션에 대한 준비로 이를 요약해 둘 가치가 있습니다.
+
+C-언어에서의 \qco{r1 = a} 또는 \qco{b = 1} 과 같은 할당문으로 만들어지는 평범한
+액세스는
+\cref{sec:toolsoftrade:Shared-Variable Shenanigans} 에서 설명한 공유 변수에
+대한 실수입니다.
+이런 실수를 막는 방법들은
+\cpageref{sec:toolsoftrade:A Volatile Solution}
+에서 시작하는
+\crefrange{sec:toolsoftrade:A Volatile Solution}{sec:toolsoftrade:Avoiding Data Races}
+에 설명되어 있습니다:
+
+\iffalse
+
 As noted in \cref{sec:toolsoftrade:Accessing Shared Variables},
 unless told otherwise, compilers assume that nothing else
 is affecting the variables that the code is accessing.
@@ -4617,7 +4637,30 @@ Ways of avoiding these shenanigans are described in
 starting on
 \cpageref{sec:toolsoftrade:A Volatile Solution}:
 
+\fi
+
 \begin{enumerate}
+\item	평범한 액세스는 쪼개질 수 있는데, 예를 들어 컴파일러는 8 바이트
+	포인터를 한번에 한 바이트씩 액세스할 수 있습니다.
+	정렬된 기계 크기 액세스를 쪼개는 것은 \co{READ_ONCE()} 와
+	\co{WRITE_ONCE()} 를 사용해 막아질 수 있습니다.
+\item	평범한 로드는 융합될 수 있는데, 예를 들어 같은 객체로부터의 앞선 로드의
+	결과가 여전히 기계 레지스터에 있다면, 컴파일러는 이를 메모리에서 다시
+	로드하는 대신 이 레지스터 내의 값을 재사용하는 식으로 최적화를 할 수도
+	있습니다.
+	로드 융합은 \co{READ_ONCE()} 를 사용하거나 \co{barrier()},
+	\co{smp_rmb()}, 또는
+	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+	에서 보인 다른 방법들을 이용해 순서를 강제함으로써 방지될 수 있습니다.
+\item	평범한 스토어는 융합될 수 있어서 같은 변수로의 뒤따른 스토어가 있다면
+	앞의 스토어는 완전히 제거될 수 있습니다.
+	스토어 융합은 \co{WRITE_ONCE()} 를 사용하거나 \co{barrier()},
+	\co{smp_wmb()}, 또는
+	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+	에서 보인 다른 방법들을 이용해 순서를 강제함으로써 방지될 수 있습니다.
+
+\iffalse
+
 \item	Plain accesses can tear, for example, the compiler could choose
 	to access an eight-byte pointer one byte at a time.
 	Tearing of aligned machine-sized accesses can be prevented by
@@ -4636,6 +4679,24 @@ starting on
 	enforcing ordering between the two stores using \co{barrier()},
 	\co{smp_wmb()}, and other means shown in
 	\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}.
+
+\fi
+
+\item	평범한 액세스는 현대의 최적화 기능을 갖춘 컴파일러에 의해 놀라운
+	방법으로 재배치될 수 있습니다.
+	이 재배치는 앞에서 설명한 방법으로 순서를 강제해 막을 수 있습니다.
+\item	평범한 로드는 만들어질 수 있는데, 예를 들어 레지스터 부족은 컴파일러가
+	앞서 로드된 값을 레지스터에서 지우고 나중에 다시 로드하게 만들 수
+	있습니다.
+	만들어진 로드는 \co{READ_ONCE()} 를 사용하거나 해당 로드와 뒤따르는 그
+	변수의 값 사이에 \co{barrier()} 를 사용해서 앞에 설명한 방법들로 순서를
+	강제해 막을 수 있습니다.
+\item	스토어는 평범한 스토어 앞에 만들어질 수 있는데, 예를 들어 써질 위치를
+	임시 저장소로 사용하는 겁니다.
+	이는 \co{WRITE_ONCE()} 의 사용으로 방지할 수 있습니다.
+
+\iffalse
+
 \item	Plain accesses can be reordered in surprising ways by modern
 	optimizing compilers.
 	This reordering can be prevented by enforcing ordering as
@@ -4649,18 +4710,60 @@ starting on
 \item	Stores can be invented before a plain store, for example, by
 	using the stored-to location as temporary storage.
 	This can be prevented by use of \co{WRITE_ONCE()}.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	컴파일러가 스토어를 만들어내는 걸 막기 위해 \co{barrier()} 호출을
+	평범한 스토어 직전에 위치시키는 건 어떤가요?
+
+	\iffalse
+
 	Why not place a \co{barrier()} call immediately before
 	a plain store to prevent the compiler from inventing stores?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그건 동작하지 않을 겁니다.
+	컴파일러가 \co{barrier()} 앞에 스토어를 만들어내는 건 막겠지만,
+	\co{barrier()} 와 평범한 스토어 사이에 스토어를 만들어내는 건 막지
+	않습니다.
+
+	\iffalse
+
 	Because it would not work.
 	Although the compiler would be prevented from inventing a
 	store prior to the \co{barrier()}, nothing would prevent
 	it from inventing a store between that \co{barrier()} and
 	the plain store.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 모든 공유 메모리 실수는
+\cref{sec:toolsoftrade:Avoiding Data Races} 에서 설명한 것처럼 평범한 액세스
+사이의 데이터 경주를 막음으로써 막아질 수 있습니다.
+어쨌건, 데이터 경주가 없다면 앞서 이야기된 모든 컴파일러 최적화는 완전
+안전합니다.
+그러나 데이터 경주를 포함하는 코드에서 이 리스트는 컴파일러 최적화는 갈수록
+적극적이 될 것이기 때문에 별다른 알림 없이 바뀔 수 있습니다.
+
+요약해서, \co{READ_ONCE()}, \co{WRITE_ONCE()}, \co{barrier()}, \co{volatile},
+그 외에 page~\pageref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet} 의
+\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+에서 이야기된 다른 기능들은 컴파일러가 여러분의 병렬 알고리즘을 존재치 않게
+최적화 해버리는 걸 막는 가치있는 도구들입니다.
+컴파일러는 로드와 스토어 쪼개기를 막는 다른 메커니즘도 지원하기 시작했는데,
+예를 들면 \co{memory_order_relaxed} 어토믹 로드와 스토어인데, 그러나 여전히
+작업이 필요합니다~\cite{JonathanCorbet2016C11atomics}.
+또한, 컴파일러 이슈 외에도 \co{volatile} 은 C11 어토믹 액세스를 포함한 액세스의
+합침과 만들어냄을 막기 위해 여전히 필요합니다.
+
+\iffalse
 
 Please note that all of these shared-memory shenanigans can instead be
 avoided by avoiding data races on plain accesses, as described in
@@ -4685,6 +4788,22 @@ needed~\cite{JonathanCorbet2016C11atomics}.
 In addition, compiler issues aside, \co{volatile} is still needed
 to avoid fusing and invention of accesses, including C11 atomic accesses.
 
+\fi
+
+\co{READ_ONCE()} 와 \co{WRITE_ONCE()} 를 과하게 사용하게 될 수 있음을
+알아두십시오.
+예를 들어, 여러분이 특정 변수가 변하는 걸 막았다면 (그 변수로의 모든 업데이트를
+락으로 보호하는 식으로), \co{READ_ONCE()} 를 사용할 이유가 없습니다.
+비슷하게, 다른 CPU 나 쓰레드가 특정 변수를 읽는 것을 막았다면 (그 변수를 다른
+CPU 나 쓰레드가 그걸 액세스 하기 전에 최적화 한다거나 하는 식으로),
+\co{WRITE_ONCE()} 를 사용할 이유가 없습니다.
+그러나, 제 경험상 개발자들은 그들이 생각하는 것보다 더 자주 \co{READ_ONCE()} 와
+\co{WRITE_ONCE()} 를 사용해야 하며, 불필요한 사용으로 인한 오버헤드는 매우
+낮습니다.
+반대로, 필요한 곳에 그것을 사용하지 않음에 따른 불이익은 매우 클 수 있습니다.
+
+\iffalse
+
 Please note that, it is possible to overdo use of \co{READ_ONCE()} and
 \co{WRITE_ONCE()}.
 For example, if you have prevented a given variable from changing
@@ -4698,6 +4817,8 @@ However, in my experience, developers need to use things like
 \co{READ_ONCE()} and \co{WRITE_ONCE()} more often than they think that
 they do, and the overhead of unnecessary uses is quite low.
 In contrast, the penalty for failing to use them when needed can be quite high.
+
+\fi
 
 \subsection{Address- and Data-Dependency Difficulties}
 \label{sec:memorder:Address- and Data-Dependency Difficulties}
