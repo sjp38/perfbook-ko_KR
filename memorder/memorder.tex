@@ -4902,6 +4902,14 @@ Failure to follow this rule can have serious side effects:
 \end{enumerate}
 
 \subsubsection{Avoid arithmetic dependency breakage}
+여러분의 종속성 연결 내에서 포인터에 대해 어떤 산술 오퍼레이션을 행하는게
+괜찮긴 하지만, 컴파일러에게 너무 많은 정보를 주는 건 조심해서 막아야 합니다.
+어쨌건, 컴파일러가 이 포인터의 정확한 값을 판단하기 충분하게 학습된다면,
+컴파일러는 그 포인터 자체가 아니라 그 정확한 값을 대신 사용할 수 있습니다.
+컴파일러가 그렇게 되자마자 종속성은 깨지고 모든 순서는 사라집니다.
+
+\iffalse
+
 Although it is just fine to do some arithmetic operations on a pointer in
 your dependency chain, you need to be careful to avoid giving the
 compiler too much information.
@@ -4909,6 +4917,8 @@ After all, if the compiler learns enough to determine the exact value
 of the pointer, it can use that exact value instead of the pointer itself.
 As soon as the compiler does that, the dependency is broken and all
 ordering is lost.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:memorder:Breakable Dependencies With Comparisons]
@@ -4948,6 +4958,18 @@ if (p == &reserve_int) {
 \end{listing}
 
 \begin{enumerate}
+\item	포인터로부터 오프셋을 계산하는건 허용되지만 이 오프셋은 완전히 취소되지
+	않아야만 합니다.
+	예를 들어, 어떤 \co{char} 포인터 \co{cp} 가 있다면,
+	\co{cp-(uintptr_t)cp} 는 오프셋을 취소시키고 컴파일러가 이 종속성
+	연결을 깨게 할 수 있습니다.
+	다른 한편, 오프셋 값을 서로와 함께 취소시키는 건 완전히 안전하고
+	합법적입니다.
+	예를 들어, \co{a} 와 \co{b} 가 동일하다면 \co{cp+a-b} 는 동일 함수로,
+	종속성을 유지합니다.
+
+\iffalse
+
 \item	Although it is permissible to compute offsets from a
 	pointer, these offsets must not result in total cancellation.
 	For example, given a \co{char} pointer \co{cp},
@@ -4957,6 +4979,32 @@ if (p == &reserve_int) {
 	is perfectly safe and legal.
 	For example, if \co{a} and \co{b} are equal, \co{cp+a-b}
 	is an identity function, including preserving the dependency.
+
+\fi
+
+\item	비교는 종속성을 깰 수 있습니다.
+	\Cref{lst:memorder:Breakable Dependencies With Comparisons}
+	이 이게 어떻게 일어날 수 있는지 보입니다.
+	여기서 전역 포인터 \co{gp} 는 동적으로 할당된 정수를 가리키지만
+	메모리가 부족하면 \co{reserve_int} 변수를 가리킬 수도 있습니다.
+	\begin{fcvref}[ln:memorder:Breakable Dependencies With Comparisons]
+	이 \co{reserve_int} 의 경우는 이 리스트의 \clnref{cmp,handle} 에서
+	보이듯 특수한 처리가 필요할 수도 있습니다.
+	\end{fcvref}
+        \begin{fcvref}[ln:memorder:Broken Dependencies With Comparisons]
+	하지만 컴파일러는 이 코드를
+	\cref{lst:memorder:Broken Dependencies With Comparisons}
+	에 보인 합리적인 형태로 변환할 수도 있는데, 절대 주소를 갖는 명령이
+	레지스터를 통해 제공되는 주소를 사용하는 명령보다 빠른 시스템에서
+	그렇습니다.
+	그러나, \clnref{deref1} 와 \clnref{deref2} 의 역참조 사이에는 명확한
+	순서 규칙이 없습니다.
+	이는 단순한 하나의 예일 뿐임을 알아 두십시오: 비교를 통해 종속성 연결을
+	깨는 수많은 방법이 존재합니다.
+	\end{fcvref}
+
+\iffalse
+
 \item	Comparisons can break dependencies.
 	\cref{lst:memorder:Breakable Dependencies With Comparisons}
 	shows how this can happen.
@@ -4979,6 +5027,9 @@ if (p == &reserve_int) {
 	Please note that this is simply an example: There are a great
 	many other ways to break dependency chains with comparisons.
 	\end{fcvref}
+
+\fi
+
 \end{enumerate}
 
 \QuickQuizSeries{%
