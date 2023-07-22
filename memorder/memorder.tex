@@ -5191,10 +5191,32 @@ form of dependency breakage.
 \fi
 
 \subsubsection{Safe comparison of dependent pointers}
+종속된 포인터들을 안전하게 비교하는 방법들이 있습니다:
+
+\iffalse
+
 It turns out that there are several safe ways to compare dependent
 pointers:
 
+\fi
+
 \begin{enumerate}
+\item	\co{NULL} 포인터에 대한 비교.
+	이 경우, 컴파일러가 알 수 있는 모든 것은 포인터가 \co{NULL} 이라는
+	것 뿐으로, 어차피 여러분은 이를 역참조할 수 없습니다.
+\item	종속된 포인터가 비교 전이든 후든 결코 역참조되지 않는 경우.
+\item	종속된 포인터가 매우 오래전에 변경된 객체를 참조하는 포인터와 비교되는
+	경우로, 여기서 ``매우 오래 전'' 이라 하기 무조건적으로 안전한 값은
+	``컴파일 시점'' 뿐.
+	핵심은 주소나 데이터 종속성 이외의 무언가가 순서를 보장할 수 있다는 것.
+\item	각각 적절한 종속성을 갖는 두개의 포인터 사이의 비교.
+	예를 들어, 각자 락을 포함하는 데이터 구조로의 종속성을 갖는 한쌍의
+	포인터가 있고 주소 순서대로 락을 잡아서 데드락을 회피하고자 하는 경우.
+\item	비교가 같지 않고, 컴파일러는 종속성을 이끄는 포인터의 값을 추측할
+	정보를 갖고 있지 않은 경우.
+
+\iffalse
+
 \item	Comparisons against the \co{NULL} pointer.
 	In this case, all the compiler can learn is that the pointer
 	is \co{NULL}, in which case you are not allowed to
@@ -5215,6 +5237,9 @@ pointers:
 \item	The comparison is not-equal, and the compiler does not have
 	enough other information to deduce the value of the
 	pointer carrying the dependency.
+
+\fi
+
 \end{enumerate}
 
 \begin{listing}[tbp]
@@ -5265,6 +5290,34 @@ void reader(void)		\lnlbl[read:b]
 \label{lst:memorder:Broken Dependencies With Pointer Comparisons}
 \end{listing}
 
+포인터 비교는 상당히 복잡할 수 있으며, 따라서
+\cref{lst:memorder:Broken Dependencies With Pointer Comparisons}
+의 예를 따라가보는 게 좋겠습니다.
+\begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons]
+이 예는 \clnrefrange{foo:b}{foo:e} 의 간단한 \co{struct foo} 와
+\clnref{gp1,gp2} 에 각각 보인 두개의 전역 포인터 \co{gp1} 과 \co{gp2} 를
+사용합니다.
+이 예는 두 쓰레드를 사용하는데, \clnrefrange{upd:b}{upd:e} 의 \co{updater()} 와
+\clnrefrange{read:b}{read:e} 의 \co{reader()} 입니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons:upd]
+\co{updater()} 쓰레드는 \clnref{alloc} 에서 메모리를 할당하고 할당에 실패하면
+\clnref{bug} 에서 불만을 표합니다.
+\Clnrefrange{init:a}{init:c} 는 새로 할당된 구조체를 초기화 하며, 이어서
+\clnref{assign1} 에서 이 포인터를 \co{gp1} 에 할당합니다.
+\Clnref{upd:b,upd:c} 는 이어서 이 구조체의 필드 중 두개를 업데이트 하는데,
+\clnref{assign1} 이 그 필드들을 읽기 쓰레드에게 보이게 한 후입니다.
+읽기 쓰레드에게 보이는 필드를 비동기적으로 업데이트 하는 것은 종종 버그임을
+알아두세요.
+그냥 이를 하는 합리적 사용처가 있지만, 그런 경우는 이 예에서보다 깊은 주의가
+필요합니다.
+
+마지막으로 \clnref{assign2} 는 이 포인터를 \co{gp2} 에 할당합니다.
+\end{fcvref}
+
+\iffalse
+
 Pointer comparisons can be quite tricky, and so it is well worth working
 through the example shown in
 \cref{lst:memorder:Broken Dependencies With Pointer Comparisons}.
@@ -5291,6 +5344,27 @@ require more care than is exercised in this example.
 Finally, \clnref{assign2} assigns the pointer to \co{gp2}.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons:read]
+\co{reader()} 쓰레드는 먼저 \co{gp2} 를 \clnref{gp2} 에서 가져오고,
+\clnref{nulchk,nulret} 에서 이를 \co{NULL} 과 비교한 후 동일하면 리턴합니다.
+\Clnref{pb} 는 \co{->b} 필드를 가져오고 \clnref{gp2} 은 \co{gp2} 을 가져옵니다.
+\Clnref{equ} 가 이 \clnref{gp2,gp2} 에서 가져온 포인터가 동일하다고 보게 되면,
+\clnref{pc} 는 \co{p->c} 를 가져옵니다.
+\Clnref{pc} 는 \clnref{gp2} 에서 가져온 포인터 \co{p} 를 사용하지 \clnref{gp1}
+에서 가져온 포인터 \co{q} 를 사용하지 않음에 유의하세요.
+
+그러나 이 차이는 문제가 되지 않을 수도 있습니다.
+\Clnref{equ} 에서의 동일성 검사는 컴파일러가 (옳지 않게도) 두 포인터가
+동일하다고 결론내리게 할 수 있습니다, 실제로는 이것들이 다른 종속성을 가짐에도
+불구하고 말입니다.
+이는 컴파일러가 \clnref{pc} 는 \co{r2 - q->c} 로 변환하게 할수도 있는데, 이는
+예상된 값 144 가 아닌 값 44 를 로드되게 할 수 있습니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons:read]
 The \co{reader()} thread first fetches \co{gp2} on \clnref{gp2}, with
 \clnref{nulchk,nulret} checking for \co{NULL} and returning if so.
@@ -5310,12 +5384,39 @@ be \co{r2 = q->c}, which might well cause the value 44 to be loaded
 instead of the expected value 144.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons:read]
+	하지만 \clnref{equ} 에서의 조건은 \clnref{pc} 를 \clnref{gp1} 다음으로
+	순서짓는 제어 종속성을 제공하지 않나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons:read]
 	But doesn't the condition in \clnref{equ} supply a control dependency
 	that would keep \clnref{pc} ordered after \clnref{gp1}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	\begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons:read]
+	맞아요, 하지만 아닙니다.
+	맞아요, 제어 종속성이 존재합니다, 그러나 제어 종속성은 나중의 로드가
+	아니라 스토어만을 순서짓습니다.
+	여러분이 정말 순서를필요로 한다면 \clnref{equ,pc} 사이에 \co{smp_rmb()}
+	를 둘 수 있습니다.
+	또는 더 낫게는 \co{update()} 가 그 구조체들을 재사용하는 대신 할당하게
+	합니다.
+	더 많은 정보를 위해선
+	\cref{sec:memorder:Control-Dependency Calamities}
+	를 참고하세요.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:memorder:Broken Dependencies With Pointer Comparisons:read]
 	Yes, but no.
 	Yes, there is a control dependency, but control dependencies do
@@ -5327,11 +5428,21 @@ instead of the expected value 144.
 	For more information, see
 	\cref{sec:memorder:Control-Dependency Calamities}.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEnd
+
+요약하자면, 여러분의 소스코드의 종속성 연결이 여전히 컴파일러에 의해 생성된
+어셈블리 코드에서도 종속성 연결이 되기 위해선 큰 주의가 필요합니다.
+
+\iffalse
 
 In short, great care is required to ensure that dependency
 chains in your source code are still dependency chains in the
 compiler-generated assembly code.
+
+\fi
 
 \subsection{Control-Dependency Calamities}
 \label{sec:memorder:Control-Dependency Calamities}
