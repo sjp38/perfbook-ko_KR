@@ -5447,6 +5447,17 @@ compiler-generated assembly code.
 \subsection{Control-Dependency Calamities}
 \label{sec:memorder:Control-Dependency Calamities}
 
+제어 종속성은 특히 복잡한데, 현재의 컴파일러는 그걸 이해하지 못하고 쉽게 그걸
+깨버릴 수 있기 때문입니다.
+이 섹션의 규칙과 예제들은 여러분이 여러분의 컴파일러가 이를 무시하고 여러분의
+코드를 깨부수는 것을 막는 것을 돕고자 작성되었습니다.
+
+로드-로드 제어 종속성은 단순한 데이터 종속성 배리어가 아니라 완전한 읽기 메모리
+배리어를 필요로 합니다.
+다음 코드를 보세요:
+
+\iffalse
+
 Control dependencies are especially tricky because current compilers
 do not understand them and can easily break them.
 The rules and examples in this section are intended to help you
@@ -5456,6 +5467,8 @@ A load-load control dependency requires a full read memory barrier,
 not simply a data dependency barrier.
 Consider the following bit of code:
 
+\fi
+
 \begin{VerbatimN}
 q = READ_ONCE(x);
 if (q) {
@@ -5464,11 +5477,20 @@ if (q) {
 }
 \end{VerbatimN}
 
+이는 뜻한 효과를 내지 못하는데, 실제 데이터 종속성이 존재하지 않으며 CPU 는 그
+결과를 먼저 예측해서 수행을 단축시킬 수 있는 제어 종속성을 가지고 있어서, 다른
+CPU 는 \co{y} 로부터의 로드를 \co{x} 로드 전에 일어난 것으로 볼 수 있습니다.
+그런 경우 정말로 필요한건 다음과 같습니다:
+
+\iffalse
+
 This will not have the desired effect because there is no actual data
 dependency, but rather a control dependency that the CPU may short-circuit
 by attempting to predict the outcome in advance, so that other CPUs see
 the load from~\co{y} as having happened before the load from~\co{x}.
 In such a case what's actually required is:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
@@ -5478,15 +5500,36 @@ if (q) {
 }
 \end{VerbatimN}
 
+그러나, 스토어는 예측되지 않습니다.
+이는 순서가 \emph{정말로} 로드-스토어 제어 종속성에는 다음 예와 같이 제공됨을
+뜻합니다:
+
+\iffalse
+
 However, stores are not speculated.
 This means that ordering \emph{is} provided for load-store control
 dependencies, as in the following example:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
 if (q)
 	WRITE_ONCE(y, 1);
 \end{VerbatimN}
+
+제어 종속성은 일반적으로 다른 종류의 순서규칙 오퍼레이션과 짝을 이룹니다.
+그러나, \co{READ_ONCE()} 도 \co{WRITE_ONCE()} 도 선택사항이 아님을 알아두세요!
+\co{READ_ONCE()} 가 없다면 컴파일러는 \co{x} 로드를 다른 \co{x} 로드와 융합시킬
+수도 있습니다.
+\co{WRITE_ONCE()} 가 없다면 컴파일러는 \co{y} 로의 스토어를 다른 \co{y} 로의
+스토어와 융합시킬 수도 있습니다.
+둘 다 상당히 반직관적인 순서 효과를 낼 수 있습니다.
+
+더 나쁜 것이, 컴파일러가 (예를 들어) 변수~\co{x} 의 값이 항상 0이 아님을 증명할
+수 있다면, 원래의 예를 \qco{if} 문을 다음과 같이 제거할 권리를 갖습니다:
+
+\iffalse
 
 Control dependencies pair normally with other types of ordering operations.
 That said, please note that neither \co{READ_ONCE()} nor \co{WRITE_ONCE()}
@@ -5502,10 +5545,15 @@ variable~\co{x} is always non-zero, it would be well within its rights
 to optimize the original example by eliminating the \qco{if} statement
 as follows:
 
+\fi
+
 \begin{VerbatimN}
 q = READ_ONCE(x);
 WRITE_ONCE(y, 1); /* BUG: CPU can reorder!!! */
 \end{VerbatimN}
+
+다음과 같이 \qco{if} 문의 양 분기문의 동일한 스토어에 순서를 강제하고 싶을
+겁니다:
 
 It is tempting to try to enforce ordering on identical stores on both
 branches of the \qco{if} statement as follows:
@@ -5523,8 +5571,15 @@ if (q) {
 }
 \end{VerbatimN}
 
+불행히도, 현재의 컴파일러는 높은 최적화 단계에서는 이를 다음과 같이 변환할 수
+있습니다:
+
+\iffalse
+
 Unfortunately, current compilers will transform this as follows at high
 optimization levels:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
