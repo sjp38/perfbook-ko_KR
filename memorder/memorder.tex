@@ -5035,11 +5035,31 @@ if (p == &reserve_int) {
 \QuickQuizSeries{%
 \QuickQuizB{
 	\begin{fcvref}[ln:memorder:Breakable Dependencies With Comparisons]
+	\Cref{lst:memorder:Breakable Dependencies With Comparisons}
+	의 \clnref{cmp} 에서 \co{&reserve_int} 와 비교하기 전에 포인터를 그냥
+	역참조하지 않는 이유가 뭐죠?
+	\end{fcvref}
+
+	\iffalse
+
+	\begin{fcvref}[ln:memorder:Breakable Dependencies With Comparisons]
 	Why can't you simply dereference the pointer before comparing it
 	to \co{&reserve_int} on \clnref{cmp} of
 	\cref{lst:memorder:Breakable Dependencies With Comparisons}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerB{
+	첫째로, \co{do_something_with()} 전에 \co{handle_reserve()} 를 호출해야
+	합니다.
+
+	하지만 메모리 순서에 더 밀접하게는, 컴파일러는 비교를 역참조 전으로
+	옮길 권리를 가져서, 컴파일러가 하드웨어가 종속성을 표시해두는 변수
+	\co{p} 대신 \co{&reserve_int} 를 사용할 수 있습니다.
+
+	\iffalse
+
 	For first, it might be necessary to invoke
 	\co{handle_reserve()} before \co{do_something_with()}.
 
@@ -5048,13 +5068,25 @@ if (p == &reserve_int) {
 	which would allow the compiler to use \co{&reserve_int} instead
 	of the variable \co{p} that the hardware has tagged with
 	a dependency.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	하지만 두 포인터 변수를 비교하는건 안전합니다, 그렇죠?
+	어쨌건, 컴파일러는 두 변수의 값을 모르는데 그 비교에서 뭘 알 수
+	있겠습니까?
+
+	\iffalse
+
 	But it should be safe to compare two pointer variables,
 	right?  After all, the compiler doesn't know the value
 	of either, so how can it possibly learn anything from the
 	comparison?
+
+	\fi
+
 }\QuickQuizAnswerE{
 %
 \begin{listing}[tbp]
@@ -5096,6 +5128,27 @@ if (p == q) {
 \label{lst:memorder:Broken Dependencies With Non-Constant Comparisons}
 \end{listing}%
 %
+
+	불행히도, 컴파일러는 여러분의 종속성 연결을 부수기 충분할 만큼 많은 걸
+	알 수 있는데, 예를 들어
+	\cref{lst:memorder:Breakable Dependencies With Non-Constant Comparisons}
+	에 보인 것과 같습니다.
+	컴파일러는 이 코드를
+	\cref{lst:memorder:Broken Dependencies With Non-Constant Comparisons}
+	에 보인 것과 같이 변환할 권리를 가지며, \co{handle_equality()} 가
+	인라인화 되었으며 많은 레지스터를 필요로 한다면 레지스터 부족시에 이런
+	변화를 만들 수 있습니다.
+	\begin{fcvref}[ln:memorder:Broken Dependencies With Non-Constant Comparisons]
+	이 변화된 코드의 \clnref{q} 는 \co{q} 를 사용하는데, 이는 \co{p} 와
+	동일하지만 하드웨어에 의해 종속성을 가져오는 것으로 표시되지 않았을 수
+	있습니다.
+	따라서, 이 변화된 코드는 \clnref{q} 가 \clnref{p} 다음으로 순서잡힐
+	것을 보장하지 않습니다.\footnote{
+		이 예를 제공한 \ppl{Linus}{Torvalds} 에게 감사를 드립니다.}
+	\end{fcvref}
+
+	\iffalse
+
 	Unfortunately, the compiler really can learn enough to
 	break your dependency chain, for example, as shown in
 	\cref{lst:memorder:Breakable Dependencies With Non-Constant Comparisons}.
@@ -5112,8 +5165,19 @@ if (p == q) {
 	that \clnref{q} is ordered after \clnref{p}.\footnote{
 		Kudos to \ppl{Linus}{Torvalds} for providing this example.}
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+연속된 동일성 비교는 함께 취해졌을 경우 컴파일러에게 포인터의 정확한 값을
+판단하기 충분한, 따라서 종속성을 깰 수 있는 정보를 줄 수도 있음을 명심하십시오.
+더 나아가, 컴파일러는 하나의 동일성 비교로부터의 정보를 다른 정보와 결합해
+정확한 값을 알아낼 수 있어서 또다시 종속성을 깰 수 있습니다.
+배열의 원소로의 포인터는 특히 이 나중 부분의 종속성 깨짐에 취약합니다.
+
+\iffalse
 
 Note that a series of inequality comparisons might, when taken together,
 give the compiler enough information to determine the exact value of
@@ -5123,6 +5187,8 @@ even a single inequality comparison with other information to learn
 the exact value, again breaking the dependency.
 Pointers to elements in arrays are especially susceptible to this latter
 form of dependency breakage.
+
+\fi
 
 \subsubsection{Safe comparison of dependent pointers}
 It turns out that there are several safe ways to compare dependent
