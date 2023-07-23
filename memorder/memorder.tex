@@ -5591,12 +5591,23 @@ else
 	do_something_else();
 \end{VerbatimN}
 
+이제 \co{x} 로부터의 로드와 \co{y} 로의 스토어 사이에는 조건이 없어지며, 이는
+CPU 가 이들을 재배치할 권리를 가짐을 뜻합니다:
+그 조건은 분명 필요하며, 모든 컴파일러 최적화가 적용된 뒤에도 어셈블리 코드
+상에 존재해야만 합니다.
+따라서, 이 예에서 순서가 필요하다면, 여러분은 명시적으로 메모리 순서
+오퍼레이션을 추가해야 하는데, 예를 들면 release store 입니다:
+
+\iffalse
+
 Now there is no conditional between the load from~\co{x} and the store
 to~\co{y}, which means that the CPU is within its rights to reorder them:
 The conditional is absolutely required, and must be present in the
 assembly code even after all compiler optimizations have been applied.
 Therefore, if you need ordering in this example, you need explicit
 memory-ordering operations, for example, a release store:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
@@ -5609,6 +5620,14 @@ if (q) {
 }
 \end{VerbatimN}
 
+초기의 \co{READ_ONCE()} 는 컴파일러가 \co{x} 의 값을 추측하는 걸 막기 위해
+여전히 필요합니다.
+또한, 지역 변수 \co{q} 를 가지고 하는일에도 주의를 기울여야 하는데, 그러지
+않으면 컴파일러는 그 값을 추측하고 다시 필요한 조건을 없애버릴 수 있습니다.
+예를 들면:
+
+\iffalse
+
 The initial \co{READ_ONCE()} is still required to prevent the compiler from
 guessing the value of~\co{x}.
 In addition, you need to be careful what you do with the local variable~%
@@ -5616,6 +5635,8 @@ In addition, you need to be careful what you do with the local variable~%
 otherwise the compiler might be able to guess its value and again remove
 the needed conditional.
 For example:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
@@ -5628,15 +5649,32 @@ if (q % MAX) {
 }
 \end{VerbatimN}
 
+만약 \co{MAX} 가 1로 정의되어 있다면, 컴파일러는 \co{(q\%MAX)} 가 0과 같다는 걸
+알아서, 컴파일러는 앞의 코드를 다음과 같이 변환할 권리를 얻습니다:
+
+\iffalse
+
 If \co{MAX} is defined to be~1, then the compiler knows that \co{(q\%MAX)} is
 equal to zero, in which case the compiler is within its rights to
 transform the above code into the following:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
 WRITE_ONCE(y, 2);
 do_something_else();
 \end{VerbatimN}
+
+이 변환된 코드에서 CPU 는 \co{x} 로부터의 로드와 \co{y} 로의 스토어 사이에
+순서를 지켜야 할 필요가 없습니다.
+컴파일러를 제약하기 위해 \co{barrier()} 를 추가하고 싶겠지만 이는 도움이 되지
+않습니다.
+조건은 사라졌고 \co{barrier()} 는 이를 되돌리지 않습니다.
+따라서, 여러분이 이 순서에 기대고 있다면, 아마도 다음과 같이 \co{MAX} 가 1보다
+크다는 걸 보장해야 합니다:
+
+\iffalse
 
 Given this transformation, the CPU is not required to respect the ordering
 between the load from variable~\co{x} and the store to variable~\co{y}.
@@ -5645,6 +5683,8 @@ but this does not help.
 The conditional is gone, and the \co{barrier()} won't bring it back.
 Therefore, if you are relying on this ordering, you should make sure
 that \co{MAX} is greater than one, perhaps as follows:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
@@ -5658,6 +5698,15 @@ if (q % MAX) {
 }
 \end{VerbatimN}
 
+\co{y} 로의 스토어는 다름을 다시 주의하세요.
+이것들이 동일하다면, 앞에서 언급한 바와 같이 컴파일러는 이 스토어들을 \qco{if}
+문 바깥으로 가져올 수 있습니다.
+
+여러분은 또한 이진 회로 평가에 지나치게 기대는 걸 막아야 합니다.
+이 예를 생각해 보세요:
+
+\iffalse
+
 Please note once again that the stores to~\co{y} differ.
 If they were identical, as noted earlier, the compiler could pull this
 store outside of the \qco{if} statement.
@@ -5665,20 +5714,38 @@ store outside of the \qco{if} statement.
 You must also avoid excessive reliance on boolean short-circuit evaluation.
 Consider this example:
 
+\fi
+
 \begin{VerbatimN}
 q = READ_ONCE(x);
 if (q || 1 > 0)
 	WRITE_ONCE(y, 1);
 \end{VerbatimN}
 
+첫번째 조건은 두번째 조건이 항상 참인 관계로 거짓일 수 없으므로, 컴파일러는
+이를 다음과 같이 변환시켜 제어 종속성을 제거할 수 있습니다:
+
+\iffalse
+
 Because the first condition cannot fault and the second condition is
 always true, the compiler can transform this example as following,
 defeating control dependency:
+
+\fi
 
 \begin{VerbatimN}
 q = READ_ONCE(x);
 WRITE_ONCE(y, 1);
 \end{VerbatimN}
+
+이 예는 컴파일러가 여러분의 코드를 추측할 수 없게 보장할 필요를 강조합니다.
+더 일반적으로, \co{READ_ONCE()} 가 컴파일러에게 특정 로드를 위한 코드를 정말
+생성하게 강제하지만, 컴파일러가 그 값을 로드하게끔 강제하지는 않습니다.
+
+또한, 제어 종속성은 if 문의 then 절과 else 절에만 적용됩니다.
+특히, if 문을 뒤따르는 코드에는 적용되지 않을 수 있습니다.
+
+\iffalse
 
 This example underscores the need to ensure that the compiler cannot
 out-guess your code.
@@ -5691,6 +5758,8 @@ else-clause of the if-statement in question.
 In particular, it does
 not necessarily apply to code following the if-statement:
 
+\fi
+
 \begin{VerbatimN}
 q = READ_ONCE(x);
 if (q)
@@ -5700,6 +5769,13 @@ else
 WRITE_ONCE(z, 1);  /* BUG: No ordering. */
 \end{VerbatimN}
 
+컴파일러는 volatile 액세스를 재배치 할 수 없으며 조건 내의 \co{y} 로의 쓰기를
+재배치할 수도 없다고 주장하고 싶을 겁니다.
+불행히도 이 경우, 컴파일러는 \co{y} 로의 두개의 쓰기를 조건적 이동 명령으로
+변환해서 다음과 같은 수도-어셈블리어를 만들어낼 수 있습니다:
+
+\iffalse
+
 It is tempting to argue that there in fact is ordering because the
 compiler cannot reorder volatile accesses and also cannot reorder
 the writes to~\co{y} with the condition.
@@ -5707,6 +5783,8 @@ Unfortunately for this line
 of reasoning, the compiler might compile the two writes to~\co{y} as
 conditional-move instructions, as in this fanciful pseudo-assembly
 language:
+
+\fi
 
 \begin{VerbatimN}
 ld r1,x
@@ -5716,6 +5794,23 @@ cmov,eq r4,$2
 st r4,y
 st $1,z
 \end{VerbatimN}
+
+완화된 순서규칙의 CPU 는 \co{x} 로부터의 로드와 \co{z} 로의 스토어 사이에 어떤
+종속성도 갖지 않습니다.
+이 제어 종속성은 한쌍의 \co{cmov} 명령과 거기 종속된 스토어까지만 확장됩니다.
+요약하면, 제어 종속성은 해당 \qco{if} 의 \qco{then} 과 \qco{else} 에만 (이 두
+절에서 호출되는 함수 포함) 적용되지, \qco{if} 를 뒤따르는 코드까지는 아닙니다.
+
+마지막으로, 제어 종속성은 cumulativity 를 제공하지 \emph{않습니다}.\footnote{
+	Cumulativity 의 의미를 위해선
+	\cref{sec:memorder:Cumulativity} 를 참고하세요.}
+이는 두개의 연관된 리트머스 테스트, 즉 \co{x} 와 \co{y} 가 둘 다 0으로 초기화
+되는
+\cref{lst:memorder:LB Litmus Test With Control Dependency,%
+lst:memorder:WWC Litmus Test With Control Dependency (Cumulativity?)}
+를 통해 선보였습니다.
+
+\iffalse
 
 A weakly ordered CPU would have no dependency of any sort between the load
 from~\co{x} and the store to~\co{z}.
@@ -5734,11 +5829,24 @@ lst:memorder:WWC Litmus Test With Control Dependency (Cumulativity?)}
 with the initial values
 of~\co{x} and~\co{y} both being zero.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/litmus/C-LB+o-cgt-o+o-cgt-o@whole.fcv}
 \caption{LB Litmus Test With Control Dependency}
 \label{lst:memorder:LB Litmus Test With Control Dependency}
 \end{listing}
+
+\Cref{lst:memorder:LB Litmus Test With Control Dependency}
+(\path{C-LB+o-cgt-o+o-cgt-o.litmus})
+의 두개 쓰레드 예에서의 \co{exists} 절은 결코 발동되지 않을 겁니다.
+제어 종속성이 cumulativity 를 보장한다면 (사실은 보장하지 않음),
+\cref{lst:memorder:WWC Litmus Test With Control Dependency (Cumulativity?)}
+(\path{C-WWC+o-cgt-o+o-cgt-o+o.litmus})
+처럼 쓰레드를 하나 더 추가하는 것이 연관된 \co{exists} 절이 발동되지 않게끔
+보장할 겁니다.
+
+\iffalse
 
 The \co{exists} clause in the two-thread example of
 \cref{lst:memorder:LB Litmus Test With Control Dependency}
@@ -5750,11 +5858,21 @@ not), then adding a thread to the example as in
 (\path{C-WWC+o-cgt-o+o-cgt-o+o.litmus})
 would guarantee the related \co{exists} clause never to trigger.
 
+\fi
+
 \begin{listing}
 \input{CodeSamples/formal/litmus/C-WWC+o-cgt-o+o-cgt-o+o@whole.fcv}
 \caption{WWC Litmus Test With Control Dependency (Cumulativity?)}
 \label{lst:memorder:WWC Litmus Test With Control Dependency (Cumulativity?)}
 \end{listing}
+
+그러나 제어 종속성은 cumulativity 를 제공하지 \emph{않으므로}, 세개 쓰레드
+리트머스 테스트의 \co{exists} 절은 발동될 수 있습니다.
+세개 쓰레드 예가 순서를 제공해야 한다면, 여러분은 \co{P0()} 의 로드와 스토어
+사이, 즉 \qco{if} 문 직전 또는 직후에에 \co{smp_mb()} 를 추가해야 합니다.
+더 나아가서, 원래의 두개 쓰레드 예는 잘못되기 쉬우니 사용되지 않아야 합니다.
+
+\iffalse
 
 But because control dependencies do \emph{not} provide cumulativity, the
 \co{exists} clause in the three-thread litmus test can trigger.
@@ -5763,20 +5881,69 @@ If you need the three-thread example to provide ordering, you will need
 that is, just before or just after the \qco{if} statements.
 Furthermore, the original two-thread example is very fragile and should be avoided.
 
+\fi
+
 \QuickQuiz{
+	\cref{lst:memorder:WWC Litmus Test With Control Dependency (Cumulativity?)}
+	의 \co{P1()} 에 \co{smp_mb()} 를 대신 추가할 순 없나요?
+
+	\iffalse
+
 	Can't you instead add an \co{smp_mb()} to \co{P1()} in
 	\cref{lst:memorder:WWC Litmus Test With Control Dependency (Cumulativity?)}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	리눅스 커널 메모리 모델에서라면 안됩니다.
+	(시도해 보세요!)
+	그러나, 여러분은 대신 \co{P0()} 의 \co{WRITE_ONCE()} 를
+	일반적으로 \co{smp_mb()} 를 더하는 것보단 적은 오버헤드를 갖는
+	\co{smp_store_release()} 로 대체할 수 있습니다.
+
+	\iffalse
+
 	Not given the Linux kernel memory model.
 	(Try it!)
 	However, you can instead replace \co{P0()}'s
 	\co{WRITE_ONCE()} with \co{smp_store_release()},
 	which usually has less overhead than does adding an \co{smp_mb()}.
+
+	\fi
+
 }\QuickQuizEnd
+
+다음 규칙들의 리스트가 이 섹션의 교훈들을 요약합니다:
+
+\iffalse
 
 The following list of rules summarizes the lessons of this section:
 
+\fi
+
 \begin{enumerate}
+\item	컴파일러는 제어 종속성을 이해하지 못하며, 따라서 컴파일러가 여러분의
+	코드를 망가뜨리지 못하게 하는건 여러분의 일입니다.
+
+\item	제어 종속성은 앞의 로드를 뒤의 스토어에 대해 순서잡습니다.
+	그러나, 그것은 어떤 다른 종류의 순서도 보장하지 \emph{않습니다}.
+	앞의 로드를 뒤의 로드에 대해서도, 앞의 스토어를 뒤의 어떤 것에 대해서도
+	순서잡지 않습니다.
+	이런 다른 형태의 순서가 필요하다면, \co{smp_rmb()}, \co{smp_wmb()},
+	또는 앞의 스토어와 뒤의 로드 사이에의 순서라면 \co{smp_mb()} 를
+	사용하십시오.
+
+\item	\qco{if} 문의 양쪽 분기가 동일한 변수로의 같은 스토어로 시작한다면 제어
+	종속성은 그 스토어들을 순서잡지 않을 겁니다.
+	순서가 필요하다면, 그것들 앞에 \co{smp_mb()} 를 두거나
+	\co{smp_store_release()} 를 사용하세요.
+	\qco{if} 문의 양 분기의 시작에 \co{barrier()} 를 두는 것은 충분치
+	\emph{않은데}, 앞의 예에서 보인바와 같이 컴파일러의 최적화는
+	\co{barrier()} 의 규칙을 지키면서도 제어 종속성을 파괴할 수 있기
+	때문임을 유의하십시오.
+
+\iffalse
+
 \item	Compilers do not understand control dependencies, so it is
 	your job to make sure that the compiler cannot break your code.
 
@@ -5798,6 +5965,23 @@ The following list of rules summarizes the lessons of this section:
 	by the example above, optimizing compilers can destroy the control
 	dependency while respecting the letter of the \co{barrier()} law.
 
+\fi
+
+\item	제어 종속성은 앞의 로드와 뒤의 스토어 사이에 최소 하나의 수행 시간
+	조건을 필요로 하며, 이 조건은 앞의 로드와 연관되어야만 합니다.
+	컴파일러가 조건을 최적화 해서 없앨 수 있다면, 이는 순서 역시 최적화
+	해서 없앨 겁니다.
+	주의 깊은 \co{READ_ONCE()} 와 \co{WRITE_ONCE()} 의 사용은 필요한 조건을
+	지키는 걸 도울 수 있습니다.
+
+\item	제어 종속성은 컴파일러가 종속성을 존재치 않게 재배치 하는 걸 막을
+	필요를 갖습니다.
+	주의 깊은 \co{READ_ONCE()}, \co{atomic_read()}, 또는
+	\co{atomic64_read()} 의 사용은 여러분의 제어 종속성을 지키는 걸 도울 수
+	있습니다.
+
+\iffalse
+
 \item	Control dependencies require at least one run-time conditional
 	between the prior load and the subsequent store, and this
 	conditional must involve the prior load.
@@ -5812,6 +5996,22 @@ The following list of rules summarizes the lessons of this section:
 	\co{atomic64_read()} can help to preserve your control
 	dependency.
 
+\fi
+
+\item	제어 종속성은 이 종속성을 포함한 \qco{if} 문의 \qco{then} 과 \qco{else}
+	절과 이 두 절에서 호출하는 함수들에까지만 적용됩니다.
+	제어 종속성은 \qco{if} 문의 끝을 뒤따르는 코드에는 적용되지
+	\emph{않습니다}.
+
+\item	제어 종속성은 일반적으로 다른 종류의 메모리 순서 오퍼레이션과 짝을
+	이룹니다.
+
+\item	제어 종속성은 cumulativity 를 제공하지 \emph{않습니다}.
+	Cumulativity 가 필요하다면, 이를 제공하는 무언가,
+	\co{smp_store_release()} 또는 \co{smp_mb()} 같은 걸 사용하십시오.
+
+\iffalse
+
 \item	Control dependencies apply only to the \qco{then} and
 	\qco{else} of the \qco{if} containing the control
 	dependency, including any functions that these two clauses call.
@@ -5824,11 +6024,22 @@ The following list of rules summarizes the lessons of this section:
 \item	Control dependencies do \emph{not} provide cumulativity.
 	If you need cumulativity, use something that provides it,
 	such as \co{smp_store_release()} or \co{smp_mb()}.
+
+\fi
+
 \end{enumerate}
+
+다시 말하지만, 많은 대중적 언어들이 싱글쓰레드 기반으로 설계되었습니다.
+이 언어들을 멀티쓰레드 기반으로 성공적으로 사용하기 위해선 여러분이 메모리
+참조와 종속성에 특별한 주의를 기울일 것을 요합니다.
+
+\iffalse
 
 Again, many popular languages were designed with single-threaded use
 in mind.  Successful multithreaded use of these languages requires you
 to pay special attention to your memory references and dependencies.
+
+\fi
 
 \section{Higher-Level Primitives}
 \label{sec:memorder:Higher-Level Primitives}
