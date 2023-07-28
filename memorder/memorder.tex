@@ -6077,6 +6077,24 @@ digs more deeply into RCU\@.
 \label{sec:memorder:Memory Allocation}
 
 \Cref{sec:SMPdesign:Parallel Fastpath for Resource Allocation}
+는 메모리 할당을 다루었고, 이 섹션은 연관된 메모리 순서 문제까지 이를
+확장합니다.
+
+핵심 요구사항은 어떤 메모리 블록이 할당 해제되기 전까지 해당 블록에 수행된 모든
+액세스는 그 블록이 재할당 된 후에 수행된 모든 액세스보다 앞으로 순서잡혀야
+한다는 겁니다.
+할당 해제 전에 수행된 스토어가 재할당을 뒤따르는 스토어 다음으로 재배치 된다면
+그건 어쨌건 잔인하고 비상식적인 메모리 할당기 버그일 겁니다.
+그러나, 개발자에게 동적으로 할당된 메모리를 접근하는데 \co{READ_ONCE()} 와
+\co{WRITE_ONCE()} 를 사용하도록 요구하는 것 역시 잔인하고 비상식적일 겁니다.
+따라서
+\cref{sec:toolsoftrade:Shared-Variable Shenanigans}
+에서 이야기된 공유 변수 비극에도 불구하고 완전한 순서는 평범한 액세스에도
+제공되어야 합니다.
+
+\iffalse
+
+\Cref{sec:SMPdesign:Parallel Fastpath for Resource Allocation}
 touched upon memory allocation, and this section expands upon the relevant
 memory-ordering issues.
 
@@ -6092,6 +6110,30 @@ memory.
 Full ordering must therefore be provided for plain accesses, in spite of
 all the shared-variable shenanigans called out in
 \cref{sec:toolsoftrade:Shared-Variable Shenanigans}.
+
+\fi
+
+물론, 각 CPU 는 자신의 액세스는 순서대로 보고 컴파일러는 항상 CPU 간 비극을
+일으킵니다.
+이 사실들은
+\cref{lst:SMPdesign:Allocator-Cache Allocator Function,%
+lst:SMPdesign:Allocator-Cache Free Function} 에 각각 보인 \co{memblock_alloc()}
+과 \co{memblock_free()} 의 락 없는 빠른 수행경로를 가능하게 합니다.
+그러나, 이는 또한 개발자가 새로 할당된 메모리 블록으로의 포인터를 공개할 때
+적절한 순서를 제공해야 할 (예를 들면, \co{smp_store_release()} 를 이용해서)
+책임이 있는 이유입니다.
+
+그러나, 할당기는 쓰레드별 풀을 밸런스 맞출 때 순서를 제공해야만 합니다.
+이 순서 잡기는 \co{memblock_alloc()} 과 \co{memblock_free()} 에서의
+\co{spin_lock()} 과 \co{spin_unlock()} 을 통해 제공됩니다.
+한 쓰레드에서 다른 쓰레드로 옮겨진 모든 블록에 대해, 기존 쓰레드는 해당 블록을
+\co{globalmem} 풀에 위치시킨 후 \co{spin_unlock(&globalmem.mutex)} 를 수행할
+것이고, 새 쓰레드는 해당 블록을 자신의 쓰레드별 풀에 옮기기 전에
+\co{spin_lock(&globalmem.mutex)} 를 수행했을 겁니다.
+이 \co{spin_unlock()} 과 \co{spin_lock()} 은 기존 쓰레드와 새 쓰레드 둘 다 기존
+쓰레드의 액세스가 새 쓰레드의 것들 전에 일어난 것으로 볼 것을 보장할 겁니다.
+
+\iffalse
 
 Of course, each CPU sees its own accesses in order and the compiler
 always has fully accounted for intra-CPU shenanigans.
@@ -6119,11 +6161,29 @@ This \co{spin_unlock()} and \co{spin_lock()} ensures that both the
 old and new threads see the old thread's accesses as having happened
 before those of the new thread.
 
+\fi
+
 \QuickQuiz{
+	하지만 PowerPC 는 리눅스 커널에서 완화된 unlock-lock 순서 속성을 가져서
+	unlock 전의 쓰기가 lock 뒤의 읽기와 재배치될 수 있게 하지 않나요?
+
+	\iffalse
+
 	But doesn't PowerPC have weak unlock-lock ordering properties
 	within the Linux kernel, allowing a write before the unlock to
 	be reordered with a read after the lock?
+
+	\fi
+
 }\QuickQuizAnswer{
+	맞습니다, 그러나 그 락을 잡지 않은 세번째 쓰레드의 관점에만 그렇습니다.
+	반대로, 메모리 할당자는 이 메모리를 옮기는 두 쓰레드에 대해서만
+	걱정하면 됩니다.
+	새로 옮겨진 메모리 블록으로의 액세스를 해야 하는 다른 쓰레드와의 올바른
+	동기화는 개발자의 책임입니다.
+
+	\iffalse
+
 	Yes, but only from the perspective of a third thread not holding
 	that lock.
 	In contrast, memory allocators need only concern themselves with
@@ -6131,11 +6191,21 @@ before those of the new thread.
 	It is after all the developer's responsibility to properly
 	synchronize with any other threads that need access to the newly
 	migrated block of memory.
+
+	\fi
+
 }\QuickQuizEnd
+
+따라서, 일반적인 메모리 할당의 사용에 필요한 순서는 빠르지 않은 수행경로의
+locking 을 통해 제공되어, 빠른 수행경로는 여전히 동기화로부터 자유롭게 합니다.
+
+\iffalse
 
 Therefore, the ordering required by conventional uses of memory allocation
 can be provided solely by non-fastpath locking, allowing the fastpath to
 remain synchronization-free.
+
+\fi
 
 % \subsection{Detailed Locking Semantics}
 % \label{sec:memorder:Detailed Locking Semantics}
