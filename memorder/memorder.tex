@@ -6397,6 +6397,17 @@ These questions are addressed in the following sections.
 \subsubsection{RCU Read-Side Ordering}
 \label{sec:memorder:RCU Read-Side Ordering}
 
+그것 자체로, RCU 의 read-side 기능인 \co{rcu_read_lock()} 과
+\co{rcu_read_unlock()} 은 어떤 순서 규칙도 제공하지 않습니다.
+특히, 그 이름에도 불구하고
+\cref{lst:memorder:RCU Readers Provide No Lock-Like Ordering}
+(\path{C-LB+rl-o-o-rul+rl-o-o-rul.litmus}) 에 보인 것처럼 이것들은 락처럼
+동작하지 않습니다.
+이 리트머스 테스트의 사이클은 허용되어 있습니다: \co{r1} 레지스터의 두
+인스턴스가 모두 마지막 값 1을 가질 수 있습니다.
+
+\iffalse
+
 On their own, RCU's read-side primitives \co{rcu_read_lock()} and
 \co{rcu_read_unlock()} provide no ordering whatsoever.
 In particular, despite their names, they do not act like locks, as can
@@ -6406,11 +6417,23 @@ be seen in
 This litmus test's cycle is allowed: Both instances of the \co{r1}
 register can have final values of 1.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/herd/C-LB+rl-o-o-rul+rl-o-o-rul@whole.fcv}
 \caption{RCU Readers Provide No Lock-Like Ordering}
 \label{lst:memorder:RCU Readers Provide No Lock-Like Ordering}
 \end{listing}
+
+이 기능들 중 어떤 것도 배리어 같은 순서 속성을 갖지 않는데,
+at least not unless there is a grace period in the mix, as can be seen in
+\cref{lst:memorder:RCU Readers Provide No Barrier-Like Ordering}
+(\path{C-LB+o-rl-rul-o+o-rl-rul-o.litmus}) 에 보인 것처럼 어떤 grace period 가
+섞여 있지 않은 한은 그렇습니다.
+이 리트머스 테스트의 사이클은 허용되어 있습니다.
+(시도해 보세요!)
+
+\iffalse
 
 Nor do these primitives have barrier-like ordering properties,
 at least not unless there is a grace period in the mix, as can be seen in
@@ -6419,15 +6442,25 @@ at least not unless there is a grace period in the mix, as can be seen in
 This litmus test's cycle is also allowed.
 (Try it!)
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/formal/herd/C-LB+o-rl-rul-o+o-rl-rul-o@whole.fcv}
 \caption{RCU Readers Provide No Barrier-Like Ordering}
 \label{lst:memorder:RCU Readers Provide No Barrier-Like Ordering}
 \end{listing}
 
+물론, 이 두 리트머스 테스트에서의 순서의 부재는 \co{rcu_read_lock()} 와
+\co{rcu_read_unlock()} 이 모두 RCU 의 QSBR 구현에서는 no-op 이라는 점을
+생각하면 결코 놀랍지 않을 겁니다.
+
+\iffalse
+
 Of course, lack of ordering in both these litmus tests should be absolutely
 no surprise, given that both \co{rcu_read_lock()} and \co{rcu_read_unlock()}
 are no-ops in the QSBR implementation of RCU\@.
+
+\fi
 
 \subsubsection{RCU Update-Side Ordering}
 \label{sec:memorder:RCU Update-Side Ordering}
