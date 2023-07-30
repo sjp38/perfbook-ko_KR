@@ -6896,6 +6896,18 @@ This section takes up that question.
 \label{lst:memorder:Two RCU Grace Periods and Two Readers}
 \end{listing}
 
+더 구체적으로,
+\cref{lst:memorder:One RCU Grace Period and Two Readers} 에 보인 것처럼
+리트머스 테스트가 하나의 RCU grace period 와 두개의 RCU 읽기 쓰레드가 있다면
+어떻게 될까요?
+\co{herd} 는 이 사이클이 허용되었다 이야기 합니다만, \emph{왜} 그런지 아는게
+좋을 겁니다.\footnote{
+	특히 Paul 이 \ppl{Jade}{Alglave} 와 RCU 순서 규칙을 범용화 하기 위해
+	일할 때 이 특별한 리트머스 테스트에 대한 생각을 여러번 바꿨다는 것을
+	놓고 보면요.}
+
+\iffalse
+
 More specifically, what if the litmus test has one RCU grace
 period and two RCU readers, as shown in
 \cref{lst:memorder:One RCU Grace Period and Two Readers}?
@@ -6904,6 +6916,8 @@ good to know \emph{why}.\footnote{
 	Especially given that Paul changed his mind several times about
 	this particular litmus test when working with \ppl{Jade}{Alglave} to
 	generalize RCU ordering semantics.}
+
+\fi
 
 \begin{figure*}[tbp]
 \centering
@@ -6919,13 +6933,37 @@ good to know \emph{why}.\footnote{
 \label{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
 \end{figure*}
 
+요점은 CPU 가 \co{P1()} 과 \co{P2()} 의 \co{WRITE_ONCE()} 와 \co{READ_ONCE()}
+를 재배치 할 수 있다는 겁니다.
+그 재배치가 있다면,
+\cref{fig:memorder:Cycle for One RCU Grace Period and Two RCU Readers}
+가 어떻게 이 사이클이 생성되는지 보입니다:
+
+\iffalse
+
 The key point is that the CPU is free to reorder \co{P1()}'s and \co{P2()}'s
 \co{WRITE_ONCE()} and \co{READ_ONCE()}.
 With that reordering,
 \cref{fig:memorder:Cycle for One RCU Grace Period and Two RCU Readers}
 shows how the cycle forms:
 
+\fi
+
 \begin{enumerate}
+\item	이 다이어그램의 바닥 근처 점선 화살표로 그려진 것처럼 \co{P0()} 의
+	\co{x1} 읽기가 \co{P1()} 의 쓰기를 앞지릅니다.
+\item	\co{P1()} 의 쓰기는 \co{P0()} 의 grace period 의 종료를 뒤따르므로,
+	\co{P1()} 의 \co{x2} 읽기는 \co{P0()} 의 grace period 의 시작을 앞설 수
+	없습니다.
+\item	\co{P1()} 의 \co{x2} 읽기가 \co{P2()} 의 쓰기를 앞지릅니다.
+\item	\co{P2()} 의 \co{x2} 쓰기가 \co{P0()} 의 grace period 의 종료를
+	앞지르므로, \co{P2()} 의 \co{x0} 읽기가 \co{P0()} 의 grace period 의
+	시작을 앞지르는 건 완전히 합법적입니다.
+\item	따라서, \co{P2()} 의 \co{x0} 읽기는 \co{P0()} 의 쓰기를 앞지를 수
+	있어서 사이클이 형성됩니다.
+
+\iffalse
+
 \item	\co{P0()}'s read from \co{x1} precedes \co{P1()}'s write, as
 	depicted by the dashed arrow near the bottom of the diagram.
 \item	Because \co{P1()}'s write follows the end of \co{P0()}'s grace period,
@@ -6937,7 +6975,30 @@ shows how the cycle forms:
 	read from \co{x0} to precede the beginning of \co{P0()}'s grace period.
 \item	Therefore, \co{P2()}'s read from \co{x0} can precede \co{P0()}'s
 	write, thus allowing the cycle to form.
+
+\fi
+
 \end{enumerate}
+
+하지만 grace period 가 하나 더 추가되면 어떤 일이 벌어질까요?
+이 상황이
+\cref{lst:memorder:Two RCU Grace Periods and Two Readers} 에 그려져 있는데,
+하나의 SB 리트머스 테스트로 \co{P0()} 와 \co{P1()} 의 RCU grace period 를
+가지고 \co{P2()} 와 \co{P3()} 는 RCU 읽기 쓰레드입니다.
+다시 말하지만, CPU 는 RCU read-side 크리티컬 섹션 내에서의 액세스들을 재배치 할
+수 있습니다,
+\cref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers} 에
+보인 것과 같이요.
+이 사이클이 생성되려면 \co{P2()} 의 크리티컬 섹션은 \co{P1()} 의 grace period
+후에 끝나야 하고 \co{P3()} 의 크리티컬 섹션은 같은 grace period 의 시작 뒤에
+끝나야 하는데, 이는 또한 \co{P0()} 의 grace period 의 종료 후에 일어날 겁니다.
+따라서, \co{P3()} 의 크리티컬 섹션은 \co{P0()} 의 grace period 시작 후에
+시작되어야만 하는데, 이는 결국 \co{P3()} 의 \co{x0} 읽기가 \co{P0()} 의 쓰기를
+앞설 수 없음을 의미합니다.
+따라서, RCU read-side 크리티컬 섹션이 전체 RCU grace period 로 확장될 수
+없으므로 사이클이 금지됩니다.
+
+\iffalse
 
 But what happens when another grace period is added?
 This situation is shown in
@@ -6957,6 +7018,24 @@ read from \co{x0} cannot possibly precede \co{P0()}'s write.
 Therefore, the cycle is forbidden because RCU read-side critical sections
 cannot span full RCU grace periods.
 
+\fi
+
+그러나,
+\cref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
+를 깊이 들여다보면 세번째 읽기 쓰레드를 추가하면 사이클이 허용됨을 알 수
+있습니다.
+이는 이 세번째 읽기 쓰레드가 \co{P0()} 의 grace period 전에 끝나서 같은 grace
+period 의 시작 전에 시작될 수 있기 때문입니다.
+이는 결국 일반적인 규칙을 제안하는데, 그것은:  이런 종류의 RCU 만 있는 리트머스
+테스트에서, RCU read-side 크리티컬 섹션의 갯수만큼의 RCU grace period 가
+존재한다면 사이클은 금지된다.\footnote{
+	흥미롭게도, Alan Stern 은 LKMM 의 맥락에서
+	\cref{sec:defer:RCU Fundamentals} 에 보인 RCU 의 기본적 속성 두 부분이
+	실제로 RCU 공리~\cite{Alglave:2018:FSC:3173162.3177156} 라 불리는 이
+	보다 일반적 결과로 보이는 것을 암시함을 증명했습니다.}
+
+\iffalse
+
 However, a closer look at
 \cref{fig:memorder:No Cycle for Two RCU Grace Periods and Two RCU Readers}
 makes it clear that adding a third reader would allow the cycle.
@@ -6971,6 +7050,8 @@ are RCU read-side critical sections, the cycle is forbidden.\footnote{
 	in \cref{sec:defer:RCU Fundamentals} actually implies
 	this seemingly more general result, which is called the RCU
 	axiom~\cite{Alglave:2018:FSC:3173162.3177156}.}
+
+\fi
 
 \subsubsection{RCU and Other Ordering Mechanisms}
 \label{sec:memorder:RCU and Other Ordering Mechanisms}
