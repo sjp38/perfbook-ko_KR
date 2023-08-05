@@ -7603,6 +7603,19 @@ documentation, these sections do give a good overview.
 \subsection{Alpha}
 \label{sec:memorder:Alpha}
 
+수명이 한참 전에 끝난 CPU 에 대해 무언가 이야기하는 건 이상하게 보일 수 있지만,
+Alpha 는 종속적 로드를 재배치하는 유일한 주류 CPU 라서 흥미로운 경우이며,
+따라서 리눅스 커널을 포함해 동시성 API 에 두드러지는 영향을 끼쳤습니다.
+핵심 리눅스 커널 코드에서 Alpha 를 위해 필요했던 코드는 리눅스 커널 v4.15 을
+끝으로 사라졌으며, 이 모든 지원을 위한 기록은 \co{smp_read_barrier_depends()}
+와 \co{read_barrier_depends()} API 의 제거와 함께 사라졌습니다.
+이 섹션은 2021년 초 기준으로 여전히 v4.15 전 버전의 리눅스 커널을 가지고 일하는
+리눅스 커널 해커들이 꽤 존재하기 때문에 Second Edition 까지는 유지됩니다.
+또한, 이 API 들이 제거될 수 있게 한 \co{READ_ONCE()} 의 변경은 여전히 Alpha 를
+지원하는 유저스페이스 프로젝트들에 전파되지 않았을 수 있습니다.
+
+\iffalse
+
 It may seem strange to say much of anything about a CPU whose end of life
 has long since passed, but Alpha is interesting because it is the only
 mainstream CPU that reorders dependent loads, and has thus had outsized
@@ -7619,6 +7632,20 @@ In addition, the modifications to \co{READ_ONCE()} that permitted
 these APIs to be removed have not necessarily propagated to all
 userspace projects that might still support Alpha.
 
+\fi
+
+\begin{fcvref}[ln:memorder:Insert and Lock-Free Search (No Ordering)]
+Alpha 와 다른 CPU 사이의 종속적 로드에 대한 차이가
+\cref{lst:memorder:Insert and Lock-Free Search (No Ordering)}
+의 코드에 보여져 있습니다.
+이 \co{smp_store_release()} 는 \clnrefrange{init:b}{init:e} 의 원소 초기화가 그
+원소가 \clnref{add} 에서 리스트에 추가되기 전에 행해지게끔 보장해서 lock-free
+탐색이 올바르게 동작하게끔 합니다.
+즉, 이 보장이 Alpha 를 {\em 제외한} 모든 CPU 에서 보장되게 합니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:memorder:Insert and Lock-Free Search (No Ordering)]
 The dependent-load difference between Alpha and the other CPUs is
 illustrated by the code shown in
@@ -7629,6 +7656,8 @@ in \clnrefrange{init:b}{init:e} is executed before the element is added to the
 list on \clnref{add}, so that the lock-free search will work correctly.
 That is, it makes this guarantee on all CPUs {\em except} Alpha.
 \end{fcvref}
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:memorder:Insert and Lock-Free Search (No Ordering)]
@@ -7665,12 +7694,58 @@ struct el *search(long searchkey)
 \end{listing}
 
 \begin{fcvref}[ln:memorder:Insert and Lock-Free Search (No Ordering)]
+이 코드에서 \co{READ_ONCE_OLD()} 라고 표시된 v4.15 이전 버전에서의
+\co{READ_ONCE()} 구현이 사용되면, Alpha 는 실제로
+\cref{lst:memorder:Insert and Lock-Free Search (No Ordering)}
+의 \clnref{key} 의 코드가 \clnrefrange{init:b}{init:e} 에서의 초기화 전의
+오래된 쓰레기 값을 볼 수 있게 합니다.
+
+\iffalse
+
+\begin{fcvref}[ln:memorder:Insert and Lock-Free Search (No Ordering)]
 Given the pre-v4.15 implementation of \co{READ_ONCE()}, indicated by
 \co{READ_ONCE_OLD()} in the listing, Alpha actually allows the code on
 \clnref{key} of
 \cref{lst:memorder:Insert and Lock-Free Search (No Ordering)}
 to see the old garbage values that were present before the initialization
 on \clnrefrange{init:b}{init:e}.
+
+\fi
+
+\Cref{fig:memorder:fig:memorder:Why smp-read-barrier-depends() is Required in Pre-v4.15 Linux Kernels}
+는 분할된 캐쉬를 가져서 캐쉬 라인을 교체하는 것이 캐쉬의 다른 파티션에서 수행될
+수 있으며 공격적인 병렬 기계에서 이게 어떻게 일어날 수 있는지 보입니다.
+예를 들어,
+\cref{lst:memorder:Insert and Lock-Free Search (No Ordering)} 의
+\clnref{h:next} 에서의 \co{head.next} 로드는 캐쉬 뱅크~0 을 액세스 했을 수도
+있고, \clnref{key} 에서의 \co{p->key} 로드와 \clnref{next} 에서의 \co{p->next}
+로드는 캐쉬 뱅크~1 을 액세스 했을 수도 있습니다.
+Alpha 에서, \co{smp_store_release()} 는
+\cref{lst:memorder:Insert and Lock-Free Search (No Ordering)}
+의 \clnrefrange{init:b}{init:e} 에서 수행된 (\co{p->next}, \co{p->key}, 그리고
+\co{p->data} 에 대한) 캐쉬 무효화가 \clnref{add} 의 (\co{head.next} 를 위한)
+것보다 먼저 중간 연결부에 도달하게 하지만, 읽는 CPU 의 캐쉬 뱅크로의 전파
+순서에 대해선 어떤 보장도 하지 않습니다.
+예를 들면, 읽는 CPU 의 캐쉬 뱅크~1 이 매우 바쁜 사이 뱅크~0 은 한가할 수
+있습니다.
+이는 새 원소를 위한 (\co{p->next}, \co{p->key}, 그리고 \co{p->data} 의) 캐쉬
+무효화가 지연되게 하여서 읽는 CPU 는 \co{head.next} 의 새 값을 로드하지만
+\co{p->key} 와 \co{p->next} 의 과거에 캐쉬된 값을 로드하게 할 수 있습니다.
+그렇습니다, 이는 Alpha 가 실제로 가리켜진 데이터를 그 포인터 자체보다 {\em
+먼저} 읽어올 수 있는데, 이는 이상하지만 사실입니다.
+\end{fcvref}
+더 많은 정보를 위해선, 또는 제가 뭔가 잘못 이야기하고 있다고 느끼신다면 앞에서
+이야기된 문서를~\cite{Compaq01,WilliamPugh2000Gharachorloo} 읽어
+보세요.\footnote{
+	물론, 영리한 독자 여러분은
+	\cref{sec:app:whymb:Ordering-Hostile Architecture}
+	의 상상속 아키텍쳐의 경우처럼 (감사하게도) 이미 Alpha 가 주변에 없음을
+	알아차렸을 겁니다.}
+이 일반적이지 않은 순서 규칙의 이익은 Alpha 가 더 간단한 캐쉬 하드웨어를 가질
+수 있어서 결국 Alpha 의 전성기에는 더 높은 클락 주파수를 가능하게 했다는
+겁니다.
+
+\iffalse
 
 \Cref{fig:memorder:fig:memorder:Why smp-read-barrier-depends() is Required in Pre-v4.15 Linux Kernels}
 shows how this can happen on
@@ -7710,6 +7785,8 @@ or if you think that I am just making all this up.\footnote{
 The benefit of this unusual approach to ordering is that Alpha can use
 simpler cache hardware, which in turn permitted higher clock frequencies
 in Alpha's heyday.
+
+\fi
 
 \begin{figure}[tbp]
 \centering
