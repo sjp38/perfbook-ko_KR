@@ -8000,13 +8000,45 @@ For more on Alpha, see its reference manual~\cite{ALPHA2002}.
 \subsection{\ARMv7-A/R}
 \label{sec:memorder:ARMv7-A/R}
 
+\ARM\ 제품군 CPU 는 임베디드 어플리케이션에서, 특히 휴대폰과 같이 전력이 제한된
+어플리케이션에서 굉장히 인기있습니다.
+이것의 메모리 모델은 \Power{} 와 유사합니다만
+(\cref{sec:memorder:POWER / PowerPC} 를 참고하세요), \ARM\ 은 다른 메모리
+배리어 명령 집합을 사용합니다~\cite{ARMv7A:2010}:
+
+\iffalse
+
 The \ARM\ family of CPUs is extremely popular in embedded applications,
 particularly for power-constrained applications such as cellphones.
 Its memory model is similar to that of \Power{}
 (see \cref{sec:memorder:POWER / PowerPC}), but \ARM\ uses a
 different set of memory-barrier instructions~\cite{ARMv7A:2010}:
 
+\fi
+
 \begin{description}
+\item	[\tco{DMB}] (data memory barrier) 는 명시된 종류의 오퍼레이션이 같은
+	타입의 뒤따르는 모든 오퍼레이션보다 앞서 완료된 것으로 \emph{보이게}
+	합니다.
+	오퍼레이션의 ``타입'' 은 모든 오퍼레이션이거나 쓰기만으로 제한될 수
+	있습니다 (Alpha 의 \co{wmb} 와 \Power{} \co{eieio} 인스트럭션과
+	유사합니다).
+	또한, \ARM\ 은 캐쉬 일관성이 세개의 범위를 가질 수 있게 합니다: 단일
+	프로세서, 프로세서의 부분집합 (``inner'') 그리고 전역 (``outer'').
+\item	[\tco{DSB}] (data synchronization barrier) 는 명시된 타입의
+	오퍼레이션이 뒤따르는 (모든 타입의) 오퍼레이션이 수행되기 전에 정말로
+	완료되게 합니다.
+	오퍼레이션의 ``타입'' 은 \co{DMB} 의 것과 같습니다.
+	\co{DSB} 명령은 \ARM\ 아키텍쳐의 초기에는 \co{DWB} (drain write buffer
+	또는 data write barrier) 라고 불렸습니다.
+\item	[\tco{ISB}] (instruction synchronization barrier) 는 CPU 파이프라인을
+	비워서, \co{ISB} 를 뒤따르는 모든 명령이 \co{ISB} 의 완료 후에만
+	읽어지게 만듭니다.
+	예를 들어, 스스로를 수정하는 프로그램 (JIT 같은) 을 작성한다면,
+	여러분은 코드의 생성과 그것의 수행 사이에 \co{ISB} 를 수행해야 합니다.
+
+\iffalse
+
 \item	[\tco{DMB}] (data memory barrier) causes the specified type of
 	operations to \emph{appear} to have completed before any
 	subsequent operations of the same type.
@@ -8029,7 +8061,26 @@ different set of memory-barrier instructions~\cite{ARMv7A:2010}:
 	For example, if you are writing a self-modifying program
 	(such as a JIT), you should execute an \co{ISB} between
 	generating the code and executing it.
+
+\fi
+
 \end{description}
+
+이 명령들 중 어느 것도 리눅스의 \co{rmb()} 기능의 명세에 정확히 들어맞지
+않으며, 따라서 완전한 \co{DMB} 로 구현됩니다.
+\co{DMB} 와 \co{DSB} 명령은 이 배리어 전후로 순서잡힌 액세스들에 대한 회귀적
+정의를 갖는데, \Power{} 의 cumulativity 와 유사한 효과를 내며, 이는 둘 다
+\cref{sec:memorder:Cumulativity} 에서 설명된 LKMM 의 cumulativity 보다 더
+강력한 것입니다.
+
+\ARM\ 은 또한 제어 종속성을 구현하여서 어떤 조건적 분기가 어떤 로드에
+종속적이라면, 그 조건적 분기 뒤에 수행되는 모든 스토어는 그 로드 뒤로
+순서잡힙니다.
+그러나, 조건적 분기를 뒤따르는 로드는 그 분기와 로드 사이에 \co{ISB} 명령이
+있지 않은 한 순서잡힐 것으로 보장되지 \emph{않습니다}.
+다음 예를 생각해 봅시다:
+
+\iffalse
 
 None of these instructions exactly match the semantics of Linux's
 \co{rmb()} primitive, which must therefore be implemented as a full
@@ -8048,6 +8099,8 @@ be guaranteed to be ordered unless there is an \co{ISB}
 instruction between the branch and the load.
 Consider the following example:
 
+\fi
+
 \begin{fcvlabel}[ln:memorder:ARM:load-store control dependency]
 \begin{VerbatimN}[commandchars=\\\[\]]
 r1 = x;			\lnlbl[x]
@@ -8059,6 +8112,19 @@ ISB();			\lnlbl[isb]
 r3 = z;			\lnlbl[z2]
 \end{VerbatimN}
 \end{fcvlabel}
+
+\begin{fcvref}[ln:memorder:ARM:load-store control dependency]
+이 예에서, 로드-스토어 제어종속성 순서규칙은 \clnref{x} 에서의 \co{x} 로드를
+\clnref{y} 에서의 \co{y} 로의 스토어 전으로 순서잡습니다.
+하지만, \ARM\ 은 로드-로드 제어 종속성을 지키지 않으므로, \clnref{x} 에서의
+로드는 \clnref{z1} 의 로드 \emph{뒤에} 벌어질 수도 있습니다.
+다른 한편, \clnref{if} 에서의 조건적 분기와 \clnref{isb} 의 \co{ISB} 명령은
+\clnref{z2} 의 로드가 \clnref{x} 의 로드 뒤에 일어날 것을 보장합니다.
+추가적인 \co{ISB} 명령을 \clnref{if,z1} 사이 어딘가에 배치하는 것은
+\clnref{x,z1} 사이의 순서를 강제함을 알아 두시기 바랍니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:memorder:ARM:load-store control dependency]
 In this example, load-store control dependency ordering causes
@@ -8073,6 +8139,8 @@ the load on \clnref{z2} happens after the load on \clnref{x}.
 Note that inserting an additional \co{ISB} instruction somewhere between
 \clnref{if,z1} would enforce ordering between \clnref{x,z1}.
 \end{fcvref}
+
+\fi
 
 \subsection{\ARMv8}
 \label{sec:memorder:ARMv8}
