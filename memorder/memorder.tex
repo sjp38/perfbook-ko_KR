@@ -7795,6 +7795,25 @@ in Alpha's heyday.
 \label{fig:memorder:fig:memorder:Why smp-read-barrier-depends() is Required in Pre-v4.15 Linux Kernels}
 \end{figure}
 
+어떤 사람은 Alpha 가 이 포인터 읽기와 뒤따르는 종속적 로드 사이에 순서를 지키게
+하기 위해 \co{smp_rmb()} 를 포인터 읽기와 그 역참조 사이에 위치시킬 수 있을
+겁니다.
+그러나, 이는 읽기 쪽의 데이터 종속성을 지켜주는 시스템에서는 (\ARM, Itanium,
+PPC, 그리고 SPARC 등) 불필요한 오버헤드를 일으킬 겁니다.
+그래서 이런 시스템에서의 오버헤드를 제거하기 위해
+\co{smp_read_barrier_depends()} 기능이 리눅스 커널에 추가되었습니다만, Alpha 의
+\co{READ_ONCE()} 정의의 강화 덕에 v5.9 리눅스 커널에서는 사라졌습니다.
+따라서, v5.9 기준으로, 코어 커널 코드는 더이상 DEC Alpha 때문에 걱정할 필요가
+없습니다.
+\begin{fcvref}[ln:memorder:Safe Insert and Lock-Free Search]
+하지만,
+\cref{lst:memorder:Safe Insert and Lock-Free Search}
+의 \clnref{deref1,deref2} 에서 보이듯 모든 최근의 커널 버전에서 안전하고
+효율적으로 동작하는 \co{rcu_dereference()} 를 사용하는게 낫습니다.
+\end{fcvref}
+
+\iffalse
+
 One could place an \co{smp_rmb()} primitive
 between the pointer fetch and dereference in order to force Alpha
 to order the pointer fetch with the later dependent load.
@@ -7813,6 +7832,24 @@ as shown on \clnref{deref1,deref2} of
 which works safely and efficiently for all recent kernel versions.
 \end{fcvref}
 
+\fi
+
+또한 모든 읽기를 하는 CPU 가 쓰기를 하는 CPU 의 쓰기를 순서대로 보게 하게끔
+\co{smp_store_release()} 자리에 소프트웨어 메커니즘을 구현할 수도 있습니다.
+이 소프트웨어 배리어는 inter-processor interrupt (IPI) 들을 모든 다른 CPU 에게
+보냄으로써 구현될 수 있습니다.
+그런 IPI 를 받으면, CPU 는 메모리 배리어 명령을 수행하므로, 리눅스 커널의
+\co{sys_membarrier()} 시스템콜이 제공하는 것과 비슷한 시스템 범위 메모리
+배리어를 구현합니다.
+데드락을 막기 위해 추가적 로직이 필요합니다.
+물론, 데이터 종속성을 지키는 CPU 는 그런 배리어를 간단히
+\co{smp_store_release()} 로 정의할 겁니다.
+하지만, 리눅스 커뮤니티는 이 방법은 지나친 오버헤드를
+발생시키며~\cite{McKenney01f}, 그들의 시점에서는 이는 공격적인 리얼타임 응답
+요구가 있는 상황에서는 완전히 부적절하다고 여깁니다.
+
+\iffalse
+
 It is also possible to implement a software mechanism
 that could be used in place of \co{smp_store_release()} to force
 all reading CPUs to see the writing CPU's writes in order.
@@ -7828,6 +7865,8 @@ However, this approach was deemed by the Linux community
 to impose excessive overhead~\cite{McKenney01f}, and to their point would
 be completely inappropriate for systems having
 aggressive real-time response requirements.
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:memorder:Safe Insert and Lock-Free Search]
@@ -7862,16 +7901,46 @@ struct el *search(long searchkey)
 \label{lst:memorder:Safe Insert and Lock-Free Search}
 \end{listing}
 
+리눅스 메모리 배리어 기능들은 그들의 이름을 Alpha 명령들에서 따와서
+\co{smp_mb()} 는 \co{mb} 이고 \co{smp_rmb()} 는 \co{rmb} 이며 \co{smp_wmb()} 는
+\co{wmb} 입니다.
+Alpha 는 \co{READ_ONCE()} 가 \co{smp_mb()} 를 내포하는 유일한 CPU 입니다.
+
+\iffalse
+
 The Linux memory-barrier primitives took their names from the Alpha
 instructions, so \co{smp_mb()} is \co{mb}, \co{smp_rmb()} is \co{rmb},
 and \co{smp_wmb()} is \co{wmb}.
 Alpha is the only CPU whose \co{READ_ONCE()} includes an \co{smp_mb()}.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	Alpha 의 \co{READ_ONCE()} 는 왜 \co{smp_rmb()} 가 아니라 \co{smp_mb()}
+	를 내포하나요?
+
+	\iffalse
+
 	Why does Alpha's \co{READ_ONCE()} include an
 	\co{smp_mb()} rather than \co{smp_rmb()}?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	Alpha 는 \co{mb} 와 \co{wmb} 명령만을 가져서, 어떻게 하든
+	\co{smp_rmb()} 는 Alpha 의 \co{mb} 명령으로 구현될 겁니다.
+	또한, 리눅스 커널이 종속성 순서에 기대기 시작했던 시점에서는 Alpha 가
+	종속된 스토어의 순서를 지켜주는지 분명치 않았고, 따라서 \co{smp_mb()}
+	가 안전한 선택이었습니다.
+
+	그러나, 앞서 설명한 v5.9 의 \co{READ_ONCE()} 변경과 일부 Alpha 의
+	어토믹 read-modify-write 오퍼레이션들을 놓고 생각하면, 어떤 리눅스 커널
+	핵심 코드도 DEC Alpha 에 대해 걱정할 필요가 없으며, 따라서 커널에서
+	Alpha 지원을 제거하기 위한 Paul E.~McKenney 의 동기를 크게 줄여줍니다.
+
+	\iffalse
+
 	Alpha has only \co{mb} and \co{wmb} instructions,
 	so \co{smp_rmb()} would be implemented by the Alpha \co{mb}
 	instruction in either case.
@@ -7884,21 +7953,49 @@ Alpha is the only CPU whose \co{READ_ONCE()} includes an \co{smp_mb()}.
 	no Linux-kernel core code need concern itself with DEC Alpha,
 	thus greatly reducing Paul E.~McKenney's incentive to remove
 	Alpha support from the kernel.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	DEC Alpha 는 가능한 메모리 순서 규칙 중 가장 약한 것을 가지니 중요하지
+	않나요?
+
+	\iffalse
+
 	Isn't DEC Alpha significant as having the weakest possible
 	memory ordering?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	DEC Alpha 가 상당한 비난을 받기는 하나, 같은 CPU 에서 같은 변수로의
+	읽기들에 대한 재배치는 막습니다.
+	또한 Java 와 C11 메모리 모델을 괴롭히는 out-of-thin-air 문제도
+	막습니다~\cite{Boehm:2014:OGA:2618128.2618134,conf/esop/BattyMNPS15,MarkBatty2013OOTA-WorkingNote,HansBoehm2020ConcurrentUB,DavidGoldblatt2019NoElegantOOTAfix,AlanJeffrey2014JavaDRF,PaulEMcKenney2020RelaxedGuideRelaxed,PaulEMcKenney2016OOTA,Sevcik:2011:SOS:1993316.1993534,Vafeiadis:2015:CCO:2775051.2676995}.
+
+	\iffalse
+
 	Although DEC Alpha does take considerable flak, it does avoid
 	reordering reads from the same CPU to the same variable.
 	It also avoids the out-of-thin-air problem that plagues
 	the Java and C11 memory
 	models~\cite{Boehm:2014:OGA:2618128.2618134,conf/esop/BattyMNPS15,MarkBatty2013OOTA-WorkingNote,HansBoehm2020ConcurrentUB,DavidGoldblatt2019NoElegantOOTAfix,AlanJeffrey2014JavaDRF,PaulEMcKenney2020RelaxedGuideRelaxed,PaulEMcKenney2016OOTA,Sevcik:2011:SOS:1993316.1993534,Vafeiadis:2015:CCO:2775051.2676995}.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
+Alpha 에 대한 더 많은 내용을 위해선 레퍼런스 매뉴얼을~\cite{ALPHA2002} 보시기
+바랍니다.
+
+\iffalse
+
 For more on Alpha, see its reference manual~\cite{ALPHA2002}.
+
+\fi
 
 \subsection{\ARMv7-A/R}
 \label{sec:memorder:ARMv7-A/R}
