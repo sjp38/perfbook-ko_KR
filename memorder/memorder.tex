@@ -8152,6 +8152,23 @@ Note that inserting an additional \co{ISB} instruction somewhere between
 \ContributedBy{Figure}{fig:memorder:Half Memory Barrier}{Melissa Brossard}
 \end{figure}
 
+\ARM\ 의 \ARMv8 CPU 제품군은~\cite{ARMv8A:2017}
+\cref{sec:memorder:ARMv7-A/R} 에 설명된 32비트만 지원하는 CPU 와 달리 64비트
+기능을 갖습니다.
+\ARMv8 의 메모리 모델은 그것의 \ARMv7 쪽 것들을 상당히 닮아있습니다만
+load-acquire (\co{LDLARB}, \co{LDLARH}, 그리고 \co{LDLAR}) 와 store-release
+(\co{STLLRB}, \co{STLLRH}, 그리고 \co{STLLR}) 명령을 추가했습니다.
+이 명령들은 ``반쪽 메모리 배리어'' 로 동작해서 \ARMv8 CPU 는 앞의 액세스를 뒤의
+\co{LDLAR} 명령과 재배치할 수 있지만 앞의 \co{LDLAR} 명령을 뒤의 액세스와는
+재배치 할 수 없는데,
+\cref{fig:memorder:Half Memory Barrier} 에 이게 그려져 있습니다.
+비슷하게, \ARMv8 CPU 는 앞의 \co{STLLR} 명령을 뒤따르는 액세스와 재배치 할 수
+있지만, 뒤의 \co{STLLR} 과 앞의 액세스는 재배치 할 수 없습니다.
+예상할 수 있듯, 이는 이 명령들은 C11 의 load-acquire 와 store-release 노선을
+직접적으로 지원합니다.
+
+\iffalse
+
 \ARM's \ARMv8 CPU family~\cite{ARMv8A:2017}
 includes 64-bit capabilities,
 in contrast to their 32-bit-only CPU described in
@@ -8171,6 +8188,27 @@ previous accesses with a later \co{STLLR} instruction.
 As one might expect, this means that these instructions directly support
 the C11 notion of load-acquire and store-release.
 
+\fi
+
+그러나, \ARMv8 은 store-release 와 load-acquire 의 조합이 특정 상황에서는
+완전한 배리어로 동작할 것을 강제함으로써 C11 메모리 모델보다 더한 것을
+제공합니다.
+예를 들어, \ARMv8 에서 어떤 스토어 뒤에 store-release 가 있고 그 뒤에
+load-acquire, 그리고 로드가 있다면, 그리고 그것들이 모두 다른 변수를 향한
+것이라면 모두 하나의 CPU 에서 행해진다면, 모든 CPU 는 처음의 스토어가 마지막의
+로드를 앞선다고 보게 됩니다.
+흥미롭게도, 대부분의 TSO 구조들은 (x86 과 mainframe 포함) 이 보장을 내지
+않는데, 여기서의 두 로드는 두 스토어 앞으로 재배치 될 수 있기 때문입니다.
+
+\ARMv8 은 \co{smp_mb__after_spinlock()} 이 완전체 배리어가 되어야 하는 두 구조
+중 하나인데, 리눅스 커널 내에서의 상대적으로 약한 lock-acquisition 구현
+때문입니다.
+
+\ARMv8 은 또한 제조사가 공개적으로 수행 가능한 정식 모델과 함께 메모리 규칙을
+정의한~\cite{ARMv8A:2017} 최초의 CPU 로 차별화 됩니다.
+
+\iffalse
+
 However, \ARMv8 goes well beyond the C11 memory model by mandating that
 the combination of a store-release and load-acquire act as a full
 barrier under certain circumstances.
@@ -8189,6 +8227,8 @@ the Linux kernel.
 
 \ARMv8 also has the distinction of being the first CPU whose vendor publicly
 defined its memory ordering with an executable formal model~\cite{ARMv8A:2017}.
+
+\fi
 
 \subsection{Itanium}
 \label{sec:memorder:Itanium}
