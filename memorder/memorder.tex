@@ -8462,6 +8462,20 @@ void synchronize_rcu(void)
 
 	\end{enumerate}
 
+	그러므로 컴파일러의 재배치가 deadlock 을 초래합니다.
+	반면, 하드웨어 재배치는 일시적이어서 CPU~1 은 \clnref{acqmutex} 에서의
+	mutex 획득 시도를 \clnref{if,store} 수행 전에 착수할 수 있지만, 결국은
+	\clnref{if,store} 를 수행할 겁니다.
+	하드웨어 재배치는 짧은 지연을 초래할 뿐이므로, 견뎌질 수 있습니다.
+	다른 한편, 컴파일러 재배치는 deadlock 을 초래하므로 반드시 막아져야
+	합니다.
+
+	어떤 연구 노력은 컴파일러가 더 적극적인 재배치를 안전하게 할 수 있도록
+	하드웨어 transactinal memory 를 사용했습니다만, 하드웨어 transaction 의
+	오버헤드는 아직까지는 그런 최적화를 충분히 매력적이진 못하게 했습니다.
+
+	\iffalse
+
 	So the compiler's reordering results in a deadlock.
 	In contrast, hardware reordering is temporary, so that CPU~1
 	might undertake its first attempt to acquire the mutex on
@@ -8477,8 +8491,31 @@ void synchronize_rcu(void)
 	the overhead of hardware transactions has thus far made
 	such optimizations unattractive.
 	% @@@ Citation for compilers use of HTM in this manner?
+
+	\fi
+
 \end{fcvref}
 }\QuickQuizEnd
+
+Itanium \co{mf} 명령은 리눅스 커널의 \co{smp_rmb()}, \co{smp_mb()}, 그리고
+\co{smp_wmb()} 기능에 사용되었습니다.
+반대의 지속적인 루머에도 불구하고 \qco{mf} 라는 이름은 ``memory fence'' 의
+약자라고 합니다.
+
+Itanium 은 또한 \co{mf} 명령을 포함한 release 오퍼레이션을 위한 전역적 완전
+순서를 제공합니다.
+이는 transitivity 의 노선을 제공하는데, 이는 특정 코드 조각이 어떤 액세스가
+일어났음을 보게 된다면 모든 뒤의 코드 조각은 또한 이 앞의 액세스가 일어난
+것으로 본다는 겁니다.
+모든 관여된 코드 조각이 올바르게 메모리 배리어를 사용한다는 가정 하입니다.
+
+마지막으로, Itanium 은 리눅스 커널을 지원하며 같은 변수로의 평범한 로드를
+재배치 할 수 있는 유일한 아키텍쳐입니다.
+리눅스 커널은 \co{READ_ONCE()} 가 특정 CPU 에 의한 같은 변수로의 것을 포함한
+모든 \co{READ_ONCE()} 순서를 강제하는, \co{ld,acq} 명령으로 번역되는
+\co{volatile} 로드를 만들어내기 때문에 이 문제를 막습니다.
+
+\iffalse
 
 The Itanium \co{mf} instruction is used for the \co{smp_rmb()},
 \co{smp_mb()}, and \co{smp_wmb()} primitives in the Linux kernel.
@@ -8499,6 +8536,8 @@ The Linux kernel avoids this issue because \co{READ_ONCE()} emits
 a \co{volatile} load, which is compiled as a \co{ld,acq} instruction,
 which forces ordering of all \co{READ_ONCE()} invocations by a given
 CPU, including those to the same variable.
+
+\fi
 
 \subsection{MIPS}
 
