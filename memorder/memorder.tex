@@ -8658,9 +8658,37 @@ the documentation for the specific MIPS implementation you are using.
 \subsection{\Power{} / PowerPC}
 \label{sec:memorder:POWER / PowerPC}
 
+\Power{} 와 PowerPC CPU 제품군은 다양한 메모리 배리어
+명령을~\cite{PowerPC94,MichaelLyons05a} 갖습니다:
+
+\iffalse
+
 The \Power{} and PowerPC CPU families have a wide variety of memory-barrier
 instructions~\cite{PowerPC94,MichaelLyons05a}:
+
+\fi
+
 \begin{description}
+\item	[\tco{sync}] 는 모든 앞의 오퍼레이션이 모든 뒤따르는 오퍼레이션이
+	시작하기 전에 완료된 것으로 {\em 보이게} 만듭니다.
+	따라서 이 명령은 매우 비용이 높습니다.
+\item	[\tco{lwsync}] (lightweight sync) 는 로드를 뒤따르는 로드와
+	스토어에 대해 순서 잡으며, 스토어에 대해서도 순서를 잡습니다.
+	그러나, 이는 스토어를 뒤따르는 로드에 대해 순서잡지는 {\em 않습니다}.
+	\co{lwsync} 명령은 load-acquire 와 store-release 오퍼레이션을
+	구현하는데 사용될 수 있습니다.
+	흥미롭게도, \co{lwsync} 명령은 x86, z~System, 그리고 우연히도 SPARC TSO
+	에서의 것과 동일한 CPU 내 순서를 강제합니다.
+	그러나, \co{lwsync} 명령을 각 메모리 참조 명령 사이에 위치시키는 것은
+	x86, z~System, 또는 SPARC TSO 메모리 순서 규칙을 만들지는 \emph{않을}
+	겁니다.
+	이 시스템들에서는 한쌍의 CPU 가 개별적으로 다른 변수에 스토어를
+	수행하면 모든 다른 CPU 가 이 스토어들의 순서에 동의합니다.
+	PowerPC 에서는 \co{lwsync} 명령이 각 메모리 참조 명령 쌍 사이에 있다고
+	해도 그렇지 않은데, PowerPC 는 multicopy atomic 하지 않기 때문입니다.
+
+\iffalse
+
 \item	[\tco{sync}] causes all preceding operations to {\em appear to have}
 	completed before any subsequent operations are started.
 	This instruction is therefore quite expensive.
@@ -8682,6 +8710,29 @@ instructions~\cite{PowerPC94,MichaelLyons05a}:
 	Not so on PowerPC, even with an \co{lwsync} instruction between each
 	pair of memory-reference instructions, because PowerPC is
 	non-multicopy atomic.
+
+\fi
+
+\item	[\tco{eieio}] (뭐의 약자인지 궁금하시다면, enforce in-order execution
+	of I/O) 는 모든 앞의 캐쉬될 수 있는 스토어가 모든 뒤따르는 스토어보다
+	먼저 완료된 것으로 나타나게 합니다.
+	그러나, 캐쉬될 수 있는 메모리로의 스토어는 캐쉬될 수 없는 메모리로의
+	스토어와 별개로 순서지어지는데, 이는 \co{eieio} 가 MMIO 스토어가 스핀락
+	해제를 앞서는 걸 강제하지 않음을 의미합니다.
+\item	[\tco{isync}] 는 모든 앞의 명령들이 모든 뒤따르는 명령이 수행을
+	시작하기 전에 완료된 것으로 나타나게 합니다.
+	이는 앞의 명령들이 그것들이 생성할 수 있는 모든 trap 이 일어났거나
+	일어나지 않을 것이 보장되었을 정도로, 그리고 이 명령의 모든 부가작용
+	(예를 들면, page-table 변경) 뒤따르는 명령에 의해 보일 정도로 충분히
+	진행되었어야만 함을 의미합니다.
+	그러나, 이는 모든 메모리 참조가 순서잡힐 것을 강제하지 \emph{않고},
+	오로지 그 명령 자체의 실제 수행만을 강제합니다.
+	따라서, 로드는 여전히 캐쉬되어 있는 오래된 값을 반환할 수 있으며
+	\co{isync} 명령은 앞서 저장된 값을 스토어 버퍼로부터 비워지게 강제하지
+	않습니다.
+
+\iffalse
+
 \item	[\tco{eieio}] (enforce in-order execution of I/O, in case you
 	were wondering) causes all preceding cacheable stores to appear
 	to have completed before all subsequent stores.
@@ -8700,7 +8751,25 @@ instructions~\cite{PowerPC94,MichaelLyons05a}:
 	Thus, the loads might return old still-cached values and the
 	\co{isync} instruction does not force values previously stored
 	to be flushed from the store buffers.
+
+\fi
+
 \end{description}
+
+불행히도, 이 명령들 중 어느 것도 {\em 모든} 스토어가 순서지어져야 하지만
+\co{sync} 명령의 높은 오버헤드를 요구하지는 않는 리눅스의 \co{wmb()} 명령에
+정확히 맞아떨어지지 않습니다.
+그러나 다른 선택지는 없습니다: ppc64 버전의 \co{wmb()} 와 \co{mb()} 는 비용이
+높은 \co{sync} 명령으로 정의되었습니다.
+그러나, 리눅스의 \co{smp_wmb()} 명령은 MMIO 에 결코 쓰이지 않아서 (드라이버가
+MMIO 들을 UP 는 물론 SMP 커널에서도 순서 잡아야 하기 때문), 더 가벼운
+\co{eieio} 나 \co{lwsync} 명령으로
+정의되었습니다~\cite{PaulEMcKenney2016LinuxKernelMMIO}.
+이 명령은 다섯개 모음으로 구성된 이름으로 독특합니다.
+\co{smp_mb()} 명령 또한 \co{sync} 명령으로 정의되었습니다만, \co{smp_mrb()} 와
+\co{rmb()} 는 모두 더 가벼운 \co{lwsync} 명령으로 정의되었습니다.
+
+\iffalse
 
 Unfortunately, none of these instructions line up exactly with Linux's
 \co{wmb()} primitive, which requires {\em all} stores to be ordered,
@@ -8716,6 +8785,8 @@ This instruction may well be unique in having a five-vowel mnemonic.
 The \co{smp_mb()} instruction is also defined to be the \co{sync}
 instruction, but both \co{smp_rmb()} and \co{rmb()} are defined to
 be the lighter-weight \co{lwsync} instruction.
+
+\fi
 
 \Power{} features ``cumulativity'', which can be used to obtain
 transitivity.
