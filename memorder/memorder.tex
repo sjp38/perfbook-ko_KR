@@ -8541,6 +8541,15 @@ CPU, including those to the same variable.
 
 \subsection{MIPS}
 
+MIPS 메모리 모델~\cite[page~479]{MIPSvII-A-2016} 은 \ARM, Itanium, 그리고
+\Power{} 의 것을 닮았는데, 기본적으로는 완화된 순서규칙을 가지지만 종속성은
+지킵니다.
+MIPS 는 다양한 종류의 메모리 배리어 명령을 갖지만 그것들을 하드웨어 주의사항과
+연결하지 않고, 그대신 리눅스 커널과 C++11 표준~\cite{RichardSmith2019N4800} 에
+의해 제공되는 사용처에 연결하는데 \ARMv8 추가사항과 비슷한 방법입니다:
+
+\iffalse
+
 The MIPS memory model~\cite[page~479]{MIPSvII-A-2016}
 appears to resemble that of \ARM, Itanium, and \Power{},
 being weakly ordered by default, but respecting dependencies.
@@ -8549,7 +8558,28 @@ not to hardware considerations, but rather to the use cases provided
 by the Linux kernel and the C++11 standard~\cite{RichardSmith2019N4800}
 in a manner similar to the \ARMv8 additions:
 
+\fi
+
 \begin{description}[style=nextline]
+\item[\tco{SYNC}]
+	OCTEON 시스템을 위한 v4.13 리눅스 커널의 \co{smp_mb()} 구현에 사용된,
+	메모리 참조를 포함해 여러 하드웨어 오퍼레이션을 위한 완전한 배리어.
+\item[\tco{SYNC_WMB}]
+	OCTECON 시스템에서 \co{syncw} 를 통해 v4.13 리눅스 커널의
+	\co{smp_wmb()} 구현을 위해 사용될 수 있는 쓰기 메모리 배리어.
+	다른 시스템은 평범한 \co{sync} 를 사용합니다.
+\item[\tco{SYNC_MB}]
+	전체 메모리 배리어이나 메모리 오퍼레이션만을 위해 작동함.
+	이는 C++ \co{atomic_thread_fence(memory_order_seq_cst)} 를 구현하는데
+	사용될 수 있습니다.
+\item[\tco{SYNC_ACQUIRE}]
+	C++ 의 \co{atomic_thread_fence(memory_order_acquire)} 를 구현하는데
+	사용될 수 있는 acquire 메모리 배리어.
+	이론상, 이는 v4.13 리눅스 커널의 \co{smp_load_acquire()} 를 구현하는
+	데에 사용될 수 있는데, 실전에서는 \co{sync} 가 대신 사용됩니다.
+
+\iffalse
+
 \item[\tco{SYNC}]
 	Full barrier for a number of hardware operations in addition
 	to memory references, which is used to implement the v4.13
@@ -8570,6 +8600,24 @@ in a manner similar to the \ARMv8 additions:
 	In theory, it could also be used to implement the v4.13 Linux-kernel
 	\co{smp_load_acquire()} primitive, but in practice
 	\co{sync} is used instead.
+
+\fi
+
+\item[\tco{SYNC_RELEASE}]
+	C++ 의 \co{atomic_thread_fence(memory_order_release)} 를 구현하는데에
+	사용될 수 있는 release 메모리 배리어.
+	이론상, v4.13 리눅스 커널의 \co{smp_store_release()} 기능을 구현하는
+	데에 사용될 수 있으나, 실제로는 \co{sync} 가 사용됩니다.
+\item[\tco{SYNC_RMB}]
+	v4.13 리눅스 커널에 의해 지원되는 현재 MIPS 구현들은 순서를 강제하기
+	위한 명시적 명령을 필요로 하지 않는다는 점을 제외하면 이론상 리눅스
+	커널의 \co{smp_rmb()} 구현에 사용될 수 있는 읽기 메모리 배리어.
+\item[\tco{SYNCI}]
+	Just-in-time (JIT) 컴파일러에 의해 생성되는 것과 같은 스스로를 수정하는
+	코드를 허용하기 위해 다른 명령들과 함께 사용되는 명령 캐쉬 동기화 기능.
+
+\iffalse
+
 \item[\tco{SYNC_RELEASE}]
 	Release memory barrier, which may be used to implement
 	C++'s \co{atomic_thread_fence(memory_order_release)}.
@@ -8586,7 +8634,17 @@ in a manner similar to the \ARMv8 additions:
 	Instruction-cache synchronization, which is used in conjunction with
 	other instructions to allow self-modifying code, such as that produced
 	by just-in-time (JIT) compilers.
+
+\fi
+
 \end{description}
+
+MIPS 아키텍쳐를 위한 비정형적 논의는 MIPS 가 \ARM\ 과 \Power{} 의 그것과 유사한
+transitivity 와 cumulativity 정의를 가짐을 알게 합니다.
+그러나, 다른 MIPS 구현은 다른 메모리 순서 속성을 가질 수 있는 것으로 보이므로
+여러분이 사용하는 특정 MIPS 구현을 위한 문서를 보는게 중요합니다.
+
+\iffalse
 
 Informal discussions with MIPS architects indicates that MIPS has a
 definition of transitivity or cumulativity similar to that of
@@ -8594,6 +8652,8 @@ definition of transitivity or cumulativity similar to that of
 However, it appears that different MIPS implementations can have
 different memory-ordering properties, so it is important to consult
 the documentation for the specific MIPS implementation you are using.
+
+\fi
 
 \subsection{\Power{} / PowerPC}
 \label{sec:memorder:POWER / PowerPC}
