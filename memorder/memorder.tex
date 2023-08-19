@@ -8855,6 +8855,16 @@ the instruction cache, and may be used in these situations.
 
 \subsection{SPARC TSO}
 
+SPARC 의 TSO (total-store order) 가 리눅스와 Solaris 양쪽에서 사용되지만, 이
+아키텍쳐는 PSO (partial store order) 와 RMO (relaxed-memory order) 또한
+정의합니다.
+RMO 에서 수행되는 모든 프로그램은 PSO 나 TSO 에서도 수행될 것이며, 비슷하게,
+PSO 에서 수행되는 프로그램은 TSO 에서도 수행될 겁니다.
+공유 메모리 병렬 프로그램을 이와 다른 방향으로 옮기는 것은 주의 깊은 메모리
+배리어 삽입을 필요로 할 겁니다.
+
+\iffalse
+
 Although SPARC's TSO (total-store order) is used by both Linux and
 Solaris, the architecture also defines PSO (partial store order) and RMO
 (relaxed-memory order).
@@ -8862,6 +8872,28 @@ Any program that runs in RMO will also run in either PSO or TSO, and similarly,
 a program that runs in PSO will also run in TSO\@.
 Moving a shared-memory parallel program in the other direction may
 require careful insertion of memory barriers.
+
+\fi
+
+SPARC 의 PSO 와 RMO 모드는 오늘날 그렇게 널리 사용되지는 않지만 그것들은 세밀한
+순서 제어를 가능하게 하는 매우 유연한 메모리 배리어 명령을 크게 늘렸습니다:
+\begin{description}
+\item	[\tco{StoreStore}] 는 앞의 스토어를 뒤의 스토어에 대해 순서 잡습니다.
+	(이는 리눅스 \co{smp_wmb()} 기능에서 사용됩니다.)
+\item	[\tco{LoadStore}] 는 앞의 로드를 뒤의 스토어에 대해 순서 잡습니다.
+\item	[\tco{StoreLoad}] 는 앞의 스토어를 뒤의 로드에 대해 순서 잡습니다.
+\item	[\tco{LoadLoad}] 는 앞의 로드를 뒤의 로드에 대해 순서 잡습니다.
+	(이는 리눅스 \co{smp_rmb()} 기능에서 사용됩니다.)
+\item	[\tco{Sync}] 는 모든 앞의 오퍼레이션을 뒤의 오퍼레이션 전에
+	완료시킵니다.
+\item	[\tco{MemIssue}] 는 앞의 메모리 오퍼레이션을 뒤의 메모리 오퍼레이션
+	전에 완료시키는데, 일부 memory-mapped I/O 에 중요합니다.
+\item	[\tco{Lookaside}] 는 MemIssue 와 같은 일을 하지만 앞의 스토어와
+	뒤따르는 로드에만 적용되며 거기서도 같은 메모리 위치에 대해 액세스하는
+	스토어와 로드에 대해서만입니다.
+\end{description}
+
+\iffalse
 
 Although SPARC's PSO and RMO modes are not used much these days, they
 did give rise to a very flexible memory-barrier instruction~\cite{SPARC94}
@@ -8884,6 +8916,28 @@ that permits fine-grained control of ordering:
 	access the same memory location.
 \end{description}
 
+\fi
+
+그래서, 왜 \qco{membar #MemIssue} 가 필요할까요?
+\qco{membar #StoreLoad} 는 뒤의 로드가 그 값을 스토어 버퍼로부터 가져올 수
+있어서 그 쓰기가 MMIO 레지스터로의 것이었다면 읽일 값에 부가작용을 일으킬 수
+있는 경우라면 문제가 될 수 있기 때문입니다.
+반대로, \qco{membar #MemIssue} 는 이 로드가 수행되기 전에 스토어 버퍼가
+비워지길 기다리고, 따라서 이 로드는 그 값을 MMIO 레지스터에서 정말로 읽어오게
+합니다.
+드라이버는 \qco{membar #Sync} 를 대신 사용할 수 있으나, 보다 비용이 높은
+\qco{membar #Sync} 의 추가적 기능이 필요치 않을 때에는 더 저렴한 \qco{membar
+#MemIssue} 가 선호됩니다.
+
+\qco{membar #Lookaside} 는 \qco{membar #MemIssue} 의 저렴한 버전으로, 특정 MMIO
+레지스터로의 쓰기가 그 레지스터로부터 다음에 읽혀질 값에 영향을 끼치는 경우
+유용합니다.
+그러나, 특정 MMIO 레지스터로의 쓰기가 {\em 다른} MMIO 레지스터로부터 다음에
+읽을 값에 영향을 끼치는 경우엔 더 비용이 높은 \qco{membar #MemIssue} 가 반드시
+사용되어야 합니다.
+
+\iffalse
+
 So, why is \qco{membar #MemIssue} needed?
 Because a \qco{membar #StoreLoad} could permit a subsequent
 load to get its value from a store buffer, which would be
@@ -8903,6 +8957,24 @@ However, the heavier-weight \qco{membar #MemIssue} must be used when
 a write to a given MMIO register affects the value that will next be
 read from {\em some other} MMIO register.
 
+\fi
+
+SPARC 는 인스트럭션 흐름이 수정되었을 때와 이 인스트럭션 중 무언가가 수행되는
+시점 사이에 \co{flush} 명령이 사용될 것을 필요로 합니다~\cite{SPARC94}.
+이는 해당 위치의 이전 값을 SPARC 의 인스트럭션 캐쉬로부터 비워내기 위해
+필요합니다.
+\co{flush} 는 주소를 취하며, 인스트럭션 캐쉬로부터 그 주소만을 비움을
+주의하십시오.
+SMP 시스템에서는 모든 CPU 의 캐쉬가 비워지나 언제 CPU 밖의 비우기가
+완료되는지를 아는 편리한 방법이 없으나, 구현 메모에 참고사항이 있긴 합니다.
+
+그러나 다시 말하지만, 리눅스 커널은 TSO 모드에서 SPARC 를 수행하므로, 앞의 모든
+\co{membar} 변종은 역사적 흥미거리일 뿐입니다.
+특히, \co{smp_mb()} 기능은 다른 세개의 재배치가 TSO 에 의해 금지되므로
+\co{#StoreLoad} 만을 필요로 합니다.
+
+\iffalse
+
 SPARC requires a \co{flush} instruction be used between the time that
 the instruction stream is modified and the time that any of these
 instructions are executed~\cite{SPARC94}.
@@ -8919,6 +8991,8 @@ all of the above \co{membar} variants are strictly of historical
 interest.
 In particular, the \co{smp_mb()} primitive only needs to use \co{#StoreLoad}
 because the other three reorderings are prohibited by TSO\@.
+
+\fi
 
 \subsection{x86}
 
