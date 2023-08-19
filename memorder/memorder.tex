@@ -8996,6 +8996,17 @@ because the other three reorderings are prohibited by TSO\@.
 
 \subsection{x86}
 
+역사적으로, x86 CPU 는 모든 CPU 가 특정 CPU 의 메모리 쓰기 순서에 동의하게끔
+``process ordering'' 을 제공했습니다.
+이는 \co{smp_wmb()} 기능이 no-op 이 될 수 있게 했습니다~\cite{IntelXeonV3-96a}.
+물론, \co{smp_wmb()} 기능 전후로 재배치 될 수 있는 최적화를 막기 위한 컴파일러
+지시어는 필요했습니다.
+아주 옛날에는, 특정 x86 CPU 는 로드를 위한 순서 보장을 제공하지 않아서
+\co{smp_mb()} 와 \co{smp_rmb()} 기능이 \co{lock;addl} 로 확장되었습니다.
+이 어토믹 인스트럭션은 로드와 스토어 둘 다에 대한 배리어로 동작합니다.
+
+\iffalse
+
 Historically, the x86 CPUs provided ``process ordering'' so that all CPUs
 agreed on the order of a given CPU's writes to memory.
 This allowed the \co{smp_wmb()}
@@ -9005,6 +9016,29 @@ that would reorder across the \co{smp_wmb()} primitive.
 In ancient times, certain x86 CPUs gave no ordering guarantees for loads, so
 the \co{smp_mb()} and \co{smp_rmb()} primitives expanded to \co{lock;addl}.
 This atomic instruction acts as a barrier to both loads and stores.
+
+\fi
+
+하지만 그건 과거의 일입니다.
+최근에 Intel 은 x86 을 위한 메모리 모델을
+출판했습니다~\cite{Intelx86MemoryOrdering2007}.
+Intel 의 현대 CPU 는 이전의 명세서에서 이야기된 것보다 더 강화된 순서를
+제공하는 것으로 드러났으며, 따라서 이 모델은 이 현대 동작만을 요합니다.
+더 최근에는 Intel 이 x86 을 위한 업데이트된 메모리 모델~\cite[Section
+8.2]{Intel64IA32v3A2011} 을 출판했는데, 여기선 스토어에 대한 전체 전역 순서를
+강요합니다만, 개별 CPU 는 여전히 스스로의 스토어가 전체 전역 순서가 파악하는
+것보다 일찍 볼 수 있게 합니다.
+이 전체 순서에 대한 예외는 스토어 버퍼와 연관된 중요한 하드웨어 최적화를
+허용하기 위해 필요합니다.
+또한, x86 은 다른 multicopy 원자성을 제공하는데, 예를 들면 CPU~0 이 CPU~1 의
+스토어를 봤다면 CPU~0 은 CPU~1 이 그 스토어 전에 봤던 모든 스토어를 볼 것이
+보장됩니다.
+소프트웨어는 이 하드웨어 최적화를 덮기 위해 어토믹 오퍼레이션을 사용할 수
+있는데, 어토믹 오퍼레이션이 비 어토믹 버전의 그것들에 비해 비용이 높은 이유 중
+하나입니다.
+
+\iffalse
+
 
 But those were ancient times.
 More recently, Intel has published a memory model for
@@ -9025,6 +9059,29 @@ all stores that CPU~1 saw prior to its store.
 Software may use atomic operations to override these hardware optimizations,
 which is one reason that atomic operations tend to be more expensive
 than their non-atomic counterparts.
+
+\fi
+
+특정 메모리 위치에 가해지는 어토믹 명령들은 모두 같은 크기여야 한다는
+것을~\cite[Section 8.1.2.2]{Intel64IA32v3A2016} 알아두는게 중요합니다.
+예를 들어, 한 CPU 가 원자적으로 한 바이트를 증가시키는 사이 다른 CPU 는 같은
+위치에 4-바이트 원자적 값 증가를 수행하는 프로그램을 작성한다면, 알아서 하세요.
+
+어떤 SSE 명령은 완화된 순서를 갖습니다 (\co{clflush} 와 비임시적 이동
+명령~\cite{IntelXeonV2b-96a}).
+이 비임시적 이동 명령을 사용하는 코드는 \co{smp_mb()} 를 위해 \co{mfence} 를,
+\co{smp_rmb()} 를 위해 \co{lfence} 를, 그리고 \co{smp_wmb()} 를 위해
+\co{sfence} 를 사용할 수 있습니다.
+x86 CPU 의 일부 오래된 변종들은 비순차적 스토어를 가능하게 하기 위핸 모드 bit
+를 가지며 이런 CPU 에서 \co{smp_wmb()} 는 \co{lock;addl} 로 정의되어야만
+합니다.
+
+최근의 x86 구현이 특별한 명령 없이 스스로를 수정하는 코드를 수용하지만, 과거와
+잠재적 미래 x86 구현에 완전히 호환되려면, CPU 는 jump 명령이나 순차화 명령 (예:
+\co{cpuid}) 을 코드 수정과 수행 사이에 수행해야만 합니다~\cite[Section
+8.1.3]{Intel64IA32v3A2011}.
+
+\iffalse
 
 It is also important to note that atomic instructions operating
 on a given memory location should all be of the same
@@ -9048,6 +9105,8 @@ past and potential future x86 implementations, a given CPU must
 execute a jump instruction or a serializing instruction (e.g., \co{cpuid})
 between modifying the code and executing
 it~\cite[Section 8.1.3]{Intel64IA32v3A2011}.
+
+\fi
 
 \subsection{z Systems}
 
