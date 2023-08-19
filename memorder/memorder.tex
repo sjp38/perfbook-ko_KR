@@ -8788,6 +8788,18 @@ be the lighter-weight \co{lwsync} instruction.
 
 \fi
 
+\Power{} 는 transitivity 를 관측하는데 사용될 수 있는 ``cumulativity'' 를
+제공합니다.
+올바르게 사용되면 앞의 코드 조각의 결과를 보는 모든 코드는 이 앞의 코드 조각
+그자체가 본 것들에 대한 액세스도 보게 됩니다.
+훨씬 많은 세부사항이 McKenney 와 Silvera 에 의해~\cite{PaulEMcKenneyN2745r2009}
+정리되어 있습니다.
+
+\Power{} 는 \ARM\ 과 거의 같은 방식으로 제어 종속성을 지킵니다만 \Power{}
+\co{isync} 명령은 \ARM\ \co{ISB} 명령으로 대체되어야 합니다.
+
+\iffalse
+
 \Power{} features ``cumulativity'', which can be used to obtain
 transitivity.
 When used properly, any code seeing the results of an earlier
@@ -8799,6 +8811,26 @@ McKenney and Silvera~\cite{PaulEMcKenneyN2745r2009}.
 \Power{} respects control dependencies in much the same way that \ARM\
 does, with the exception that the \Power{} \co{isync} instruction
 is substituted for the \ARM\ \co{ISB} instruction.
+
+\fi
+
+\ARMv8 과 같이, \Power{} 는 \co{smp_mb__after_spinlock()} 이 완전한 메모리
+배리어가 될 것을 필요로 합니다.
+또한, \Power{} 는 \co{smp_mb__after_unlock_lock()} 이 완전한 메모리 배리어가 될
+것을 필요로 하는 유일한 아키텍쳐입니다.
+두 경우 모두, 이는 \Power{} 의 락킹 기능의 완화된 순서 속성 때문이며
+\co{lwsync} 명령의 사용이 획득과 해제 둘 다에 순서를 제공해야 하기 때문입니다.
+
+\Power{} 제품군의 많은 제품들이 비일관적 인스트럭션 캐쉬를 가져서 메모리로의
+스토어는 인스트럭션 캐쉬에 반영되지 않을 수 있습니다.
+고맙게도 몇몇 사람들이 스스로를 수정하는 코드를 요즘 작성하지만, JIT 와
+컴파일러는 항상 그러지는 않습니다.
+더 나아가, 최근에 수행된 프로그램을 다시 컴파일하는 건 CPU 의 시점에서는
+스스로를 수정하는 코드처럼 보입니다.
+\co{icbi} 명령 (instruction cache block invalidate) 은 인스트럭션 캐쉬로부터
+특정 캐쉬 라인을 무효화 시키며 이 상황에 쓰일 수 있을 겁니다.
+
+\iffalse
 
 Like \ARMv8, \Power{} requires \co{smp_mb__after_spinlock()} to be
 a full memory barrier.
@@ -8818,6 +8850,8 @@ self-modifying code from the CPU's viewpoint.
 The \co{icbi} instruction (instruction cache block invalidate)
 invalidates a specified cache line from
 the instruction cache, and may be used in these situations.
+
+\fi
 
 \subsection{SPARC TSO}
 
