@@ -9171,6 +9171,24 @@ aforementioned \qco{bcr 15,0} instruction), and test-and-set.
 	  It is method that they lack.}
 	 {\emph{F. W. Nichol}}
 
+이 섹션은
+\cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
+와 \cref{sec:memorder:Basic Rules of Thumb} 를 다시 방문해 더 정교한 경험적
+법칙과 함께 그 사이의 논의를 요약합니다.
+
+그 첫번째 경헙적 규칙은 메모리 순서 오퍼레이션들이 최소 두개의 쓰레드에서 최소
+두개의 공유변수 사이의 상호작용을 가질 가능성이 있을 때에만 필요하다는 겁니다.
+그 사이의 것들에 의해, 이 단일 문장은
+\cref{sec:memorder:Basic Rules of Thumb} 의 기본적 경험적 법칙의 만흔 것을
+담아내는데, 예를 들어 ``memory-barrier pairing'' 은 ``사이클'' 의 두개
+쓰레드에서의 특수 경우임을 명심하십시오.
+또한, 항상 그렇듯 싱글쓰레드 프로그램이 충분한 성능을 제공한다면, 왜 병렬성을
+고려하겠습니까?\footnote{
+	취미가들과 연구자들은 물론 여러 이유로 이를 무시하셔도 무방하겠습니다.}
+어쨌건, 병렬성을 막는 것은 메모리 순서 오퍼레이션의 추가 비용을 막습니다.
+
+\iffalse
+
 This section revisits
 \cref{tab:memorder:Linux-Kernel Memory-Ordering Cheat Sheet}
 and \cref{sec:memorder:Basic Rules of Thumb},
@@ -9191,12 +9209,48 @@ performance, why bother with parallelism?\footnote{
 After all, avoiding parallelism also avoids the added cost of
 memory-ordering operations.
 
+\fi
+
+그 두번째 경험적 법칙은 로드-버퍼링 상황에 연관됩니다:
+특정 사이클에서의 모든 쓰레드간 통신이 store-to-load 연결을 사용한다면 (즉,
+다음 쓰레드의 로드는 앞의 쓰레드가 저장한 값을 반환한다면), 최소한의 순서
+짓기로 충분합니다.
+최소한의 순서 짓기는 종속성과 acquire 는 물론 더 강한 순서 오퍼레이션들도
+포함합니다.
+
+\iffalse
+
 The second rule of thumb involves load-buffering situations:
 If all thread-to-thread communication in a given cycle use store-to-load
 links (that is, the next thread's load returns the value stored by
 the previous thread), minimal ordering suffices.
 Minimal ordering includes dependencies and acquires as well as all stronger
 ordering operations.
+
+\fi
+
+그 세번째 경험적 법칙은 release-acquire 연결에 연관됩니다:
+주어진 사이클의 모든 링크가 하나만 제외하고는 모두 store-to-load 연결이라면,
+\cref{lst:memorder:Long ISA2 Release-Acquire Chain,%
+lst:memorder:Long Z6.2 Release-Acquire Chain} 에 보인 것처럼 그 store-to-load
+연결의 각 짝에 release-acquire 짝을 사용하는 것으로 충분합니다.
+여러분은 이 acquire 를 허용되는 환경에서는 종속성으로 대체할 수 있는데, C11
+표준의 메모리 모델은 종속성을 완전히 존중하지 \emph{않음} 을 명심하시기
+바랍니다.
+따라서, 로드를 앞서는 종속성은 \co{READ_ONCE()} 나 \co{rcu_dereference()} 를
+통해 이루어져야 합니다: 평범한 C 언어 로드는 충분치 않습니다.
+또한, 여러분의 컴파일러에 의해 부서진 종속성은 어떤 것도 순서잡지 않을테니
+\cref{sec:memorder:Address- and Data-Dependency Difficulties,%
+sec:memorder:Control-Dependency Calamities} 을 주의 깊게 다시 보세요.
+하나의 store-to-load 가 아닌 링크를 공유하는 두개의 쓰레드는 보통
+\co{WRITE_ONCE()} 더하기 \co{smp_wmb()} 를 \co{smp_store_release()} 로,
+\co{READ_ONCE()} 더하기 \co{smp_rmb()} 는 \co{smp_load_acquire()} 로 교체할 수
+있습니다.
+그러나, 현명한 개발자는 그런 교체를 주의 깊게 검사할 텐데, 예를 들면
+\cref{sec:formal:Axiomatic Approaches} 에 설명된 것처럼 \co{herd} 도구를
+사용하는 겁니다.
+
+\iffalse
 
 The third rule of thumb involves release-acquire chains:
 If all but one of the links in a given cycle is a store-to-load
@@ -9223,12 +9277,40 @@ However, the wise developer will check such substitutions carefully,
 for example, using the \co{herd} tool as described in
 \cref{sec:formal:Axiomatic Approaches}.
 
+\fi
+
 \QuickQuiz{
+	왜 store-to-load 가 아닌 load-to-store 와 store-to-store 링크에는 보다
+	무거운 순서 오퍼레이션을 사용해야만 하죠?
+	대체 무엇이 store-to-load 링크를 그렇게 특별하게 합니까???
+
+	\iffalse
+
 	Why is it necessary to use heavier-weight ordering for
 	load-to-store and store-to-store links, but not for
 	store-to-load links?
 	What on earth makes store-to-load links so special???
+
+	\fi
+
 }\QuickQuizAnswer{
+	Load-to-store 와 store-to-store 링크는
+	\cref{sec:memorder:Propagation} 의
+	\cref{fig:memorder:Load-to-Store is Counter-Temporal,%
+	fig:memorder:Store-to-Store is Counter-Temporal} 에서 설명된 것처럼
+	임시적이지 않을 수 있음을 기억하십시오.
+	이 load-to-store 와 store-to-store 링크의 반 임시성은 강력한 순서
+	규칙을 필요로 합니다.
+
+	대조적으로, store-to-load 링크는
+	\cref{lst:memorder:Load-Buffering Data-Dependency Litmus Test,%
+	lst:memorder:Load-Buffering Control-Dependency Litmus Test} 에 보인
+	것처럼 임시적입니다.
+	이 store-to-load 링크의 임시성이 최소한의 순서 규칙만 지키는 것을
+	허용합니다.
+
+	\iffalse
+
 	Recall that load-to-store and store-to-store links can be
 	counter-temporal, as illustrated by
 	\cref{fig:memorder:Load-to-Store is Counter-Temporal,%
@@ -9242,7 +9324,31 @@ for example, using the \co{herd} tool as described in
 	lst:memorder:Load-Buffering Control-Dependency Litmus Test}.
 	This temporal nature of store-to-load links permits use of
 	minimal ordering.
+
+	\fi
+
 }\QuickQuizEnd
+
+마지막인 그 네번째 경험적 규칙은 어디에 전체 메모리 배리어가 (또는 그보다
+강력한 것이) 필요한지 정의합니다:
+주어진 사이클이 두개 이상의 store-to-load 링크가 아닌 링크를 갖는다면 (즉, 총
+두개 이상의 링크가 load-to-store 나 store-to-store 링크라면), 여러분은 이
+사이클의 각 store-to-load 가 아닌 링크들 사이에 최소 하나의 전체 메모리
+배리어를 필요로 하며, 이는
+\cref{lst:memorder:W+WRC Litmus Test With More Barriers} 와
+\QuickQuizARef{\MemorderQQLitmusTestR} 의 답변에 설명되어 있습니다.
+전체 배리어는 \co{smp_mb()}, 성공한 전체 강력도의 \co{void} 가 아닌 atomic RMW
+오퍼레이션, 그리고 \co{smp_mb__before_atomic()} 또는
+\co{smp_mb__after_atomic()} 와 함께 사용된 다른 tomic RMW 오퍼레이션들을
+포함합니다.
+모든 RCU 의 grace-period 대기 기능 (\co{synchronize_rcu()} 와 그 친구들) 또한
+전체 배리어로 동작합니다만 \co{smp_mb()} 보다 훨씬 비용이 높습니다.
+전체 배리어가 확장성을 손상시키는 것보다는 성능을 보통 덜 손상시키긴 합니다만
+힘은 비용과 함께 옵니다.
+
+이 규칙들을 다시 정리해 봅니다:
+
+\iffalse
 
 The fourth and final rule of thumb identifies where full memory barriers
 (or stronger) are required:
@@ -9264,7 +9370,20 @@ usually hurt performance more than they hurt scalability.
 
 Recapping the rules:
 
+\fi
+
 \begin{enumerate}
+\item	메모리 순서 오퍼레이션들은 최소한 두개의 변수들이 최소 두개의 쓰레드에
+	의해 공유될 때에만 필요합니다.
+\item	사이클의 모든 링크가 store-to-load 링크라면, 최소한의 순서 보장으로
+	충분합니다.
+\item	만약 사이클의 링크들 중 하나를 제외한 모두가 store-to-load 링크라면, 각
+	store-to-load 링크는 release-acquire 쌍을 사용할 수 있습니다.
+\item	그렇지 않다면, 최소 하나의 전체 배리어가 store-to-load 가 아닌 각 쌍
+	사이에 필요합니다.
+
+\iffalse
+
 \item	Memory-ordering operations are required only if at least
 	two variables are shared by at least two threads.
 \item	If all links in a cycle are store-to-load links, then
@@ -9273,7 +9392,26 @@ Recapping the rules:
 	then each store-to-load link may use a release-acquire pair.
 \item	Otherwise, at least one full barrier is required between
 	each pair of non-store-to-load links.
+
+\fi
+
 \end{enumerate}
+
+이 네개의 경험적 규칙은 \emph{최소한의} 보장을 다룸을 명심하세요.
+특정 아키텍쳐는 \cref{sec:memorder:Hardware Specifics} 에서 설명한 것처럼 보다
+상당한 보장을 제공할 수도 있습니다만 이 보장은 그 아키텍쳐에서만 수행되는
+코드에만 의존할 수도 있습니다.
+또한, 더 연관된 메모리 모델은 보다 높은 복잡도를 대가로 더 강한 보장을 제공할
+수도 있습니다~\cite{Alglave:2018:FSC:3173162.3177156}.
+이 보다 정형적인 메모리 순서 논문에서, store-to-load 링크는 readers-from (rf)
+링크의 예이고, load-to-store 링크는 from-reads (fr) 링크의 예이며,
+store-to-store 링크는 coherence (co) 링크의 예입니다.
+
+마지막 조언입니다: 날것의 메모리 순서 기능을 사용하는 것은 최후의 수단입니다.
+거의 항상 이미 존재하는 락킹이나 RCU 같은 기능을 사용해서 그 기능들이 여러분을
+위한 메모리 순서 보장을 하게 하는 것이 더 낫습니다.
+
+\iffalse
 
 Note that these four rules of thumb encapsulate \emph{minimum} guarantees.
 A given architecture may give more substantial guarantees, as discussed
@@ -9291,5 +9429,7 @@ One final word of advice: Use of raw memory-ordering primitives is
 a last resort.
 It is almost always better to use existing primitives, such as locking
 or RCU, thus letting those primitives do the memory ordering for you.
+
+\fi
 
 \QuickQuizAnswersChp{qqzmemorder}
