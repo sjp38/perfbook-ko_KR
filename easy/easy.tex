@@ -107,6 +107,17 @@ things are covered in the next section.
 % http://billhennessy.com/simple-strategies/2015/09/09/i-wish-drucker-never-said-it
 % Rusty is OK with this: July 19, 2006.
 
+이 섹션은 Rusty Russell 의 2003년 Ottawa Linux 심포지엄 키노드의
+일부~\cite[Slides~39--57]{RustyRussell2003OLSkeynote} 를 수정했습니다.
+Rusty 의 요점은 목적은 단순히 사용하기 편한 API 를 만드는 게 아니라 API 를 잘못
+사용하기 어렵게 해야 한다는 겁니다.
+그 결과, Rusty 는 그의 ``Rusty Scale'' 을 이 오용하기 어렵기 속성의 중요도의
+내림차순으로 제안합니다.
+
+다음 리스트는 Rusty Scale 을 리눅스 커널에 맞춰 일반화 해보려는 시도입니다:
+
+\iffalse
+
 This section is adapted from portions of Rusty Russell's 2003 Ottawa Linux
 Symposium keynote address~\cite[Slides~39--57]{RustyRussell2003OLSkeynote}.
 Rusty's key point is that the goal should not be merely to make an API
@@ -117,7 +128,29 @@ of this important hard-to-misuse property.
 The following list attempts to generalize the Rusty Scale beyond the
 Linux kernel:
 
+\fi
+
 \begin{enumerate}
+\item	잘못되기 불가능할 것.
+	이는 모든 API 설계자드리 추구해야 하는 표준이지만 상상의
+		\co{dwim()}\footnote{
+		\co{dwim()} 함수는 ``do what I mean'' 으로 펼쳐지는
+		축약어입니다.}
+	커맨드만이 근접할 수 있었습니다.
+\item	컴파일러나 링커가 여러분이 잘못을 저지르게 못하게 할 것.
+\item	컴파일러나 링커는 여러분이 뭔가 잘못하면 경고할 것.
+	\co{BUILD_BUG_ON()} 은 여러분의 사용자의 친구가 됩니다.
+\item	가장 간단한 사용이 올바른 방법일 것.
+\item	이름이 사용법을 설명하게 하기.
+	하지만 이름은 양날의 검입니다.
+	비록 \co{rcu_read_lock()} 이 코드를 reader-writer 락킹으로부터
+	변환하고자 하는 누군가에겐 충분히 평범하지만, 레퍼런스 카운팅에서
+	코드를 변환하는 사람에겐 어떤 경악을 금치 못하게 할수도 있을 겁니다.
+\item	올바르게 하지 않으면 수행시간에 항상 고장나게 하기.
+	\co{WARN_ON_ONCE()} 가 여러분의 사용자의 친구가 됩니다.
+
+\iffalse
+
 \item	It is impossible to get wrong.
 	Although this is the standard to which all API designers should
 	strive, only the mythical \co{dwim()}\footnote{
@@ -136,6 +169,27 @@ Linux kernel:
 	reference counting.
 \item	Do it right or it will always break at runtime.
 	\co{WARN_ON_ONCE()} is your users' friend.
+
+\fi
+
+\item	일반적인 관습을 따르면 올바르게 되기.
+	\co{malloc()} 라이브러리 함수가 좋은 예입니다.
+	메모리 할당을 잘못하기는 쉽지만 수많은 프로젝트가 적어도 대부분의 경우
+	이를 올바르게 관리합니다.
+	\co{malloc()} 을 Valgrind~\cite{ValgrindHomePage} 와 함께 사용하는 것은
+	\co{malloc()} 을 거의 ``올바르게 하지 않으면 수행시간에 항상 고장나게
+	하기'' 지점까지 옮깁니다.
+\item	문서를 읽으면 올바르게 사용할 수 있게 하기.
+\item	구현을 읽으면 올바르게 사용할 수 있게 하기.
+\item	올바른 메일링 리스트 기록을 읽으면 올바르게 사용할 수 있게 하기.
+\item	올바른 메일링 리스트 기록을 읽으면 잘못 사용하게 하기.
+\item	구현을 읽으면 잘못 사용하게 하기.
+	\co{rcu_read_lock()} 의 최초 비 \co{CONFIG_PREEMPT}
+	구현은~\cite{PaulEMcKenney2007PreemptibleRCU} 이 지점의 확장성에 대한
+	악명 높은 예입니다.
+
+\iffalse
+
 \item	Follow common convention and you will get it right.
 	The \co{malloc()} library function is a good example.
 	Although it is easy to get memory allocation wrong, a
@@ -153,6 +207,24 @@ Linux kernel:
 	The original non-\co{CONFIG_PREEMPT} implementation of
 	\co{rcu_read_lock()}~\cite{PaulEMcKenney2007PreemptibleRCU}
 	is an infamous example of this point on the scale.
+
+\fi
+
+\item	문서를 읽으면 잘못 사용하게 하기.
+	예를 들어, DEC Alpha \co{wmb} 명령의 문서는~\cite{ALPHA2002} 많은
+	개발자들로 하여금 이 명령이 실제보다 훨씬 강력한 메모리 순서 규칙을
+	갖는 걸로 오해하게 만들었습니다.
+	나중의 문서는 이 지점을 분명케
+	했고~\cite{Compaq01,WilliamPugh2000Gharachorloo}, \co{wmb} 명령을
+	``문서를 읽으면 올바르게 사용하게 하기'' 지점까지 올려놓았습니다.
+\item	흔한 관례를 따르면 잘못 사용하게 하기.
+	\co{printf()} 문은 이 지점의 한 예인데, 개발자들은 거의 항상
+	\co{printf()} 의 반환 오류를 검사하지 않기 때문입니다.
+\item	올바르게 사용하면 수행 시간에 고장나게 하기.
+\item	이름이 그것을 어떻게 사용하면 안되는지 말하게 하기.
+
+\iffalse
+
 \item	Read the documentation and you will get it wrong.
 	For example, the DEC Alpha \co{wmb} instruction's
 	documentation~\cite{ALPHA2002} fooled a
@@ -169,6 +241,18 @@ Linux kernel:
 	developers almost always fail to check \co{printf()}'s error return.
 \item	Do it right and it will break at runtime.
 \item	The name tells you how not to use it.
+
+\fi
+
+\item	명백한 사용이 잘못되기.
+	리눅스 커널의 \co{smp_mb()} 함수는 이 지점의 한 예입니다.
+	많은 개발자들이 이 함수가 실제로 수행하는 것보다 훨씬 강한 순서 규칙을
+	갖는다고 가정합니다.
+	Chapter~\ref{chp:Advanced Synchronization: Memory Ordering} 가 이
+	실수를 막기 위한 정보를 리눅스 커널 소스 트리의
+	\path{Documentation} 과 \path{tools/memory-model} 디렉토리들처럼 담고
+	있습니다.
+
 \item	The obvious use is wrong.
 	The Linux kernel \co{smp_mb()} function is an example of
 	this point on the scale.
