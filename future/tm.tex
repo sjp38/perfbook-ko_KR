@@ -174,6 +174,25 @@ storage.
 \subsubsection{I/O Operations}
 \label{sec:future:I/O Operations}
 
+우린 I/O 오퍼레이션을 필요하다면 락 기반 크리티컬 섹션 내에서 해저드 포인터를
+잡은 채, 시퀀스 락킹 read-side 크리티컬 섹션에서, 또는 userspace-RCU read-side
+크리티컬 섹션에서, 그리고 심지어는 이 모든 것을 한꺼번에 한 채로 수행할 수
+있습니다.
+여러분이 I/O 오퍼레이션을 트랜잭션 형태로 수행하려 하면 어떤 일이 벌어질까요?
+
+여기서의 문제는 트랜잭션은 예를 들면 충돌 때문에 롤백될 수 있다는 겁니다.
+대략적으로 말하자면, 이는 해당 트랜잭션 내의 모든 오퍼레이션이 취소 가능해서 이
+오퍼레이션을 두번 수행하는 것이 한번 수행되었을 때와 같은 효과를 내야 할 것을
+필요로 합니다.
+불행히도, I/O 는 일반적으로 취소 불가한 오퍼레이션의 원형이어서, 트랜잭션 내에
+일반 I/O 오퍼레이션을 포함하기 어렵게 합니다.
+실제로, 일반 I/O 는 취소 불가합니다:
+일단 핵전쟁을 시작하는 버튼을 누르고 나면, 되돌릴 수 없습니다.
+
+여기 트랜잭션 내에서 I/O 를 처리하기 위한 일부 선택사항이 있습니다:
+
+\iffalse
+
 One can execute I/O operations within a lock-based critical section,
 while holding a hazard pointer, within a sequence-locking read-side
 critical section, and from within a userspace-RCU read-side critical
@@ -195,7 +214,32 @@ there is no turning back.
 
 Here are some options for handling of I/O within transactions:
 
+\fi
+
 \begin{enumerate}
+\item	트랜잭션 내에서의 I/O 를 메모리 내 버퍼와 함께 이뤄지는 버퍼 기반 I/O
+	로 제한합니다.
+	그럼 이 버퍼는 모든 다른 메모리 위치가 포함될 수 잇는 것과 같은
+	방법으로 트랜잭션에 포함될 수 있을 겁니다.
+	이는 선택되는 메커니즘이 될 것으로 보이며, stream I/O 와 대용량
+	저장장치 I/O 같은 많은 흔한 상황에서 잘 동작합니다.
+	그러나, 여러 기록 기반 출력 스트림이 여러 프로세스로부터의 단일 파일에
+	머지되는, \co{fopen()} 에의 ``a+'' 옵션이나 \co{open()} 에의
+	\co{O_APPEND} 플래그를 통해 이루어질 수 있는 경우에는 특수한 처리가
+	필요합니다.
+	또한, 다음 섹션에서도 알아보겠지만 일반적인 네트워킹 오퍼레이션은
+	버퍼링을 통해 처리될 수 없습니다.
+\item	트랜잭션 내에서의 I/O 를 금지해서 I/O 오퍼레이션을 수행하려는 모든
+	시도가 그를 감싼 트랜잭션을 (그리고 중첩된 여러 트랜잭션을) 취소시키게
+	합니다.
+	이 시도는 버퍼링 불가한 I/O 를 위한 일반적인 TM 방법으로 보이나, TM 이
+	I/O 를 제어하기 위한 다른 동기화 기능과 함께 사용되어야 하게
+	합니다.
+\item	트랜잭션 내에서의 I/O 를 금지하나, 이 금지를 강제하기 위해 컴파일러의
+	도움을 받습니다.
+
+\iffalse
+
 \item	Restrict I/O within transactions to buffered I/O with in-memory
 	buffers.
 	These buffers may then be included in the transaction in the
@@ -217,6 +261,31 @@ Here are some options for handling of I/O within transactions:
 	synchronization primitives tolerating I/O.
 \item	Prohibit I/O within transactions, but enlist the compiler's aid
 	in enforcing this prohibition.
+
+\fi
+
+\item	한번에 단 하나만 수행될 수 있는 특수한 \emph{취소 불가한}
+	트랜잭션~\cite{SpearMichaelScott2008InevitableSTM} 을 허용해서 취소
+	불가한 트랜잭션이 I/O 오퍼레이션을 포함할 수 있게 합니다.\footnote{
+		이전의 출판물에서, 취소 불가한 트랜잭션은 \emph{피할 수 없는}
+		트랜잭션이라 불리었습니다.}
+	이는 일반적으로 동작합니다만, I/O 오퍼레이션의 확장성과 성능을 상당하게
+	제한합니다.
+	확장성과 성능이 병렬성의 첫번째 목적인 만큼, 이 방법은 일반적으로
+	스스로를 제한하는 것으로 보여지기도 합니다.
+	더 나쁜 것이, I/O 오퍼레이션을 제어하기 위한 취소 불가성의 사용은
+	직접적인 트랜잭션 취소 오퍼레이션의 사용을 크게 제한하는 듯
+	합니다.\footnote{
+		이 어려움은 Michael Factor 에 의해 지적되었습니다.
+		이 문제를 이해하기 위해, 어떤 트랜잭션이 취소 불가한
+		오퍼레이션을 수행한 후 취소되려 할 때 TM 은 어떻게 반응해야
+		할지 생각해 봅시다.}
+	마지막으로, 특정 데이터 항목을 조정하는 취소 불가한 트랜잭션이 있다면
+	같은 데이터 아이템을 조정하는 모든 다른 트랜잭션은 non-blocking 될 수
+	없습니다.
+
+\iffalse
+
 \item	Permit only one special
 	\emph{irrevocable} transaction~\cite{SpearMichaelScott2008InevitableSTM}
 	to proceed
@@ -238,12 +307,32 @@ Here are some options for handling of I/O within transactions:
 	Finally, if there is an irrevocable transaction manipulating
 	a given data item, any other transaction manipulating that
 	same data item cannot have non-blocking semantics.
+
+\fi
+
+\item	I/O 오퍼레이션이 트랜잭션 가능한 하위 영역에 들어갈 수 잇는 새로운
+	하드웨어와 프로토콜을 만듭니다.
+	입력 오퍼레이션의 경우, 하드웨어는 그 오퍼레이션의 결과를 올바르게
+	예측할 수 있고 그 예측이 틀리면 그 트랜잭션을 취소할 수 있어야 합니다.
+
+\iffalse
+
 \item	Create new hardware and protocols such that I/O operations can
 	be pulled into the transactional substrate.
 	In the case of input operations, the hardware would need to
 	correctly predict the result of the operation, and to abort the
 	transaction if the prediction failed.
+
+\fi
+
 \end{enumerate}
+
+I/O 오퍼레이션은 TM 의 널리 알려진 약점이며, 트랜잭션에서 I/O 를
+지원하는데에서의 문제가 합리적이고 일반적인 해결책을 가지고 있는지는 최소한
+``합리적인'' 이 쓸만한 성능과 확장성을 포함한다면 불명확 합니다.
+그러나, 이 문제에 대한 지속적인 관심과 시간은 추가적인 진보를 만들어 낼 겁니다.
+
+\iffalse
 
 I/O operations are a well-known weakness of TM, and it is not clear
 that the problem of supporting I/O in transactions has a reasonable
@@ -251,6 +340,8 @@ general solution, at least if ``reasonable'' is to include usable
 performance and scalability.
 Nevertheless, continued time and attention to this problem will likely
 produce additional progress.
+
+\fi
 
 \subsubsection{RPC Operations}
 \label{sec:future:RPC Operations}
