@@ -346,6 +346,21 @@ produce additional progress.
 \subsubsection{RPC Operations}
 \label{sec:future:RPC Operations}
 
+우린 RPC 들을 락 기반 크리티컬 섹션에서, 해저드 포인터를 쥔 상태에서, 시퀀스
+락킹 read-side 크리티컬 섹션에서, userspace-RCU read-side 크리티컬 섹션에서,
+그리고 심지어 필요하다면 이 모든 것과 함께 할 실행할 수도 있습니다.
+트랜잭션 내에서 RPC 를 실행하려 하면 어떻게 될까요?
+
+RPC 요청과 응답이 모두 이 트랜잭션 내에 포함된다면, 그리고 트랜잭션의 어떤
+부분이 응답으로 반환되는 결과에 의존적이라면, buffered I/O 의 경우에 사용될 수
+있는 메모리 버퍼 트릭은 사용될 수 없습니다.
+이 버퍼링 방법을 사용하려는 모든 시도는 아래의 예에서처럼 그 요청은 이
+트랜잭션이 성공될 거라고 보장되기 전까지는 전송될 수 없지만 이 트랜잭션의 성공
+여부는 그 응답이 도착할 때까지 알 수 없으므로, 이 트랜잭션을 데드락에 빠뜨릴
+겁니다.
+
+\iffalse
+
 One can execute RPCs within a lock-based critical section, while holding
 a hazard pointer, within a sequence-locking read-side critical section,
 and from within a userspace-RCU read-side critical section, and even
@@ -362,6 +377,8 @@ request could not be transmitted until the transaction was guaranteed
 to succeed, but the transaction's success might not be knowable until
 after the response is received, as is the case in the following example:
 
+\fi
+
 \begin{VerbatimN}[samepage=true]
 begin_trans();
 rpc_request();
@@ -369,6 +386,16 @@ i = rpc_response();
 a[i]++;
 end_trans();
 \end{VerbatimN}
+
+이 트랜잭션의 메모리 사용량은 이 RPC 응답을 받기 전까지는 파악될 수 없으며, 이
+트랜잭션의 메모리 사용량이 파악되기 전까지는 이 트랜잭션이 커밋될 수 있는지
+파악될 수 없습니다.
+따라서 트랜잭션 의미규칙에서 일관적인 단 하나의 행동은 무조건적으로 트랜잭션을
+취소하는 것으로, 달리 말하면 최소한 도움이 되지 않습니다.
+
+여기 TM 에서 가능할 법한 옵션들이 있습니다:
+
+\iffalse
 
 The transaction's memory footprint cannot be determined until after the
 RPC response is received, and until the transaction's memory footprint
@@ -380,7 +407,32 @@ unhelpful.
 
 Here are some options available to TM:
 
+\fi
+
 \begin{enumerate}
+\item	트랜잭션 내에서의 RPC 를 금지해서 RPC 오퍼레이션을 수행하려는 모든
+	시도는 그를 감싼 트랜잭션을 취소시키게 합니다 (그리고 아마도 여러개의
+	중첩된 트랜잭션도).
+	대안적으로, 컴파일러가 RPC 가 없는 트랜잭션만을 강제하게 하는 도움을
+	받을 수도 있습니다.
+	이 방법은 동작하나, TM 이 다른 동기화 기능들과 상호작용하게 해야 할
+	겁니다.
+\item	한번에 단 하나의 취소 불가한 특수한
+	트랜잭션~\cite{SpearMichaelScott2008InevitableSTM} 만을 허용해서 취소
+	불가한 트랜잭션들이 RPC 오퍼레이션을 포함할 수 있게 합니다.
+	이는 일반적으로 동작하지만, 심각하게 RPC 오퍼레이션의 확장성과 성능을
+	제한합니다.
+	확장성과 성능이 병렬성의 첫번째 목표임을 감안하면, 이 방법의 범용성은
+	스스로를 제한하는 듯 보입니다.
+	더 나아가, RPC 오퍼레이션을 허용하기 위해 취소 불가한 트랜잭션을
+	사용하는 것은 일단 RPC 오퍼레이션이 시작되면 직접적인 트랜잭션 취소
+	오퍼레이션이 제한됩니다.
+	마지막으로, 어떤 데이터 항목을 조정하는 취소 불가한 트랜잭션이
+	존재한다면, 같은 데이터 항목을 조정하는 모든 다른 트랜잭션은 블록되어야
+	합니다.
+
+\iffalse
+
 \item	Prohibit RPC within transactions, so that any attempt to execute
 	an RPC operation aborts the enclosing transaction (and perhaps
 	multiple nested transactions).
@@ -402,6 +454,24 @@ Here are some options available to TM:
 	Finally, if there is an irrevocable transaction manipulating
 	a given data item, any other transaction manipulating that
 	same data item must have blocking semantics.
+
+\fi
+
+\item	트랜잭션의 성공이 RPC 응답이 받아지기 전에 정해질 수 있는 특수한 경우를
+	정의하고 자동으로 이것들을 RPC 요청을 보내기 직전에 취소 불가한
+	트랜잭션으로 변환시킵니다.
+	물론, 동시의 여러 트랜잭션이 이 방법으로 RPC 호출을 시도한다면 하나만
+	남기고 모든 트랜잭션을 롤백해야 할텐데 이는 성능과 확장성의 저하를
+	초래할 겁니다.
+	그러나 이 방법은 RPC 와 함께 종료되는 오랜 시간 수행되는 트랜잭션에는
+	가치 있을 수도 있습니다.
+	이 방법은 여전히 직접적인 트랜잭션 취소 오퍼레이션을 제약할 수
+	있습니다.
+\item	RPC 응답이 트랜잭션 밖으로 빠질 수 있는 특수한 경우들을 정의하고 그
+	경우엔 buffered I/O 와 비슷한 방법을 사용해 진행합니다.
+
+\iffalse
+
 \item	Identify special cases where the success of the transaction may
 	be determined before the RPC response is received, and
 	automatically convert these to irrevocable transactions immediately
@@ -416,6 +486,19 @@ Here are some options available to TM:
 \item	Identify special cases where the RPC response may be moved out
 	of the transaction, and then proceed using techniques similar
 	to those used for buffered I/O.
+
+\fi
+
+\item	트랜잭션의 범위를 RPC 서버에 이어 클라이언트까지 포함하도록 확장합니다.
+	이는 이론상 가능하며 분산 데이터베이스를 통해 시범되었습니다.
+	그러나, 요청되는 성능과 확장성 요구사항이 분산 데이터베이스 기법으로
+	이루어질 수 있는지는 불명확한데, 메모리 기반 TM 은 그런 응답시간을 가릴
+	수 있는 뒷단의 느린 디스크 드라이브를 갖지 않기 때문입니다.
+	물론, solid-state 디스크의 발전을 놓고 보면 데이터베이스가 응답시간
+	감추기 기법을 재설계 해야 할 것으로 보이긴 합니다.
+
+\iffalse
+
 \item	Extend the transactional substrate to include the RPC server as
 	well as its client.
 	This is in theory possible, as has been demonstrated by
@@ -427,10 +510,20 @@ Here are some options available to TM:
 	Of course, given the advent of solid-state disks, it is also quite
 	possible that databases will need to redesign their approach to
 	latency hiding.
+
+\fi
+
 \end{enumerate}
+
+앞의 섹션에서 이야기 되었듯, I/O 는 TM 의 알려진 약점이며, RPC 는 I/O 의 특별히
+문제가 되는 경우일 뿐입니다.
+
+\iffalse
 
 As noted in the prior section, I/O is a known weakness of TM, and RPC
 is simply an especially problematic case of I/O.
+
+\fi
 
 \subsubsection{Time Delays}
 \label{sec:future:Time Delays}
