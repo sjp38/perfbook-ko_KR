@@ -628,6 +628,22 @@ memory to legacy code.
 \subsubsection{Persistence}
 \label{sec:future:Persistence}
 
+많은 다른 종류의 락킹 기능들이 있습니다.
+한가지 흥미로운 차이점은 지속성으로, 달리 말하면 어떤 락이 그 락을 사용하는
+프로세스의 주소 공간에 무관하게 존재할 수 있는가 입니다.
+
+비 지속적 락은 \co{pthread_mutex_lock()}, \co{pthread_rwlock_rdlock()}, 그리고
+대부분의 커널 단계 락킹 기능들을 포함합니다.
+비 지속적 락의 데이터 구조체를 만들어내는 메모리 위치가 사라진다면 락도
+사라집니다.
+일반적인 \co{pthread_mutex_lock()} 사용에서 이는 프로세스가 종료될 때 그것의
+모든 락도 사라짐을 의미합니다.
+이 속성은 프로그램 종료 시점의 락 정리를 간단하게 하기 위해 사용될 수 있으나,
+관계 없는 어플리케이션들이 락을 공유하기는 그 어플리케이션들이 메모리를
+공유하게 해야 하므로 어렵게 만듭니다.
+
+\iffalse
+
 There are many different types of locking primitives.
 One interesting distinction is persistence, in other words, whether the
 lock can exist independently of the address space of the process using
@@ -644,17 +660,58 @@ at program shutdown time, but makes it more difficult for unrelated
 applications to share locks, as such sharing requires the applications
 to share memory.
 
+\fi
+
 \QuickQuiz{
+	하지만 어떤 어플리케이션이 파일로 매핑된 메모리 지역에 있는
+	\co{pthread_mutex_lock()} 을 쥔 채로 종료된다면요?
+
+	\iffalse
+
 	But suppose that an application exits while holding a
 	\co{pthread_mutex_lock()} that happens to be located in a
 	file-mapped region of memory?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로, 이 경우 그 락은 지속될 것이며, 이 락을 획득하려 시도하는 다른
+	프로세스들은 더이상 존재하지 않는 프로세스에 의해 그 락이 이미 잡혀
+	있음에 놀라게 될 겁니다.
+	이는 파일에 매핑된 메모리 영역에 위치한 \co{pthread_mutex} 객체를
+	사용할 때 세심한 주의가 필요한 이유입니다.
+
+	\iffalse
+
 	Indeed, in this case the lock would persist, much to the
 	consternation of other processes attempting to acquire this
 	lock that is held by a process that no longer exists.
 	Which is why great care is required when using \co{pthread_mutex}
 	objects located in file-mapped memory regions.
+
+	\fi
+
 }\QuickQuizEnd
+
+지속적 락은 관계 없는 어플리케이션 간에 메모리를 공유할 필요를 제거하는데
+도움이 됩니다.
+지속적 락킹 API 는 flock 부류들, \co{lockf()}, System V 세마포어, \co{open()}
+에의 \co{O_CREAT} 플래그 등을 포함합니다.
+이 지속적 API 들은 여러 어플리케이션을 수행하는 거대 규모 오퍼레이션들을
+보호하는데 사용될 수 있으며, \co{O_CREAT} 의 경우는 심지어 운영체제 리부팅
+이후에도 살아남습니다.
+필요하다면, 락은 심지어 분산 락 관리자와 분산 파일시스템을 통해 여러 컴퓨터
+시스템을 아우를 수도 있습니다---그리고 이 컴퓨터 시스템들 모든 것의 리부팅에도
+지속될 수 있습니다.
+
+지속적 락은 어떤 어플리케이션에 의해서도 사용될 수 있는데, 여러 언어와
+소프트웨어 환경으로 쓰여진 어프리케이션들도 포함됩니다.
+실제로, 어떤 지속적 락은 C 로 쓰여진 어플리케이션에 의해 획득되고 Python 으로
+쓰인 어플리케이션에 의해 해제될 수 있습니다.
+
+비슷한 지속적 기능이 TM 에는 어떻게 제공될 수 있을까요?
+
+\iffalse
 
 Persistent locks help avoid the need to share memory among unrelated
 applications.
@@ -674,7 +731,22 @@ in C and released by an application written in Python.
 
 How could a similar persistent functionality be provided for TM?
 
+\fi
+
 \begin{enumerate}
+\item	지속적 트랜잭션을 예를 들면 SQL 과 같은, 그것을 지원하기 위해 설계된
+	특수 목적 환경에 제약합니다.
+	이는 수십년의 데이터베이스 시스템의 긴 역사를 놓고 볼 때 분명
+	동작하지만, 지속적 락이 제공하는 것 만큼의 유연성을 제공하진 않습니다.
+\item	일부 저장 장치나 파일시스템을 통해 제공되는 스냅샷 기능을 사용합니다.
+	불행히도, 이는 네트워크 통신을 처리하지 않으며, 예를 들면 메모리 스틱
+	같은 스냅샷 기능을 제공하지 않는 기기로의 I/O 역시 처리하지 않습니다.
+\item	타임머신을 만듭니다.
+\item	현존하는 지속적 기능을 사용해 트랜잭션 내에서의 그런 사용을 막음으로써
+	문제를 완전히 막습니다.
+
+\iffalse
+
 \item	Restrict persistent transactions to special-purpose environments
 	designed to support them, for example, SQL\@.
 	This clearly works, given the decades-long history of database
@@ -688,13 +760,25 @@ How could a similar persistent functionality be provided for TM?
 \item	Build a time machine.
 \item	Avoid the problem entirely by using existing persistent facilities,
 	presumably avoiding such use within transactions.
+
+\fi
+
 \end{enumerate}
+
+물론, 이게 트랜잭셔널 \emph{메모리} 라고 불린다는 사실은 우릴 잠깐 정지시킬
+텐데, 그 이름 자체가 지속적 트랜잭션의 컨셉과 충돌하기 때문입니다.
+그러나 이 가능성을 트랜잭션 메모리의 고유의 한계점을 보이는 중요한 테스트
+케이스로 생각할 가치는 있습니다.
+
+\iffalse
 
 Of course, the fact that it is called transactional \emph{memory}
 should give us pause, as the name itself conflicts with the concept of
 a persistent transaction.
 It is nevertheless worthwhile to consider this possibility as an important
 test case probing the inherent limitations of transactional memory.
+
+\fi
 
 \subsection{Process Modification}
 \label{sec:future:Process Modification}
