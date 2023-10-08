@@ -528,6 +528,24 @@ is simply an especially problematic case of I/O.
 \subsubsection{Time Delays}
 \label{sec:future:Time Delays}
 
+트랜잭션 외 액세스와의 상호 작용의 중요한 특수 경우는 트랜잭션 내에서의 시간
+지연을 포함합니다.
+물론, 트랜잭션 내에서의 시간 지연이라는 아이디어는 TM 의 원자성에 적용되지만
+이런 종류의 것은 논쟁의 소지가 있지만 약한 원자성이란 무엇인가에 대한 것이
+됩니다.
+더 나아가, memory-mapped I/O 와의 올바른 상호작용은 때때로 주의깊게 제어된
+타이밍을 필요로 하며, 어플리케이션은 종종 여러 목적으로 시간 지연을 사용합니다.
+마지막으로, 어떤 사람들은 시간 지연을 락 기반의 크리티컬 섹션에서, 해저드
+포인터를 쥔 채, 시퀀스 락킹 read-side 크리티컬 섹션 내에서, userspace-RCU
+read-side 크리티컬 섹션 내에서, 그리고 심지어는 필요하다면 이 모든 것들과 함께
+수행할 수도 있습니다.
+그렇게 하는건 경쟁이나 확장성 시점에서 보면 현명하지 않을테지만, 다시 말하지만
+그렇게 하는건 근본적 컨셉상의 문제를 일으키지는 않습니다.
+
+그러니, TM 은 트랜잭션 내에서의 시간 지연을 위해 뭘 할 수 있을까요?
+
+\iffalse
+
 An important special case of interaction with extra-transactional accesses
 involves explicit time delays within a transaction.
 Of course, the idea of a time delay within a transaction flies in the
@@ -545,7 +563,26 @@ but then again, doing so does not raise any fundamental conceptual issues.
 
 So, what can TM do about time delays within transactions?
 
+\fi
+
 \begin{enumerate}
+\item	트랜잭션 내에서의 시간 지연을 무시합니다.
+	이는 우아해 보일 수 있지만 다른 너무 많은 ``우아한'' 해결책들처럼, 기존
+	코드와의 접촉에서 살아남지 못합니다.
+	크리티컬 섹션 내에 중요한 시간 지연을 가질 그런 코드는 트랜잭션화
+	되는데 실패할 겁니다.
+\item	시간 지연 오퍼레이션을 만나는 순간 트랜잭션들을 취소시킵니다.
+	이는 매력적이지만 불행히도 시간 지연 오퍼레이션을 항상 자동으로 탐지할
+	수는 없습니다.
+	그 반복문은 중요한 계산을 하는 걸까요, 아니면 시간이 지나가길 기다릴
+	뿐일까요?
+\item	컴파일러가 트랜잭션 내에서의 시간 지연을 금지하게 부탁합니다.
+\item	시간 지연이 평범히 수행되게 합니다.
+	불행히도, 일부 TM 구현은 수정사항을 커밋 시점에만 외부에 노출하는데,
+	이는 시간 지연의 목적을 의미없게 할 수 있습니다.
+
+\iffalse
+
 \item	Ignore time delays within transactions.
 	This has an appearance of elegance, but like too many other
 	``elegant'' solutions, fails to survive first contact with
@@ -561,7 +598,20 @@ So, what can TM do about time delays within transactions?
 \item	Let the time delays execute normally.
 	Unfortunately, some TM implementations publish modifications only
 	at commit time, which could defeat the purpose of the time delay.
+
+\fi
+
 \end{enumerate}
+
+하나의 올바른 답이 있는지는 명확치 않습니다.
+약화된 원자성을 가져서 변경사항을 트랜잭션 내에서 즉각적으로 외부에 노출시키는
+(취소 시에는 이 변경들을 롤백시킵니다) TM 구현은 마지막 대안으로 잘 처리될 수도
+있을 겁니다.
+이 경우에조차, 이 트랜잭션의 다른쪽 끝의 코드 (또는 심지어 하드웨어) 는 취소된
+트랜잭션을 처리하기 위해 상당한 재설계가 필요할 겁니다.
+이 재설계 필요는 트랜잭셔널 메모리를 기존 코드에 적용하기 더 어렵게 할 겁니다.
+
+\iffalse
 
 It is not clear that there is a single correct answer.
 TM implementations featuring weak atomicity that publish changes
@@ -572,6 +622,8 @@ end of the transaction may require a substantial redesign to tolerate
 aborted transactions.
 This need for redesign would make it more difficult to apply transactional
 memory to legacy code.
+
+\fi
 
 \subsubsection{Persistence}
 \label{sec:future:Persistence}
