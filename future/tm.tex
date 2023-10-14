@@ -1138,6 +1138,32 @@ as well as a \co{longjmp()} or an exception that would exit the transaction.
 \subsubsection{Dynamic Linking and Loading}
 \label{sec:future:Dynamic Linking and Loading}
 
+락 기반 크리티컬 섹션, 해저드 포인터를 쥐는 코드, 시퀀스 락킹 read-side
+크리티컬 섹션, 그리고 userspace-RCU read-side 크리티컬 섹션은 C/C++ 공유
+라이브러리와 Java 클래스 라이브러리를 포함한 동적으로 링크되고 로드되는
+함수들을 호출하는 코드를 포함하는게 함법적입니다.
+물론, 이 라이브러리에 있는 코드는 정의 상으로 컴파일 시점엔 알려지지
+않았습니다.
+따라서, 동적으로 로드된 함수가 트랜잭션 내에서 호출되면 무슨 일이 벌어질까요?
+
+이 질문은 두 부분을 갖습니다: (a)~트랜잭션 내에서 어떻게 동적으로 함수를
+링크하고 로드하는가 그리고 (b)~이 함수 내의 알려지지 않은 본성의 코드에 대해 뭘
+할 것인가?
+공정을 위해 말하자면, 항목 (b) 는 최소한 이론상으로는 락킹과 userspace-RCU 에도
+일부 문제를 일으킬 수 있습니다.
+예를 들어, 이 동적으로 링크된 함수는 락킹에 대한 데드락을 일으키거나 (문제가
+되게도) userspace-RCU read-side 크리티컬 섹션 내로 quiescent state 를 추가시킬
+수도 있습니다.
+차이점이라면 락킹과 userspace-RCU 크리티컬 섹션 내에서 허용된 오퍼레이션들의
+종류는 잘 이해되어 있는 반면, TM 의 경우엔 상당한 불확실성이 있는듯 하다는
+겁니다.
+실제로, TM 의 다른 구현들은 다른 제약들을 갖는듯 합니다.
+
+그러니 TM 은 동적으로 링크되고 로드되는 라이브러리 함수에 대해 뭘 할까요?
+실제로 코드를 로딩하는 것인 항목 (a) 를 위한 옵션들에는 다음이 포함됩니다:
+
+\iffalse
+
 Lock-based critical section, code holding a hazard pointer,
 sequence-locking read-side critical sections, and userspace-RCU read-side
 critical sections can (separately or in combination) legitimately contain
@@ -1163,6 +1189,8 @@ In fact, different implementations of TM seem to have different restrictions.
 
 So what can TM do about dynamically linked and loaded library functions?
 Options for part (a), the actual loading of the code, include the following:
+
+\fi
 
 \begin{enumerate}
 \item	Treat the dynamic linking and loading in a manner similar to a
