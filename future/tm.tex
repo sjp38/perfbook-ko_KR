@@ -802,6 +802,14 @@ ever-changing execution environment.
 \subsubsection{Multithreaded Transactions}
 \label{sec:future:Multithreaded Transactions}
 
+락을 쥔채, 또는 필요하다면 해저드 포인터를 쥔 채, 시퀀스 락킹 read-side
+크리티컬 섹션 내에서, userspace-RCU read-side 크리티컬 섹션 내에서, 그리고
+필요하다면 이 모든 것을 한채로 프로세스와 쓰레드를 생성하는게 완벽하게
+합법적입니다.
+이는 합법일 뿐 아니라 매우 간단한데, 다음 코드 조각으로 보이는 바와 같습니다:
+
+\iffalse
+
 It is perfectly legal to create processes and threads while holding
 a lock or, for that matter, while holding a hazard pointer, within
 a sequence-locking read-side critical section, and from within a
@@ -809,6 +817,8 @@ userspace-RCU read-side critical section, and even all at the same time,
 if need be.
 Not only is it legal, but it is quite simple, as can be seen from the
 following code fragment:
+
+\fi
 
 \begin{VerbatimN}
 pthread_mutex_lock(...);
@@ -818,6 +828,18 @@ for (i = 0; i < ncpus; i++)
 	pthread_join(tid[i], ...);
 pthread_mutex_unlock(...);
 \end{VerbatimN}
+
+이 슈도코드 조각은 CPU 당 하나의 쓰레드를 생성하기 위해 \co{pthread_create()}
+를 사용하고 이어서 각 쓰레드가 완료되기를 기다리기 위해 \co{pthread_join()} 을
+사용하며 이 모든 행동은 \co{pthread_mutex_lock()} 으로 보호됩니다.
+그 효과는 락 기반의 크리티컬 섹션을 병렬로 수행하는 것이며, 비슷한 효과를
+\co{fork()} 와 \co{wait()} 로 얻을 수도 있습니다.
+물론, 이 크리티컬 섹션은 쓰레드 생성 오버헤드를 정당화 할 수 있을 만큼 커야
+할테지만, 제품 소프트웨어에는 커다란 크리티컬 섹션의 예가 많습니다.
+
+TM 은 트랜잭션 내에서 쓰레드를 생성하는 것에 대해 어떻게 할까요?
+
+\iffalse
 
 This pseudo-code fragment uses \co{pthread_create()} to spawn one thread
 per CPU, then uses \co{pthread_join()} to wait for each to complete,
@@ -830,7 +852,26 @@ critical sections in production software.
 
 What might TM do about thread spawning within a transaction?
 
+\fi
+
 \begin{enumerate}
+\item	트랜잭션 내에서의 \co{pthread_create()} 를 불법으로 규정하여 그 경우
+	트랜잭션을 취소시킵니다.
+	대안적으로, 컴파일러가 \co{pthread_create()} 가 없는 트랜잭션만을
+	강제하게 도움을 구합니다.
+\item	\co{pthread_create()} 가 트랜잭션 내에서 수행될 수 있게 하지만 그 부모
+	쓰레드만이 트랜잭션의 부분으로 여겨지게 합니다.
+	이 방법은 존재하는 그리고 가정되는 TM 구현들과 합리적으로 호환된다고
+	보이겠지만 그건 부주의한 사람을 위한 속임수인 듯 합니다.
+	이 방법은 더 많은 질문을 던지게 하는데, 충돌하는 자식 쓰레드 액세스를
+	어떻게 처리할 것인지 등입니다.
+\item	\co{pthread_create()} 들을 함수 호출로 변환합니다.
+	이 방법 또한 매력적인데, 자식 쓰레드들이 서로 통신하는 희귀하지 않은
+	경우들을 처리하지 않기 때문입니다.
+	또한, 트랜잭션의 몸체의 동시 수행을 허용하지 않습니다.
+
+\iffalse
+
 \item	Declare \co{pthread_create()} to be illegal within transactions,
 	preferably by aborting the transaction.
 	Alternatively, enlist the compiler to enforce
@@ -848,6 +889,22 @@ What might TM do about thread spawning within a transaction?
 	with one another.
 	In addition, it does not permit concurrent execution of the body
 	of the transaction.
+
+\fi
+
+\item	부모와 모든 자식 쓰레드를 감싸게끔 트랜잭션을 확장합니다.
+	이 방법은 충돌하는 액세스들의 본성에 대한 흥미로운 질문을 자아내는데,
+	부모와 자식이 서로 충돌하는게 허용되어 있지만 다른 쓰레드와는 그렇지
+	않기 때문입니다.
+	이는 또한 부모 쓰레드가 트랜잭션을 커밋하기 전에 자식들을 기다리지
+	않으면 무슨 일이 벌어질 것인가 같은 흥미로운 질문들을 자아냅니다.
+	더 흥미로운건, 부모가 트랜잭션 내에서 참여하는 변수들의 값에 기반해
+	조건적으로 \co{pthread_join()} 을 수행한다면 무슨 일이 벌어질까요? 
+	이 질문들에 대한 답은 락킹의 경우 합리적으로 단순합니다.
+	TM 에서의 답은 독자 여러분의 몫으로 남겨둡니다.
+
+\iffalse
+
 \item	Extend the transaction to cover the parent and all child threads.
 	This approach raises interesting questions about the nature of
 	conflicting accesses, given that the parent and children are
@@ -862,7 +919,21 @@ What might TM do about thread spawning within a transaction?
 	The answers to these questions are reasonably straightforward
 	in the case of locking.
 	The answers for TM are left as an exercise for the reader.
+
+\fi
+
 \end{enumerate}
+
+트랜잭션의 병렬 수행은 데이터베이스 세계에서 흔하다는 걸 놓고 보면, 현재의 TM
+제안들이 그걸 제공하지 않는다는 건 놀라울 수 있습니다.
+다른 한편, 앞의 예는 간단한 교재의 예에서는 일반적이지 않은 상당히 발전된
+락킹의 사용들이므로, 아마도 그 누락은 예상되었을 수 있습니다.
+그렇다고 하나, 어떤 연구자들은 코드를 자동으로 병렬화 하기 위해 트랜잭션을
+사용하며~\cite{ArunRaman2010MultithreadedTransactions}, 다른 TM 연구자들은
+트랜잭션 내에서의 fork/join 병렬성을 조사하고 있다는 소식이 있으므로, 이 주제는
+더 자세히 다뤄질 수도 있습니다.
+
+\iffalse
 
 Given that parallel execution of transactions is commonplace in the
 database world, it is perhaps surprising that current TM proposals do
@@ -875,6 +946,8 @@ code~\cite{ArunRaman2010MultithreadedTransactions},
 and there are rumors that other TM researchers are investigating
 fork/join parallelism within transactions, so perhaps this topic will
 soon be addressed more thoroughly.
+
+\fi
 
 \subsubsection{The \tco{exec()} System Call}
 \label{sec:future:The exec System Call}
