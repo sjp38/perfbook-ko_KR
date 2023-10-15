@@ -1193,6 +1193,14 @@ Options for part (a), the actual loading of the code, include the following:
 \fi
 
 \begin{enumerate}
+\item	동적 링킹과 로딩을 페이 폴트와 비슷한 방식으로 취급해서 그 함수가
+	로드되고 링크되지만 그 트랜잭션은 취소되게 합니다.
+	그 트랜잭션이 어보트 되었다면, 재시도는 그 함수가 이미 존재함을 찾게 될
+	것이고 그 트랜잭션은 평범하게 처리될 수 있을겁니다.
+\item	트랜잭션 내에서의 함수의 동적 링킹과 로딩을 금지합니다.
+
+\iffalse
+
 \item	Treat the dynamic linking and loading in a manner similar to a
 	page fault, so that the function is loaded and linked, possibly
 	aborting the transaction in the process.
@@ -1201,12 +1209,46 @@ Options for part (a), the actual loading of the code, include the following:
 	proceed normally.
 \item	Disallow dynamic linking and loading of functions from within
 	transactions.
+
+\fi
+
 \end{enumerate}
+
+아직 로드되지 않은 함수 내의 TM 에 친화적이지 않은 오퍼레이션들을 탐지할 수
+없는 경우인 (b) 를 위한 선택 사항들은 다음의 것들이 포함됩니다:
+
+\iffalse
 
 Options for part (b), the inability to detect TM-unfriendly operations
 in a not-yet-loaded function, possibilities include the following:
 
+\fi
+
 \begin{enumerate}
+\item	그냥 그 코드를 수행합니다: 그 함수 내에 TM 에 친화적이지 않은
+	오퍼레이션이 있다면, 단순히 그 트랜잭션을 취소합니다.
+	불행히도, 이 방법은 컴파일러가 언제 어떤 트랜잭션들이 안전히 만들어질
+	수 있는지 파악할 수 없게 합니다.
+	그에 관계 없이 안전한 만들어질 수 있는 능력을 허용하는 한가지 방법은
+	취소 불가한 트랜잭션입니다만, 현재의 구현들은 한번에 단 하나의 취소
+	불가 트랜잭션만 진행될 수 있게 하는데, 이는 상당히 성능과 확장성을
+	제한합니다.
+	취소 불가한 트랜잭션은 또한 직접적인 트랜잭션 취소 오퍼레이션의 사용을
+	제한합니다.
+	마지막으로, 특정 데이터 항목을 조정하는 취소 불가한 트랜잭션이 있다면,
+	같은 데이터 항목을 조정하는 모든 다른 트랜잭션은 non-blocking 될 수
+	없습니다.
+\item	어떤 함수가 TM 친화적인지 알리는 장식을 함수 선언에 합니다.
+	이 장식은 컴파일러의 타입 시스템에 의해 강제될 수 있습니다.
+	물론, 많은 언어에 있어서 이는 언어 확장이 제안되고 표준화 되고 구현될
+	것을 필요로 하는데 이는 연관된 시간 지연을 내포하며 그렇지 않았다면
+	관계 없었을 많은 라이브러리 함수들에의 연관된 장식을 필요로 합니다.
+	그러나, 이 표준화 노력은 이미 진행
+	중입니다~\cite{ALi-Reza-Adl-Tabatabai2009CppTM}.
+\item	앞에서와 같이, 트랜잭션 내에서의 함수 동적 링킹과 로딩을 급지합니다.
+
+\iffalse
+
 \item	Just execute the code: if there are any TM-unfriendly operations
 	in the function, simply abort the transaction.
 	Unfortunately, this approach makes it impossible for the compiler
@@ -1232,7 +1274,19 @@ in a not-yet-loaded function, possibilities include the following:
 	progress~\cite{Ali-Reza-Adl-Tabatabai2009CppTM}.
 \item	As above, disallow dynamic linking and loading of functions from
 	within transactions.
+
+\fi
+
 \end{enumerate}
+
+I/O 오퍼레이션은 물론 알려진 TM 의 약점이며, 동적 링킹과 로딩은 I/O 의 또다른
+특수 경우라고 생각될 수 있습니다.
+그러나, TM 제안자는 이 문제를 풀거나 TM 이 병렬 프로그래머의 도구상자의 여러
+도구 중 하나일 뿐인 세계에 체념해야 합니다.
+(공정을 위해 말하자면, 여러 TM 제안자들이 TM 외에도 여러개를 갖는 세계에
+체념했습니다.)
+
+\iffalse
 
 I/O operations are of course a known weakness of TM, and dynamic linking
 and loading can be thought of as yet another special case of I/O\@.
@@ -1241,6 +1295,8 @@ resign themselves to a world where TM is but one tool of several in the
 parallel programmer's toolbox.
 (To be fair, a number of TM proponents have long since resigned themselves
 to a world containing more than just TM.)
+
+\fi
 
 \subsubsection{Memory-Mapping Operations}
 \label{sec:future:Memory-Mapping Operations}
