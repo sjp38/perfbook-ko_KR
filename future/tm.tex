@@ -1405,6 +1405,16 @@ implications.\footnote{
 \subsubsection{Debugging}
 \label{sec:future:Debugging}
 
+브레이크포인터 같은 일반적인 디버깅 오퍼레이션은 락 기반의 크리티컬 섹션과
+userspace-RCU read-side 크리티컬 섹션 내에서 평범하게 동작합니다.
+그러나, 초기의 트랜잭션 메모리 하드웨어
+구현에서는~\cite{DaveDice2009ASPLOSRockHTM} 트랜잭션 내에서의 예외가 트랜잭션을
+취소시켰는데 이는 브레이크포인트가 모든 감싼 트랜잭션을 취소시킴을 의미합니다.
+
+그러니 어떻게 트랜잭션을 디버깅 할 수 있을까요?
+
+\iffalse
+
 The usual debugging operations such as breakpoints work normally within
 lock-based critical sections and from usespace-RCU read-side critical sections.
 However, in initial transactional-memory hardware
@@ -1414,7 +1424,30 @@ breakpoints abort all enclosing transactions.
 
 So how can transactions be debugged?
 
+\fi
+
 \begin{enumerate}
+\item	브레이크포인트를 포함하는 트랜잭션을 갖는 소프트웨어 에뮬레이션 기술을
+	사용합니다.
+	물론, 모든 트랜잭션의 범위에서 언제든 브레이크포인트를 갖는 모든
+	트랜잭션을 에뮬레이션 할 필요가 있을 수 있습니다.
+	만약 런타임 시스템이 어떤 트랜잭션의 범위 내에 어떤 브레이크포인트가
+	있는지 없는지 탐지할 수 없다면, 안전을 위해 모든 트랜잭션을 에뮬레이션
+	해야 할수도 있습니다.
+	그러나, 이 방법은 상당한 오버헤드를 일으킬 수도 있는데, 이는 결국
+	찾고자 하는 버그를 숨길 수도 있습니다.
+\item	브레이크포인트 예외를 처리할 수 있는 하드웨어 TM 구현만을 사용합니다.
+	불행히도, 지금 시점에서 (2021년 3월), 모든 그런 구현은 연구용
+	프로토타입입니다.
+\item	다른 간단한 하드웨어 TM 구현들보다 (매우 개략적으로 말해서) 예외를 더
+	잘 다룰 수 있는 소프트웨어 TM 구현만을 사용합니다.
+\item	더 주의 깊게 프로그래밍 해서 트랜잭션 내에 버그를 남겨둘 여지를
+	없앱니다.
+	이걸 어떻게 할 수 있는지 파악하자마자 모두가 그 비밀을 알 수 있게
+	해주세요!
+
+\iffalse
+
 \item	Use software emulation techniques within transactions containing
 	breakpoints.
 	Of course, it might be necessary to emulate all transactions
@@ -1438,7 +1471,23 @@ So how can transactions be debugged?
 	transactions in the first place.
 	As soon as you figure out how to do this, please do let everyone
 	know the secret!
+
+\fi
+
 \end{enumerate}
+
+트랜잭셔널 메모리는 다른 동기화 메커니즘들에 비해 생산성의 개선을 제공할 거라
+믿을 이유가 있습니다만, 트랜잭션적 디버깅 기술이 트랜잭션들에느 적용될 수
+없다면 그 개선은 쉽게 사라질 수 있습니다.
+이는 트랜잭셔널 메모리가 거대한 트랜잭션들에서 초보자들에 의해 사용될 경우 특히
+사실일 것으로 보입니다.
+대조적으로, 마초 ``일류'' 프로그래머들은 그런 디버깅 도구 없이도 일을 해낼 수
+있을수도 있는데, 특히 작은 트랜잭션들이라면 그럴 수도 있습니다.
+
+따라서, 트랜잭셔널 메모리가 그 생산성 약속을 초보자 프로그래머들에게도
+전달하려면 이 디버깅 문제가 해결되어야 합니다.
+
+\iffalse
 
 There is some reason to believe that transactional memory will deliver
 productivity improvements compared to other synchronization mechanisms,
@@ -1453,6 +1502,8 @@ such debugging aids, especially for small transactions.
 Therefore, if transactional memory is to deliver on its productivity
 promises to novice programmers, the debugging problem does need to
 be solved.
+
+\fi
 
 \subsection{Synchronization}
 \label{sec:future:Synchronization}
