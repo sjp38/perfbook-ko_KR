@@ -1647,6 +1647,19 @@ such software is now freely available to everyone, including researchers.
 \subsubsection{Reader-Writer Locking}
 \label{sec:future:Reader-Writer Locking}
 
+락을 잡고 있으면서 reader-writer 락을 읽기 모드로 잡는 건 흔한데, 최소한
+데드락을 막기 위한 잘 알려진 흔한 소프트웨어 엔지니어링 기법들이 사용되는
+동안은 잘 동작합니다.
+RCU read-side 크리티컬 섹션 내에서 reader-writer 락을 읽기 모드로 잡는 것 또한
+잘 동작하며, RCU read-side 기능들은 락 기반 데드락 사이클에 참여할 수 없기
+때문에 데드락에 대한 걱정을 덜어줍니다.
+해저드 포인터를 잡고 있는 동안 또는 시퀀스 락 read-side 크리티컬 섹션 내에서
+락을 잡는것 또한 가능합니다.
+하지만 여러분이 트랜잭션 내에서 reader-writer 락을 읽기 모드로 획득하려 하면
+무슨 일이 벌어질까요?
+
+\iffalse
+
 It is commonplace to read-acquire reader-writer locks while holding
 other locks, which just works, at least as long as the usual well-known
 software-engineering techniques are employed to avoid deadlock.
@@ -1657,6 +1670,21 @@ It is also possible to acquire locks while holding hazard pointers and
 within sequence-lock read-side critical sections.
 But what happens when you attempt to read-acquire a reader-writer lock
 from within a transaction?
+
+\fi
+
+불행히도, 트랜잭션 내에서 전통적인 카운터 기반 reader-writer 락을 읽기 모드로
+잡으려는 시도는 reader-writer 락의 목적을 의미없게 합니다.
+이를 보기 위해, 같은 reader-writer 락을 읽기 모드로 획득하려는 동시의 트랜잭션
+한 쌍을 생각해 보세요.
+읽기 모드 획득은 이 reader-writer 락의 데이터 구조의 수정을 필요로 하므로,
+충돌이 발생하고, 이는 두 트랜잭션 중 하나의 롤백을 일으킵니다.
+이 동작은 동시의 읽기 쓰레드들을 허용하려는 reader-writer 락의 목표와 완전히
+불일치합니다.
+
+TM 을 위한 일부 옵션이 여기 있습니다:
+
+\iffalse
 
 Unfortunately, the straightforward approach to read-acquiring the
 traditional counter-based reader-writer lock within a transaction defeats
@@ -1671,7 +1699,24 @@ goal of allowing concurrent readers.
 
 Here are some options available to TM:
 
+\fi
+
 \begin{enumerate}
+\item	특정 CPU (또는 쓰레드) 가 락을 읽기 모드 획득할 때 지역 데이터만을
+	수정하는 CPU 별, 또는 쓰레드별 reader-writer
+	락킹~\cite{WilsonCHsieh92a} 을 사용합니다.
+	이는 두 트랜잭션이 동시에 락을 읽기 모드로 획득하는 것을 충돌을
+	허용하며, 의도될 대로 둘 모두 진행되는 걸 허용합니다.
+	불행히도, (1)~CPU/쓰레드별 락킹에서의 쓰기 모드 락 획득 오버헤드는
+	상당히 높으며, (2)~CPU/스레드별 락킹의 메모리 오버헤드는 위험할 수
+	있으며, (3)~이 변형은 여러분이 문제의 소스코드에의 접근이 허용될 때에만
+	가능합니다.
+	다른 더 최근의 확장 가능한 reader-writer
+	락~\cite{YossiLev2009SNZIrwlock} 은 이 문제들의 일부 또는 전부를 해결할
+	수도 있습니다.
+
+\iffalse
+
 \item	Use per-CPU or per-thread reader-writer
 	locking~\cite{WilsonCHsieh92a}, which allows a
 	given CPU (or thread, respectively) to manipulate only local
@@ -1687,6 +1732,27 @@ Here are some options available to TM:
 	Other more-recent scalable
 	reader-writer locks~\cite{YossiLev2009SNZIrwlock}
 	might avoid some or all of these problems.
+
+\fi
+
+\item	락 기반의 프로그램에 TM 을 도입할 때 ``작은 단계'' 에서만 TM 을
+	사용해서 트랜잭션 내에서 reader-writer 락을 읽기 모드로 획득할 때의
+	문제를 회피합니다.
+\item	락킹 기반 기존 시스템을 완전히 버리고, 트랜잭션으로 모든 것을
+	재구현합니다.
+	이 방법은 많은 지지자가 있으나, 이 시리즈에서 설명된 \emph{모든} 문제가
+	해결될 것을 필요로 합니다.
+	이 문제들을 해결하는 동안 경쟁 동기화 메커니즘들은 물론 개선될 기회를
+	가질 겁니다.
+\item	TxLinux~\cite{ChistopherJRossbach2007a} 그룹과 더 최근의 TM 을 이용해
+	reader-writer 락을 제거한 작업들~\cite{PascalFelber2016rwlockElision}
+	처럼 락 기반 시스템의 최적화에만 TM 을 사용합니다.
+	이 방법은 최소한 \Power{8} CPU 에서는 말이 되는 듯
+	하나~\cite{Le:2015:TMS:3266491.3266500}, 락킹 설계 제한 (데드락 회피의
+	필요 등) 은 그대로 둡니다.
+
+\iffalse
+
 \item	Use TM only ``in the small'' when introducing TM to lock-based
 	programs, thereby avoiding read-acquiring reader-writer locks
 	from within transactions.
@@ -1705,11 +1771,21 @@ Here are some options available to TM:
 	CPUs~\cite{Le:2015:TMS:3266491.3266500}, but leaves the locking
 	design constraints (such as the need to avoid deadlock) firmly
 	in place.
+
+\fi
+
 \end{enumerate}
+
+물론, 배타적 락킹에서 그랬듯 TM 을 reader-writer 락킹과 조합하는데 따르는
+불명확한 문제들이 여럿 있을 수 있습니다.
+
+\iffalse
 
 Of course, there might well be other non-obvious issues surrounding
 combining TM with reader-writer locking, as there in fact were with
 exclusive locking.
+
+\fi
 
 \subsubsection{Deferred Reclamation}
 \label{sec:future:Deferred Reclamation}
