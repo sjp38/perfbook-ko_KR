@@ -1790,6 +1790,28 @@ exclusive locking.
 \subsubsection{Deferred Reclamation}
 \label{sec:future:Deferred Reclamation}
 
+이 섹션은 RCU 에 주 초점을 맞춥니다.
+TM 을 레퍼런스 카운터나 해저드 포인터 같은 다른 deferred-reclamation 메커니즘과
+결합할 때에도 비슷한 문제와 가능한 해결법이 나타납니다.
+아래의 글에서는 알려진 차이점들을 특별히 이야기 합니다.
+
+레퍼런스 카운팅, 해저드 포인터, 그리고 RCU 는
+\cref{sec:defer:RCU Related Work,sec:defer:Which to Choose? (Production Use)}
+에서 이야기 되었듯 모두 널리 사용됩니다.
+이는 이 섹션에서 이야기된 모든 문제를 극복하지 않기로 한 모든 TM 구현은 이
+동기화 메커니즘들과 깨끗하고 효율적으로 상호작용해야 함을 의미합니다.
+
+오스틴의 텍사스 대학교의 TxLinux 그룹은 RCU/TM 상호작용의 문제를 취한 그룹으로
+보입니다~\cite{ChistopherJRossbach2007a}.
+그들은 TM 을 Linux 2.6 커널에 적용했는데, 이 커널은 RCU 를 사용하므로 그들은 TM
+이 RCU 업데이트 락킹을 대체하는 형태로 TM 과 RCU 를 상호작용하게 하는 것밖에
+다른 선택지가 없었습니다.
+불행히도, 논문은 RCU 구현의 락이 (예: \co{rcu_ctrlblk.lock}) 트랜잭션으로
+변환되었다고 명시했지만, RCU 기반 업데이트에 의해 사용된 락들에(예:
+\co{dcache_lock}) 대해선 무슨 일이 일어났는지는 설명하지 않습니다.
+
+\iffalse
+
 This section focuses mainly on RCU\@.
 Similar issues and possible resolutions arise when combining TM with
 other deferred-reclamation mechanisms such as reference counters and
@@ -1813,6 +1835,28 @@ locks (e.g., \co{rcu_ctrlblk.lock}) were converted to transactions,
 it is silent about what was done with those locks used by RCU-based updates
 (for example, \co{dcache_lock}).
 
+\fi
+
+더 최근에는, \ppl{Dimitrios}{Siakavaras} 등이 HTM 과 RCU 를 탐색 트리에
+적용했고~\cite{Siakavaras2017CombiningHA,DimitriosSiakavaras2020RCU-HTM-B+Trees},
+\ppl{Christina}{Giannoula} 등은 HTM 과 RCU 를 그래프에 색을 지정하는데
+사용했으며~\cite{ChristinaGiannoula2018HTM-RCU-graphcoloring},
+\ppl{SeongJae}{Park} 등은 HTM 과 RCU 를 경쟁이 심한 NUMA 시스템에서의 락킹을
+최적화 하는데 사용했습니다~\cite{SeongJaePark2020HTMRCUlock}.
+
+RCU 는 읽기 쓰레드와 업데이트 쓰레드를 동시에 수행될 수 있게 허용하며 더 나아가
+RCU 읽기 쓰레드가 업데이트 중인 데이터에 접근하는 것도 허용함을 알아두는게
+중요합니다.
+물론, 성능, 확장성, 그리고 리얼타임 응답시간 이득이 될 수 있는 이 RCU 의 속성은
+TM 의 원자적 속성에도 적용될 수 있겠지만, \Power{8} CPU 군의 지연된 트랜잭션
+설비~\cite{Le:2015:TMS:3266491.3266500} 는 이를 이 규칙에서의 예외로 만듭니다.
+
+그래서 TM 기반 업데이트는 어떻게 동시의 RCU 읽기 쓰레드와 상호작용할 수
+있을까요?
+일부 가능성은 다음과 같습니다:
+
+\iffalse
+
 More recently, \ppl{Dimitrios}{Siakavaras} et al.~have applied
 HTM and RCU to search trees~\cite{Siakavaras2017CombiningHA,DimitriosSiakavaras2020RCU-HTM-B+Trees},
 \ppl{Christina}{Giannoula} et al.~have used HTM and RCU to color
@@ -1833,7 +1877,22 @@ it an exception to this rule.
 So how should TM-based updates interact with concurrent RCU readers?
 Some possibilities are as follows:
 
+\fi
+
 \begin{enumerate}
+\item	RCU 읽기 쓰레드는 동시의 충돌하는 TM 업데이트를 취소시킵니다.
+	이는 TxLinux 프로젝트에 의해 실제로 취해진 방법입니다.
+	이 방법은 RCU 의미를 지키며, 또한 RCU 의 read-side 성능, 확장성, 그리고
+	리얼타임 응답시간 속성을 지킵니다만 불행히도 충돌하는 업데이트를
+	불필요하게 취소시키는 부작용을 갖습니다.
+	최악의 경우, 길게 유지되는 RCU 읽기 쓰레드는 모든 업데이트 쓰레드를
+	기아에 빠뜨릴 가능성이 있으며, 이는 이론상 시스템 정지를 초래할 수
+	있습니다.
+	또한, 모든 TM 구현이 이 방법을 구현하는데 필요한 강력한 원자성을
+	제공하는건 아닙니다.
+
+\iffalse
+
 \item	RCU readers abort concurrent conflicting TM updates.
 	This is in fact the approach taken by the TxLinux project.
 	This approach does preserve RCU semantics, and also preserves
@@ -1845,6 +1904,24 @@ Some possibilities are as follows:
 	in system hangs.
 	In addition, not all TM implementations offer the strong atomicity
 	required to implement this approach, and for good reasons.
+
+\fi
+
+\item	충돌하는 TM 업데이트와 동시에 수행되는 RCU 읽기 쓰레드는 기존 (트랜잭션
+	전) 값을 받습니다.
+	이는 RCU 의미와 성능을 지키고 RCU-update 기아도 방지합니다.
+	그러나, 모든 TM 구현이 현재 수행중인 트랜잭션에 의해 업데이트 되고
+	있을지도 모르는 변수에의 기존 값을 즉시 접근할 수 있게 하는건 아닙니다.
+	특히, 이전 값을 로그에 유지하는 (따라서 훌륭한 TM 커밋 성능을 제공하는)
+	로그 기반 TM 구현은 이 방법에 행복하지 않을 겁니다.
+	아마도 \co{rcu_dereference()} 기능은 RCU 가 TM 구현의 더 큰 범위에서
+	기존 값에 RCU 가 접근하는 걸 도울 수 있겠지만, 성능이 문제가 될수도
+	있을 겁니다.
+	그렇다고 하나, 이 방법으로 RCU 와 상호작용한 유명한 TM 구현도
+	있습니다~\cite{DonaldEPorter2007TRANSACT,PhilHoward2011RCUTMRBTree,PhilipWHoward2013RCUrbtree}.
+
+\iffalse
+
 \item	RCU readers that run concurrently with conflicting TM updates
 	get old (pre-transaction) values from any conflicting RCU loads.
 	This preserves RCU semantics and performance, and also prevents
@@ -1862,6 +1939,19 @@ Some possibilities are as follows:
 	been integrated with RCU in this
 	manner~\cite{DonaldEPorter2007TRANSACT,PhilHoward2011RCUTMRBTree,
 	PhilipWHoward2013RCUrbtree}.
+
+\fi
+
+\item	RCU 읽기 쓰레드가 수행중인 트랜잭션과 충돌하는 액세스를 수행한다면, 그
+	RCU 액세스는 이 충돌하는 트랜잭션이 커밋하거나 취소된 뒤로 지연됩니다.
+	이 방법은 RCU 의미를 지키나 RCU 의 성능이나 리얼타임 응답시간을 지키지
+	않는데, 특히 긴 시간 수행되는 트랜잭션의 존재 시 그렇습니다.
+	또한, 모든 TM 구현이 충돌하는 액세스를 지연시킬 수 있는 건 아닙니다.
+	그러나, 이 방법은 작은 트랜잭션만 지원하는 하드웨어 TM 구현에서는
+	상당히 합리적인 듯 합니다.
+
+\iffalse
+
 \item	If an RCU reader executes an access that conflicts with an
 	in-flight transaction, then that RCU access is delayed until
 	the conflicting transaction either commits or aborts.
@@ -1872,6 +1962,22 @@ Some possibilities are as follows:
 	conflicting accesses.
 	Nevertheless, this approach seems eminently reasonable for hardware
 	TM implementations that support only small transactions.
+
+\fi
+
+\item	RCU 읽기 쓰레드가 트랜잭션으로 변환됩니다.
+	이 방법은 RCU 가 어떤 TM 구현과도 호환될 것을 상당히 보장합니다만 RCU
+	read-side 크리티컬 섹션의 TM 에 의한 취소 가능성을 암시해 RCU 의
+	리얼타임 응답시간 보장을 파괴하며, 또한 RCU 의 read-side 성능을
+	떨어뜨립니다.
+	더 나아가, 이 방법은 어떤 RCU read-side 크리티컬 섹션이 해당 TM 구현은
+	처리할 수 없는 오퍼레이션을 포함하는 경우에 적합치 못합니다.
+	이 방법은 해저드 포인터와 레퍼런스 카운터에 적용하긴 더 어려우데,
+	코드의 부분에 대한 명확히 정의된 읽기 쓰레드 부분 공지가 없기
+	때문입니다.
+
+\iffalse
+
 \item	RCU readers are converted to transactions.
 	This approach pretty much guarantees that RCU is compatible with
 	any TM implementation, but it also imposes TM's rollbacks on RCU
@@ -1883,6 +1989,24 @@ Some possibilities are as follows:
 	This approach is more difficult to apply to hazard pointers and
 	reference counters, which do not have a sharply defined notion
 	of a reader as a section of code.
+
+\fi
+
+\item	많은 업데이트 쪽 RCU 사용이 새 데이터 구조를 발행하기 위해 단일
+	포인터를 수정합니다.
+	이 경우들 중 일부에서 RCU 는 뒤이어 취소되는 트랜잭션 상의 포인터
+	업데이트를 보는게 안전히 허용되는데, 이 트랜잭션이 메모리 순서 규칙을
+	지키고 취소 과정이 연관된 구조체를 메모리 해제하는데 \co{call_rcu()} 를
+	사용하는 동안은 그렇습니다.
+	불행히도, 모든 TM 구현이 트랜잭션 내에서 메모리 배리어를 존중하지는
+	않습니다.
+	아마도, 이는 트랜잭션이 원자적일 것이라 여겨지며, 트랜잭션 내에서의
+	액세스의 순서는 아무래도 상관 없다 생각했기 때문인 듯 합니다.
+\item	RCU 업데이트 내에서의 TM 사용을 금지합니다.
+	이는 동작할 것이 보장되지만, TM 의 사용을 제한합니다.
+
+\iffalse
+
 \item	Many update-side uses of RCU modify a single pointer to publish
 	a new data structure.
 	In some of these cases, RCU can safely be permitted to see a
@@ -1897,7 +2021,19 @@ Some possibilities are as follows:
 	is not supposed to matter.
 \item	Prohibit use of TM in RCU updates.
 	This is guaranteed to work, but restricts use of TM.
+
+\fi
+
 \end{enumerate}
+
+특히 user-level RCU 와 해저드 포인터 구현의 발전을 놓고 보면 더 많은 방법들이
+나타날 것으로 보입니다.\footnote{
+	앞의 여러 대안들을 가져와 준 TxLinux group, Maged Michael, 그리고 Josh
+	Triplett 에게 감사드립니다.}
+더 나은 성능과 확장성의 STM 구현들 중 다수가 RCU 비슷한 기법을 내부적으로
+사용한다는 것은 흥미롭습니다~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3358885,Kim:2019:MSR:3297858.3304040}.
+
+\iffalse
 
 It seems likely that additional approaches will be uncovered, especially
 given the advent of user-level RCU and hazard-pointer
@@ -1908,16 +2044,49 @@ It is interesting to note that many of the better performing and
 scaling STM implementations make use of RCU-like techniques
 internally~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3358885,Kim:2019:MSR:3297858.3304040}.
 
+\fi
+
 \QuickQuiz{
+	MV-RLU 는 상당히 좋아 보입니다!
+	이게 RCU 를 무찌를 수 있을까요?
+
+	\iffalse
+
 	MV-RLU looks pretty good!
 	Doesn't it beat RCU hands down?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그 초록을 빠르게 읽었다면 그런 인상을 받을 수 있겠습니다만, 더 주의
+	깊은 독자들은 마지막 문장의 ``여러 워크로드에 대해'' 부분을 볼 겁니다.
+	이 부분은 상당히 중요한 것으로 드러났습니다:
+
+	\iffalse
+
 	One might get that impression from a quick read of the abstract,
 	but more careful readers will notice the ``for a wide range of
 	workloads'' phrase in the last sentence.
 	It turns out that this phrase is quite important:
 
+	\fi
+
 	\begin{enumerate}
+	\item	그들의 RCU 성능 평가는 동기성 grace period 를 사용하는데, 이는
+		필요 없이 업데이트를 멈추게 하는데, 그들의 섹션~6.2.1 에
+		설명되어 있습니다.
+		덕이 깊은 비동기 \co{call_rcu()} 기능의 사용이 RCU 를 많은 수의
+		업데이트 쓰레드와 상당히 잘 동작하고 확장되게 한다는 점을 보기
+		위해 이 책의
+		\cref{fig:datastruct:Read-Side RCU-Protected Hash-Table Performance For Schroedinger's Zoo in the Presence of Updates}
+		를 읽어보시기 바랍니다.
+		더 나아가, 그들의 논문의 섹션~3.7 에서, 저자들은 비동기 grace
+		period 가 MV-RLU 확장성을 위해 중요하다고 인정합니다.
+		공정한 비교는 RCU 또한 비동기성의 이득을 얻게 해줘야 합니다.
+
+	\iffalse
+
+
 	\item	Their RCU evaluation uses synchronous grace periods, which
 		needlessly throttle updates, as noted in their
 		Section~6.2.1.
@@ -1931,6 +2100,9 @@ internally~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3
 		MV-RLU scalability.
 		A fair comparison would also allow RCU the benefits of
 		asynchrony.
+
+	\fi
+
 	\item	They use a poorly tuned 1,000-bucket hash table containing
 		10,000~elements.
 		In addition, their 448~hardware threads need considerably
