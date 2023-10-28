@@ -2338,10 +2338,38 @@ large-scale practical impact in the near term.
 \subsection{Discussion}
 \label{sec:future:Discussion}
 
+전체적인 TM 도입에의 장애물들은 다음 결론을 이끌어냅니다:
+
+\iffalse
+
 The obstacles to universal TM adoption lead to the following
 conclusions:
 
+\fi
+
 \begin{enumerate}
+\item	TM 의 흥미로운 속성 중 하나는 트랜잭션이 취소되고 재시도 될 수 있다는
+	사실입니다.
+	이 속성은 버퍼링 되지 않은 I/O, RPC, 메모리 매핑 오퍼레이션, 시간 지연,
+	그리고 \co{exec()} 시스템 콜을 포함한 취소 불가한 오퍼레이션과 TM 의
+	관계에서의 어려움의 근원을 이룹니다.
+	이 속성은 또한 실패의 가능성에서 피할 수 없는 모든 복잡도를 개발자에게
+	보이는 형태로 도입하게 되어버린다는 결론을 갖습니다.
+\item	TM 의 또다른 흥미로운 속성은
+	Shpeisman 등~\cite{TatianaShpeisman2009CppTM} 에 의해 이야기 되었듯, TM
+	은 그것이 보호하는 데이터와 동기화를 관련지운다는 겁니다.
+	이 속성은 TM 의 I/O, 메모리 매핑 오퍼레이션, 엑스트라-트랜잭션 액세스,
+	그리고 디버깅 브레이크포인트와의 문제의 근원을 이룹니다.
+	대조적으로, 락킹과 RCU 를 포함한 전통적인 동기화 기능들은 동기화 기능과
+	그것이 보호하는 데이터 사이에 분명한 분리를 유지합니다.
+\item	TM 분야에서 종사하는 많은 사람들의 선언된 목표들 중 하나는 거대한
+	순차적 프로그램의 병렬화를 쉽게 한다는 겁니다.
+	그러므로 개별 트랜잭션은 보통 순차적으로 수행될 것으로 예상되는데, 이는
+	TM 의 멀티쓰레드 기반 트랜잭션에서의 문제의 많은 부분을 설명할 수도
+	있습니다.
+
+\iffalse
+
 \item	One interesting property of TM is the fact that transactions are
 	subject to rollback and retry.
 	This property underlies TM's difficulties with irreversible
@@ -2364,12 +2392,33 @@ conclusions:
 	As such, individual transactions are commonly expected to
 	execute serially, which might do much to explain TM's issues
 	with multithreaded transactions.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	\co{spin_trylock()} 같은게 존재하는데 TM 이 실패의 컨셉을 가져왔다고
+	말하는게 말이 됩니까???
+
+	\iffalse
+
 	Given things like \co{spin_trylock()}, how does it make any
 	sense at all to claim that TM introduces the concept of failure???
+
+	\fi
+
 }\QuickQuizAnswer{
+	락킹을 사용할 때, \co{spin_trylock()} 은 선택으로, 실패에서 자유로운
+	선택은 \co{spin_lock()} 이 되는데 이는 흔한 경우로 v5.11 리눅스
+	커널에서 \co{spin_lock()} 호출이 \co{spin_trylock()} 호출의 100배가
+	넘음으로 알 수 있습니다.
+	TM 을 사용할 때에는 실패로부터 자유롱누 선택은 취소 불가 트랜잭션
+	뿐으로, 이는 흔한 경우에 사용되지 않습니다.
+	사실, 취소 불가 트랜잭션은 모든 TM 구현에서 사용 가능하지도 않습니다.
+
+	\iffalse
+
 	When using locking, \co{spin_trylock()} is a choice, with a
 	corresponding failure-free choice being \co{spin_lock()},
 	which is used in the common case, as in there are more than
@@ -2379,6 +2428,9 @@ conclusions:
 	transaction, which is not used in the common case.
 	In fact, the irrevocable transaction is not even available
 	in all TM implementations.
+
+	\fi
+
 }\QuickQuizEnd
 
 What should TM researchers and developers do about all of this?
