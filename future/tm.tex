@@ -2225,6 +2225,21 @@ internally~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3
 \subsubsection{Extra-Transactional Accesses}
 \label{sec:future:Extra-Transactional Accesses}
 
+락 기반 크리티컬 섹션 내에서는 동시에 액세스 되거나 심지어 이 락의 크리티컬
+섹션 외부에서 수정되는 여러 변수들을 조정하는게 완전히 합법적인데 흔한 한가지
+예는 통계적 카운터입니다.
+같은 일이 RCU read-side 크리티컬 섹션 내에서 가능하며, 이는 실제로 흔한
+경우입니다.
+
+``Dirty reads'' 라고 흔히 불리는, 제품 데이터베이스 시스템에서 널리 상요되는
+메커니즘을 놓고 볼 때, 엑스트라-트랜잭션 (extra-transactional) 액세스가 TM 의
+부분에서 완화된 atomicity~\cite{Blundell2006TMdeadlock} 등의 지점에서 상당한
+관심을 받았음은 놀랍지 않습니다.
+
+여기 엑스트라-트랜잭션 옵션이 몇개 있습니다:
+
+\iffalse
+
 Within a lock-based critical section, it is perfectly legal to manipulate
 variables that are concurrently accessed or even modified outside that
 lock's critical section, with one common example being statistical
@@ -2240,7 +2255,31 @@ atomicity~\cite{Blundell2006TMdeadlock} being but one case in point.
 
 Here are some extra-transactional options:
 
+\fi
+
 \begin{enumerate}
+\item	엑스트라-트랜잭션 액세스로 인한 충돌은 항상 트랜잭션을 취소시킨다.
+	이는 강한 atomicity 입니다.
+\item	엑스트라-트랜잭션 액세스로 인한 충돌은 무시되어, 트랜잭션을 통한
+	충돌만이 트랜잭션들을 취소시킬 수 있습니다.
+	이는 완화된 atomicity 입니다.
+\item	트랜잭션은 비 트랜잭션 오퍼레이션을 특수한 경우에 사용하는 것이
+	허용되는데, 메모리를 할당받거나 락 기반 크리티컬 섹션과 상호작용할
+	때가 그 예입니다.
+\item	여러 트랜잭션에서 하나의 변수에 동시에 취해질 수 있는 일부 오퍼레이션을
+	(예를 들면, 더하기) 허용하는 하드웨어 확장을 만듭니다.
+\item	트랜잭셔널 메모리에 완화된 의미를 도입합니다.
+	한가지 방법은
+	\cref{sec:future:Deferred Reclamation} 에서 설명된 대로 RCU 와의 결합을
+	하는 것으로, Gramoli 와 Guerraoui 는 다른 완화된 트랜잭션 방법을
+	여러가지 연구했는데~\cite{Gramoli:2014:DTP:2541883.2541900}, 예를 들면
+	거대한 ``우아한'' 트랜잭션의 더 작은 트랜잭션으로의 제한된 조각내기로,
+	충돌 가능성을 줄입니다 (적은 성능과 확장성에도 불구하고).
+	아마도 더 많은 경험은 엑스트라-트랜잭션 액세스의 어떤 사용이 완화된
+	트랜잭션을 대체할 수 있음을 보일 겁니다.
+
+\iffalse
+
 \item	Conflicts due to extra-transactional accesses always abort
 	transactions.
 	This is strong atomicity.
@@ -2266,7 +2305,21 @@ Here are some extra-transactional options:
 	Perhaps further experience will show that some uses of
 	extra-transactional accesses can be replaced by weak
 	transactions.
+
+\fi
+
 \end{enumerate}
+
+트랜잭션은 진공 상태에서 다른 동기화 메커니즘과의 상호작용 필요성 없이 생각된
+것처럼 보입니다.
+그렇다면, 트랜잭션을 비 트랜잭션 액세스와 결합하려 할 때 나타나는 혼란과
+복잡성은 놀랍지 않습니다.
+그러나 트랜잭션이 격리된 데이터 구조로의 작은 업데이트로 국한될 것이 아니라면,
+또는 현재 존재하는 수많은 병렬 코드와 상호작용하지 않는 새로운 프로그램에만
+국한될 것이 아니라면, 트랜잭션은 가까운 미래에 거대 규모의 실용적 효과를 내기
+위해선 그것들과 결합되어야 합니다.
+
+\iffalse
 
 It appears that transactions were conceived in a vacuum, with no
 interaction required with any other synchronization mechanism.
@@ -2277,6 +2330,8 @@ data structures, or alternatively to be confined to new programs
 that do not interact with the huge body of existing parallel code,
 then transactions absolutely must be so combined if they are to have
 large-scale practical impact in the near term.
+
+\fi
 
 % @@@ Huge transactions.  Or perhaps conflict handling.
 
