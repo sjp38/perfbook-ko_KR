@@ -2103,6 +2103,26 @@ internally~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3
 
 	\fi
 
+	\item	그들은 잘 튜닝되지 않은, 10,000 개 원소를 담은 1,000 개 버킷
+		해쉬 테이블을 사용합니다.
+		또한, 그들의 448~하드웨어 쓰레드는 그들이 그들의 벤치마크에서
+		RCU 성능을 제한한다고 올바르게 명시하는 락 경쟁을 막기 위해
+		1,000 개보다 훨씬 많은 버킷이 필요합니다.
+		유용한 비교는 올바르게 튜닝된 해쉬 테이블을 사용할 겁니다.
+	\item	그들의 RCU 해쉬 테이블은 버킷별 락을 사용했는데, 그들은 이를
+		병목지점이라 했고, 이는 긴 해쉬 채인과 작은 버킷 대 쓰레드
+		비율을 볼 때 놀랍지 않습니다.
+		이와 경쟁하는 그들의 다른 여러 메커니즘들은 그대신 lockfree
+		기법을 사용하고, 따라서 버킷별 락 병목을 회피하며, 이는
+		냉소적인 사람들은 그러지 않고는 설명할 수 없는 그들의 제대로
+		튜닝되지 않은 해쉬 테이블의 사용에 빛을 비춰야 한다고 할수도
+		있겠습니다.
+		해당 논문 Figure~4 의 가운데 열의 첫번째 그래프는 인위적 병목에
+		붙잡히지 않는다면 무엇을 이룰 수 있는지 보이며, 같은 열의
+		두번째 그래프의 첫번째 부분 또한 그럽니다.
+
+	\iffalse
+
 	\item	They use a poorly tuned 1,000-bucket hash table containing
 		10,000~elements.
 		In addition, their 448~hardware threads need considerably
@@ -2123,6 +2143,28 @@ internally~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3
 		Figure~4 show what RCU can achieve if not hobbled by
 		artificial bottlenecks, as does the first portion of
 		the second graph in that same row.
+
+	\fi
+
+	\item	그들의 링크드 리스트 오퍼레이션은 RLU 가 리스트의 다른 원소들에
+		동시적 수정을 가하는 걸허용하지만, RCU 는 직렬화된 업데이트를
+		강제합니다.
+		다시 말하지만, RCU 는 lockless 업데이트 쓰레드와 결합되어서도
+		항상 잘 동작해 왔으며, 이 저자들이
+		인용한~\cite{MathieuDesnoyers2012URCU} 학계의 논문에서도 설명된
+		사실입니다.
+		공정한 비교는 MV-RLU 에서와 같은 형태의 업데이트를 RCU 에
+		사용해야 할 겁니다.
+	\item	저자들은 리눅스 커널에서 읽기 쓰레드들에게 여러 포인터 업데이트
+		사이에 일관적인 모습을 보이기 위해 사용되는 RCU 와 시퀀스
+		락킹을 조합을 고려하지 못했습니다.
+	\item	저자들은 읽기 쓰레드에게 완화된 형태의 일관성이긴 하지만 다수
+		포인터 업데이트의 일관적 모습을 제공하는 Issaguah
+		Challenge~\cite{PaulEMcKenney2016IssaquahCPPCON} 에의 RCU 기반
+		해결책을 고려하지 못했습니다.
+
+	\iffalse
+
 	\item	Their linked-list operation permits RLU to do concurrent
 		modifications of different elements in the list, while
 		RCU is forced to serialize updates.
@@ -2139,7 +2181,26 @@ internally~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3
 		Issaquah Challenge~\cite{PaulEMcKenney2016IssaquahCPPCON},
 		which also gives readers a coherent view of multi-pointer
 		updates, albeit with a weaker view of ``coherent''.
+
+	\fi
+
 	\end{enumerate}
+
+	이 논문의 익명 리뷰어들이 MV-RLU 와 RCU 의 apples-to-apples 비교를
+	요구하지 않았다는 건 놀랍습니다.
+	그러나, 저자들은 강력한 읽기 쪽 일관성과 결합된 훌륭한 확장성이라는
+	너무 희귀한 예를 선보이는 학술 논문을 만들어냈음에 축하받아야 합니다.
+	그들은 또한 학계의 비동기적 grace period 에 대한 전통적 편견을
+	이겨냈음에 축하받을 겁니다.  이는 그들의 확장성을 크게 개선시킬 겁니다.
+
+	흥미롭게도, RLU 와 RCU 는 \ppl{Hagit}{Attiya}
+	등~\cite{Attiya:2009:STMReadOnlyLimits} 에 의해 설명된 STM 의 본성적
+	한계를 다른 방법으로 회피합니다.
+	RCU 는 엄격한 serializability 를 제공하는 걸 회피하고 RLU 는 보이지
+	않는 읽기 전용 트랜잭션을 제공하는 걸 회피하는데, 따라서 둘 다 그
+	한계를 회피합니다.
+
+	\iffalse
 
 	It is surprising that the anonymous reviewers of this paper did
 	not demand an apples-to-apples comparison of MV-RLU and RCU\@.
@@ -2156,6 +2217,9 @@ internally~\cite{UCAM-CL-TR-579,KeirFraser2007withoutLocks,Gu:2019:PSE:3358807.3
 	RCU avoids providing strict serializability and RLU avoids providing
 	invisible read-only transactions, both thus avoiding the
 	limitations.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Extra-Transactional Accesses}
