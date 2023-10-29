@@ -12,11 +12,38 @@
 % If at first you do succeed---try to hide your astonishment.
 % Harry F.~Banks
 
+2021년 기준, 하드웨어 트랜잭셔널 메모리 (HTM) 은 상업적으로 접근 가능한 상품
+컴퓨터 시스템의 여러 형태로 수년째
+가용해졌습니다~\cite{Yoo:2013:PEI:2503210.2503232,RickMerrit2011PowerTM,ChristianJacobi2012MainframeTM,TimothyHayes2020ARM-HTM}.
+이 섹션은 병렬 프로그래머의 도구상자에서 HTM 의 위치를 정의해 보려 합니다.
+
+\iffalse
+
 As of 2021, hardware transactional memory (HTM) has been available for many
 years on several types of commercially available commodity computer
 systems~\cite{Yoo:2013:PEI:2503210.2503232,RickMerrit2011PowerTM,ChristianJacobi2012MainframeTM,TimothyHayes2020ARM-HTM}.
 This section makes an attempt to identify HTM's place in the parallel
 programmer's toolbox.
+
+\fi
+
+컨셉적 관점에서, HTM 은 선정된 선언문들이 (``트랜잭션'') 다른 프로세서에서
+수행중인 다른 트랜잭션의 관점에서 볼 때 어토믹하게 효과를 발휘하도록 하게 하기
+위해 프로세서 캐쉬와 예측적 수행을 사용합니다.
+이 트랜잭션은 begin-transaction 기계 명령에 의해 시작되고 commit-transaction
+기계 명령에 의해 완료됩니다.
+일반적으로 abort-transaction 기계 명령도 존재하는데, 예측을 찌그러뜨리고
+(begin-transaction 명령과 뒤따르는 명령들이 수행되지 않은 것처럼) 실패
+처리기에서의 수행을 시작합니다.
+실패 처리기의 위치는 일반적으로 begin-transaction 명령에 의해 명시되는데,
+명시적 실패 처리기 주소가 주어지거나 명령 자체에 의해 설정되는 조건 코드를 통해
+주어집니다.
+각 트랜잭션은 모든 다른 트랜잭션에 대해 원자적으로 수행됩니다.
+
+HTM 은 여러 중요한 이득을 갖는데, 데이터 구조의 자동화된 동적 파티셔닝, 동기화
+기능의 캐쉬 미스 감소, 상당한 수의 실용적 어플리케이션의 지원이 포함됩니다.
+
+\iffalse
 
 From a conceptual viewpoint, HTM uses processor caches and speculative
 execution to make a designated group of statements (a ``transaction'')
@@ -37,6 +64,31 @@ Each transaction executes atomically with respect to all other transactions.
 HTM has a number of important benefits, including automatic
 dynamic partitioning of data structures, reducing synchronization-primitive
 cache misses, and supporting a fair number of practical applications.
+
+\fi
+
+그러나, 제대로 된 문서를 읽을 것이 항상 필요하며, HTM 도 예외가 아닙니다.
+이 섹션의 주요 지점은 어떤 조건에서 HTM 의 이득이 그것의 제대로 된 문서에 숨어
+있는 복잡도를 이겨내는가를 알아내는 것입니다.
+따라서, \cref{sec:future:HTM Benefits WRT Locking} 는 HTM 의 이득을 이야기하고,
+\cref{sec:future:HTM Weaknesses WRT Locking} 는 그 약점을 이야기 합니다.
+이는 이전의 섹션들과
+논문들에서와~\cite{McKenney2007PLOSTM,PaulEMcKenney2010OSRGrassGreener} 같은
+방법입니다.\footnote{
+	다른 저자들, Maged Michael, Josh Triplett, Jonathan Walpole, Andi Kleen
+	등과의 많은 자극적 토론에 소중한 감사를 표합니다.}
+
+이어서
+\cref{sec:future:HTM Weaknesses WRT Locking When Augmented} 는 리눅스 커널
+(그리고 많은 유저 스페이스 어플리케이션) 에서 사용되는 동기화 기능들과의 조합
+관점에서의 HTM 의 약점을 설명합니다.
+\Cref{sec:future:Where Does HTM Best Fit In?} 는 병렬 프로그래머의 도구상자
+내에서 어디에 HTM 이 가장 잘 맞을지 알아보고,
+\cref{sec:future:Potential Game Changers} 는 HTM 의 영역과 인상을 크게 개선시킬
+수도 있을 이벤트를 일부 나열해 봅니다.
+마지막으로, \cref{sec:future:Conclusions} 는 결론을 짓습니다.
+
+\iffalse
 
 However, it always pays to read the fine print, and HTM is no exception.
 A major point of this section is determining under what conditions HTM's
@@ -60,6 +112,8 @@ might best fit into the parallel programmer's toolbox, and
 greatly increase HTM's scope and appeal.
 Finally, \cref{sec:future:Conclusions}
 presents concluding remarks.
+
+\fi
 
 \subsection{HTM Benefits WRT Locking}
 \label{sec:future:HTM Benefits WRT Locking}
