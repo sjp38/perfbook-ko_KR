@@ -162,6 +162,16 @@ listed above.
 \subsubsection{Avoiding Synchronization Cache Misses}
 \label{sec:future:Avoiding Synchronization Cache Misses}
 
+대부분의 동기화 메커니즘은 어토믹 명령에 의해 운영되는 데이터 구조에
+기반합니다.
+이 어토믹 명령들은 일반적으로 일단 연관된 캐쉬라인이 그들이 수행중인 CPU 에
+의해 소유되게 하여, 다른 CPU 에서의 같은 동기화 기능의 사용은 캐쉬 미스를
+일으키게 합니다.
+이 통신을 위한 캐쉬 미스는 전통적 동기화 메커니즘의 성능과 확장성을 크게
+악화시킵니다~\cite[Section 4.2.3]{Anderson97}.
+
+\iffalse
+
 Most synchronization mechanisms are based on data structures that are
 operated on by atomic instructions.
 Because these atomic instructions normally operate by first causing
@@ -172,6 +182,19 @@ CPU will result in a cache miss.
 These communications cache misses severely degrade both the performance and
 scalability of conventional synchronization
 mechanisms~\cite[Section 4.2.3]{Anderson97}.
+
+\fi
+
+대조적으로, HTM 은 해당 CPU 의 캐쉬를 이용해 동기화를 하므로 별도의 동기화
+데이터 구조와 그로 인한 캐쉬 미스를 회피합니다.
+HTM 의 장점은 락 데이터 구조가 별도의 캐쉬 라인에 위치하는 경우 가장 커지는데,
+이 경우 크리티컬 섹션을 HTM 트랜잭션으로 변환시키는 것은 크리티컬 섹션의 캐쉬
+미스로 인한 오버헤드를 완전히 줄일 수 있습니다.
+이로 인한 절약은 짧은 크리티컬 섹션이라는 흔한 경우 상당히 클 수 있는데, 최소한
+제거된 락이 그 락에 의해 보호되는 변수의 캐쉬 라인을 공유하는 많은 경우가 아닐
+경우에는 그렇습니다.
+
+\iffalse
 
 In contrast, HTM synchronizes by using the CPU's cache, avoiding the need
 for a separate synchronization data structure and resultant cache misses.
@@ -184,16 +207,36 @@ critical sections, at least for those situations where the elided lock
 does not share a cache line with an oft-written variable protected by
 that lock.
 
+\fi
+
 \QuickQuiz{
+	왜 락 변수와 보호되는 변수가 캐쉬 라인을 공유하는 일반적 경우가
+	중요하죠?
+
+	\iffalse
+
 	Why would it matter that oft-written variables shared the cache
 	line with the lock variable?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그 락이 자신이 보호하는 변수들과 같은 캐쉬라인에 있다면, 한 CPU 에 의한
+	이 변수들로의 쓰기는 모든 다른 CPU 의 캐쉬 라인을 무효화 시킬 겁니다.
+	이 무효화는 큰 수의 충돌과 재시도를 발생시키는데, 이는 아마 락킹에
+	비해서도 성능과 확장성을 더 떨어뜨릴 수도 있습니다.
+
+	\iffalse
+
 	If the lock is in the same cacheline as some of the variables
 	that it is protecting, then writes to those variables by one CPU
 	will invalidate that cache line for all the other CPUs.
 	These invalidations will
 	generate large numbers of conflicts and retries, perhaps even
 	degrading performance and scalability compared to locking.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Dynamic Partitioning of Data Structures}
