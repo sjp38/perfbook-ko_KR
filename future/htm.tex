@@ -419,6 +419,17 @@ followed by a summary.
 \subsubsection{Transaction-Size Limitations}
 \label{sec:future:Transaction-Size Limitations}
 
+현재 HTM 구현의 트랜잭션 크기 제한은 트랜잭션에 의해 영향받는 데이터를 프로세서
+캐쉬에 둔다는 점에서 기인합니다.
+이게 특정 CPU 가 트랜잭션을 자신의 캐쉬에 국한시켜서 수행함으로써 이를
+원자적으로 행하는 것으로 다른 CPU 에게 보이게 하지만, 이는 또한 여기 들어맞지
+않는 트랜잭션은 커밋될 수 없음을 의미합니다.
+더 나아가, 인터럽트, 시스템콜, 예외, 트랩, 그리고 컨텍스트 스위치 같은 수행
+컨텍스트를 바꾸는 이벤트는 해당 CPU 의 진행중인 트랜잭션을 취소시키거나 이 다른
+수행 문맥의 캐쉬 사용량으로 인해 트랜잭션 크기를 더 제한해야 합니다.
+
+\iffalse
+
 The transaction-size limitations of current HTM implementations
 stem from the use of the processor caches to hold the data
 affected by the transaction.
@@ -431,6 +442,19 @@ abort any ongoing transaction on the CPU in question or must further
 restrict transaction size due to the cache footprint of the other
 execution context.
 
+\fi
+
+물론, 현대의 CPU 는 큰 캐쉬를 갖는 경향을 보이며, 많은 트랜잭션에 필요한
+데이터는 쉽게 1 메가바이트 캐쉬에 담길 겁니다.
+불행히도, 캐쉬에 있어 작은 크기가 전부는 아닙니다.
+문제는 대부분의 캐쉬는 하드웨어로 구현된 해쉬 테이블로 생각될 수 있습니다.
+그러나, 하드웨어 캐쉬는 버킷을 (일반적으로 \emph{set} 이라 불립니다) 연결시키지
+않고, 고정된 수의 set 별 캐쉬라인을 제공합니다.
+각 set 에 의해 제공된 원소의 갯수를 해당 캐쉬의 \emph{associativity} 라
+불립니다.
+
+\iffalse
+
 Of course, modern CPUs tend to have large caches, and the data required
 for many transactions would fit easily in a one-megabyte cache.
 Unfortunately, with caches, sheer size is not all that matters.
@@ -442,6 +466,19 @@ provide a fixed number of cachelines per set.
 The number of elements provided for each set in a given cache
 is termed that cache's \emph{associativity}.
 
+\fi
+
+캐쉬 associativity 는 다양하지만, 제가 이를 타이핑 하는 랩탑에 있는 8-way
+associativity 레벨 0 캐쉬는 드물지 않습니다.
+이게 의미하는 바는 특정 트랜잭션이 아홉개의 캐쉬 라인을 건드려야 하며 그
+아홉개의 캐쉬 라인이 모두 같은 set 으로 매핑된다면 해당 캐쉬에 얼마나 많은
+추가적 공간이 존재하는가와 관계없이 이 트랜잭션은 결코 완료될 수 없다는 겁니다.
+그렇습니다, 특정 데이터 구조에서 데이터 원소가 무작위적으로 선택된다면 그
+트랜잭션이 커밋될 가능성은 상당히 높습니다, 그러나 보장은
+없습니다~\cite{PaulEMcKenney2012HTMCacheGeometry}.
+
+\iffalse
+
 Although cache associativity varies, the eight-way associativity of
 the level-0 cache on the laptop I am typing this on is not unusual.
 What this means is that if a given transaction needed to touch
@@ -452,6 +489,18 @@ Yes, given randomly selected data elements in a given data structure,
 the probability of that transaction being able to commit is quite
 high, but there can be no guarantee~\cite{PaulEMcKenney2012HTMCacheGeometry}.
 
+\fi
+
+이 제한을 완화시키려는 일부 연구가 있었습니다.
+완전한 associativity 의 \emph{victim cache} 는 이 ssociativity 제한을 완화시킬
+테지만, victim 캐쉬의 크기에 대한 까다로운 성능과 에너지 효율 제한이 있습니다.
+그렇다고 하나, 수정되지 않은 캐쉬 라인을 위한 HTM victim 캐쉬는 상당히 작을 수
+있는데, 주소만 가지면 되기 때문입니다:
+데이터 자체는 메모리에 저장되거나 다른 캐쉬에 의해 따라갈 수 있으며, 주소
+자체만으로도 쓰기와의 충돌을 탐지하기 충분합니다~\cite{RaviRajwar2012TSX}.
+
+\iffalse
+
 There has been some research work to alleviate this limitation.
 Fully associative \emph{victim caches} would alleviate the associativity
 constraints, but there are currently stringent performance and
@@ -461,6 +510,27 @@ small, as they need to retain only the address:
 The data itself can be written to memory or shadowed by other caches,
 while the address itself is sufficient to detect a conflicting
 write~\cite{RaviRajwar2012TSX}.
+
+\fi
+
+\emph{Unbounded transactional memory} (UTM)
+방법은~\cite{CScottAnanian2006,KevinEMoore2006}
+DRAM 을 극단적으로 큰 victim 캐쉬로 사용합니다만, 그런 방법을 제품 품질의 캐쉬
+일관성 메커니즘과 결합하는 것은 여전히 해결되지 않은 문제입니다.
+또한, DRAM 을 victim 캐쉬로 사용하는 것은 불행한 성능과 에너지 효율성 결론을
+가질 수 있으며, 특히 victim 캐쉬가 완전한 ssociativity 를 갖는다면 그렇습니다.
+마지막으로, ``unbounded'' 라는 UTM 의 속성은 모든 DRAM 이 victim 캐쉬로 사용될
+수 있음을 가정하는데, 실제로는 크지만 여전히 고정된 양의 DRAM 이 특정 CPU 에
+할당되므로 해당 CPU 의 트랜잭션의 크기는 제한될 겁니다.
+다른 방법들은 하드웨어와 소프트웨어 트랜잭션 메모리의 결합을
+사용하며~\cite{SanjeevKumar2006} 여기서 STM 은 HTM 의 fallback 메커니즘으로
+생각될 수 있습니다.
+
+그러나, 제가 알기로는 TM 읽기 집합의 표현의 간략화라는 예외가 있지만 현재 사용
+가능한 시스템들은 이런 연구 아이디어들을 구현하지 않았는데, 아마도 좋은 이유가
+있었을 겁니다.
+
+\iffalse
 
 \emph{Unbounded transactional memory} (UTM)
 schemes~\cite{CScottAnanian2006,KevinEMoore2006}
@@ -481,6 +551,8 @@ fallback mechanism for HTM\@.
 However, to the best of my knowledge, with the exception of abbreviating
 representation of TM read sets, currently available systems do not
 implement any of these research ideas, and perhaps for good reason.
+
+\fi
 
 \subsubsection{Conflict Handling}
 \label{sec:future:Conflict Handling}
