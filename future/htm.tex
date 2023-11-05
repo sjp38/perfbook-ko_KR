@@ -557,8 +557,15 @@ implement any of these research ideas, and perhaps for good reason.
 \subsubsection{Conflict Handling}
 \label{sec:future:Conflict Handling}
 
+첫번째 복잡성은 \emph{충돌} 가능성입니다.
+예를 들어, 트랜잭션~A 와~B 가 다음과 같이 정의되었다고 해봅시다.
+
+\iffalse
+
 The first complication is the possibility of \emph{conflicts}.
 For example, suppose that transactions~A and~B are defined as follows:
+
+\fi
 
 \begin{VerbatimU}
 Transaction A       Transaction B
@@ -566,6 +573,29 @@ Transaction A       Transaction B
 x = 1;              y = 2;
 y = 3;              x = 4;
 \end{VerbatimU}
+
+각 트랜잭션이 각자의 프로세서에서 동시에 수행된다고 해봅시다.
+트랜잭션~A \co{x} 로의 스토어를 트랜잭션~B 의 \co{y} 스토어와 동시에 행하면,
+어떤 트랜잭션도 진행될 수 없습니다.
+이를 자세히 보기 위해, 트랜잭션~A 가 \co{y} 로의 스토어를 하는걸 봅시다.
+그럼 트랜잭션~A 는 트랜잭션~B 와 엮이게 되어, 각자에 대해 트랜잭션에 원자적으로
+수행되어야 한다는 요구사항을 어기게 됩니다.
+트랜잭션~B 가 \co{x} 로의 스토어를 하게 하는 것 역시 비슷하게 원자적 수행
+요구사항을 어기게 합니다.
+이 상황은 \emph{충돌 (conflict)} 라 명명되었는데, 두 동시의 트랜잭션이 같은
+변수에 액세스 하며 그 액세스 중 최소 하나는 스토어일 때 발생합니다.
+따라서 이 시스템은 수행이 진행될 수 있게 하기 위해 트랜잭션 중 하나 또는 둘
+다를 중지시켜야 합니다.
+어떤 트랜잭션을 중지시킬지의 선택은 박사 학위논문을 만들기 충분할 만큼의 능력을
+얻게 할만큼 흥미로운 주제일텐데 그런 예도
+있습니다~\cite{EgeAkpinar2011HTM2TLE}.\footnote{
+	Liu 와 Spear 의 ``Toxic
+	Transactions''~\cite{YujieLiu2011ToxicTransactions} 는 특히
+	교훈적입니다.}
+이 섹션의 목표에 집중하기 위해, 우린 시스템이 무작위적 선택을 한다고 가정할 수
+있습니다.
+
+\iffalse
 
 Suppose that each transaction executes concurrently on its own processor.
 If transaction~A stores to \co{x} at the same time that transaction~B
@@ -591,6 +621,20 @@ example~\cite{EgeAkpinar2011HTM2TLE}.\footnote{
 For the purposes of this section, we can assume that the system makes
 a random choice.
 
+\fi
+
+또다른 복잡성은 충돌 탐지로, 최소한 가장 간단한 경우에는 비교적 간단합니다.
+프로세서는 트랜잭션을 수행할 때 이 트랜잭션에 의해 만져진 모든 캐쉬라인을
+표시합니다.
+만약 이 프로세서의 캐쉬가 현재 트랜잭션에 의해 접촉된 것으로 표시된 캐쉬 라인에
+연관된 요청을 받는다면, 잠재적 충돌이 일어난 겁니다.
+더 정교한 시스템은 현재 프로세서의 트랜잭션이 그 요청을 보낸 프로세서의 것보다
+앞서 수행되도록 노력할 것이고, 이 과정을 최적화 하는 것은 역시나 박사
+학위논문을 만들 능력을 얻을 수 있게 할 겁니다.
+그러나 이 섹션은 매우 간단한 충돌 탐지 전략을 가정합니다.
+
+\iffalse
+
 Another complication is conflict detection, which is comparatively
 straightforward, at least in the simplest case.
 When a processor is executing a transaction, it marks every cache line
@@ -603,6 +647,28 @@ transaction to precede that of the processor sending the request, and
 optimizing this process will likely also retain the ability to generate
 Ph.D. dissertations for quite some time.
 However this section assumes a very simple conflict-detection strategy.
+
+\fi
+
+그러나, HTM 이 효과적으로 동작하기 위해선 충돌의 가능성이 상당히 낮아야 하는데,
+이는 결국 데이터 구조가 충분히 낮은 충돌 확률을 유지하게끔 짜여져야 할 것을
+필요로 합니다.
+예를 들어, 간단한 삽입, 삭제, 그리고 탐색을 하는 red-black 트리는 이 경우에
+들어맞습니다만, 트리의 원소들의 정확한 수를 유지하는 red-black 트리는 그렇지
+않습니다.\footnote{
+	이 카운트를 업데이트 해야 한다는 필요성이 트리에의 삽입과 삭제가 서로
+	충돌하게 만들어, 강력한 non-commutativity 를
+	초래합니다~\cite{HagitAttiya2011LawsOfOrder,Attiya:2011:LOE:1925844.1926442,PaulEMcKenney2011SNC}.}
+또다른 예로, 하나의 트랜잭션 내에서 트리의 모든 원소를 접근하는 red-black
+트리는 높은 충돌 가능성을 가져서 성능과 확장성을 떨어뜨립니다.
+그 결과, 많은 순차적 프로그램들은 HTM 이 효과적으로 동작하기 전에 일부 재구축을
+필요로 할 겁니다.
+어떤 경우에는, 실무자들은 추가적 단계들을 취하고 (red-black 트리의 경우, radix
+트리나 해쉬 테이블 같은 분할 가능한 데이터 구조로의 변경 같은) 간단히 락킹을
+하는걸 선호할 텐데, 특히 HTM 이 모든 관련 아키텍쳐에서 사용될 준비가 될
+때까지는 그럴 겁니다~\cite{CliffClick2009AzulHTM}.
+
+\iffalse
 
 However, for HTM to work effectively, the probability of conflict must
 be quite low, which in turn requires that the data structures
@@ -626,20 +692,47 @@ use locking, particularly until such time as HTM is readily available
 on all relevant
 architectures~\cite{CliffClick2009AzulHTM}.
 
+\fi
+
 \QuickQuiz{
+	동기화 메커니즘의 선택에 관계 없이 red-black 트리가 어떻게 모든 원소를
+	효율적으로 접근할 수 있죠???
+
+	\iffalse
+
 	How could a red-black tree possibly efficiently enumerate all
 	elements of the tree regardless of choice of synchronization
 	mechanism???
+
+	\fi
+
 }\QuickQuizAnswer{
+	많은 경우, 그 접근은 정확할 필요가 없습니다.
+	이 경우, 읽기 쓰레드를 보호하기 위해 어떤 삽입이나 삭제와도 낮은 충돌
+	확률을 제공하는 해저드 포인터나 RCU 를 사용할 수 있을 겁니다.
+
+	\iffalse
+
 	In many cases, the enumeration need not be exact.
 	In these cases, hazard pointers or RCU may be used to protect
 	readers, which provides low probability of conflict with any
 	given insertion or deletion.
+
+	\fi
+
 }\QuickQuizEnd
+
+더 나아가, 동시의 트랜잭션 사이에서의 충돌하는 액세스의 가능성이 실패를 초래할
+수 있습니다.
+그런 실패를 처리하는 것에 대해 다음 섹션에서 다룹니다.
+
+\iffalse
 
 Furthermore, the potential for conflicting accesses among concurrent
 transactions can result in failure.
 Handling such failure is discussed in the next section.
+
+\fi
 
 \subsubsection{Aborts and Rollbacks}
 \label{sec:future:Aborts and Rollbacks}
