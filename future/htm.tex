@@ -737,6 +737,18 @@ Handling such failure is discussed in the next section.
 \subsubsection{Aborts and Rollbacks}
 \label{sec:future:Aborts and Rollbacks}
 
+어떤 트랜잭션이든 언제든 중단될 수도 있으므로, 트랜잭션이 취소될 수 없는 문장을
+포함하지 않는게 중요합니다.
+이는 트랜잭션은 I/O, 시스템콜, 또는 디버깅 브레이크포인트를 수행할 수 없음을
+(HTM 트랜잭션을 위한 단계별 디버거가 없습니다!!!) 의미합니다.
+대신, 트랜잭션은 스스로를 평범한 캐쉬된 메모리에의 접근으로 국한시켜야 합니다.
+더 나아가, 일부 시스템에서는 인터럽트, 예외, 트랩, TLB 미스, 그리고 다른
+이벤트들도 트랜잭션을 중단시킬 겁니다.
+오류 조건에 대한 적절치 않은 처리로 초래된 수많은 버그를 생각해 보면, 중단과
+되돌림이 사용성에 어떤 영향을 주는지 묻는게 공정합니다.
+
+\iffalse
+
 Because any transaction might be aborted at any time, it is important
 that transactions contain no statements that cannot be rolled back.
 This means that transactions cannot do I/O, system calls, or debugging
@@ -749,15 +761,34 @@ Given the number of bugs that have resulted from improper handling
 of error conditions, it is fair to ask what impact aborts and rollbacks
 have on ease of use.
 
+\fi
+
 \QuickQuiz{
+	하지만 디버거가 트랜잭션의 성공한 라인에 브레이크포인트를 설정하고 앞의
+	트랜잭션 수행의 단계를 다시 추적하길 재시도하는 방법으로 단계별 수행을
+	에뮬레이션하는 건 왜 안되죠?
+
+	\iffalse
+
 	But why can't a debugger emulate single stepping by setting
 	breakpoints at successive lines of the transaction, relying
 	on the retry to retrace the steps of the earlier instances
 	of the transaction?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 방법은 높은 확률로 동작할 수도 있습니다만, 많은 사용자들에게 무척
+	놀라운 방식으로 실패할 수 있습니다.
+	이를 자세히 보기 위해, 다음트랜잭션을 생각해 봅시다:
+
+	\iffalse
+
 	This scheme might work with reasonably high probability, but it
 	can fail in ways that would be quite surprising to most users.
 	To see this, consider the following transaction:
+
+	\fi
 
 \begin{fcvlabel}[ln:future:htm:debug rollbacks]
 \begin{VerbatimN}[commandchars=\\\[\]]
@@ -774,6 +805,19 @@ end_trans();
 \end{fcvlabel}
 
 	\begin{fcvref}[ln:future:htm:debug rollbacks]
+	사용자가 \clnref{another} 에 걸리면 트랜잭션을 중단시키고 디버거에
+	진입할 브레이크포인트를 설정했다고 해봅시다.
+	\end{fcvref}
+	브레이크포인트가 걸린 시각과 디버거가 모든 쓰레드를 중단시키는 시각
+	사이에 어떤 다른 쓰레드가 \co{a} 의 값을 0 으로 설정합니다.
+	불쌍한 사용자가 이 프로그램을 한단계 더 움직이려 하면, 놀랍게도!
+	이 프로그램은 이제 then-절이 아니라 else-절을 수행합니다.
+
+	이는 제가 사용하기 쉬운 디버거라 부르는 게 \emph{아닙니다}.
+
+	\iffalse
+
+	\begin{fcvref}[ln:future:htm:debug rollbacks]
 	Suppose that the user sets a breakpoint at \clnref{another},
 	which triggers,
 	aborting the transaction and entering the debugger.
@@ -785,7 +829,24 @@ end_trans();
 	The program is now in the else-clause instead of the then-clause.
 
 	This is \emph{not} what I call an easy-to-use debugger.
+
+	\fi
+
 }\QuickQuizEnd
+
+물론, 중단과 되돌리기는 HTM 이 하드 리얼타임 시스템에서 유용할지 질문하게
+합니다.
+HTM 의 성능 이익은 중단과 되돌리기의 비용을 넘어서며, 그렇다면 어떤 조건에서
+그럴까요?
+트랜잭션은 우선순위 높이기를 할 수 있을까요?
+또는 높은 우선순위 쓰레드를 위한 트랜잭션은 낮은 우선순위 쓰레드를 중단시켜야
+할까요?
+만약 그렇다면, 하드웨어는 어떻게 효율적으로 우선순위를 전달받나요?
+HTM 의 리얼타임에서의 사용에 대한 글들은 상당히 적은데, 아마도 HTM 을 비
+리얼타임 환경에서 잘동작하게 만드는데도 충분한 정도를 넘어서는 문제들이
+산적했기 때문일 겁니다.
+
+\iffalse
 
 Of course, aborts and rollbacks raise the question of whether HTM can
 be useful for hard real-time systems.
@@ -798,6 +859,31 @@ If so, how is the hardware efficiently informed of priorities?
 The literature on real-time use of HTM is quite sparse, perhaps
 because there are more than enough problems in making HTM work well in
 non-real-time environments.
+
+\fi
+
+현재의 HTM 구현은 결정론적으로 특정 트랜잭션을 중단시키므로, 소프트웨어는
+fallback 코드를 제공해야만 합니다.
+이 fallback 코드는 예를 들어 락킹 같은 다른 형태의 동기화를 사용해야만 합니다.
+락 기반 fallback 이 사용된다면, 데드락의 가능성을 포함한 모든 락킹의 한계들이
+다시 나타납니다.
+물론 이 fallback 이 자주 사용되지 않길 바랄 수 있겠는데, 그럼 더 간단하고 덜
+데드락에 취약한 락킹 설계가 사용될 수 있을 겁니다.
+그러나 이는 시스템이 어떻게 락 기반 fallback 사용에서 트랜잭션으로 전환하는지
+질문을 일으킵니다.\footnote{
+	Fallback 모드에서 멈춰있는 어플리케이션의 가능성은 ``lemming effect''
+	라 명명되었습니다.}
+한가지 방법은 test-and-test-and-set 방법~\cite{Martinez02a} 으로, 락이 해제되기
+전까지는 모두가 뒤로 물러서서 시스템이 트랜잭션 모드의 깔끔한 상태에서 시작할
+수 있게 하는 겁니다.
+그러나, 이는 상당한 스피닝을 초래할 수 있는데, 락을 쥔 쓰레드가 블록되거나
+preemption 당한다면 현명하지 않은 선택일 수도 있습니다.
+또다른 방법은 락을 쥔 쓰레드와 병렬로 트랜잭션이 진행될 수 있게 하는
+것인데~\cite{Martinez02a}, 이는 원자성 유지에 어려움을 자아내며, 이 쓰레드가
+락을 쥐는 이유가 연관된 트랜잭션이 캐쉬 크기에 맞지 않기 때문이라면 특히
+그렇습니다.
+
+\iffalse
 
 Because current HTM implementations might deterministically abort a
 given transaction, software must provide fallback code.
@@ -823,6 +909,17 @@ in maintaining atomicity, especially if the reason that the thread is
 holding the lock is because the corresponding transaction would not fit
 into cache.
 
+\fi
+
+마지막으로, 중단과 되돌리기의 가능성을 처리하는 것은 가능한 오류 조건을 모두
+올바르게 처리해야하는 개발자에게 추가적 짐을 지우는 것으로 보입니다.
+
+HTM 사용자들은 fallback 코드 경로와 fallback 코드에서 트랜잭션 사용 코드로의
+전환 두 경우에 상당한 검증 노력을 들여야 함이 분명합니다.
+HTM 하드웨어의 검증 요구사항이 덜 힘들 거라 믿을 이유 또한 없습니다.
+
+\iffalse
+
 Finally, dealing with the possibility of aborts and rollbacks seems to
 put an additional burden on the developer, who must correctly handle
 all combinations of possible error conditions.
@@ -832,6 +929,8 @@ into testing both the fallback code paths and transition from fallback
 code back to transactional code.
 Nor is there any reason to believe that the validation requirements of
 HTM hardware are any less daunting.
+
+\fi
 
 \subsubsection{Lack of Forward-Progress Guarantees}
 \label{sec:future:Lack of Forward-Progress Guarantees}
