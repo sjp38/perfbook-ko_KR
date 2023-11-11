@@ -1034,6 +1034,25 @@ and thus increasing the probability of failure.
 \subsubsection{Semantic Differences}
 \label{sec:future:Semantic Differences}
 
+HTM 이 많은 경우에 락킹의 즉시 대체제로 사용될 수 있지만 (따라서 Transactional
+lock elision~\cite{DaveDice2008TransactLockElision} 이라는 명칭이 나왔습니다),
+그 의미에는 작은 차이들이 있습니다.
+트랜잭션으로 수행될 때 데드락이나 라이브락을 초래할 수 있는 조합된 락 기반
+크리티컬 섹션을 포함시키는 특히 나쁜 예가
+Blundell~\cite{Blundell2006TMdeadlock} 에 의해 알려졌습니다만, 훨씬 간단한 예는
+텅빈 크리티컬 섹션입니다.
+
+락 기반 프로그램에서, 텅 빈 크리티컬 섹션은 이 락을 잡았던 앞선 프로세스들이
+이제 이를 해제했음을 보장합니다.
+이 용법은 2.4 리눅스 커널의 네트워킹 스택에서 구성 변경을 처리하기 위해
+사용되었습니다.
+그러나 이 텅 빈 크리티컬 섹션이 트랜잭션으로 변환된다면, 그 결과는 no-op
+입니다.
+달리 말하자면, transactional lock elision 은 락킹의 데이터 보호 의미를
+유지하나, 락킹의 시간 기반 메세징 의미는 잃습니다.
+
+\iffalse
+
 Although HTM can in many cases be used as a drop-in replacement for locking
 (hence the name transactional lock
 elision~\cite{DaveDice2008TransactLockElision}),
@@ -1055,11 +1074,35 @@ lost.
 In other words, transactional lock elision preserves the data-protection
 semantics of locking, but loses locking's time-based messaging semantics.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	하지만 \emph{누가} 빈 락 기반 크리티컬 섹션을 필요로 합니까???
+
+	\iffalse
+
 	But why would \emph{anyone} need an empty lock-based critical
 	section???
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\Cref{sec:locking:Exclusive Locks} 의
+	\QuickQuizARef{\QlockingQemptycriticalsection} 의 답을 보시기 바랍니다.
+
+	그러나 진행 보장이 없이 강력한 원자성을 제공하는 HTM 구현 때문에 빈
+	크리티컬 섹션에 기반한 모든 메모리 기반 락킹 설계는 transactional lock
+	elision 의 존재에도 올바르게 동작할 거라는 주장이 있습니다.
+	저는 이 말의 증명을 보지 못했지만, 이 주장에는 단순한 이유가 있습니다.
+	요점은 강력하게 원자적인 HTM 구현에서, 특정 트랜잭션의 결과는 이
+	트랜잭션이 성공적으로 완료되기 전까지는 보이지 않는다는 겁니다.
+	따라서, 여러분이 어떤 트랜잭션이 시작된 걸 본다면, 이는 이미
+	완료되었음이 보장되어서 뒤따르는 빈 락 기반 크리티컬 섹션은 그걸
+	``기다린다'' 는 겁니다---어쨌건, 기다림이 필요치 않으니까요.
+
+	\iffalse
+
 	See the answer to \QuickQuizARef{\QlockingQemptycriticalsection} in
 	\cref{sec:locking:Exclusive Locks}.
 
@@ -1079,6 +1122,18 @@ semantics of locking, but loses locking's time-based messaging semantics.
 	successfully ``wait'' on it---after all, there is no waiting
 	required.
 
+	\fi
+
+	이 근거는 완화된 원자적 시스템에서는 (많은 STM 구현이 포함됩니다)
+	성립되지 않으며, 통신에 메모리 이외의 수단을 사용하는 락 기반
+	프로그램에도 적용되지 않습니다.
+	그런 방법들에는 시간의 흐름 (예를 들어, 하드 리얼타임 시스템) 이나
+	우선순위의 흐름이 (예를 들어, 소프트 리얼타임 시스템) 있습니다.
+
+	우선순위 높이기에 기반하는 락킹 설계는 특히 흥미로울 겁니다.
+
+	\iffalse
+
 	This line of reasoning does not apply to weakly atomic
 	systems (including many STM implementation), and it also
 	does not apply to lock-based programs that use means other
@@ -1089,13 +1144,40 @@ semantics of locking, but loses locking's time-based messaging semantics.
 
 	Locking designs that rely on priority boosting are of particular
 	interest.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	Transactional lock elision 은 간단히 빈 락 기반 크리티컬 섹션을
+	제거하지 않음으로써 락킹의 시간 기반 메세징 의미를 다룰 수 있지
+	않을까요?
+
+	\iffalse
+
 	Can't transactional lock elision trivially handle locking's
 	time-based messaging semantics
 	by simply choosing not to elide empty lock-based critical sections?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	그럴 수 있겠습니다만, 이는 불필요하고 불충분할 겁니다.
+
+	이 텅빈 크리티컬 섹션이 조건적 컴파일 때문이었다면 이는 불필요합니다.
+	이 락의 목표는 데이터 보호 뿐이었다면 이를 완전히 제거하는게 올바른
+	일일 겁니다.
+	실제로, 빈 락 기반 크리티컬 섹션을 놔두는 건 성능과 확장성을 떨어뜨릴
+	겁니다.
+
+	다른 한편, 비지 않은 락 기반 크리티컬 섹션이 락킹의 데이터 보호와 시간
+	기반  메세징 의미에 의존하는 게 가능합니다.
+	그런 경우에 transactional lock elision 을 사용하는 것은 올바르지 않으며
+	버그를 초래할 겁니다.
+
+	\iffalse
+
 	It could do so, but this would be both unnecessary and
 	insufficient.
 
@@ -1112,13 +1194,43 @@ semantics of locking, but loses locking's time-based messaging semantics.
 	and time-based messaging semantics of locking.
 	Using transactional lock elision in such a case would be
 	incorrect, and would result in bugs.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	현대의 하드웨어에서~\cite{PeterOkech2009InherentRandomness} 어떻게
+	시간에 기반한 병렬 소프트웨어가 동작할 거라 생각될 수 있습니까?
+
+	\iffalse
+
 	Given modern hardware~\cite{PeterOkech2009InherentRandomness},
 	how can anyone possibly expect parallel software relying
 	on timing to work?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	짧게 답하자면 일반적인 공간의 일반적 하드웨어에서는 모든 세밀한
+	타이밍에 기반한 동기화 설계는 무모하며 모든 상황에서 올바르게
+	동작할거라 예상될 수 없다는 겁니다.
+
+	그렇다고는 하나, 훨씬 결정론적인 하드 리얼타임에서의 사용을 위해 설계된
+	시스템이 있습니다.
+	그런 시스템을 사용하는 (매우 드물) 경우, 어떻게 시간 기반 동기화가
+	동작할 수 있는지 보이는 작은 예가 있습니다.
+	다시 말하지만, 일반적 마이크로프로세서에서는 상당히 비결정적인 성능
+	특성이 있으므로 이를 시도하지 \emph{마세요}.
+
+	이 예는 하나의 제어 쓰레드와 여러 일꾼 쓰레드를 사용합니다.
+	각 일꾼 쓰레드는 바깥으로의 데이터 넘기기를 하고 각 일단위를 마친 후
+	쓰레드별 \co{my_timestamp} 변수에 현재 시간을 (예를 들어,
+	\co{clock_gettime()} 시스템콜로부터 얻을 수 있겠습니다) 기록합니다.
+	이 예의 리얼타임 특성은 다음과 같은 제한을 초래합니다:
+
+	\iffalse
+
 	The short answer is that on commonplace commodity hardware,
 	synchronization designs based on any sort of fine-grained
 	timing are foolhardy and cannot be expected to operate correctly
@@ -1142,7 +1254,17 @@ semantics of locking, but loses locking's time-based messaging semantics.
 	The real-time nature of this example results in the following
 	set of constraints:
 
+	\fi
+
 	\begin{enumerate}
+	\item	특정 일꾼 쓰레드가 \co{MAX_LOOP_TIME} 이상의 시간동안 이 시간
+		기록을 업데이트하지 못한다면 이는 치명적 오류입니다.
+	\item	락은 전역 상태를 접근하고 업데이트 하기 위해 아껴서 사용됩니다.
+	\item	락은 주어진 쓰레드 우선순위 내에서 엄격한 FIFO 순서로
+		얻어집니다.
+
+	\iffalse
+
 	\item	It is a fatal error for a given worker thread to fail
 		to update its timestamp for a time period of more than
 		\co{MAX_LOOP_TIME}.
@@ -1150,7 +1272,24 @@ semantics of locking, but loses locking's time-based messaging semantics.
 		state.
 	\item	Locks are granted in strict FIFO order within
 		a given thread priority.
+
+	\fi
+
 	\end{enumerate}
+
+	일꾼 쓰레드가 데이터 넘기기를 완료하면, 이들은 스스로를 이
+	어플리케이션의 나머지 부분으로부터 떼어내고 상태 값을 \co{-1} 로 초기화
+	되는 쓰레드별 \co{my_status} 변수에 저장합니다.
+	쓰레드는 끝나지 않습니다; 대신 이들은 나중의 처리 요구를 위해 쓰레드
+	풀에 위치합니다.
+	제어 쓰레드는 필요에 따라 일꾼 쓰레드를 할당하고, 또한 쓰레드 상태들의
+	히스토그램을 유지합니다.
+	이 제어 쓰레드는 일꾼 쓰레드의 그것보다 더 높지 않은 리얼타임
+	우선순위로 수행됩니다.
+
+	일꾼 쓰레드의 코드는 다음과 같습니다:
+
+	\iffalse
 
 	When worker threads complete their feed, they must disentangle
 	themselves from the rest of the application and place a status
@@ -1164,6 +1303,8 @@ semantics of locking, but loses locking's time-based messaging semantics.
 	that of the worker threads.
 
 	Worker threads' code is as follows:
+
+	\fi
 
 \begin{VerbatimN}
 	int my_status = -1;  /* Thread local. */
@@ -1189,7 +1330,13 @@ semantics of locking, but loses locking's time-based messaging semantics.
 	/* thread awaits repurposing. */
 \end{VerbatimN}
 
+	제어 쓰레드의 코드는 다음과 같습니다:
+
+	\iffalse
+
 	The control thread's code is as follows:
+
+	\fi
 
 \begin{fcvlabel}[ln:future:htm:control thread]
 \begin{VerbatimN}[commandchars=\\\@\$]
@@ -1211,6 +1358,19 @@ semantics of locking, but loses locking's time-based messaging semantics.
 \end{fcvlabel}
 
 	\begin{fcvref}[ln:future:htm:control thread]
+	\Clnref{if} 는 쓰레드가 종료되었는지 추측하기 위해 시간의 흐름을
+	사용하며, 그렇다면 \clnref{dep:b,dep:e} 를 수행합니다.
+	\Clnref{acq,rel} 의 빈 락 기반 크리티컬 섹션은 종료 중인 모든 쓰레드가
+	완료되었길 보장합니다 (락은 FIFO 순서로 주어짐을 기억하세요!).
+	\end{fcvref}
+
+	다시 말하지만, 일반 마이크로프로세서에서 이런 일을 하지 마세요.
+	어쨌건, 하드 리얼타임 사용처를 위해 특수 설계된 시스템에서도 이를
+	올바르게 만들기는 충분히 어렵습니다.
+
+	\iffalse
+
+	\begin{fcvref}[ln:future:htm:control thread]
 	\Clnref{if} uses the passage of time to deduce that the thread
 	has exited, executing \clnref{dep:b,dep:e} if so.
 	The empty lock-based critical section on \clnref{acq,rel}
@@ -1222,8 +1382,27 @@ semantics of locking, but loses locking's time-based messaging semantics.
 	microprocessors.
 	After all, it is difficult enough to get this right on systems
 	specifically designed for hard real-time use!
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+락킹과 트랜잭션 사이의 한가지 중요한 의미상 차이는 락 기반 리얼타임
+프로그램에서 우선순위 역전을 막기 위해 사용되는 우선순위 높이기 입니다.
+우선순위 역전이 일어날 수 있는 경우 중 하나는 락을 잡은 낮은 우선순위 쓰레드가 
+중간 우선순위 CPU 사용 쓰레드에 preemption 당할 때입니다.
+그런 중간 우선순위 쓰레드가 CPU 당 최소 하나 있다면, 이 낮은 우선순위 쓰레드는
+다시 동작할 기회를 얻지 못합니다.
+이제 어떤 높은 우선순위 쓰레드가 이 락을 얻으려 하면 블록됩니다.
+이 쓰레드는 이 낮은 운선순위 쓰레드가 이 락을 해제하기 전까지 그 락을 얻을 수
+없고, 낮은 우선순위 쓰레드는 동작할 기회를 얻기 전까지는 이 락을 놓을 수
+없으며, 중간 우선순위 쓰레드가 CPU 를 놓기 전까지는 동작할 기회를 얻지
+못합니다.
+따라서, 이 중간 우선순위 쓰레드는 실질적으로 높은 우선순위 프로세스를 블록하고
+있으며, 따라서 ``우선순위 역전'' 이라는 이름이 붙었습니다.
+
+\iffalse
 
 One important semantic difference between locking and transactions
 is the priority boosting that is used to avoid priority inversion
@@ -1242,6 +1421,8 @@ threads gives up its CPU\@.
 Therefore, the medium-priority threads are in effect blocking the
 high-priority process, which is the rationale for the name ``priority
 inversion.''
+
+\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:future:Exploiting Priority Boosting]
