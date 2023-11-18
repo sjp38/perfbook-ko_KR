@@ -1815,6 +1815,22 @@ as discussed in the next section.
 \subsection{Where Does HTM Best Fit In?}
 \label{sec:future:Where Does HTM Best Fit In?}
 
+HTM 의 적용 영역이
+page~\pageref{fig:defer:RCU Areas of Applicability} 의
+\cref{fig:defer:RCU Areas of Applicability} 에서의 RCU 로 보이는 것처럼 잘
+파악되기까지는 시간이 걸릴 것으로 보이지만, 그게 그 방향으로의 이동을 시작하지
+않을 이유는 아닙니다.
+
+거대한 멀티프로세서에서 돌아가는 거대한 메모리 상의 데이터 구조에서의
+상대적으로 다른 부분들에 상대적으로 작은 변화를 포함하는 업데이트가 많은
+워크로드에서 HTM 은 가장 잘 맞을 것으로 보이는데, 이는 현재 HTM 구현의 크기
+제한과 맞고 충돌과 그에 따른 중단 및 되돌리기의 가능성을 최소화 하기
+때문입니다.
+이 시나리오는 현재의 동기화 기능을 가지고는 처리하기가 상대적으로 어려운
+것입니다.
+
+\iffalse
+
 Although it will likely be some time before HTM's area of applicability
 can be as crisply delineated as that shown for RCU in
 \cref{fig:defer:RCU Areas of Applicability} on
@@ -1829,6 +1845,33 @@ minimizing the probability of conflicts and attendant aborts and
 rollbacks.
 This scenario is also one that is relatively difficult to handle given
 current synchronization primitives.
+
+\fi
+
+락킹을 HTM 과 함께 사용하는 것은 HTM 의 취소불가 오퍼레이션에서의 문제를 극복할
+것으로 보이며, RCU 나 해저드 포인터의 사용은 HTM 의 트랜잭션 크기 제한을 데이터
+구조의 큰 부분을 움직이는 읽기 전용 오퍼레이션에서 완화할 수 있을 수도
+있습니다~\cite{SeongJaePark2020HTMRCUlock}.
+현재의 HTM 구현은 무조건적으로 RCU 나 해저드 포인터 읽기 쓰레드와 충돌하는
+업데이트 트랜잭션을 중단시키지만, 미래의 HTM 구현은 이 동기화 메커니즘들과 더
+부드럽게 상호작용할지도 모릅니다.
+그때까지는, 거대한 RCU 나 해저드 포인터 read-side 크리티컬 섹션과의 업데이트
+충돌 확률은 동일한 읽기 전용 트랜잭션과의 충돌의 확률보다 훨씬 작아야 할
+겁니다.\footnote{
+	NoSQL 데이터베이스가 전통적인 데이터베이스의 엄격한 트랜잭션을
+	완화시키는 때에 공유 메모리 시스템에 엄격한 트랜잭션 메커니즘이 나오는
+	건 꽤 아이러닉합니다.
+	리눅스 커널의 주소 공간 무작위화 방어
+	메커니즘~\cite{YeongjinJang2016TSXbreakKASLR,Jang:2016:BKA:2976749.2978321}
+	에서의 black-hat 공격에도 불구하고 HTM 은 은 실제로 TM 의 편한 사용성
+	약속을 알고 있습니다.}
+그러나, RCU 나 해저드 포인터 읽기 쓰레드의 지속적인 등장은 연관된 충돌의 지속적
+등장으로 인해 업데이트 쓰레드를 기아에 빠뜨릴 수도 있습니다.
+이 취약점은 extra-transactional 읽기에게 로드되는 메모리 위치의 트랜잭션 전
+복사본을 제공하는 식으로 제거될 수 있습니다 (상당한 하드웨어 비용과 복잡도가
+들겠지만).
+
+\iffalse
 
 Use of locking in conjunction with HTM seems likely to overcome HTM's
 difficulties with irrevocable operations, while use of RCU or
@@ -1857,6 +1900,8 @@ steady stream of conflicts.
 This vulnerability could be eliminated (at significant
 hardware cost and complexity) by giving extra-transactional
 reads the pre-transaction copy of the memory location being loaded.
+
+\fi
 
 The fact that HTM transactions must have fallbacks might in some cases
 force static partitionability of data structures back onto HTM\@.
