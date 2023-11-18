@@ -1457,6 +1457,26 @@ void booster(void)		\lnlbl@high:b$
 \label{lst:future:Exploiting Priority Boosting}
 \end{listing}
 
+우선순위 역전을 막는 한가지 방법은 \emph{우선순위 상속} 으로, 락에 블록되는
+높은 우선순위 쓰레드가 임시적으로 자신의 우선순위를 락을 쥔 쓰레드에게 주는
+것인데, \emph{우선순위 높이기} 라고도 불립니다.
+그러나, 우선순위 높이기는
+\cref{lst:future:Exploiting Priority Boosting} 에 보인 것처럼 우선순위 역전을
+막는 것 이외의 것을 위해서도 사용될 수 있습니다.
+\begin{fcvref}[ln:future:Exploiting Priority Boosting]
+이 리스트의
+\clnrefrange{low:b}{low:e} 는 매 밀리세컨드마다 수행되어야만 하는 낮은 우선순위
+프로세스를 보이고, \clnrefrange{high:b}{high:e} 는 \co{boostee()} 가 필요에
+따라 주기적으로 수행됨을 보장하기 위해 우선순위 높이기를 사용하는 높은 우선순위
+프로세스를 보입니다.
+
+\co{boostee()} 함수는 두개의 \co{boost_lock[]} 락들 중 하나를 항상 잡아서
+\co{booster()} 의 \clnrefrange{acq}{rel} 은 필요에 따라 우선순위를 높일 수 있게
+함으로써 이를 가능하게 합니다.
+\end{fcvref}
+
+\iffalse
+
 One way to avoid priority inversion is \emph{priority inheritance},
 in which a high-priority thread blocked on a lock temporarily donates
 its priority to the lock's holder, which is also called \emph{priority
@@ -1475,12 +1495,32 @@ the two \co{boost_lock[]} locks, so that \clnrefrange{acq}{rel} of
 \co{booster()} can boost priority as needed.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	하지만
+	\cref{lst:future:Exploiting Priority Boosting}
+	의 \co{boostee()} 함수는 그 대신 락을 반대 순서로 잡습니다!
+	이는 데드락을 초래할 수 있지 않나요?
+
+	\iffalse
+
 	But the \co{boostee()} function in
 	\cref{lst:future:Exploiting Priority Boosting}
 	alternatively acquires its locks in reverse order!
 	Won't this result in deadlock?
+
+	\fi
+
 }\QuickQuizAnswer{
+	데드락은 일어나지 않습니다.
+	데드락에 도달하기 위해선, 두개의 다른 쓰레드가 두 락을 반대 순서로
+	획득해야 하는데, 이 예에서는 일어나지 않는 일입니다.
+	그러나, lockdep~\cite{JonathanCorbet2006lockdep} 같은 데드락 탐지기는
+	이를 false positive 로 잡아낼 겁니다.
+
+	\iffalse
+
 	No deadlock will result.
 	To arrive at deadlock, two different threads must each
 	acquire the two locks in opposite orders, which does not
@@ -1488,7 +1528,34 @@ the two \co{boost_lock[]} locks, so that \clnrefrange{acq}{rel} of
 	However, deadlock detectors such as
 	lockdep~\cite{JonathanCorbet2006lockdep}
 	will flag this as a false positive.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:future:Exploiting Priority Boosting]
+이 조정은 \co{boostee()} 가 시스템이 바빠지기 전에 \clnref{1stacq} 에서 첫번째
+락을 잡을 것을 필요로 하지만, 이는 현대의 하드웨어에서조차 쉽게 해결됩니다.
+
+불행히도, 이 조정은 transactional lock elision 의 존재에서 쉽게 부서질 수
+있습니다.
+\co{boostee()} 함수의 겹치는 크리티컬 섹션은 하나의 무한한 트랜잭션이 되는데,
+이는 언젠가 중단될 것인데, 예를 들어 \co{boostee()} 함수를 수행하는 쓰레드가
+preemption 당하는 첫번째 경우가 있겠습니다.
+이 시점에서, \co{boostee()} 는 락킹으로 되돌아가지만, 낮은 우선순위와 조용한
+초기화 단계는 이미 끝났음을 놓고 보면 (애초에 \co{boostee()} 가 preemption
+당한게 그 이유입니다), 이 쓰레드는 다시 수행될 기회를 영원히 잡지 못할 수도
+있습니다.
+
+그리고 \co{boostee()} 쓰레드가 락을 잡고 있지 않다면, \co{booster()} 쓰레드의
+\cref{lst:future:Exploiting Priority Boosting} 의 \clnref{acq,rel} 에서의 텅 빈
+크리티컬 섹션은 이무 효과 없는 텅 빈 트랜잭션이 되어, \co{boostee()} 는 결코
+수행되지 않습니다.
+이 예는 transactional memory 의 되돌리고 재시도 하기 방법의 미묘한 결과를
+보입니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:future:Exploiting Priority Boosting]
 This arrangement requires that \co{boostee()} acquire its first
@@ -1515,6 +1582,18 @@ This example illustrates some of the subtle consequences of
 transactional memory's rollback-and-retry semantics.
 \end{fcvref}
 
+\fi
+
+경험은 추가적인 미묘한 의미적 차이들을 드러낼 거라는 점을 생각해 보면, HTM 기반
+락 제거를 거대한 프로그램에 적용하는 것은 주의와 함께 이루어져야 합니다.
+그러나, 그게 적용되는 곳에서라면 HTM 기반 락 제거는 락 변수와 연관된 캐쉬
+미스를 제거할 수 있으며, 이는 거대한 실제 세계 소프트웨어 시스템에서 2015년 초
+기준으로 수십 퍼센트의 성능 향상을 가져왔습니다.
+따라서 우리는 안정적인 지원을 제공하는 하드웨어에서의 이 기술의 상당한 사용을
+예상할 수 있습니다.
+
+\iffalse
+
 Given that experience will likely uncover additional subtle semantic
 differences, application of HTM-based lock elision to large programs
 should be undertaken with caution.
@@ -1525,13 +1604,32 @@ systems as of early 2015.
 We can therefore expect to see substantial use of this technique on
 hardware providing reliable support for it.
 
+\fi
+
 \QuickQuiz{
+	그러니까 여러 사람이 락킹을 대체하려고 했고, 그들은 대부분 그저 락킹을
+	최적화 하는데 그치는 건가요???
+
+	\iffalse
+
 	So a bunch of people set out to supplant locking, and they
 	mostly end up just optimizing locking???
+
+	\fi
+
 }\QuickQuizAnswer{
+	그들은 최소한 무언가 유용한 것을 이루어냈습니다!
+	그리고 시간에 따라 추가적인 HTM 쪽 진보가 계속될
+	겁니다~\cite{Siakavaras2017CombiningHA,DimitriosSiakavaras2020RCU-HTM-B+Trees,ChristinaGiannoula2018HTM-RCU-graphcoloring,SeongJaePark2020HTMRCUlock}.
+
+	\iffalse
+
 	At least they accomplished something useful!
 	And perhaps there will continue to be additional HTM progress
 	over time~\cite{Siakavaras2017CombiningHA,DimitriosSiakavaras2020RCU-HTM-B+Trees,ChristinaGiannoula2018HTM-RCU-graphcoloring,SeongJaePark2020HTMRCUlock}.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsubsection{Summary}
