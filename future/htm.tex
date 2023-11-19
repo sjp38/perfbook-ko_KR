@@ -1961,6 +1961,16 @@ These are expanded upon in the following sections.
 \subsubsection{Forward-Progress Guarantees}
 \label{sec:future:Forward-Progress Guarantees}
 
+\Cref{sec:future:Lack of Forward-Progress Guarantees} 에서 이야기된 것처럼,
+현재의 HTM 구현은 진행 보장을 제공하지 않는데, 따라서 HTM 실패를 다루기 위해
+fallback 소프트웨어를 필요로 합니다.
+물론, 보장을 요구하기는 쉽지만 그걸 제공하기는 항상 쉽지는 않습니다.
+HTM 의 경우, 보장에 대한 장애물은 캐쉬 크기와 associativity, TLB 크기와
+asociativity, 트랜잭션 길이와 인터럽트 빈번도, 그리고 스케쥴러 구현이 포함될 수
+있습니다.
+
+\iffalse
+
 As was discussed in
 \cref{sec:future:Lack of Forward-Progress Guarantees},
 current HTM implementations lack forward-progress guarantees, which requires
@@ -1970,6 +1980,28 @@ to provide them.
 In the case of HTM, obstacles to guarantees can include cache size and
 associativity, TLB size and associativity, transaction duration and
 interrupt frequency, and scheduler implementation.
+
+\fi
+
+캐쉬 크기와 associativity 는
+\cref{sec:future:Transaction-Size Limitations}
+에서 현재의 한계를 회피하기 위한 일부 연구와 함께 이야기 되었습니다.
+하지만, HTM 진행 보장은 크기 제한과 함께 올 것이며, 그게 크더라도 그 한계는
+언젠가 닥칠 겁니다.
+그런데 왜 현재의 HTM 구현은 작은 트랜잭션에 대해서는 진행 보장을 제공하지
+않을까요, 예를 들면 캐쉬의 associativity 로 제한을 걸어서라도?
+한가지 잠재적 이유는 하드웨어 실패 처리 필요일수도 있습니다.
+예를 들어, 한 고장난 cache SRAM cell 은 이 고장난 cell 을 비활성화 함으로써
+처리될 수 있으며, 따라서 캐쉬의 associativity 를 줄이고 진행 보장이 주어지는
+트랜잭션의 최대 크기 또한 줄어듭니다.
+이는 보장된 트랜잭션 크기를 줄일 뿐이므로, 다른 이유도 있을 것 같습니다.
+아마도 진행 보장을 제품 수준 하드웨어에서 제공하는 것은 사람들이 생각하는
+것보다 더 어려울지고 모르고, 소프트웨어에서 진행 보장을 만드는 것의 어려움을
+생각하면 완전히 그럴싸한 설명입니다.
+문제를 소프트웨어에서 하드웨어로 옮기는 것은 그걸 꼭 쉽게 만드는 것만은
+아닙니다~\cite{ChristianJacobi2012MainframeTM}.
+
+\iffalse
 
 Cache size and associativity was discussed in
 \cref{sec:future:Transaction-Size Limitations},
@@ -1993,6 +2025,22 @@ in software.
 Moving a problem from software to hardware does not necessarily make
 it easier to solve~\cite{ChristianJacobi2012MainframeTM}.
 
+\fi
+
+물리적으로 태깅되고 인덱싱 된 캐쉬에서라면 트랜잭션이 캐쉬에 들어가는
+것만으로는 충분치 않습니다.
+그것의 주소 변환 또한 TLB 에 들어맞아야만 합니다.
+따라서 모든 진행 보장은 TLB 크기와 associativity 도 계산에 넣어야 합니다.
+
+인터럽트, 트랩, 그리고 예외가 현재의 HTM 구현에서는 트랜잭션을 중단시키므로,
+트랜잭션의 수행 시간은 예상되는 인터럽트간 시간 간격보다 짧아야 합니다.
+어떤 트랜잭션이 얼마나 작은 데이터를 건드는가와 관계 없이, 이게 너무 오래
+돌아간다면, 중단당할 겁니다.
+따라서, 모든 진행 보장은 트랜잭션 크기만이 아니라 수행시간에도 조건적이
+되어야만 합니다.
+
+\iffalse
+
 Given a physically tagged and indexed cache, it is not enough for the
 transaction to fit in the cache.
 Its address translations must also fit in the TLB\@.
@@ -2007,6 +2055,28 @@ No matter how little data a given transaction touches, if it runs too
 long, it will be aborted.
 Therefore, any forward-progress guarantees must be conditioned not only
 on transaction size, but also on transaction duration.
+
+\fi
+
+진행 보장은 여러 충돌하는 트랜잭션 중 어느 것을 중단시킬지 결정하는 능력에
+치명적으로 의존합니다.
+앞의 트랜잭션을 중단시키고는 나중의 트랜잭션에 스스로가 중단당하는, 따라서 어떤
+트랜잭션도 실제로 커밋하지 못하는 끝없는 트랜잭션의 연속을 상상하기는 너무
+쉽습니다.
+충돌 처리의 복잡성은 많은 HTM 충돌 처리 정책
+제안들~\cite{EgeAkpinar2011HTM2TLE,YujieLiu2011ToxicTransactions} 에 의해
+증명되었습니다.
+추가적인 복잡도가 Blundell 에 의해 이야기 되었듯~\cite{Blundell2006TMdeadlock}
+트랜잭션 외 액세스에 의해 더해집니다.
+트랜잭션 외 액세스를 이 모든 문제에 대해 비난하기는 쉬우나, 이런 생각의
+어리석음은 트랜잭션 외 액세스 각각을 각자의 단일 액세스 트랜잭션에
+위치시킴으로써 쉽게 선보여질 수 있습니다.
+문제는 액세스의 패턴이지, 그것이 트랜잭션에 감싸여서 수행되는가가 아닙니다.
+
+마지막으로, 모든 트랜잭션 진행 보장은 트랜잭션을 수행하는 쓰레드가 성공적으로
+커밋하기 충분하게 오래 수행되게 허용해야 하는 스케쥴러에 의존적입니다. 
+
+\iffalse
 
 Forward-progress guarantees depend critically on the ability to determine
 which of several conflicting transactions should be aborted.
@@ -2029,6 +2099,24 @@ Finally, any forward-progress guarantees for transactions also
 depend on the scheduler, which must let the thread executing the
 transaction run long enough to successfully commit.
 
+\fi
+
+따라서 HTM 제조사가 진행 보장을 제공하는데에는 상당한 장애물이 존재합니다.
+그러나, 그것들 중 하나라도 처리하는 것의 효과는 거대할 겁니다.
+이는 HTM 트랜잭션은 더이상 소프트웨어 fallback 을 필요로 하지 않을 것을
+의미하는데, 이는 HTM 이 마침내 TM 의 데드락 제거 약속을 지키는 것을 의미합니다.
+
+그러나, 2012 년 말, IBM Mainframe 은 일반적인 best-effort HTM
+구현~\cite{ChristianJacobi2012MainframeTM} 에 더해 \emph{제한된 트랜잭션} 을
+포함하는 HTM 구현을 발표했습니다.
+제한된 트랜잭션은 best-effort 트랜잭션에 사용되었던 \co{tbegin} 을 대신해
+\co{tbeginc} 명령으로 시작합니다.
+제한된 트랜잭션은 항상 (결국은) 완료될 것이 보장되어서, 트랜잭션이 중단되면
+fallback 경로로 분기하는 대신 (best-effort 트랜잭션에선 이렇게 되었습니다),
+하드웨어가 \co{tbeginc} 명령부터 트랜잭션을 재시작 합니다.
+
+\iffalse
+
 So there are significant obstacles to HTM vendors offering forward-progress
 guarantees.
 However, the impact of any of them doing so would be enormous.
@@ -2048,6 +2136,22 @@ so if a transaction aborts, rather than branching to a fallback path
 (as is done for best-effort transactions), the hardware instead restarts
 the transaction at the \co{tbeginc} instruction.
 
+\fi
+
+Mainframe 설계자는 이 진행 보장을 위한 극한적인 측정을 해야 했습니다.
+만약 제한된 트랜잭션이 반복적으로 실패한다면, CPU 는 분기 예측을 비활성화 하고,
+순차적 수행을 강제하고, 파이프라이닝을 비활성화하기까지 할수도 있습니다.
+반복된 실패가 높은 경쟁 때문이라면, CPU 는 예측적 읽기를 비활성화하고, 무작위적
+지연을 넣고, 충돌하는 CPU 의 순차적 수행을 시킬 수조차 있습니다.
+``흥미로운'' 진행 시나리오는 최소 두개의 CPU 로부터 백개의 CPU 까지 포함시킬 수
+있습니다.
+이 극한의 측정은 왜 다른 CPU 들이 지금껏 제한된 트랜잭션을 제공하는 것을
+자제했는지 어떤 통찰을 제공합니다.
+
+이름이 의미하듯, 제한된 트랜잭션은 실제로 상당히 제한되어 있습니다:
+
+\iffalse
+
 The Mainframe architects needed to take extreme measures to deliver on
 this forward-progress guarantee.
 If a given constrained transaction repeatedly fails, the CPU
@@ -2063,7 +2167,19 @@ have thus far refrained from offering constrained transactions.
 
 As the name implies, constrained transactions are in fact severely constrained:
 
+\fi
+
 \begin{enumerate}
+\item	최대 데이터 사용량은 메모리의 네개 블록으로, 각 블록은 32 바이트가
+	최대입니다.
+\item	최대 코드 사용량은 256 바이트입니다.
+\item	만약 4K 페이지가 제한된 트랜잭션의 코드를 포함한다면, 그 페이지는 그
+	트랜잭션의 데이터를 포함하지 않습니다.
+\item	수행될 수 있는 어셈블리 명령의 최대 수는 32 입니다.
+\item	후방으로의 분기는 금지되어 있습니다.
+
+\iffalse
+
 \item	The maximum data footprint is four blocks of memory,
 	where each block can be no larger than 32 bytes.
 \item	The maximum code footprint is 256 bytes.
@@ -2072,7 +2188,26 @@ As the name implies, constrained transactions are in fact severely constrained:
 \item	The maximum number of assembly instructions that may be executed
 	is 32.
 \item	Backwards branches are forbidden.
+
+\fi
+
 \end{enumerate}
+
+그러나, 이 제약들은 링크드 리스트, 스택, 큐, 그리고 배열 같은 많은 중요한
+데이터 구조들을 지원합니다.
+따라서 제약된 HTM 은 병렬 프로그래머의 도구상자에 중요한 도구가 될 것 같습니다.
+
+이 진행 보장은 절대적일 필요는 없음을 알아두십시오.
+예를 들어, 어떤 HTM 의 사용이 fallback 으로 전역 락을 사용한다고 해봅시다.
+이 fallback 메커니즘은
+\cref{sec:future:Aborts and Rollbacks}
+에서 설명된 ``lemming effect'' 를 막게끔 조심스레 설계되었다 가정하면, HTM
+되돌리기가 충분히 빈번하지 않을 경우, 이 전역 락은 병목이 되지 않을 겁니다.
+그렇다고는 하나, 시스템이 거대할수록, 크리티컬 섹션이 길수록, 그리고 ``lemming
+effect'' 로부터 회복되는데 필요한 시간이 길수록, ``충분히 빈번하지 않음'' 음 더
+드물어져야 할 겁니다.
+
+\iffalse
 
 Nevertheless, these constraints support a number of important data structures,
 including linked lists, stacks, queues, and arrays.
@@ -2089,6 +2224,8 @@ will not be a bottleneck.
 That said, the larger the system, the longer the critical sections,
 and the longer the time required to recover from the ``lemming effect'',
 the more rare ``sufficiently infrequent'' needs to be.
+
+\fi
 
 \subsubsection{Transaction-Size Increases}
 \label{sec:future:Transaction-Size Increases}
