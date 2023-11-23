@@ -88,6 +88,19 @@ against these requirements.
 \subsection{Automatic Translation}
 \label{sec:future:Automatic Translation}
 
+Promela 와 \co{spin} 은 귀중한 설계상의 도움이 되지만, 여러분이 C 언어
+프로그램을 정형적으로 회귀 테스트 하려 한다면 여러분은 여러분이 코드를 다시
+검증하고 싶을 때마다 그 코드를 Promela 로 직접 변환해야 합니다.
+여러분의 코드가 매 60-90 일마다 릴리즈 되는 리눅스 커널이라면, 여러분은 매년
+네번에서 여섯번 가량 직접 변환을 해야할 겁니다.
+시간이 흐름에 따라, 사람의 오류가 발생할 것인데, 이는 이 검증이 소스코드와 맞지
+않음을 의미해서 이 검증을 쓸모없게 만들 겁니다.
+반복된 검증은 이 정형적 검증 도구이 여러분의 코드를 직접 입력받게 하거나
+버그로부터 자유로운 여러분의 코드를 검증에 필요한 형태로 자동으로 변환하는
+도구를 가지게 해야 할 겁니다.
+
+\iffalse
+
 Although Promela and \co{spin}
 are invaluable design aids, if you need to formally regression-test
 your C-language program, you must hand-translate to Promela each time
@@ -101,12 +114,47 @@ Repeated verification clearly requires either that the formal-verification
 tooling input your code directly, or that there be bug-free automatic
 translation of your code to the form required for verification.
 
+\fi
+
+PPCMEM 과 \co{herd} 는 이론상 입력 어셈블리어와 C++ 코드를 입력받을 수 있으나,
+이 도구들은 매우 작은 리트머스 테스트에만 동작해서, 일반적으로는 여러분이
+여러분의 메커니즘의 핵심 부분을 직접 노출시켜야만 합니다.
+Promela 와 \co{spin} 에서처럼, PPCMEM 과 \co{herd} 는 매우 유용하나, 회귀
+테스트에 잘 맞지는 않습니다.
+
+\iffalse
+
 PPCMEM and \co{herd} can in theory directly input assembly language
 and C++ code, but these tools work only on very small litmus tests,
 which normally means that you must extract the core of your
 mechanism---by hand.
 As with Promela and \co{spin}, both PPCMEM and \co{herd} are
 extremely useful, but they are not well-suited for regression suites.
+
+\fi
+
+대조적으로, \co{cbmc} 와 Nidhugg 는 합리적 (여전히 상당히 제한되어 있지만)
+크기의 C 프로그램을 입력받으며, 그 능력이 계속 성장한다면, 회귀 테스트 도구에
+훌륭한 추가품이 될 수 있을 겁니다.
+Coverity 정적 분석 도구 또한 리눅스 커널을 포함한 상당히 큰 크기의 C 프로그램을
+입력으로 받습니다.
+물론, Coverity 의 정적 분석은 \co{cbmc} 와 Nidhugg 의 것에 비하면 상당히
+단순합니다.
+다른 한편, Coverity 는 특수한 도전을~\cite{AlBessey2010BillionLoCLater} 갖는
+총괄적인 ``C 프로그램'' 에 대한 정의를 가졌습니다.
+Amazon Web Services 는 \co{cbmc} 를 포함한 다양한 정형적 검증 도구를 사용하며,
+이 도구들 중 일부를 회귀 테스팅에 사용합니다~\cite{ByronCook2018FormalAmazon}.
+Google 은 상대적으로 간단한 정적 분석 도구를 논란의 여기가 있지만 C
+코드베이스보다 덜 다양한 거대한 Java 코드베이스에
+사용합니다~\cite{CaitlinSadowski2018staticAnalysisGoogle}.
+Facebook 은 동시성 분석을 포함해 그들의 코드베이스에 보다 공격적인 형태의 정형
+검증을
+사용합니다만~\cite{DinoDistefano2019FBstaticAnalysis,PeterWOHearn2019incorrectnessLogic}
+아직 리눅스 커널에까지 적용하진 않았습니다.
+마지막으로, 마이크로소프트는 그들의 코드베이스에 정적 분석을 오랜 기간 사용해
+왔습니다~\cite{JamesRLarus2004RightingSoftware}.
+
+\iffalse
 
 In contrast, \co{cbmc} and Nidhugg can input C programs of reasonable
 (though still quite limited) size, and if their capabilities continue
@@ -129,6 +177,20 @@ though not yet on the Linux kernel.
 Finally, Microsoft has long used static analysis on its code
 bases~\cite{JamesRLarus2004RightingSoftware}.
 
+\fi
+
+이 리스트를 놓고 보면, 제품 수준 소스 코드를 직접 사용할 수 있는 잘 만들어진
+정형적 검증 도구를 만들 수 있을 것이 분명합니다.
+
+그러나, C 코드를 입력으로 받는 것의 한가지 단점은 컴파일러가 올바를 거라
+가정한다는 겁니다.
+한가지 대안은 C 컴파일러가 생성한 바이너리를 입력으로 받아서 모든 연관된
+컴파일러 버그를 처리하게 하는 겁니다.
+이 방법은 여러 검증 노력에서 사용되었는데, 가장 두곽을 드러내는 것은 SEL4
+프로젝트~\cite{ThomasSewell2013L4binaryVerification} 일 겁니다.
+
+\iffalse
+
 Given this list, it is clearly possible to create sophisticated
 formal-verification tools that directly consume production-quality
 source code.
@@ -141,11 +203,32 @@ This approach has been used in a number of verification efforts,
 perhaps most notably by the SEL4
 project~\cite{ThomasSewell2013L4binaryVerification}.
 
+\fi
+
 \QuickQuiz{
+	SEL4 프로젝트에서 사용된 여러 검증 도구의 놀라운 본성을 놓고 보면, 왜
+	이 챕터는 그걸 더 다루지 않는지 궁금하군요?
+
+	\iffalse
+
 	Given the groundbreaking nature of the various verifiers used
 	in the SEL4 project, why doesn't this chapter cover them in
 	more depth?
+
+	\fi
+
 }\QuickQuizAnswer{
+	SEL4 프로젝트에서 사용된 검증 도구들이 상당히 쓸모있을 거라는 데에는
+	의심의 여지가 없습니다.
+	그러나, SEL4 는 단일 CPU 프로젝트로 시작되었습니다.
+	그리고 SEL4 가 멀티 프로세서 기능을 얻었지만, 현재로써는 리눅스 커널의
+	과거의 Big Kernel Lock (BKL) 과 유사한 큰 규모의 락킹을 사용하고
+	있습니다.
+	SEL4 의 검증 도구를 병렬 프로그래밍에 대한 책에 추가하는 게 말이 되는
+	날이 오길 기대합니다만, 아직은 그 날이 아닙니다.
+
+	\iffalse
+
 	There can be no doubt that the verifiers used by the SEL4
 	project are quite capable.
 	However, SEL4 started as a single-CPU project.
@@ -156,7 +239,22 @@ project~\cite{ThomasSewell2013L4binaryVerification}.
 	There will hopefully come a day when it makes sense to add
 	SEL4's verifiers to a book on parallel programming, but
 	this is not yet that day.
+
+	\fi
+
 }\QuickQuizEnd
+
+그러나, 소스나 바이너리에서 직접 검증을 하는 것은 사람에 의한 변환 과정에서의
+오류를 제거하는 장점을 갖는데, 안정적인 회귀 테스팅에 치명적으로 중요합니다.
+
+이는 특수 목적 언어를 사용하는 도구가 쓸모없다는 말이 아닙니다.
+그와 반대로, 그것들은
+\cref{chp:Formal Verification} 에서 논의 했듯 설계 시점 검증에 매우 도움이 될
+수 있습니다.
+그러나, 그런 도구는 이 섹션의 주제인 자동화된 회귀 테스트에서 특별히 도움되진
+않습니다.
+
+\iffalse
 
 However, verifying directly from either the source or binary both have the
 advantage of eliminating human translation errors, which is critically
@@ -168,6 +266,8 @@ as was discussed in
 \cref{chp:Formal Verification}.
 However, such tools are not particularly helpful for automated regression
 testing, which is in fact the topic of this section.
+
+\fi
 
 \subsection{Environment}
 \label{sec:future:Environment}
