@@ -355,6 +355,26 @@ cautionary tale of
 \subsection{Overhead}
 \label{sec:future:Overhead}
 
+모든 하드코어 정형적 검증 도구들은 본성적으로 폭발적인데, 흥미로운 소프트웨어
+질문 중 대부분이 실제로 비결정적이라 생각하기 전까지는 실망스러워 보일 겁니다.
+그러나, 폭발적인 성질에도 정도의 차이가 있습니다.
+
+PPCMEM 은 설계상 최적화 되어 있지 않은데, 문제의 메모리 모델이 올바르게
+표현되었음을 확실히 보장하기 위함입니다.
+\co{herd} 는
+\cref{sec:formal:Axiomatic Approaches} 에서 언급되었듯 더 적극적인 최적화를
+하는데, 따라서 PPCMEM 보다 수십 수백배 빠릅니다.
+그렇다고 하나, PPCMEM 과 \co{herd} 둘 다 커다란 코드의 몸통보다는 작은 리트머스
+테스트를 목표로 합니다.
+
+대조적으로, Promela/\co{spin}, \co{cbmc} 그리고 Nidhugg 는 (어떤) 더 큰 분량의
+코드를 위해 설계되었습니다.
+Promela/\co{spin} 은 Curiosity rover 의 파일시스템을 검증하는데
+사용되었고~\cite{DBLP:journals/amai/GroceHHJX14}, 앞서 언급되었듯 \co{cbmc} 와
+Nidhugg 는 리눅스 커널 RCU 에 적용되었습니다.
+
+\iffalse
+
 Almost all hard-core formal-verification tools are exponential
 in nature, which might seem discouraging until you consider that
 many of the most interesting software questions are in fact undecidable.
@@ -374,6 +394,24 @@ Promela/\co{spin} was used to verify the Curiosity rover's
 filesystem~\cite{DBLP:journals/amai/GroceHHJX14} and, as noted earlier,
 both \co{cbmc} and Nidhugg were appled to Linux-kernel RCU\@.
 
+\fi
+
+만약 휴리스틱 상의 발전이 지난 30년간의 속도와 비슷하게 계속된다면 우린 정형적
+검증의 오버헤드가 크게 감소할 것을 기대할 수 있습니다.
+그러나, 조합상의 폭발 (combinatorial explosion) 은 여전히 조합상의 폭발이므로,
+휴리스틱의 계속된 개선과 관계없이 검증될 수 있는 프로그램의 크기를 분명하게
+제한할 것입니다.
+
+그러나, 조합상의 폭발의 이면은 마케도니아의 Philip II 의 조언입니다: ``분할하고
+정복하라.''
+만약 큰 프로그램이 분할될 수 있고 그 조각들이 검증된다면, 그 결과는 조합상의
+\emph{내파 (implosion)}~\cite{PaulEMcKenney2011Verico} 입니다.
+분할을 할 자연스러운 장소는 API 경계인데, 예를 들ㅇ면 락킹 기능의 그것들입니다.
+그러면 하나의 검증 경로는 이 락킹 구현이 올바른지를 검증하고, 추가적인 검증
+경로는 락킹 API 의 올바른 사용을 검증할 수 있습니다.
+
+\iffalse
+
 If advances in heuristics continue at the rate of the past three
 decades, we can look forward to large reductions in overhead for
 formal verification.
@@ -391,6 +429,8 @@ of locking primitives.
 One verification pass can then verify that the locking implementation
 is correct, and additional verification passes can verify correct
 use of the locking APIs.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/formal/herd/C-SB+l-o-o-u+l-o-o-u-C@whole.fcv}
@@ -418,6 +458,22 @@ use of the locking APIs.
 \label{tab:future:Emulating Locking: Performance (s)}
 \end{table}
 
+이 방법의 성능상 이득은 리눅스 커널 메모리
+모델~\cite{Alglave:2018:FSC:3173162.3177156} 을 사용해 선보일 수 있습니다.
+이 모델은 \co{spin_lock()} 과 \co{spin_unlock()} 기능을 제공합니다만 이
+기능들은 또한
+\cref{lst:future:Emulating Locking with cmpxchg}
+(\path{C-SB+l-o-o-u+l-o-o-*u.litmus} 와 \path{C-SB+l-o-o-u+l-o-o-u*-C.litmus})
+에서 보이듯 \co{cmpxchg_acquire()} 와 \co{smp_store_release()} 를 사용해
+에뮬레이션 될 수 있습니다.
+\Cref{tab:future:Emulating Locking: Performance (s)}
+는 이 모델의 \co{spin_lock()} 과 \co{spin_unlock()} 을 사용하는 것의 성능과
+확장성을 이 기능들을 에뮬레이션 하는 것과 비교합니다.
+차이는 사소하지 않습니다: 네개의 프로세스에서, 이 모델은 에뮬레이션보다 수백배
+이상 빠릅니다!
+
+\iffalse
+
 The performance benefits of this approach can be demonstrated using
 the Linux-kernel memory
 model~\cite{Alglave:2018:FSC:3173162.3177156}.
@@ -433,18 +489,38 @@ primitives as shown in the listing.
 The difference is not insignificant: At four processes, the model
 is more than two orders of magnitude faster than emulation!
 
+\fi
+
 \QuickQuiz{
 \begin{fcvref}[ln:future:formalregress:C-SB+l-o-o-u+l-o-o-u-C:whole]
+	\Cref{lst:future:Emulating Locking with cmpxchg}
+	의 라인~\lnref{filter_} 에서는 왜 단순하게 그 조건을 \co{exists} 절에
+	추가하는 대신 별도의 \co{filter} 커맨드를 사용하나요?
+	그리고 \co{cmpxchg_acquire()} 대신 \co{xchg_acquire()} 를 사용하는게 더
+	간단하지 않을까요?
+
+	\iffalse
+
 	Why bother with a separate \co{filter} command on line~\lnref{filter_} of
 	\cref{lst:future:Emulating Locking with cmpxchg}
 	instead of just adding the condition to the \co{exists} clause?
 	And wouldn't it be simpler to use \co{xchg_acquire()} instead
 	of \co{cmpxchg_acquire()}?
+
+	\fi
+
 \end{fcvref}
 }\QuickQuizAnswer{
+	이 \co{filter} 절은 \co{herd} 도구가 \co{exists} 절이 그러는 것보다
+	이른 처리 단계에서 수행을 폐기하게 해줘서 상당한 속도향상을 가져옵니다.
+
+	\iffalse
+
 	The \co{filter} clause causes the \co{herd} tool to discard
 	executions at an earlier stage of processing than does
 	the \co{exists} clause, which provides significant speedups.
+
+	\fi
 
 \begin{table}[tbh]
 \rowcolors{7}{lightgray}{}
@@ -473,6 +549,25 @@ is more than two orders of magnitude faster than emulation!
 \label{tab:future:Emulating Locking: Performance Comparison (s)}
 \end{table}
 
+	\co{xchg_acquire()} 의 경우, 이 어토믹 오퍼레이션은 락 획득이
+	성공했는지와 관계없이 쓰기를 할건데, 이는 \co{xchg_acquire()} 를
+	사용하는 모델은 락 획득 실패의 경우 쓰기를 하지 않을
+	\co{cmpxchg_acquire()} 를 사용하는 것보다 더 맣은 오퍼레이션을 갖게
+	됨을 의미합니다.
+	더 많은 쓰기는 폭발할 수 있는 더 많은 조합을 의미하는데,
+	\cref{tab:future:Emulating Locking: Performance Comparison (s)} 에 보인
+	것과 같습니다
+	(\path{C-SB+l-o-o-u+l-o-o-*u.litmus},
+	\path{C-SB+l-o-o-u+l-o-o-u*-C.litmus},
+	\path{C-SB+l-o-o-u+l-o-o-u*-CE.litmus},
+	\path{C-SB+l-o-o-u+l-o-o-u*-X.litmus}, 그리고
+	\path{C-SB+l-o-o-u+l-o-o-u*-XE.litmus}).
+	이 표는 \co{cmpxchg_acquire()} 가 \co{xchg_acquire()} 보다, 그리고
+	\co{filter} 의 사용이 \co{exists} 절의 사용보다 성능이 나음을 분명하게
+	보입니다.
+
+	\iffalse
+
 	As for \co{xchg_acquire()}, this atomic operation will do a
 	write whether or not lock acquisition succeeds, which means
 	that a model using \co{xchg_acquire()} will have more operations
@@ -488,7 +583,25 @@ is more than two orders of magnitude faster than emulation!
 	This table clearly shows that \co{cmpxchg_acquire()}
 	outperforms \co{xchg_acquire()} and that use of the
 	\co{filter} clause outperforms use of the \co{exists} clause.
+
+	\fi
+
 }\QuickQuizEnd
+
+도구들이 자동으로 커다란 프로그램을 분할하고 그 조각들을 검증하고 그 조각들의
+조합들을 검증할 수 있다면 매우 유용할 겁니다.
+그 전까지는, 커다란 프로그램의 검증은 상당한 직접적 개입을 필요로 할 겁니다.
+이 개입은 스크립트를 사용하는 것으로 중개되는게 선호될 것이고, 각 릴리즈마다
+반복된 검증을 안정적으로 이끌어 갈 수 있을수록 좋을 것이고, 종국적으로는 잘
+짜여진 지속적 통합의 형태면 좋을 겁니다.
+그리고 Facebook 의 Infer 도구는 compositionality 와 abstraction 을
+통해~\cite{SamBlackshear2018RacerD,DinoDistefano2019FBstaticAnalysis} 그걸 위한
+중요한 단계를 밟고 있습니다.
+
+어떤 경우든, 우린 정형적 검증 기능이 시간에 따라 증가하길, 그리고 그런 증가가
+결국 정형적 검증의 회귀 테스트에서의 적합도를 증가시킬 것을 예상할 수 있습니다.
+
+\iffalse
 
 It would of course be quite useful for tools to automatically divide
 up large programs, verify the pieces, and then verify the combinations
@@ -505,6 +618,8 @@ abstraction~\cite{SamBlackshear2018RacerD,DinoDistefano2019FBstaticAnalysis}.
 In any case, we can expect formal-verification capabilities to continue
 to increase over time, and any such increases will in turn increase
 the applicability of formal verification to regression testing.
+
+\fi
 
 \subsection{Locate Bugs}
 \label{sec:future:Locate Bugs}
