@@ -9,6 +9,23 @@
 	  applications.}
 	 {\emph{Malte Skarupke}}
 
+1980년대 초에 제가 처음으로 함수형 프로그래밍 수업을 들었을 때, 교수님은
+부작용으로부터 자유로운 함수형 프로그래밍 스타일은 사소한 병렬화와 분석에 잘
+맞는다고 단정하셨습니다.
+30년 후, 이 단정은 남아있습니다만, 주류 제작사에서의 병렬 함수형 언어의 사용은
+매우 적으며, 이는 교수님의 프로그램은 상태를 유지하지 않고 I/O 를 하지 않아야
+한다고 하셨던 추가적인 말씀과 관계가 아주 없지는 않을 겁니다.
+Erlang 과 같은 함수형 언어의 틈색에서의 사용이 있고, 여러 다른 함수형 언어에
+멀티쓰레드 지원이 추가되었습니다만, 주류 제조 환경은 C, C++, Java, 그리고
+Fortran 같은 절차형 언어의 (보통 OpenMP, MPI, 또는 coarrays 와 증간된 형태의)
+영역으로 남아 있습니다.
+
+이 상황은 자연스레 ``분석이 목표라면, 분석 전에 왜 이 절차형 언어를 함수형
+언어로 변환하면 어떨까?'' 라는 질문을 일으키게 합니다.
+이 방법에 대한 여러 반대들이 물론 존재하는데, 이 중 세개만 나열하자면:
+
+\iffalse
+
 When I took my first-ever functional-programming class in the early 1980s,
 the professor asserted that the side-effect-free functional-programming
 style was well-suited to trivial parallelization and analysis.
@@ -28,7 +45,26 @@ doing the analysis?''
 There are of course a number of objections to this approach, of which
 I list but three:
 
+\fi
+
 \begin{enumerate}
+\item	절차형 언어는 다른 독립된 함수들에 의해, 또는 더 나쁘게도 여러 쓰레드에
+	의해 수정될 수 있는 전역 변수들을 종종 많이 사용합니다.
+	Haskell 의 \emph{monads} 는 싱글 쓰레드 전역 상태를 처리하기 위해
+	발명되었으며, 전역 상태로의 멀티 쓰레드에 의한 액세스는 함수형 모델에
+	추가적인 위반을 가함을 알아 두시기 바랍니다.
+\item	멀티쓰레드 기반 절차형 언어는 종종 락, 어토믹 오퍼레이션, 그리고
+	트랜잭션 같은 동기화 기능을 사용하는데, 이는 함수형 모델에 위반을
+	더합니다.
+\item	절차형 언어는 함수 인자에 \emph{별명을 붙일 (alias)} 수 있는데, 예를
+	들어 같은 구조체로의 포인터를 어떤 함수의 같은 호출에 두개의 다른
+	인자로 넘길 수 있습니다.
+	이는 이 함수가 이 구조체를 두개의 다른 (그리고 아마도 겹치는) 코드
+	순서에서 알지 못한 업데이트를 만들 수 있게 하는데, 이는 분석을 무척
+	복잡하게 만듭니다.
+
+\iffalse
+
 \item	Procedural languages often make heavy use of global variables,
 	which can be updated independently by different
 	functions, or, worse yet, by multiple threads.
@@ -44,6 +80,9 @@ I list but three:
 	This can result in the function unknowingly updating that
 	structure via two different (and possibly overlapping) code
 	sequences, which greatly complicates analysis.
+
+\fi
+
 \end{enumerate}
 
 Of course, given the importance of global state, synchronization
