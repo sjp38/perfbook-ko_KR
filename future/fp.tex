@@ -85,6 +85,19 @@ I list but three:
 
 \end{enumerate}
 
+물론, 전역 상태, 동기화 기능, 그리고 aliasing 의 중요성을 감안하여 현명한
+함수형 프로그래밍 전문가들은 함수형 프로그래밍 모델을 그것들에 조정하기 위한
+여러 시도를 제안했으면, monads 그런 것들 중 하나입니다.
+
+또다른 방법은 병렬 절차적 프로그램을 함수형 그로그램으로 변환하고, 그 결과를
+분석하기 위해 함수형 프로그래밍 도구를 사용하는 것입니다.
+하지만 이것보다 훨씬 더 잘할 수 있는데, 모든 실제 계산은 유한한 입력을 갖는
+거대한 유한 상태 기계 (finite-state machine) 이기 때문입니다.
+이는 모든 실제 프로그램은 하나의 표현으로 변환될 수 있다는 것을 의미하는데,
+비실용적으로 큰 것일 수도 있긴 합니다~\cite{VijayDSilva2012-sas}.
+
+\iffalse
+
 Of course, given the importance of global state, synchronization
 primitives, and aliasing, clever functional-programming experts have
 proposed any number of attempts to reconcile the function programming
@@ -98,6 +111,28 @@ computation is a large finite-state machine with finite input that
 runs for a finite time interval.
 This means that any real program can be transformed into an expression,
 possibly albeit an impractically large one~\cite{VijayDSilva2012-sas}.
+
+\fi
+
+하지만, 병렬 알고리즘의 여러 저수준 핵심 부분들이 현대의 컴퓨터의 메모리에 쉽게
+들어갈 수 있을 만큼 충분히 작은 표현으로 변환됩니다.
+만약 그런 표현이 단정과 결합된다면, 그 단정이 격발될 수 있을지 확인하는 것은
+satisfiability 문제가 됩니다.
+Satisfiability 문제는 NP-complete 하긴 하나, 전체 상태 공간을 생성하는데 필요한
+것보다 훨씬 짧은 시간에 종종 해결될 수 있습니다.
+또한, 이 해결 시간은 기저의 메모리 모델에 덜 종속적인 것으로 보이므로, 완화된
+순서 규칙의 시스템에서 돌아가는 알고리즘도 검사될 수
+있습니다~\cite{JadeAlglave2013-cav}.
+
+일반적인 방법은 프로그램을 single-static-assignment (SSA) 형태로 변환하여서 각
+변수로의 할당문이 그 변수의 분리된 버전을 만들게 하는 겁니다.
+이는 모든 활성화된 쓰레드로부터의 할당문에 적용되어 그 결과 만들어지는 표현은
+해당 코드의 모든 가능한 수행을 갖게 됩니다.
+할당문을 하나 추가하는 것은 입력과 초기 값의 어떤 조합이 어떤 단정문을
+격발시키는 결과를 낳을 수 있는지 질문하게 만드는데, 이는 앞에서도 언급된 것처럼
+satisfiability 문제입니다.
+
+\iffalse
 
 However, a number of the low-level kernels of parallel algorithms transform
 into expressions that are small enough to fit easily into the memories
@@ -121,6 +156,25 @@ The addition of an assertion entails asking whether any combination of
 inputs and initial values can result in the assertion firing, which,
 as noted above, is exactly the satisfiability problem.
 
+\fi
+
+한가지 가능한 반대는 이게 임의의 반복문을 우아하게 처리하지 않는다는 겁니다.
+그러나, 많은 경우 이는 그 반복문을 유한한 횟수만큼 unrolling 함으로써 처리될 수
+있습니다.
+또한, 어떤 반복문은 귀납법으로 풀어질 수 있는 것으로 증명될 겁니다.
+
+또다른 가능한 반대는 spinlock 이 임의의 긴 반복문을 갖고, 모든 유한 횟수
+unrolling 은 이 spinlock 의 전체 행동을 포착하지 못할 거라는겁니다.
+이 반대는 쉽게 극복될 수 있는 것으로 드러났습니다.
+전체 spinlock 을 모델링하는 대신, 그 락을 획득하려 시도하는 trylock 을
+모델링하고 즉각 그러지 못한다면 중단하는 겁니다.
+그러면 이 단정문은 spinlock 이 그 락을 즉각 얻을 수 없기 때문에 중단되었을
+때에는 격발되지 않도록 조정되어야만 합니다.
+이 논리 표현은 시간에 무관하므로, 모든 가능한 동시성 동작은 이 방법으로 포착될
+겁니다.
+
+\iffalse
+
 One possible objection is that it does not gracefully handle arbitrary
 looping constructs.
 However, in many cases, this can be handled by unrolling the loop a
@@ -138,6 +192,27 @@ The assertion must then be crafted so as to avoid firing in cases
 where a spinlock aborted due to the lock not being immediately available.
 Because the logic expression is independent of time, all possible
 concurrency behaviors will be captured via this approach.
+
+\fi
+
+마지막 반대는 이 기법이 리눅스 커널을 만드는 수백만 행의 코드와 같은 완전한
+크기의 소프트웨어 작품은 처리하지 못할 거라는 겁니다.
+이는 그럴 수 있는 이야기이나, 리눅스 커널의 많은 작은 병렬 기능들 각각을 세세히
+검증할 수 있다는 것은 상당히 가치있을 겁니다.
+그리고 이 방법의 선봉에 선 연구자들은 실제로 리눅스 커널의 Tree RCU 구현을
+포함한 실제 세계의 사소하지 않은 코드에
+적용했습니다~\cite{LihaoLiang2016VerifyTreeRCU,MichalisKokologiannakis2017NidhuggRCU}.
+
+이 기법이 얼마나 널리 적용가능할지 두고 봐야겠습니다만, 이는 정형 검증
+영역에서의 흥미로운 혁신들 중 하나일 뿐입니다.
+병렬 프로그래밍 대변자들은 그들의 피할 수 없는 함수형 프로그래밍의 세계 정복에
+대한 단정에 대해 긴 시간 후에는 옳았음으로 드러날 수도 있겠으나, 이 오랜 시간
+있어온 방법론은 그것의 정형 검증 영역에서는 믿을 수 있는 결과를 보이기 시작하고
+있습니다.
+따라서 함수형 프로그래밍의 피할 수 없는 세계 정복에 대한 의심을 계속할 이유가
+있습니다.
+
+\iffalse
 
 A final objection is that this technique is unlikely to be able to handle
 a full-sized software artifact such as the millions of lines of code making
@@ -160,3 +235,5 @@ that this long-touted methodology is starting to see credible
 competition on its formal-verification home turf.
 There is therefore continued reason to doubt the inevitability of
 functional-programming dominance.
+
+\fi
