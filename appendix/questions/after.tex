@@ -55,15 +55,46 @@ e.g., where time has appeared to go backwards.
 \end{listing}
 
 \QuickQuiz{
+	이 예들에서 어떤 SMP 코딩 오류를 당신은 찾았나요?
+	전체 코드를 위해선 \path{time.c} 를 보세요.
+
+	\iffalse
+
 	What SMP coding errors can you see in these examples?
 	See \path{time.c} for full code.
+
+	\fi
+
 }\QuickQuizAnswer{
 	\begin{enumerate}
+	\item	반복문에서의 \co{barrier()} 나 \co{volatile} 사용 누락.
+	\item	업데이트 쪽에서의 메모리 배리어 누락
+	\item	생성 쓰레드와 소비 쓰레드 사이의 동기화 부재.
+
+	\iffalse
+
 	\item	Missing \co{barrier()} or \co{volatile} on tight loops.
 	\item	Missing memory barriers on update side.
 	\item	Lack of synchronization between producer and consumer.
+
+	\fi
+
 	\end{enumerate}
 }\QuickQuizEnd
+
+직관적으로는 생성 쓰레드가 타임스탬프나 값을 기록하는 데에는 시간이 많이 들지
+않을 것이므로 생성 쓰레드와 소비 쓰레드 사이의 타임스탬프 차이는 상당히 작을
+것이라 예상할 수 있겠습니다.
+듀얼코어 1\,GHz x86 에서의 샘플 결과가
+\cref{tab:app:questions:After Program Sample Output} 에 보여져 있습니다.
+여기서, ``seq'' 행은 이 반복문을 통과한 횟수이고, ``time'' 행은 초 단위에서의
+이상현상 횟수이며, ``delta'' 행은 생성 쓰레드의 타임스탬프가 소비 쓰레드의
+그것을 뒤따르는 초 수이며 (음수는 소비 쓰레드가 타임스탬프를 생성 쓰레드가
+취득하기 전에 취득했음을 의미합니다), ``a'', ``b'', 그리고 ``c'' 로 라벨링 된
+행들은 이 값들이 소비 쓰레드가 얻어온 앞의 스냅샷 대비 얼마나 증가했는지를
+보입니다.
+
+\iffalse
 
 One might intuitively expect that the difference between the producer
 and consumer timestamps would be quite small, as it should not take
@@ -77,6 +108,8 @@ of the producer (where a negative value indicates that the consumer
 has collected its timestamp before the producer did), and the
 columns labelled ``a'', ``b'', and ``c'' show the amount that these
 variables increased since the prior snapshot collected by the consumer.
+
+\fi
 
 \begin{table}[htbp]
 \rowcolors{1}{}{lightgray}
@@ -101,6 +134,14 @@ seq    & \multicolumn{1}{c}{time (seconds)} & delta~  &  a &  b &  c \\
 \label{tab:app:questions:After Program Sample Output}
 \end{table}
 
+왜 시간이 거꾸로 흐르는 걸까요?
+괄호 안의 수는 마이크로세컨드 단위로, 큰 수 하나는 10 마이크로세컨드를
+넘어서며, 어떤건 100 마이크로세컨드까지 넘깁니다!
+이 CPU 는 잠재적으로 그 동안 100,000 개의 인스트럭션을 수행할 수 있음을
+알아두시기 바랍니다.
+
+\iffalse
+
 Why is time going backwards?
 The number in parentheses is the difference in microseconds, with
 a large number exceeding 10 microseconds, and one exceeding even
@@ -108,7 +149,26 @@ a large number exceeding 10 microseconds, and one exceeding even
 Please note that this CPU can potentially execute more than 100,000
 instructions in that time.
 
+\fi
+
 \begin{fcvref}[ln:api-pthreads:QAfter:time]
+한가지 가능한 경우의 수가 다음 사건의 연속 시에 가능합니다:
+\begin{enumerate}
+\item	소비 쓰레드가 타임스탬프를 얻습니다
+	(\Cref{lst:app:questions:After Consumer Function},
+	\clnref{consumer:tod}).
+\item	소비 쓰레드가 preemption 당합니다.
+\item	임의의 시간이 흐릅니다.
+\item	생성 쓰레드가 타임스탬프를 얻습니다
+	(\Cref{lst:app:questions:After Producer Function},
+	\clnref{producer:tod}).
+\item	소비 쓰레드가 수행을 재개하고, 이 생성 쓰레드의 타임스탬프를 가져옵니다
+	(\Cref{lst:app:questions:After Consumer Function},
+	\clnref{consumer:prodtod}).
+\end{enumerate}
+
+\iffalse
+
 One possible reason is given by the following sequence of events:
 \begin{enumerate}
 \item	Consumer obtains timestamp
@@ -125,6 +185,17 @@ One possible reason is given by the following sequence of events:
 	\clnref{consumer:prodtod}).
 \end{enumerate}
 
+\fi
+
+이 시나리오에서, 생성 쓰레드의 타임스탬프는 소비 쓰레드가 타임스탬프를 가져온
+시간보다 임의의 양만큼 뒤일 겁니다.
+
+여러분의 SMP 코드에서 ``after'' 의 의미로 괴롭힘 당하는 걸 어떻게 막을까요?
+
+단순히 SMP 기능들을 설계된 대로 사용하면 됩니다.
+
+\iffalse
+
 In this scenario, the producer's timestamp might be an arbitrary
 amount of time after the consumer's timestamp.
 
@@ -132,6 +203,35 @@ How do you avoid agonizing over the meaning of ``after'' in your
 SMP code?
 
 Simply use SMP primitives as designed.
+
+\fi
+
+이 예에서, 가장 쉬운 방법은 락킹을 사용하는 것으로, 예를 들어
+\cref{lst:app:questions:After Producer Function} 의
+\clnref{producer:tod} 전에 생성 쓰레드에서 락을 잡고
+\cref{lst:app:questions:After Consumer Function} 의
+\clnref{consumer:tod} 전에 소비 쓰레드에서 락을 잡는 겁니다.
+이 락은 또한 
+\cref{lst:app:questions:After Producer Function} 의
+\clnref{producer:upd:c} 뒤, 그리고
+\cref{lst:app:questions:After Consumer Function} 의
+\clnref{consumer:upd:c} 뒤에서 해제되어야 합니다.
+이 락은
+\cref{lst:app:questions:After Producer Function} 의
+\clnrefrange{producer:tod}{producer:upd:c} 와
+\cref{lst:app:questions:After Consumer Function} 의
+\clnrefrange{consumer:tod}{consumer:upd:c} 가 서로를 {\em 배제} 하게 하는데,
+달리 말하면 각자에 대해 어토믹하게 수행됩니다.
+이 점이
+\cref{fig:app:questions:Effect of Locking on Snapshot Collection} 에 표현되어
+있습니다:
+이 락킹은 코드 상자 모두가 시간상 겹쳐지는 것을 막아서 소비 쓰레드의
+타임스탬프는 앞의 생성 쓰레드의 타임스탬프 뒤에 얻어져야만 하게 합니다.
+이 그림의 각 상자의 코드 조각은 ``크리티컬 섹션'' 이라 명명됩니다; 한번에 그런
+크리티컬 섹션 중 오직 하나만이 수행됩니다.
+\end{fcvref}
+
+\iffalse
 
 In this example, the easiest fix is to use locking, for example,
 acquire a lock in the producer before \clnref{producer:tod} in
@@ -158,6 +258,8 @@ The segments of code in each box in this figure are termed
 at a given time.
 \end{fcvref}
 
+\fi
+
 \begin{figure}[htb]
 \centering
 \includegraphics{appendix/questions/after-snapshot}
@@ -165,11 +267,21 @@ at a given time.
 \label{fig:app:questions:Effect of Locking on Snapshot Collection}
 \end{figure}
 
+이 락킹의 추가는
+\cref{fig:app:questions:Locked After Program Sample Output} 에 보인 결과를
+초래합니다.
+여기엔 시간이 뒤로 흐르는 경우는 사라졌고, 그대신 소비 쓰레드에 의한 뒤따르는
+읽기 사이에 1,000 회의 추가가 만들어져 있습니다.
+
+\iffalse
+
 This addition of locking results in output as shown in
 \cref{fig:app:questions:Locked After Program Sample Output}.
 Here there are no instances of time going backwards, instead,
 there are only cases with more than 1,000 counts difference between
 consecutive reads by the consumer.
+
+\fi
 
 \begin{table}[htbp]
 \renewcommand*{\arraystretch}{1.2}
@@ -189,11 +301,29 @@ seq    & \multicolumn{1}{c}{time (seconds)} & delta~  &  a &  b &  c \\
 \end{table}
 
 \QuickQuiz{
+	연속된 소비 쓰레드의 읽기 사이에 어떻게 그렇게 큰 차이가 발생하죠?
+	전체 코드를 위해선 \path{timelocked.c} 를 보시기 바랍니다.
+
+	\iffalse
+
 	How could there be such a large gap between successive
 	consumer reads?
 	See \path{timelocked.c} for full code.
+
+	\fi
+
 }\QuickQuizAnswer{
 	\begin{enumerate}
+	\item	이 소비 쓰레드가 오랫동안 preemption 당했을 수도 있습니다.
+	\item	오랫동안 수행되는 인터럽트가 이 소비 쓰레드를 지연시켰을 수도
+		있습니다.
+	\item	캐쉬미스가 이 소비 쓰레드를 지연시켰을 수도 있습니다.
+	\item	생성 쓰레드는 소비 쓰레드보다 빠른 CPU 에서 수행되었을 수도
+		있습니다 (예를 들어, CPU 들 중 하나는 열 처리나 전력 소비
+		제한을 위해 처리 속도를 낮췄을 수도 있습니다).
+
+	\iffalse
+
 	\item	The consumer might be preempted for long time periods.
 	\item	A long-running interrupt might delay the consumer.
 	\item	Cache misses might delay the consumer.
@@ -202,8 +332,31 @@ seq    & \multicolumn{1}{c}{time (seconds)} & delta~  &  a &  b &  c \\
 		decrease its
 		clock frequency due to heat-dissipation or power-consumption
 		constraints).
+
+	\fi
+
 	\end{enumerate}
 }\QuickQuizEnd
+
+요약하자면, 여러분이 배타적 락을 획득했다면, 여러분은 여러분이 그 락을 쥔
+상태에서 행한 모든 일이 그 락을 전에 쥔 쓰레드가 행한 모든 일 뒤에 일어나는
+것을 {\em 압니다}, 최소한 transactional lock elision
+(Section~\ref{sec:future:Semantic Differences} 을 참고하세요) 을
+주고받는다면요.
+어떤 CPU 가 메모리 배리어를 수행하거나 하지 않았는지 걱정할 필요도, CPU 나
+컴파일러의 코드 재배치에 걱정할 필요도 없습니다---삶은 단순합니다.
+물론, 이 락킹이 이 두 조각의 코드가 동시에 수행되는 것을 막는다는 것은 이
+프로그램의 멀티프로세서에서의 성능 증가를 제한하는, ``안전하지만 느린'' 상황을
+초래할 수 있음을 의미합니다.
+\Cref{cha:Partitioning and Synchronization Design} 는 많은 경우에서 성능과
+확장성을 증가시키는 방법들을 설명합니다.
+
+그러나, 대부분의 경우, 스스로가 코드 조각들이 전이나 후에 수행되는지에 대해
+걱정하고 있음을 발견한다면, 여러분은 표준 기능의 사용으로 상황을 낫게 하기 위한
+힌트를 여기서 얻어야 합니다.
+이 기능들이 그 걱정을 여러분 대신 하게 하세요.
+
+\iffalse
 
 In summary, if you acquire an exclusive lock, you {\em know} that
 anything you do while holding that lock will appear to happen after
@@ -224,3 +377,5 @@ However, in most cases, if you find yourself worrying about what happens
 before or after a given piece of code, you should take this as a hint to
 make better use of the standard primitives.
 Let these primitives do the worrying for you.
+
+\fi
