@@ -98,6 +98,17 @@ subtlety on the part of the scheduler.
 
 \fi
 
+어떤 사람은 단순히 스케쥴러로부터의 경쟁의 합리적 수준을 요구함으로써 병렬성과
+동시성 사이의 차이를 단순히 무시할 수 있게 해야 한다고 주장할 수 있습니다.
+이게 종종 좋은 전략이지만, 효율성, 성능, 그리고 확장성에 대한 염려가 스케쥴러가
+합리적으로 제공할 수 있는 경쟁의 수준을 크게 제한하는 중요한 환경들이 있습니다.
+한가지 중요한 예는 스케쥴러가 SIMD 유닛이나 GPGPU 처럼 하드웨어에서 구현되었을
+때입니다.
+또다른 예는 일의 단위들이 상당히 짧은 워크로드로, 이 경우 소프트웨어 기반의
+스케쥴러는 정교성과 효율성 사이에서 힘든 결정을 해야만 합니다.
+
+\iffalse
+
 One could argue that we should simply demand a reasonable level of
 competence from the scheduler, so that we could simply ignore any
 distinctions between parallelism and concurrency.
@@ -110,6 +121,23 @@ hardware, as it often is in SIMD units or GPGPUs.
 Another example is a workload where the units of work are quite
 short, so that even a software-based scheduler must make hard choices
 between subtlety on the one hand and efficiency on the other.
+
+\fi
+
+이제, 이 두번째 관점은 워크로드가 사용 가능한 스케쥴러와 맞게끔, 즉 병렬
+워크로드가 간단한 스케쥴러를 사용하고 동시성 워크로드는 정교한 스케쥴러를
+요구하는 식으로 만드는 것으로 생각될 수 있습니다.
+
+불행히도, 이 관점은 첫번째 관점에 의해 놓여진 종속성 기반 차이와 항상 잘 맞지는
+않습니다.
+예를 들어, 고도로 상호의존적인 CPU 당 하나의 쓰레드를 갖는 락 기반 워크로드는
+스케쥴러의 결정이 필요치 않기 때문에 간단한 스케쥴러와도 잘 동작할 수 있습니다.
+사실, 이런 종류의 일부 워크로드는 순차적 기계에서도 순서대로 수행되는 식으로
+돌아갈 수 있습니다.
+따라서, 그런 워크로드는 첫번째 관점에 의해선 ``동시적'' 이라 라벨링 되지만
+두번째 관점을 취하는 많은 사람들에 의해선 ``병렬적'' 이라 라벨링 됩니다.
+
+\iffalse
 
 Now, this second perspective can be thought of as making the workload
 match the available scheduler, with parallel workloads able to
@@ -126,11 +154,29 @@ on a sequential machine.
 Therefore, such a workload would be labeled ``concurrent'' by the first
 perspective and ``parallel'' by many taking the second perspective.
 
+\fi
+
 \QuickQuiz{
+	두번째 (스케쥴러 기반) 관점의 어떤 부분에서 락 기반 CPU 별 싱글쓰레드
+	워크로드가 ``동시적'' 으로 여겨질 수 있을까요?
+
+	\iffalse
+
 	In what part of the second (scheduler-based) perspective would
 	the lock-based single-thread-per-CPU workload be considered
 	``concurrent''?
+
+	\fi
+
 }\QuickQuizAnswer{
+	임의로 워크로드를 쪼개고 짜깁으려는 사람들에 의해서요.
+	물론, 임의의 쪼개기는 관련된 락 해제로부터 획득을 분리시키는 결과를
+	낳을수도 있을텐데, 이는 다른 쓰레드가 그 락을 획득하는 걸 방지할
+	겁니다.
+	그 락이 순수한 스핀락이라면, 이는 데드락을 초래할 수도 있습니다.
+
+	\iffalse
+
 	The people who would like to arbitrarily subdivide and interleave
 	the workload.
 	Of course, an arbitrary subdivision might end up separating
@@ -138,7 +184,25 @@ perspective and ``parallel'' by many taking the second perspective.
 	would prevent any other thread from acquiring that lock.
 	If the locks were pure spinlocks, this could even result in
 	deadlock.
+
+	\fi
+
 }\QuickQuizEnd
+
+이건 아무 문제 없습니다.
+인간이 작성한 어떤 규칙도 목적 우주에 대해 어떤 가치도 갖지 않습니다,
+멀티프로세서 프로그램을 ``동시적'' 과 ``병렬적'' 같은 카테고리로 나누는
+규칙조차도요.
+
+이 구분하려는 시도의 실패는 그런 규칙들이 쓸모없음을 의미하는게 아니라 이를
+새로운 환경에 적용하고자 할 때 회의적인 마음자세를 가져야 함을 의미합니다.
+항상 그렇듯, 그런 규칙을 적용되는 곳에 사용하고 그렇지 않은 곳에선 무시하세요.
+
+사실, 새 카테고리는 병렬성, 동시성, 맵리듀스, 태스크 기반, 등등으로 더 나타날
+겁니다.
+어떤 것들은 시간의 시험에 들 것이니, 잘 추측하시기 바랍니다!
+
+\iffalse
 
 Which is just fine.
 No rule that humankind writes carries any weight against the objective
@@ -153,3 +217,5 @@ As always, use such rules where they apply and ignore them otherwise.
 In fact, it is likely that new categories will arise in addition
 to parallel, concurrent, map-reduce, task-based, and so on.
 Some will stand the test of time, but good luck guessing which!
+
+\fi
