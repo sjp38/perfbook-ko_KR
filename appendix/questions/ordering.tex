@@ -99,6 +99,23 @@ These tasks are taken up by the following sections.
 \subsection{Where is the Defining Data?}
 \label{sec:app:questions:Where is the Defining Data?}
 
+이를 위한 한가지 방법은 강력한 순서규칙에 의해 발생된 일관성의 영역은 이
+시스템의 영역\footnote{
+	분산 시스템이 될수도 있습니다.}
+바깥으로 확장되지 못한다는 것을 마음에 굳혀두는 겁니다.
+바깥 세상의 상태를 추적하기 위한 역할을 하는 시스템의 부분은 보통 완화된
+순서규칙을 가질 수 있고, 빛의 속도의 지연은 시스템 내 상태가 바깥 세상의 것을
+뒤따르게 강제할 겁니다.
+본성적으로 시간에 뒤쳐진 데이터에 대한 일관적 시각을 강제하기 위해 큰
+오버헤드를 일으키는 건 많은 경우 의미가 없습니다.
+이 경우, \cref{chp:Deferred Processing} 의 방법은 상당히 도움이 될 수 있으며,
+\cref{chp:Data Structures} 에 설명된 데이터 구조들 일부도 마찬가지입니다.
+
+그러나, 그 데이터에 접근하는 것들에게 보이는 의미있는 어떤 규칙들을 갖는게
+현명한데, 예를 들면 특정 함수의 반환값은 다음과 같을 수도 있을 겁니다:
+
+\iffalse
+
 One way to do this is to keep firmly in mind that the region of
 consistency engendered by strong ordering cannot extend out past the
 boundaries of the system.\footnote{
@@ -116,7 +133,29 @@ Nevertheless, it is wise to adopt some meaningful semantics that are
 visible to those accessing the data, for example, a given function's
 return value might be:
 
+\fi
+
 \begin{enumerate}
+\item	해당 함수 호출 시점에서의 어떤 추상적 값과 그 함수로부터의 리턴
+	시점에서의 그 추상적 값 사이의 어떤 값.
+	예를 들어,
+	\cref{sec:count:Statistical Counters} 에서 이야기 된 통계적 카운터를
+	그런 카운터는 일반적으로 최소한 연속적인 오버플로 사이에서는
+	단조증가함을 가슴속에 새기고 보십시오.
+\item	해당 함수로의 호출과 리턴 사이의 실제 값.
+	예를 들어,
+	\cref{lst:count:Just Count Atomically!} 에 보인 단일 변수 어토믹
+	카운터를 보십시오.
+\item	해당 함수에서 사용된 어떤 값이 이 함수의 호출과 리턴 사이 시간 동안
+	바뀌지 않았다면, 예상된 값, 그렇지 않다면 예상된 값에 대한 어떤 근사값.
+	이 근사치에 대한 정확한 경계의 명세는 상당히 도전적일 수 있습니다.
+	예를 들어,
+	\cref{sec:datastruct:Read-Mostly Data Structures} 에 보인 것처럼 RCU 로
+	보호되는 연결된 데이터 구조에서의 다른 원소들의 값을 합하는 함수를
+	생각해 보세요.
+
+\iffalse
+
 \item	Some value between the conceptual value at the time of the call
 	to the function and the conceptual value at the time of the
 	return from that function.
@@ -136,7 +175,19 @@ return value might be:
 	For example, consider a function combining values from
 	different elements of an RCU-protected linked data structure,
 	as described in \cref{sec:datastruct:Read-Mostly Data Structures}.
+
+\fi
+
 \end{enumerate}
+
+요약하자면, 완화된 순서 규칙은 보통 완화된 일관성을 수반하며, 여러분은 어떻게
+이 완화가 그들에게 영향을 미치는지에 대한 어떤 약속을 여러분의 사용자에게
+제공할 수 있어야 합니다.
+동시에, 호출자가 그 함수 호출과 그 함수에 의해 계산된 값의 사용 사이에 락을
+잡고 있지 않았다면, 완전히 순서 잡힌 구현도 일반적으로 앞의 선택사항들에 의해
+제공되는 의미 규칙보다 나은 것을 하진 못합니다.
+
+\iffalse
 
 In short, weaker ordering usually entails weaker consistency, and
 you should be able to give some sort of promise to your users as
@@ -146,11 +197,41 @@ function call and the use of any values computed by that function,
 even fully ordered implementations normally cannot do any better
 than the semantics given by the options above.
 
+\fi
+
 \QuickQuiz{
+	하지만 완전히 순서잡힌 구현이 성능도 확장성도 더 좋은 완화된 순서의
+	구현보다 더 강한 보장을 제공하지 못한다면, 완전한 순서를 사용할 이유가
+	뭡니까?
+
+	\iffalse
+
 	But if fully ordered implementations cannot offer stronger
 	guarantees that the better performing and more scalable weakly
 	ordered imptementations, why bother with full ordering?
+
+	\fi
+
 }\QuickQuizAnswer{
+	강력하게 순서잡힌 구현은 가끔 주어진 데이터 구조를 접근하는 함수들의
+	호출 집합들 사이에 더 강한 일관성을 제공할 수 있기 때문입니다.
+	예를 들어,
+	\cref{lst:count:Just Count Atomically!} 의 어토믹 카운터를
+	\cref{sec:count:Statistical Counters} 의 통계적 마운터와 비교해 보세요.
+	한 쓰레드가 값~3 을 더하고 또다른 쓰레드가 값~5를 더하며, 다른 두
+	쓰레드가 이 카운터의 값을 동시에 읽는다고 해봅시다.
+	어토믹 카운터에서는 읽기 쓰레드 중 하나가 값~3 을 얻고 다른 쓰레드는
+	값~5 를 얻는게 불가능 합니다.
+	통계적 카운터에서, 그런 결과는 정말 벌어질 수 있습니다.
+	사실, 어떤 컴퓨팅 환경에서는 이 결과는 x86 과 같이 상대적으로 강한 순서
+	규칙의 하드웨어에서조차 벌어질 수 있습니다.
+
+	따라서, 여러분의 사용자가 이런 비일상적인 수준의 일관성을 필요로 하게
+	된다면, 여러분은 완화된 순서규칙의 통계적 카운터를 사용하지 말아야
+	합니다.
+
+	\iffalse
+
 	Because strongly ordered implementations are sometimes
 	able to provide greater consistency among sets of calls to
 	functions accessing a given data structure.
@@ -170,7 +251,23 @@ than the semantics given by the options above.
 	Therefore, if your user happen to need this admittedly
 	unusual level of consistency, you should avoid weakly ordered
 	statistical counters.
+
+	\fi
+
 }\QuickQuizEnd
+
+어떤 사람은 유용한 컴퓨팅 처리는 바깥 세계와의 상호작용에서만 일어나며, 따라서
+모든 컴퓨팅은 완화된 순서규칙을 사용할 수 있다고 주장할 수도 있겠습니다.
+그런 주장은 틀렸습니다.
+예를 들어, 은행 계좌의 값은 여러분의 은행의 컴퓨터에 의해 정의되었으며,
+살마들은 종종 그들의 계좌 잔고에 연관된 정확한 계산을 선호하는데, 특히 그런
+근사화가 그 은행의 선호에 의해 이루어질 거라 의심하는 살마들은 그럴 겁니다.
+
+짧게 말하자면, 외부의 상태를 추적하는 데이터는 완화된 순서규칙 액세스의
+매력적인 후보가 될 수 있지만, 정확히 무엇이 추적되고 있으며 무엇이 추적을 하고
+있는지에 대해 주의 깊게 생각하십시오.
+
+\iffalse
 
 Some might argue that useful computing deals only with the outside world,
 and therefore that all computing can use weak ordering.
@@ -183,6 +280,8 @@ approximations would be in the bank's favor.
 In short, although data tracking external state can be an attractive
 candidate for weakly ordered access, please think carefully about
 exactly what is being tracked and what is doing the tracking.
+
+\fi
 
 \subsection{Consistent Data Used Consistently?}
 \label{sec:app:questions:Consistent Data Used Consistently?}
