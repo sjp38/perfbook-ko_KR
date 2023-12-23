@@ -299,6 +299,17 @@ in the next section.
 \label{sec:app:toyrcu:Per-Thread Lock-Based RCU}
 
 \cref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+(\path{rcu_lock_percpu.h} 와 \path{rcu_lock_percpu.c})
+가 쓰레드별 락에 기반한 구현을 보입니다.
+\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 함수는 현재 쓰레드의 락을 각각
+획득하고 해제합니다.
+\co{synchronize_rcu()} 함수는 각 쓰레드의 락을 순서대로 획득하고 해제합니다.
+따라서, \co{synchronize_rcu()} 기 시작할 때 수행되고 있던 모든 RCU read-side
+크리티컬 섹션은 \co{synchronize_rcu()} 가 리턴하기 전에 완료되어야만 합니다.
+
+\iffalse
+
+\cref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 (\path{rcu_lock_percpu.h} and \path{rcu_lock_percpu.c})
 shows an implementation based on one lock per thread.
 The \co{rcu_read_lock()} and \co{rcu_read_unlock()} functions
@@ -309,12 +320,23 @@ Therefore, all RCU read-side critical sections running
 when \co{synchronize_rcu()} starts must have completed before
 \co{synchronize_rcu()} can return.
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/defer/rcu_lock_percpu@lock_unlock.fcv}\vspace*{-11pt}\fvset{firstnumber=last}
 \input{CodeSamples/defer/rcu_lock_percpu@sync.fcv}\fvset{firstnumber=auto}
 \caption{Per-Thread Lock-Based RCU Implementation}
 \label{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 \end{listing}
+
+이 구현은 동시의 RCU 읽기 쓰레드를 허용하는 장점을 갖추고 있으며, 단일 전역
+락에서는 일어날 수 있는 데드락 조건을 막습니다.
+더 나아가, read-side 오버헤드는 약 140 나노세컨드로 높지만, CPU 의 수에 상관
+없이 약 140 나노세컨드로 유지됩니다.
+그러나, update-side 오버헤드는 단일 \Power{5} CPU 에서의 600 나노세컨드에서 64
+CPU 에서의 100 \emph{마이크로세컨드} 까지를 오갑니다.
+
+\iffalse
 
 This implementation does have the virtue of permitting concurrent
 RCU readers, and does avoid the deadlock condition that can arise
@@ -325,8 +347,20 @@ However, the update-side overhead ranges from about 600 nanoseconds
 on a single \Power{5} CPU
 up to more than 100 \emph{microseconds} on 64 CPUs.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\begin{fcvref}[ln:defer:rcu_lock_percpu:sync:loop]
+	\Cref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+	의 \clnrefrange{b}{e} 에서의 반복문에서는 모든 락을 획득한 후 한번에
+	해제하는게 더 깔끔하지 않을까요?
+	어쨌건, 이 변경으로 인해 어떤 읽기 쓰레드도 존재하지 않는 시점이
+	존재하게 되어서 모든 것을 훨씬 간단하게 만들 겁니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:defer:rcu_lock_percpu:sync:loop]
 	Wouldn't it be cleaner to acquire all the locks, and then
 	release them all in the loop from \clnrefrange{b}{e} of
@@ -334,17 +368,56 @@ up to more than 100 \emph{microseconds} on 64 CPUs.
 	After all, with this change, there would be a point in time
 	when there were no readers, simplifying things greatly.
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 변경을 가하는 것은 데드락을 다시 불러일으키며, 따라서 아니오, 그건
+	더 깔끔하지 않습니다.
+
+	\iffalse
+
 	Making this change would re-introduce the deadlock, so
 	no, it would not be cleaner.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	\Cref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+	에 보인 구현은 데드락으로부터 자유로운가요?
+	이유는 뭐죠?
+
+	\iffalse
+
 	Is the implementation shown in
 	\cref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 	free from deadlocks?
 	Why or why not?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	한가지 데드락 상황은 어떤 락이 \co{synchronize_rcu()} 에 걸쳐 잡혀져
+	있으며, 같은 락이 어떤 RCU read-side 크리티컬 섹션에 의해 획득될 때일
+	겁니다.
+	그러나, 이 상황은 모든 올바르게 설계된 RCU 구현을 데드락에 빠지게 할
+	겁니다.
+	어쨌건, \co{synchronize_rcu()} 기능은 모든 앞서 존재했던 RCU read-side 
+	크리티컬 섹션이 완료되길 기다려야만 하지만, 이 크리티컬 섹션들 가운데
+	하나가 \co{synchronize_rcu()} 가 수행중인 쓰레드에 의해 잡힌 락을
+	기다린다면, RCU 의 정의에 내재한 데드락을 갖게 됩니다.
+
+	또다른 데드락 상황은 RCU read-side 크리티컬 섹션을 중첩시키려 할 때
+	발생합니다.
+	이 데드락은 이 구현에만 있으며, 재귀 락을 사용하거나
+	\co{rcu_read_lock()} 에 의해 읽기 모드로 획득되고
+	\co{synchronize_rcu()} 에 의해 쓰기 모드로 획득되는 reader-writer 락의
+	사용으로 회피될 수도 있을 겁니다.
+
+	\iffalse
+
 	One deadlock is where a lock is
 	held across \co{synchronize_rcu()}, and that same lock is
 	acquired within an RCU read-side critical section.
@@ -363,6 +436,17 @@ up to more than 100 \emph{microseconds} on 64 CPUs.
 	locks that are read-acquired by \co{rcu_read_lock()} and
 	write-acquired by \co{synchronize_rcu()}.
 
+	\fi
+
+	그러나, 앞의 두 경우를 배제한다면, 이 RCU 구현은 어떤 데드락 상황도
+	초래하지 않습니다.
+	이는 어떤 다른 쓰레드의 락이 획득된 시점은 \co{synchronize_rcu()} 가
+	수행중일 때 뿐이며, 락은 곧바로 해제될 것이어서 앞의 첫번째 경우인,
+	\co{synchronize_rcu()} 에 걸쳐 잡힌 락이 관여되는 데드락 사이클을
+	방지하기 때문입니다.
+
+	\iffalse
+
 	However, if we exclude the above two cases,
 	this implementation of RCU does not introduce any deadlock
 	situations.
@@ -371,14 +455,34 @@ up to more than 100 \emph{microseconds} on 64 CPUs.
 	is immediately released, prohibiting a deadlock cycle that
 	does not involve a lock held across the \co{synchronize_rcu()}
 	which is the first case above.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	\Cref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
+	에 보인 RCU 알고리즘의 한가지 장점은 예를 들면 POSIX pthreads 같은
+	곳에서 널리 사용 가능한 기능만을 사용한다는 점일까요?
+
+	\iffalse
+
 	Isn't one advantage of the RCU algorithm shown in
 	\cref{lst:app:toyrcu:Per-Thread Lock-Based RCU Implementation}
 	that it uses only primitives that are widely available,
 	for example, in POSIX pthreads?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	이는 실제로 장점입니다만, \co{rcu_dereference()} 와
+	\co{rcu_assign_pointer()} 는 여전히 필요한데, \co{rcu_dereference()}
+	에서의 \co{volatile} 조정과 \co{rcu_assign_pointer()} 에서의 메모리
+	배리어 사용을 의미합니다.
+	물론, 두 기능 모두 Alpha CPU 에서는 메모리 배리어가 필요할 겁니다.
+
+	\iffalse
+
 	This is indeed an advantage, but do not forget that
 	\co{rcu_dereference()} and \co{rcu_assign_pointer()}
 	are still required, which means \co{volatile} manipulation
@@ -386,8 +490,18 @@ up to more than 100 \emph{microseconds} on 64 CPUs.
 	\co{rcu_assign_pointer()}.
 	Of course, many Alpha CPUs require memory barriers for both
 	primitives.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 방법은 비슷한 방법이 리눅스 2.4 커널에서 사용되었다는 점을 볼
+때~\cite{Molnar00a} 일부 상황에서 유용할 수 있습니다.
+
+이어서 소개될 카운터 기반 RCU 구현은 락 기반 구현의 단점들 일부를 극복합니다.
+
+\iffalse
 
 This approach could be useful in some situations, given that a similar
 approach was used in the
@@ -395,6 +509,8 @@ Linux 2.4 kernel~\cite{Molnar00a}.
 
 The counter-based RCU implementation described next overcomes some of
 the shortcomings of the lock-based implementation.
+
+\fi
 
 \section{Simple Counter-Based RCU}
 \label{sec:app:toyrcu:Simple Counter-Based RCU}
