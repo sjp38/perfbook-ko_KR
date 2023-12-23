@@ -78,6 +78,16 @@ provides a summary and a list of desirable RCU properties.
 \label{lst:app:toyrcu:Lock-Based RCU Implementation}
 \end{listing}
 
+아마도 가장 간단한 RCU 구현은
+\cref{lst:app:toyrcu:Lock-Based RCU Implementation}
+(\path{rcu_lock.h} 와 \path{rcu_lock.c}) 에 보인 것처럼 락을 사용하는 것일
+겁니다.
+이 구현에서, \co{rcu_read_lock()} 은 전역 spinlock 하나를 획득하고
+\co{rcu_read_unlock()} 은 이를 해제하며, \co{synchronize_rcu()} 는 이 락을
+획득하고는 곧바로 내려놓습니다.
+
+\iffalse
+
 Perhaps the simplest RCU implementation leverages locking, as
 shown in
 \cref{lst:app:toyrcu:Lock-Based RCU Implementation}
@@ -85,6 +95,25 @@ shown in
 In this implementation, \co{rcu_read_lock()} acquires a global
 spinlock, \co{rcu_read_unlock()} releases it, and
 \co{synchronize_rcu()} acquires it then immediately releases it.
+
+\fi
+
+\co{synchronize_rcu()} 는 락을 획득하기 (그리고 내려놓기) 전까지는 리턴하지
+않으므로, 앞의 모든 RCU read-side 크리티컬 섹션이 완료되기 전까지는 리턴될 수
+없고, 따라서 RCU semantic 을 완전히 구현합니다.
+물론, 한번에 하나의 RCU 읽기 쓰레드만이 read-side 크리티컬 섹션에 들어가 있을
+수 있는데, 이는 RCU 의 목적을 완전히 놓치는 것입니다.
+또한, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 에서의 락 오퍼레이션은
+굉장히 무거워서, read-side 오버헤드는 한개의 \Power{5} CPU 에서의
+100~나노세컨드에서 64-CPU 시스템에서의 17~\emph{마이크로세컨드} 까지를
+오갑니다.
+더 나쁜게, 이 락 오퍼레이션은 \co{rcu_read_lock()} 이 데드락 사이클에 낄 수
+있게 합니다.
+더 나아가, 회귀적 락의 부재 시, RCU read-side 크리티컬 섹션은 중첩될 수 없고,
+마지막으로, 동시의 RCU 업데이트는 흔한 grace priod 에 의해 완료되겠지만 이
+구현은 grace period 들을 순차화 시켜서 grace-period 공유를 금지합니다.
+
+\iffalse
 
 Because \co{synchronize_rcu()} does not return until it has acquired
 (and released) the lock, it cannot return until all prior RCU read-side
@@ -105,12 +134,34 @@ although concurrent RCU updates could in principle be satisfied by
 a common grace period, this implementation serializes grace periods,
 preventing grace-period sharing.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	왜
+	\cref{lst:app:toyrcu:Lock-Based RCU Implementation}
+	에서의 RCU 구현 내의 모든 데드락은 다른 RCU 구현에서도 데드락이지
+	않을까요?
+
+	\iffalse
+
 	Why wouldn't any deadlock in the RCU implementation in
 	\cref{lst:app:toyrcu:Lock-Based RCU Implementation}
 	also be a deadlock in any other RCU implementation?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	\begin{fcvref}[ln:app:toyrcu:Deadlock in Lock-Based RCU Implementation]
+	\Cref{lst:app:toyrcu:Deadlock in Lock-Based RCU Implementation}
+	에서의 함수 \co{foo()} 와 \co{bar()} 가 다른 CPU 에서 동시에
+	호출되었다고 해봅시다.
+	그럼 \co{foo()} 는 \clnref{foo:acq} 에서 \co{my_lock()} 을 획득하고,
+	\clnref{bar:rrl} 에서 \co{bar()} 는 \co{rcu_gp_lock} 을 획득합니다.
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:app:toyrcu:Deadlock in Lock-Based RCU Implementation]
 	Suppose the functions \co{foo()} and \co{bar()} in
 	\cref{lst:app:toyrcu:Deadlock in Lock-Based RCU Implementation}
@@ -119,6 +170,8 @@ preventing grace-period sharing.
 	while \co{bar()} will acquire \co{rcu_gp_lock} on
 	\clnref{bar:rrl}.
 	\end{fcvref}
+
+	\fi
 
 \begin{listing}[tbp]
 \begin{fcvlabel}[ln:app:toyrcu:Deadlock in Lock-Based RCU Implementation]
@@ -149,6 +202,21 @@ void bar(void)
 \end{listing}
 
 	\begin{fcvref}[ln:app:toyrcu:Deadlock in Lock-Based RCU Implementation]
+	\co{foo()} 가 \clnref{foo:rrl} 로 나아가면, \co{bar()} 가 잡고 있는
+	\co{rcu_gp_lock} 을 획득하려 시도할 겁니다.
+	그러면 \co{bar()} 가 \clnref{bar:acq} 로 나아갈 때, \co{foo()} 가 잡고
+	있는 \co{my_lock} 을 획득하려 할 겁니다.
+	\end{fcvref}
+
+	그럼 각 함수는 서로가 잡고 있는 락을 기다리므로, 고전적인 데드락이
+	됩니다.
+
+	다른 RCU 구현은 \co{rcu_read_lock()} 에서 spin 하지도 block 하지도
+	않으므로 데드락이 회피됩니다.
+
+	\iffalse
+
+	\begin{fcvref}[ln:app:toyrcu:Deadlock in Lock-Based RCU Implementation]
 	When \co{foo()} advances to \clnref{foo:rrl}, it will attempt to
 	acquire \co{rcu_gp_lock}, which is held by \co{bar()}.
 	Then when \co{bar()} advances to \clnref{bar:acq}, it will attempt
@@ -160,14 +228,36 @@ void bar(void)
 
 	Other RCU implementations neither spin nor block in
 	\co{rcu_read_lock()}, hence avoiding deadlocks.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\Cref{lst:app:toyrcu:Lock-Based RCU Implementation}
+	의 RCU 구현에서는 왜 RCU 읽기 쓰레드들이 병렬로 수행될 수 있게끔 단순히
+	reader-writer 락을 사용하지 않죠?
+
+	\iffalse
+
 	Why not simply use reader-writer locks in the RCU implementation
 	in
 	\cref{lst:app:toyrcu:Lock-Based RCU Implementation}
 	in order to allow RCU readers to proceed in parallel?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	실제로 그런 방식으로 reader-writer 락을 사용할 수 있을 겁니다.
+	그러나, 교재 상의 reader-writer 락은 메모리 경쟁으로 고통받으므로, 병렬
+	수행을 실제로 허용하기 위해선 RCU read-side 크리티컬 섹션이 상당히
+	길어져야 할 겁니다~\cite{McKenney03a}.
+
+	다른 한편, \co{rcu_read_lock()} 에서 읽기 모드로 획득된 reader-writer
+	락의 사용은 앞서 언급된 데드락 조건을 막을 겁니다.
+
+	\iffalse
+
 	One could in fact use reader-writer locks in this manner.
 	However, textbook reader-writer locks suffer from memory
 	contention, so that the RCU read-side critical sections would
@@ -177,8 +267,20 @@ void bar(void)
 	On the other hand, use of a reader-writer lock that is
 	read-acquired in \co{rcu_read_lock()} would avoid the
 	deadlock condition noted above.
+
+	\fi
+
 }\QuickQuizEndE
 }
+
+이 구현이 제품 단계 환경에서 유용할 거라 상상하긴 어렵지만 거의 모든 사용자
+단계 어플리케이션에서 구현될 수 있다는 장점을 갖추고 있긴 합니다.
+더 나아가, CPU 별 락 또는 reader-writer 락을 사용하는 비슷한 구현이 2.4 리눅스
+커널에 의해 제품 단계에서 사용된 바 있습니다.
+
+이 CPU 별 락 방법의 쓰레드별 락으로 수정된 버전이 다음 섹션에서 설명됩니다.
+
+\iffalse
 
 It is hard to imagine this implementation being useful
 in a production setting, though it does have the virtue
@@ -190,6 +292,8 @@ in the 2.4 Linux kernel.
 A modified version of this one-lock-per-CPU approach, but instead using
 one lock per thread, is described
 in the next section.
+
+\fi
 
 \section{Per-Thread Lock-Based RCU}
 \label{sec:app:toyrcu:Per-Thread Lock-Based RCU}
