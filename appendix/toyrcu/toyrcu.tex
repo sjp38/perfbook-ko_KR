@@ -816,6 +816,21 @@ which are themselves shown in
 
 \paragraph{Design}
 
+기아로부터의 자유를 제공하는 건 \co{rcu_refcnt[]} 배열의 두 원소입니다.
+핵심은 \co{synchronize_rcu()} 가 앞서 존재한 읽기 쓰레드들만을 기다리면 된다는
+겁니다.
+만약 어떤 새로운 읽기 쓰레드가 특정 \co{synchronize_rcu()} 호출이 수행을 시작한
+후에 시작된다면, 이 \co{synchronize_rcu()} 수행은 이 새 읽기 쓰레드를 기다리지
+않아도 됩니다.
+언제든, 특정 읽기 쓰레드가 자신의 RCU read-side 크리티컬 섹션을
+\co{rcu_read_lock()} 을 통해 시작했을 때, 이 쓰레드는 \co{rcu_idx} 변수로
+가리켜지는 \co{rcu_refcnt[]} 배열의 원소를 값 증가시킵니다.
+이 똑같은 읽기 쓰레드가 \co{rcu_read_unlock()} 을 통해 자신의 RCU read-side
+크리티컬 섹션을 종료할 때, 이 쓰레드는 모든 가능한 \co{rcu_idx} 값으로의
+뒤따르는 변화를 무시하고 무엇이든 자신이 증가시킨 원소의 값을 감소시킵니다.
+
+\iffalse
+
 It is the two-element \co{rcu_refcnt[]} array that provides the freedom
 from starvation.
 The key point is that \co{synchronize_rcu()} is only required to wait
@@ -830,6 +845,27 @@ the \co{rcu_idx} variable.
 When that same reader exits its RCU read-side critical section via
 \co{rcu_read_unlock()}, it decrements whichever element it incremented,
 ignoring any possible subsequent changes to the \co{rcu_idx} value.
+
+\fi
+
+이 조정은 \co{synchronize_rcu()} 는 \co{rcu_idx} 의 값을
+\co{rcu_idx = !rcu_idx} 로 조정함으로써 기아를 막을 수 있음을 의미합니다.
+\co{rcu_idx} 의 기존 값이 0 이었고, 따라서 새 값은 1이라고 해봅시다.
+이 값 조정 오퍼레이션 뒤에 도착한 새 읽기 쓰레드는 \co{rcu_refcnt[1]} 의 값을
+증가시킬 것이며, 앞서 \co{rcu_refcnt[0]} 의 값을 증가시킨 기존 읽기 쓰레드들은
+자신의 RCU read-side 크리티컬 섹션을 종료할 때 \co{rcu_refcnt[0]} 의 값을
+감소시킬 겁니다.
+이는 \co{rcu_refcnt[0]} 의 값이 더이상 증가되지 않을 것이며, 따라서 단조 감소할
+것을 의미합니다.\footnote{
+	이 ``단조 감소'' 를 무시하는 경주 조건이 존재합니다.
+	이 경주 조건은 \co{synchronize_rcu()} 코드를 통해 처리될 겁니다.
+	그 전까지는 불신을 미뤄두길 제안합니다.}
+이는 \co{synchronize_rcu()} 가 해야할 모든 일은 \co{rcu_refcnt[0]} 의 값이 0이
+되길 기다리는 것 뿐임을 의미합니다.
+
+이 배경지식과 함께라면, 실제 기능의 구현을 들여다볼 준비가 되었습니다.
+
+\iffalse
 
 This arrangement means that \co{synchronize_rcu()} can avoid starvation
 by complementing the value of \co{rcu_idx}, as in \co{rcu_idx = !rcu_idx}.
@@ -851,6 +887,8 @@ value of \co{rcu_refcnt[0]} to reach zero.
 
 With the background, we are ready to look at the implementation of the
 actual primitives.
+
+\fi
 
 \paragraph{Implementation}
 
