@@ -515,6 +515,27 @@ the shortcomings of the lock-based implementation.
 \section{Simple Counter-Based RCU}
 \label{sec:app:toyrcu:Simple Counter-Based RCU}
 
+약간 더 진보된 RCU 구현이
+\cref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
+(\path{rcu_rcg.h} 와 \path{rcu_rcg.c}) 에 보여 있습니다.
+\begin{fcvref}[ln:defer:rcu_rcg]
+이 구현은 \clnref{lock_unlock:grc} 에 정의된 전역 레퍼런스 카운터
+\co{rcu_refcnt} 를 사용합니다.
+\co{rcu_read_lock()} 기능은 이 카운터를 어토믹하게 증가시키고, RCU read-side
+크리티컬 섹션이 이 어토믹 값 증가 뒤로 순서잡혔음을 보장하기 위해 메모리
+배리어를 수행합니다.
+비슷하게, \co{rcu_read_unlock()} 은 RCU read-side 크리티컬 섹션을 가두기 위해
+메모리 배리어를 수행하고 이어서 이 카운터를 어토믹하게 감소시킵니다.
+\co{synchronize_rcu()} 기능은 이 레퍼런스 카운터가 0이 되기를 메모리 배리어로
+감싸진 가운데에서 기다립니다.
+\Clnref{sync:poll} 의 \co{poll()} 은 그저 순수한 지연을 제공하며, 순수한 RCU
+semantic 관점에서는 없어져도 됩니다.
+다시 말하지만, 일단 \co{synchronize_rcu()} 가 리턴하면, 모든 앞의 RCU read-side
+크리티컬 섹션은 완료되었을 것이 보장됩니다.
+\end{fcvref}
+
+\iffalse
+
 A slightly more sophisticated RCU implementation is shown in
 \cref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
 (\path{rcu_rcg.h} and \path{rcu_rcg.c}).
@@ -536,12 +557,23 @@ Again, once \co{synchronize_rcu()} returns, all prior
 RCU read-side critical sections are guaranteed to have completed.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/defer/rcu_rcg@lock_unlock.fcv}\vspace*{-11pt}\fvset{firstnumber=last}
 \input{CodeSamples/defer/rcu_rcg@sync.fcv}\fvset{firstnumber=auto}
 \caption{RCU Implementation Using Single Global Reference Counter}
 \label{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
 \end{listing}
+
+\Cref{sec:app:toyrcu:Lock-Based RCU} 에 보인 락 기반 구현과의 행복한 대조로, 이
+구현은 RCU read-side 크리티컬 섹션의 병렬 수행을 허용합니다.
+\Cref{sec:app:toyrcu:Per-Thread Lock-Based RCU} 에 보인 쓰레드별 락 기반
+구현과의 행복한 대조로, 이 구현은 또한 중첩을 허용합니다.
+또한, \co{rcu_read_lock()} 기능은 데드락 사이클에 참여될 수 없는데, spin 도
+block 도 하지 않기 때문입니다.
+
+\iffalse
 
 In happy contrast to the lock-based implementation shown in
 \cref{sec:app:toyrcu:Lock-Based RCU}, this implementation
@@ -552,11 +584,30 @@ it also allows them to be nested.
 In addition, the \co{rcu_read_lock()} primitive cannot possibly
 participate in deadlock cycles, as it never spins nor blocks.
 
+\fi
+
 \QuickQuiz{
+	하지만 여러분이 \co{synchronize_rcu()} 호출 전반에 걸쳐 락을 잡고 있고,
+	어떤 RCU read-side 크리티컬 섹션 내에서 같은 락을 잡으면 어떻게 될까요?
+
+	\iffalse
+
 	But what if you hold a lock across a call to
 	\co{synchronize_rcu()}, and then acquire that same lock within
 	an RCU read-side critical section?
+
+	\fi
+
 }\QuickQuizAnswer{
+	실제로 이는 모든 합법적 RCU 구현에 데드락을 초래할 수 있습니다.
+	하지만 \co{rcu_read_lock()} 은 \emph{정말로} 이 데드락 사이클에
+	참여하고 있나요?
+	그렇다고 믿는다면,
+	\cref{sec:app:toyrcu:RCU Based on Quiescent States} 의 RCU 구현을 볼 때
+	같은 질문을 스스로에게 해보세요.
+
+	\iffalse
+
 	Indeed, this would deadlock any legal RCU implementation.
 	But is \co{rcu_read_lock()} \emph{really} participating in
 	the deadlock cycle?
@@ -564,7 +615,22 @@ participate in deadlock cycles, as it never spins nor blocks.
 	ask yourself this same question when looking at the
 	RCU implementation in
 	\cref{sec:app:toyrcu:RCU Based on Quiescent States}.
+
+	\fi
+
 }\QuickQuizEnd
+
+그러나, 이 구현은 여전히 심각한 단점이 있습니다.
+첫째로, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 의 어토믹 오퍼레이션은
+여전히 무거워서, read-side 오버헤드를 단일 \Power{5} CPU 에서의
+100~나노세컨드에서 64-CPU 시스템에서의 40~\emph{마이크로세컨드} 를 오가게
+합니다.
+이는 RCU read-side 크리티컬 섹션이 실제 read-side 병렬성을 얻기 위해서는 굉장히
+길어야 함을 의미합니다.
+다른 한편, 읽기 쓰레드가 부재할 경우, grace period 는 40~\emph{나노세컨드}
+가량에 끝나는데, 리눅스 커널의 제품 품질 구현보다 수십수백배 빠릅니다.
+
+\iffalse
 
 However, this implementation still has some serious shortcomings.
 First, the atomic operations in \co{rcu_read_lock()} and
@@ -579,10 +645,30 @@ On the other hand, in the absence of readers, grace periods elapse
 in about 40~\emph{nanoseconds}, many orders of magnitude faster
 than production-quality implementations in the Linux kernel.
 
+\fi
+
 \QuickQuiz{
+	\co{synchronize_rcu()} 가 10-밀리세컨드 지연을 갖는데 어떻게 grace
+	peirod 는 40 나노세컨드에 끝날 수 있죠?
+
+	\iffalse
+
 	How can the grace period possibly elapse in 40 nanoseconds when
 	\co{synchronize_rcu()} contains a 10-millisecond delay?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 업데이트 쪽 테스트는 읽기 쓰레드의 부재 하에 수행되었으므로,
+	\co{poll()} 시스템 콜이 아예 수행되지 않았습니다.
+	또한, 실제 코드는 이 \co{poll()} 시스템콜이 주석처리 되어 있어서, 이
+	업데이트 쪽 코드의 실제 오버헤드를 더 잘 평가할 수 있었습니다.
+	이 코드의 제품 환경에서의 사용은 \co{poll()} 시스템 콜의 사용을 통해
+	나아질 수 있겠습니다만, 다시 말하지만 제품 환경에서의 사용의 경우 이
+	섹션의 뒤쪽에서 소개할 다른 구현을 사용하는게 나을 겁니다.
+
+	\iffalse
+
 	The update-side test was run in absence of readers, so the
 	\co{poll()} system call was never invoked.
 	In addition, the actual code has this \co{poll()}
@@ -592,7 +678,24 @@ than production-quality implementations in the Linux kernel.
 	using the \co{poll()} system call, but then again,
 	production uses would be even better served by other implementations
 	shown later in this section.
+
+	\fi
+
 }\QuickQuizEnd
+
+둘째로 수많은 동시의 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()}
+오퍼레이션이 존재한다면, \co{rcu_refcnt} 에 상당한 메모리 경쟁이 존재할
+것이어서 비싼 캐쉬 미스를 초래할 겁니다.
+이 두개의 단점은 RCU 의 주요 목적인 낮은 오버헤드의 read-side 동기화 기능
+제공하기를 크게 해칩니다.
+
+마지막으로, 긴 read-side 크리티컬 섹션을 갖는 큰 수의 RCU 읽기 쓰레드는
+\co{synchronize_rcu()} 가 평생 완료되지 못하게 할 수 있는데, 이 전역 카운터가
+평생 0이 되지 않을 수도 있기 때문입니다.
+이는 RCU 업데이트 쓰레드의 기아를 초래할 수 있는데, 이 역시 제품 환경에서는
+받아들여질 수 없는 일입니다.
+
+\iffalse
 
 Second, if there are many concurrent \co{rcu_read_lock()}
 and \co{rcu_read_unlock()} operations, there will
@@ -608,13 +711,37 @@ never reach zero.
 This could result in starvation of RCU updates, which
 is of course unacceptable in production settings.
 
+\fi
+
 \QuickQuiz{
+	\Cref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
+	의 RCU 구현에서 \co{synchronize_rcu()} 가 너무 오래 기다리고 있었다면
+	\co{rcu_read_lock()} 이 기다리게 하는건 어떤가요?
+	이게 \co{synchronize_rcu()} 가 기아에 빠지는 걸 방지하지 않을까요?
+
+	\iffalse
+
 	Why not simply make \co{rcu_read_lock()} wait when a concurrent
 	\co{synchronize_rcu()} has been waiting too long in
 	the RCU implementation in
 	\cref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}?
 	Wouldn't that prevent \co{synchronize_rcu()} from starving?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이게 실제로 기아를 제거하겠지만, 이는 또한 \co{rcu_read_lock()} 이 쓰기
+	쓰레드를 기다리느라 spin 또는 block 을 함을 의미하는데, 이는 결국 읽기
+	쓰레드를 기다리는 일입니다.
+	이 읽기 쓰레드들 중 하나가 이 spin/block 하는 \co{rcu_read_lock()} 이
+	잡고 있는 락을 잡으려 한다면 우린 또다시 데드락에 빠집니다.
+
+	짧게 발해서, 이 치료법은 질병보다 더 나쁩니다.
+	올바른 치료를 위해선
+	\cref{sec:app:toyrcu:Starvation-Free Counter-Based RCU} 를 보십시오.
+
+	\iffalse
+
 	Although this would in fact eliminate the starvation, it would
 	also mean that \co{rcu_read_lock()} would spin or block waiting
 	for the writer, which is in turn waiting on readers.
@@ -625,7 +752,17 @@ is of course unacceptable in production settings.
 	In short, the cure is worse than the disease.
 	See \cref{sec:app:toyrcu:Starvation-Free Counter-Based RCU}
 	for a proper cure.
+
+	\fi
+
 }\QuickQuizEnd
+
+따라서, 이 구현 역시 제품 환경에서 유용할 거라 상상하기는 어렵지만 락 기반
+메커니즘에 비해서는 예를 들면 높은 부하에서의 디버깅 환경에 적합한 RCU
+구현으로는 약간 더 나은 잠재력을 가지고 있습니다.
+다음 섹션은 읽기 쓰레드에 더 선호될 레퍼런스 카운팅 방법의 변주를 설명합니다.
+
+\iffalse
 
 Therefore, it is still hard to imagine this implementation being useful
 in a production setting, though it has a bit more potential
@@ -633,6 +770,8 @@ than the lock-based mechanism, for example, as an RCU implementation
 suitable for a high-stress debugging environment.
 The next section describes a variation on the reference-counting
 scheme that is more favorable to writers.
+
+\fi
 
 \section{Starvation-Free Counter-Based RCU}
 \label{sec:app:toyrcu:Starvation-Free Counter-Based RCU}
