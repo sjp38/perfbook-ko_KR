@@ -892,6 +892,17 @@ actual primitives.
 
 \paragraph{Implementation}
 
+\co{rcu_read_lock()} 기능은 \co{rcu_idx} 에 의해 인덱스되는 \co{rcu_refcnt[]}
+쌍의 멤버를 값 증가시키고, 이 인덱스의 스냅샷을 쓰레드별 변수 \co{rcu_read_idx}
+에 보관합니다.
+\co{rcu_read_unlock()} 기능은 이어서 그게 무엇이든 연관된 \co{rcu_read_lock()}
+이 값 증가시켰던 카운터의 값을 원자적으로 감소시킵니다.
+그러나, 쓰레드당 단 하나의 \co{rcu_idx} 값만이 기억되었으므로, 중첩을 허용하기
+위해선 추가적인 방법이 필요합니다.
+이 추가적인 방법은 중첩을 추적하는 쓰레드별 \co{rcu_nesting} 변수를 사용합니다.
+
+\iffalse
+
 The \co{rcu_read_lock()} primitive atomically increments the member of the
 \co{rcu_refcnt[]} pair indexed by \co{rcu_idx}, and keeps a
 snapshot of this index in the per-thread variable \co{rcu_read_idx}.
@@ -902,6 +913,23 @@ However, because only one value of \co{rcu_idx} is remembered per thread,
 additional measures must be taken to permit nesting.
 These additional measures use the per-thread \co{rcu_nesting} variable
 to track nesting.
+
+\fi
+
+\begin{fcvref}[ln:defer:rcu_rcpg:r:lock]
+이 모든게 동작하게 하기 위해,
+\cref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair} 의
+\co{rcu_read_lock()} 의 \clnref{pick} 은 현재 쓰레드의 \co{rcu_nesting} 을
+가져오고, \clnref{if} 가 이게 가장 바깥 \co{rcu_read_lock()} 임을 확인하면,
+\clnrefrange{cur:b}{cur:e} 는 \co{rcu_idx} 의 현재 값을 가져오고, 그것을 이
+쓰레드의 \co{rcu_read_idx} 에 저장한 후, \co{rcu_refcnt} 의 선택된 원소의 값을
+어토믹하게 증가시킵니다.
+\co{rcu_nesting} 의 값에 관계 없이, \clnref{inc} 는 이를 값 증가시킵니다.
+\Clnref{mb} 는 이 RCU read-side 크리티컬 섹션이 \co{rcu_read_lock()} 코드
+앞으로 새어나가지 않음을 보장하기 위해 메모리 배리어를 수행합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:rcu_rcpg:r:lock]
 To make all this work, \clnref{pick} of \co{rcu_read_lock()} in
@@ -917,6 +945,23 @@ Regardless of the value of \co{rcu_nesting}, \clnref{inc} increments it.
 critical section does not bleed out before the \co{rcu_read_lock()} code.
 \end{fcvref}
 
+\fi
+
+\begin{fcvref}[ln:defer:rcu_rcpg:r:unlock]
+비슷하게, \co{rcu_read_unlock()} 함수는 RCU read-side 크리티컬 섹션이
+\co{rcu_read_unlock()} 코드 뒤로 새어나가지 않게끔 \clnref{mb} 에서 메모리
+배리어를 수행합니다.
+\Clnref{nest} 는 이 쓰레드의 \co{rcu_nesting} 인스턴스를 가져오고, \clnref{if}
+에서 이것이 가장 바깥 \co{rcu_read_unlock()} 임을 확인하면, \clnref{idx,atmdec}
+에서 이 쓰레드의 \co{rcu_read_idx} 인스턴스를 가져오고 (이는 가장 바깥의
+\co{rcu_read_lock()} 에 의해 저장되었음) \co{rcu_refcnt} 의 선택된 원소의 값을
+원자적으로 감소시킵니다.
+중첩 단계에 관계 없이, \clnref{decnest} 는 이 쓰레드의 \co{rcu_nesting}
+인스턴스의 값을 감소시킵니다.
+\end{fcvref}
+
+\iffalse
+
 \begin{fcvref}[ln:defer:rcu_rcpg:r:unlock]
 Similarly, the \co{rcu_read_unlock()} function executes a memory barrier
 at \clnref{mb}
@@ -931,11 +976,32 @@ Regardless of the nesting level, \clnref{decnest} decrements this thread's
 instance of \co{rcu_nesting}.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/defer/rcu_rcpg@sync.fcv}
 \caption{RCU Update Using Global Reference-Count Pair}
 \label{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
 \end{listing}
+
+\begin{fcvref}[ln:defer:rcu_rcpg:sync]
+\Cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+(\path{rcu_rcpg.c})
+는 연관된 \co{synchronize_rcu()} 구현을 보입니다.
+\Clnref{acq,rel} 은 하나 이상의 동시의 \co{synchronize_rcu()} 를 방지하기 위해
+\co{rcu_gp_lock} 을 획득하고 해제합니다.
+\Clnref{pick,compl} 은 각각 \co{rcu_idx} 값을 가져오고 이를 보상하여 뒤따르는
+\co{rcu_read_lock()} 인스턴스는 앞의 인스턴스와 다른 \co{rcu_refcnt} 를
+사용하게끔 만듭니다.
+\Clnrefrange{while:b}{while:e} 는 이어서 \co{rcu_refcnt} 의 앞의 원소가 0이
+되기를 \clnref{mb2} 에서의 \co{rcu_refcnt} 의 검사가 \co{rcu_idx} 보상을
+앞지르게끔 재배치 되지 않게끔 보장하는 메모리 배리어와 함께 기다립니다.
+\Clnrefrange{mb3}{while2:e} 는 이 과정을 반복하며, \clnref{mb5} 는 모든
+뒤따르는 회수 오퍼레이션이 \co{rcu_refcnt} 의 검사를 앞지르게끔 재배치 되지
+않게끔 보장합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:rcu_rcpg:sync]
 \Cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
@@ -958,14 +1024,46 @@ subsequent reclamation operations are not reordered to precede the
 checking of \co{rcu_refcnt}.
 \end{fcvref}
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\begin{fcvref}[ln:defer:rcu_rcpg:sync]
+	\Cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+	의 \co{synchronize_rcu()} 에서의 \clnref{mb1} 에서의 메모리 배리어는
+	바로 뒤에 스핀락 획득이 있는데 왜 필요하죠?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:defer:rcu_rcpg:sync]
 	Why the memory barrier on \clnref{mb1} of \co{synchronize_rcu()} in
 	\cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
 	given that there is a spin-lock acquisition immediately after?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 스핀락 획득은 이 스핀락의 크리티컬 섹션이 이 획득 앞으로
+	``새어나가지'' 않게 보장할 뿐입니다.
+	스핀락 획득을 앞서는 코드가 이 크리티컬 섹션 안으로 재배치 되는 것은
+	막지 않습니다.
+	그런 재배치는 RCU 로 보호되는 리스트로부터의 우너소 삭제가 \co{rcu_idx}
+	의 보상을 뒤따르게끔 재배치 하는 것을 허용해서 새로 시작된 RCU
+	read-side 크리티컬 섹션이 최근 제거된 데이터 원소를 볼 수 있게 할 수
+	있습니다.
+
+	독자 여러분을 위한 연습:
+	\cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+	의 메모리 배리어 가운데 무엇이 정말로 필요한지 판단하기 위해
+	Promela/spin 같은 도구를 사용해 보세요.
+	이 도구들을 사용하는 법을 알기 위해 \cref{chp:Formal Verification} 을
+	보세요.
+	첫번째 올바르고 완전한 답은 상을 받을 겁니다.
+
+	\iffalse
+
 	The spin-lock acquisition only guarantees that the spin-lock's
 	critical section will not ``bleed out'' to precede the
 	acquisition.
@@ -984,13 +1082,49 @@ checking of \co{rcu_refcnt}.
 	See \cref{chp:Formal Verification}
 	for information on using these tools.
 	The first correct and complete response will be credited.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	왜 이 카운터는
+	\cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+	에서 두번 뒤집히나요?
+	한번 뒤집고 기다리기만으로도 충분하지 않나요?
+
+	\iffalse
+
 	Why is the counter flipped twice in
 	\cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}?
 	Shouldn't a single flip-and-wait cycle be sufficient?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	\begin{fcvref}[ln:defer:rcu_rcpg]
+	두번의 뒤집기가 분명 필요합니다.
+	이를 보기 위해, 다음 이벤트의 연속을 생각해 봅시다:
+	\begin{enumerate}
+	\item	\Cref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
+		의 \co{rcu_read_lock()} 의 \clnref{r:lock:cur:b} 에서
+		\co{rcu_idx} 를 가져오고 그 값이 0임을 확인합니다.
+	\item	\Cref{lst:app:toyrcu:RCU Update Using Global Reference-Count Pair}
+		의 \co{synchronize_rcu()} 의 \clnref{sync:compl} 에서
+		\co{rcu_idx} 의 값을 보상해서 그 값을 1로 만듭니다.
+	\item	\co{synchronize_rcu()} 의
+		\clnrefrange{sync:while:b}{sync:while:e} 에서
+		\co{rcu_refcnt[0]} 의 값이 0임을 확인하고 따라서 리턴합니다.
+		(질문은 \clnrefrange{sync:mb3}{sync:mb5} 이 제거되면 어떻게
+		되는가임을 상기합시다.)
+	\item	\co{rcu_read_lock()} 의 \clnref{r:lock:set,r:lock:cur:e} 가 이
+		쓰레드의 \co{rcu_read_idx} 인스턴스에 값 0을 저장하고
+		\co{rcu_refcnt[0]} 의 값을 증가시킵니다.
+		수행은 이제 이 RCU read-side 크리티컬 섹션 내부로 이어집니다.
+		\label{sec:app:toyrcu:rcu_rcgp:RCU Read Side Start}
+
+	\iffalse
+
 	\begin{fcvref}[ln:defer:rcu_rcpg]
 	Both flips are absolutely required.
 	To see this, consider the following sequence of events:
@@ -1015,6 +1149,27 @@ checking of \co{rcu_refcnt}.
 		Execution then proceeds into the RCU read-side critical
 		section.
 		\label{sec:app:toyrcu:rcu_rcgp:RCU Read Side Start}
+
+	\fi
+
+	\item	\co{synchronize_rcu()} 의 또다른 인스턴스가 다시 \co{rcu_idx}
+		를 보상하는데, 이번에는 그 값을 0으로 만듭니다.
+		\co{rcu_refcnt[1]} 은 0 이므로, \co{synchronize_rcu()} 는
+		곧바로 리턴합니다.
+		(\co{rcu_read_lock()} 은 \co{rcu_refcnt[1]} 이 아닌
+		\co{rcu_refcnt[0]} 을 값 증가시켰음을 기억하세요!)
+		\label{sec:app:toyrcu:rcu_rcgp:RCU Grace Period Start}
+	\item	Step~\ref{sec:app:toyrcu:rcu_rcgp:RCU Grace Period Start}
+		에서 시작된 grace period 는 이제 종료가 허가되었는데, 이전에
+		step~\ref{sec:app:toyrcu:rcu_rcgp:RCU Read Side Start} 
+		에서 시작된 RCU read-side 크리티컬 섹션은 완료되지 않았으에도
+		불구하고 그렇습니다.
+		이는 RCU semantic 의 위반이며, 업데이트가 RCU read-side
+		크리티컬 섹션이 여전히 참조하고 있는 데이터 원소를 메모리
+		해제할 수 있게 합니다.
+
+	\iffalse
+
 	\item	Another instance of \co{synchronize_rcu()} again complements
 		\co{rcu_idx}, this time setting its value to zero.
 		Because \co{rcu_refcnt[1]} is zero, \co{synchronize_rcu()}
@@ -1032,7 +1187,19 @@ checking of \co{rcu_refcnt}.
 		This violates RCU semantics, and could allow the update
 		to free a data element that the RCU read-side critical
 		section was still referencing.
+
+	\fi
+
 	\end{enumerate}
+
+	독자 여러분을 위한 연습: \co{rcu_read_lock()} 이 \clnref{r:lock:cur:b}
+	후에 매우 긴 시간 (수시간!) preemption 당하면 무슨 일이 벌어질까요?
+	이 구현은 그런 경우에 잘 동작할까요?
+	왜 그럴까요?
+	첫번째 올바르고 완전한 답변은 상을 받을 겁니다.
+	\end{fcvref}
+
+	\iffalse
 
 	Exercise for the reader: What happens if \co{rcu_read_lock()}
 	is preempted for a very long time (hours!) just after
@@ -1041,12 +1208,23 @@ checking of \co{rcu_refcnt}.
 	Why or why not?
 	The first correct and complete response will be credited.
 	\end{fcvref}
+
+	\fi
 }\QuickQuizEndE
 }
+
+이 구현은
+\cref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
+에 보인 단일 카운터 기반 구현에서 일어날 수 있는 업데이트 starvation 문제를
+막습니다.
+
+\iffalse
 
 This implementation avoids the update-starvation issues that could
 occur in the single-counter implementation shown in
 \cref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}.
+
+\fi
 
 \paragraph{Discussion}
 
