@@ -1228,6 +1228,29 @@ occur in the single-counter implementation shown in
 
 \paragraph{Discussion}
 
+여전히 심각한 단점들이 있습니다.
+첫째, \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 의 어토믹 오퍼레이션들은
+여전히 꽤 무겁습니다.
+실제로, 이건
+\cref{lst:app:toyrcu:RCU Implementation Using Single Global Reference Counter}
+에 보인 단일 카운터 변종의 것들보다 더 복잡해서 읽기 쪽 기능들은 단일 \Power{5}
+CPU 에서 약 150~나노세컨드, 64-CPU 시스템에서는 거의 40~\emph{마이크로세컨드}
+의 시간을 소비합니다.
+업데이트 쪽 \co{synchronize_rcu()} 기능은 이보다 더 비싼데, 단일 \Power{5} CPU
+에서 약 200~나노세컨드에 64-CPU 시스템에서 40~\emph{마이크로세컨드} 를
+소비합니다.
+이는 RCU read-side 크리티컬 섹션이 실제 읽기 쪽의 병렬성을 얻기 위해선 굉장히
+길어야 함을 의미합니다.
+
+둘째, 많은 동시의 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 오퍼레이션이
+존재한다면, \co{rcu_refcnt} 원소로의 상당한 메모리 경쟁이 있어서 비싼 캐쉬
+미스를 초래합니다.
+이는 병렬 read-side 액세스를 제공하기 위해 필요한 RCU read-side 크리티컬 섹션의
+시간을 더 늘립니다.
+이 두개의 단점들은 RCU 의 목적을 대부분의 상황에서 좌절시킵니다.
+
+\iffalse
+
 There are still some serious shortcomings.
 First, the atomic operations in \co{rcu_read_lock()}
 and \co{rcu_read_unlock()}
@@ -1253,6 +1276,17 @@ duration required to provide parallel read-side access.
 These first two shortcomings defeat the purpose of RCU in most
 situations.
 
+\fi
+
+셋째, \co{rcu_idx} 를 두번 뒤집어야 하는 필요성은 업데이트에의 상당한
+오버헤드를 부과하며, 특히 큰 수의 쓰레드가 있을때 그렇습니다.
+
+마지막으로, 동시의 RCU 업데이트는 이론상 공통의 grace period 에 의해 처리될 수
+있다는 사실에도 불구하고, 이 구현은 grace period 들을 순차화 시켜서
+grace-period 공유를 막습니다.
+
+\iffalse
+
 Third, the need to flip \co{rcu_idx} twice imposes substantial
 overhead on updates, especially if there are large
 numbers of threads.
@@ -1262,20 +1296,56 @@ satisfied by a common grace period, this implementation
 serializes grace periods, preventing grace-period
 sharing.
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:defer:rcu_rcpg:r]
+	어토믹 값 증가와 감소가 그렇게 비싸면,
+	\cref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}
+	의 \clnref{lock:cur:e} 에서 어토믹하지 않은 값 증가를 사용하고
+	\clnref{unlock:atmdec} 에서 어토믹하지 않은 값 감소를 사용하는 건
+	어떻습니까?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:defer:rcu_rcpg:r]
 	Given that atomic increment and decrement are so expensive,
 	why not just use non-atomic increment on \clnref{lock:cur:e} and a
 	non-atomic decrement on \clnref{unlock:atmdec} of
 	\cref{lst:app:toyrcu:RCU Read-Side Using Global Reference-Count Pair}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	어토믹하지 않은 오퍼레이션을 사용하는 것은 값 증가와 감소를 손실되게
+	만들어서 결국 이 구현이 실패하게 합니다.
+	\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 에서 비 어토믹
+	오퍼레이션을 사용하는 안전한 방법을 위해선
+	\cref{sec:app:toyrcu:Scalable Counter-Based RCU} 를 참고하십시오.
+
+	\iffalse
+
 	Using non-atomic operations would cause increments and decrements
 	to be lost, in turn causing the implementation to fail.
 	See \cref{sec:app:toyrcu:Scalable Counter-Based RCU}
 	for a safe way to use non-atomic operations in
 	\co{rcu_read_lock()} and \co{rcu_read_unlock()}.
+
+	\fi
+
 }\QuickQuizEnd
+
+이런 단점들에도 불구하고, 어떤 이는 이 RCU 변종이 작은 단단하게 결합된
+멀티프로세서에서, 아마도 더 복잡한 구현과의 API 호환성을 유지하는 메모리 보호
+구현으로 사용되는 걸 상상해 볼 수 있을 겁니다.
+그러나, 이는 몇 CPU 이상으로는 확장되지 못할 가능성이 큽니다.
+
+다음 섹션은 크게 향상된 read-side 성능과 확장성을 제공하는 레퍼런스 카운팅
+방법의 또다른 변종을 설명합니다.
+
+\iffalse
 
 Despite these shortcomings, one could imagine this variant
 of RCU being used on small tightly coupled multiprocessors,
@@ -1285,6 +1355,8 @@ However, it would not likely scale well beyond a few CPUs.
 
 The next section describes yet another variation on the reference-counting
 scheme that provides greatly improved read-side performance and scalability.
+
+\fi
 
 \section{Scalable Counter-Based RCU}
 \label{sec:app:toyrcu:Scalable Counter-Based RCU}
