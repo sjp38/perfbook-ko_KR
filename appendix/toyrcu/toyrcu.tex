@@ -1940,10 +1940,20 @@ thread-local accesses to one, as is done in the next section.
 \label{sec:app:toyrcu:RCU Based on Free-Running Counter}
 
 \Cref{lst:app:toyrcu:Free-Running Counter Using RCU}
+(\path{rcu.h} and \path{rcu.c}) 는
+\cref{lst:app:toyrcu:Data for Free-Running Counter Using RCU}
+에 보인 데이터와 함께 짝수 값만을 취하는 전역 free-running 카운터 하나에 기반한
+RCU 구현을 보입니다.
+
+\iffalse
+
+\Cref{lst:app:toyrcu:Free-Running Counter Using RCU}
 (\path{rcu.h} and \path{rcu.c})
 shows an RCU implementation based on a single global free-running counter
 that takes on only even-numbered values, with data shown in
 \cref{lst:app:toyrcu:Data for Free-Running Counter Using RCU}.
+
+\fi
 
 \begin{listing}[tbp]
 \input{CodeSamples/defer/rcu@define.fcv}
@@ -1957,6 +1967,25 @@ that takes on only even-numbered values, with data shown in
 \caption{Free-Running Counter Using RCU}
 \label{lst:app:toyrcu:Free-Running Counter Using RCU}
 \end{listing}
+
+이로 인한 \co{rcu_read_lock()} 구현은 굉장히 간단합니다.
+\begin{fcvref}[ln:defer:rcu:read_lock_unlock:lock]
+\Clnref{gp1,gp2} 는 전역 free-running \co{rcu_gp_ctr} 변수에 1을 더하고 그 결과
+만들어지는 홀수 값을 쓰레드별 변수 \co{rcu_reader_gp} 에 저장합니다.
+\Clnref{mb} 는 뒤따르는 RCU read-side 크리티컬 섹션의 내용이 ``밖으로
+새어나가는'' 것을 방지하기 위해 메모리 배리어를 수행합니다.
+\end{fcvref}
+
+\begin{fcvref}[ln:defer:rcu:read_lock_unlock:unlock]
+\co{rcu_read_unlock()} 구현도 비슷합니다.
+\Clnref{mb} 는 다시 앞의 RCU read-side 크리티컬 섹션이 ``새어 나오는'' 것을
+막기 위해 메모리 배리어를 수행합니다.
+\Clnref{gp1,gp2} 는 이어서 \co{rcu_gp_ctr} 전역 변수를 쓰레드별 변수
+\co{rcu_reader_gp} 에 복사하고, 이 쓰레드별 변수를 짝수 값으로 남겨두어 동시의
+\co{synchronize_rcu()} 가 이를 알고 무시할 수 있게 해줍니다.
+\end{fcvref}
+
+\iffalse
 
 The resulting \co{rcu_read_lock()} implementation is extremely
 straightforward.
@@ -1979,20 +2008,74 @@ variable with an even-numbered value so that a concurrent instance
 of \co{synchronize_rcu()} will know to ignore it.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:defer:rcu:read_lock_unlock:unlock]
+	어떤 짝수 값이든 \co{synchronize_rcu()} 에게 그 태스크를 무시하라고
+	말하기 충분하다면, 왜
+	\cref{lst:app:toyrcu:Free-Running Counter Using RCU}
+	의 \clnref{gp1,gp2} 는 간단히 \co{rcu_reader_gp} 에 0을 할당하지
+	않나요?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:defer:rcu:read_lock_unlock:unlock]
 	If any even value is sufficient to tell \co{synchronize_rcu()}
 	to ignore a given task, why don't \clnref{gp1,gp2} of
 	\cref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	simply assign zero to \co{rcu_reader_gp}?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	0 (또는 어떤 값이든 짝수 상수) 를 할당하는 것도 실제로 동작할
+	것입니다만, \co{rcu_gp_ctr} 에 값을 할당하는 것은 의미있는 디버깅에
+	도움이 될 것인데, 이는 개발자에게 언제 연관된 쓰레드가 마지막으로 RCU
+	read-side 크리티컬 섹션을 빠져나왔는지 눈치챌 수 있게 해주기
+	때문입니다.
+
+	\iffalse
+
 	Assigning zero (or any other even-numbered constant)
 	would in fact work, but assigning the value of
 	\co{rcu_gp_ctr} can provide a valuable debugging aid,
 	as it gives the developer an idea of when the corresponding
 	thread last exited an RCU read-side critical section.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:defer:rcu:synchronize:syn]
+따라서, \co{synchronize_rcu()} 는 모든 쓰레드별 \co{rcu_reader_gp} 변수가 짝수
+값을 가지길 기다릴 수 있습니다.
+그러나, \co{synchronize_rcu()} 는 \emph{앞에서부터 존재해온} RCU read-side
+크리티컬 섹션만을 기다리면 되기 때문에 이보다 훨씬 더 잘할수 있습니다.
+\Clnref{mb1} 은 앞의 RCU 로 보호되는 데이터 구조의 조정이 \clnref{increasegp}
+뒤로 순서 재배치 되는 걸 (CPU 에 의해서든 컴파일러에 의해서든) 막기 위해 메모리
+배리어를 수행합니다.
+\Clnref{spinlock} 은 여러 \co{synchronize_rcu()} 인스턴스가 동시에 수행되는
+것을 막기 위해 \co{rcu_gp_lock} 을 획득합니다 (그리고 \clnref{spinunlock} 에서
+이를 해제합니다).
+\Clnref{increasegp} 는 이어서 전역 \co{rcu_gp_ctr} 변수를 2 증가시켜서, 모든
+앞서서부터 존재한 RCU read-side 크리티컬 섹션이 연관된 쓰레드별
+\co{rcu_reader_gp} 변수에 \co{rcu_gp_ctr} 의 것에 해당 기계의 워드 크기로
+modulo 연산한 값보다 작은 값을 갖게 합니다.
+또한 \co{rcu_reader_gp} 의 짝수 값의 쓰레드는 RCU read-side 크리티컬 섹션에
+있지 않으므로, \clnrefrange{scan:b}{scan:e} 는 \co{rcu_reader_gp} 값을 그 값이
+모두 짝수이거나 (\clnref{even}) 전역 \co{rcu_gp_ctr} (\clnrefrange{gt1}{gt2})
+보다 큰 값일 때까지 스캐닝 합니다.
+\Clnref{poll} 은 앞서서부터 존재한 RCU read-side 크리티컬 섹션을 기다리기 위해
+짧은 시간동안 블록됩니다만, 이는 grace-period 응답시간이 중요하다면
+spin-반복문으로 대체될 수 있습니다.
+마지막으로, \clnref{mb3} 에서의 메모리 배리어는 모든 뒤따르는 제거가 앞의
+반복문 안으로 재배치 되지 않게 보장합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:rcu:synchronize:syn]
 Thus, \co{synchronize_rcu()} could wait for all of the per-thread
@@ -2025,6 +2108,8 @@ a spin-loop if grace-period latency is of the essence.
 Finally, the memory barrier at \clnref{mb3} ensures that any subsequent
 destruction will not be reordered into the preceding loop.
 \end{fcvref}
+
+\fi
 
 \QuickQuiz{
 	\begin{fcvref}[ln:defer:rcu:synchronize:syn]
