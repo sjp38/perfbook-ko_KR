@@ -1647,6 +1647,25 @@ concurrent RCU updates.
 
 \Cref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
 (\path{rcu_rcpls.h})
+는 앞에서와 같이 쓰레드별 레퍼런스 카운트 쌍을 이용하지만 업데이트들이 grace
+period 를 공유하는 걸 허용하는 RCU 구현의 read-side 기능을 보입니다.
+\begin{fcvref}[ln:defer:rcu_rcpls:r]
+\Cref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair}
+에 보인
+앞의 구현과의 주요 차이점은 \co{rcu_idx} 가 이제 \co{long} 이어서
+\cref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
+의 \clnref{lock:idx} 는 아래쪽 비트를 마스킹 해 제거해야만 한다는 겁니다.
+우린 또한 \co{atomic_read()} 와 \co{atomic_set()} 사용을 \co{READ_ONCE()}
+사용으로 바꿨습니다.
+데이터는 상당히 유사한데,
+\cref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update Data}
+에 보였듯 \co{rcu_idx} 가 \co{atomic_t} 대신 \co{long} 이 되었을 뿐입니다.
+\end{fcvref}
+
+\iffalse
+
+\Cref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
+(\path{rcu_rcpls.h})
 shows the read-side primitives for an RCU implementation using per-thread
 reference count pairs, as before, but permitting updates to share
 grace periods.
@@ -1665,6 +1684,8 @@ with \co{rcu_idx} now being a \co{long} instead of an
 \co{atomic_t}.
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/defer/rcu_rcpls@define.fcv}
 \caption{RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update Data}
@@ -1676,6 +1697,24 @@ with \co{rcu_idx} now being a \co{long} instead of an
 \caption{RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
 \label{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
 \end{listing}
+
+\Cref{lst:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pair}
+(\path{rcu_rcpls.c})
+는 \co{synchronize_rcu()} 와 그 헬퍼 함수 \co{flip_counter_and_wait()} 를
+보입니다.
+이것들은
+\cref{lst:app:toyrcu:RCU Update Using Per-Thread Reference-Count Pair}
+의 것들과 비슷합니다.
+\co{flip_counter_and_wait()} 의 차이점은 다음을 포함합니다:
+\begin{fcvref}[ln:defer:rcu_rcpls:u:flip]
+\begin{enumerate}
+\item	\Clnref{inc} 는 \co{atomic_set()} 대신 \co{WRITE_ONCE()} 를 사용하고,
+	보상하는 대신 값을 증가시킵니다.
+\item	새로운 \clnref{mask} 는 이 카운터를 바닥 비트로 마스킹 합니다.
+\end{enumerate}
+\end{fcvref}
+
+\iffalse
 
 \Cref{lst:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pair}
 (\path{rcu_rcpls.c})
@@ -1692,11 +1731,35 @@ The differences in \co{flip_counter_and_wait()} include:
 \end{enumerate}
 \end{fcvref}
 
+\fi
+
 \begin{listing}[tbp]
 \input{CodeSamples/defer/rcu_rcpls@u.fcv}
 \caption{RCU Shared Update Using Per-Thread Reference-Count Pair}
 \label{lst:app:toyrcu:RCU Shared Update Using Per-Thread Reference-Count Pair}
 \end{listing}
+
+\begin{fcvref}[ln:defer:rcu_rcpls:u:sync]
+\co{synchronize_rcu()} 로의 변경은 더 폭넓습니다:
+\begin{enumerate}
+\item	\Clnref{oldctr} 에서의 락 획득 전 \co{rcu_idx} 값을 잡아두는 지역 변수
+	\co{oldctr} 이 생겼습니다.
+\item	\Clnref{idx} 는 \co{atomic_read()} 대신 \co{READ_ONCE()} 를 사용합니다.
+\item	\Clnrefrange{if:b}{ret} 는 락이 잡혀있는 사이 다른 쓰레드에 의해 최소
+	세번의 카운터 뒤집기가 행해졌는지 보고, 그렇다면 락을 내려놓고, 메모리
+	배리어를 수행하고, 리턴합니다.
+	이 경우, 카우넡가 0이 되기까지의 완전한 기다림이 두번 있으므로 다른
+	쓰레드들은 필요한 일을 이미 다 끝냈을 겁니다.
+\item	\Clnrefrange{ifpair}{flip2} 에서, \co{flip_counter_and_wait()} 는 락이
+	획득된 사이 두번 미만의 카운터 뒤집기가 행해졌다면 두번째에만
+	수행됩니다.
+	다른 한편, 두번의 카운터 뒤집기가 있었다면, 어떤 다른 쓰레드가 모든
+	카운터가 0이 되기를 완전히 한번 기다렸으므로, 한번만 더 기다리면
+	됩니다.
+\end{enumerate}
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:rcu_rcpls:u:sync]
 The changes to \co{synchronize_rcu()} are more pervasive:
@@ -1719,6 +1782,25 @@ The changes to \co{synchronize_rcu()} are more pervasive:
 \end{enumerate}
 \end{fcvref}
 
+\fi
+
+이 방법과 함께, 임의의 큰 수의 쓰레드가 쓰레드당 CPU 하나를 가진 채 동시에
+\co{synchronize_rcu()} 를 수행했다면, 카운터가 0이 되기를 기다리는 횟수는
+세번만이 될겁니다.
+
+이 개선에도 불구하고, 이 RCU 구현은 여전히 단점이 여럿 있습니다.
+첫째로, 이전과 같이 \co{rcu_idx} 를 두번 뒤집어야 하는 필요성은 업데이트에
+상당한 오버헤드를 부과하는데, 특히 큰 수의 쓰레드가 있을 때 그렇습니다.
+
+둘째, 각 업데이트 쓰레드는 여전히 \co{rcu_gp_lock} 을 획득해야만 하며, 해야할
+일이 없을 때조차도 그렇습니다.
+이는 큰 수의 동시 업데이트가 존재하는 경우 상당한 확장성 한계를 초래할 수
+있습니다.
+리눅스 커널의 제품 품질 리얼타임 RCU 구현에서 이루어졌던
+것처럼~\cite{PaulEMcKenney2007PreemptibleRCU} 이를 막는 방법들이 있습니다.
+
+\iffalse
+
 With this approach, if an arbitrarily large number of threads invoke
 \co{synchronize_rcu()} concurrently, with one CPU for each thread, there
 will be a total of only three waits for counters to go to zero.
@@ -1737,6 +1819,20 @@ There are ways of avoiding this, as was done in a
 production-quality real-time implementation of RCU for the Linux
 kernel~\cite{PaulEMcKenney2007PreemptibleRCU}.
 
+\fi
+
+셋째, 이 구현은 쓰레드별 변수와 쓰레드를 순회하는 기능을 필요로 하는데, 다시
+말하지만 어떤 소프트웨어 환경에서는 문제가 될 수 있습니다.
+
+마지막으로, 32-bit 기계에서는 \co{rcu_idx} 카운터가 오버플로우되기까지 긴 시간
+업데이트 쓰레드가 preemption 당해 있을 수도 있습니다.
+이는 그런 쓰레드가 불필요한 카운터 뒤집기 두번을 강제하게 할 수 있습니다.
+그러나, 각 grace period 가 1 마이크로세컨드만 소비했다고 하더라도, 공격하는
+쓰레드는 한시간 이상을 preemption 당해야 할 것인데, 이 경우 추가적인 한쌍의
+카운터 뒤집기가 여러분의 걱정거리 중 최소한의 것이 될 겁니다.
+
+\iffalse
+
 Third, this implementation requires per-thread variables
 and the ability to enumerate threads, which again can be
 problematic in some software environments.
@@ -1752,6 +1848,21 @@ preempted for more than an hour, in which case an
 extra pair of counter flips is likely the least of
 your worries.
 
+\fi
+
+\Cref{sec:app:toyrcu:Simple Counter-Based RCU} 에서 설명한 구현에서와 같이, 이
+read-side 기능은 매우 잘 확장하여, CPU 의 수에 관계 없이 약 115~나노세컨드의
+오버헤드만을 일으킵니다.
+\co{synchronize_rcu()} 기능은 여전히 비용이 높아서, 1 마이크로세컨드에서
+16~마이크로세컨드까지의 오버헤드를 초래합니다.
+그렇다고는 하나 이는
+\cref{sec:app:toyrcu:Scalable Counter-Based RCU} 의 구현에서 발생하는 약
+200~마이크로세컨드에 비하면 훨씬 낮은 것입니다.
+따라서, 그 단점에도 불구하고, 어떤 사람들은 이 RCU 구현이 실제 삶의 제품 단계
+어플리케이션에서 사용되는 걸 상상해 볼 수 있을 겁니다.
+
+\iffalse
+
 As with the implementation described in
 \cref{sec:app:toyrcu:Simple Counter-Based RCU},
 the read-side primitives scale extremely well, incurring roughly
@@ -1764,7 +1875,18 @@ incurred by the implementation in
 So, despite its shortcomings, one could imagine this
 RCU implementation being used in production in real-life applications.
 
+\fi
+
 \QuickQuiz{
+	이 모든 toy RCU 구현은 \co{rcu_read_lock()} 과 \co{rcu_read_unlock()},
+	또는 \co{synchronize_rcu()} 에서 어토믹 오퍼레이션을 가지고 있어서
+	쓰레드의 수에 따라 오버헤드가 선형적으로 증가합니다.
+	어떤 환경에서야 어떤 RCU 구현은 이 세개의 모든 기능이 결정적인
+	($\O({1}$) 오버헤드와 응답시간을 제공하는 가벼운 구현을 즐길 수
+	있을까요?
+
+	\iffalse
+
 	All of these toy RCU implementations have either atomic operations
 	in \co{rcu_read_lock()} and \co{rcu_read_unlock()},
 	or \co{synchronize_rcu()}
@@ -1772,10 +1894,33 @@ RCU implementation being used in production in real-life applications.
 	Under what circumstances could an RCU implementation enjoy
 	lightweight implementations for all three of these primitives,
 	all having deterministic ($\O{1}$) overheads and latencies?
+
+	\fi
+
 }\QuickQuizAnswer{
+	RCU 의 특수 목적 유니프로세서 구현은 이 이상을 달성할 수
+	있습니다~\cite{PaulEMcKenney2009BloatwatchRCU}.
+
+	\iffalse
+
 	Special-purpose uniprocessor implementations of RCU can attain
 	this ideal~\cite{PaulEMcKenney2009BloatwatchRCU}.
+
+	\fi
+
 }\QuickQuizEnd
+
+\Cref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update}
+를 다시 참고해보면, 우린 전역 변수로의 한번의 액세스가 있고 쓰레드 지역
+변수로의 네번 이상의 액세스가 있음을 볼 수 있습니다.
+POSIX 쓰레드를 구현하는 시스템에서의 쓰레드 지역 액세스의 상대적으로 높은
+비용을 놓고 생각해 보면, 이 세개의 쓰레드 지역 변수들을 하나의 구조체로 만들어
+\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 이 각자의 쓰레드 지역 데이터를
+하나의 쓰레드 지역 저장소 액세스로 액세스 할 수 있게 하고 싶을 겁니다.
+그러나, 그보다도 나은 방법은 쓰레드 지역 액세스를 한번으로 줄이는 것일텐데,
+이를 다음 섹션에서 합니다.
+
+\iffalse
 
 Referring back to
 \cref{lst:app:toyrcu:RCU Read-Side Using Per-Thread Reference-Count Pair and Shared Update},
@@ -1788,6 +1933,8 @@ thread-local variables into a single structure, permitting
 thread-local data with a single thread-local-storage access.
 However, an even better approach would be to reduce the number of
 thread-local accesses to one, as is done in the next section.
+
+\fi
 
 \section{RCU Based on Free-Running Counter}
 \label{sec:app:toyrcu:RCU Based on Free-Running Counter}
