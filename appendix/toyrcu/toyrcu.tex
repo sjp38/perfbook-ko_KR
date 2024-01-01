@@ -2113,13 +2113,34 @@ destruction will not be reordered into the preceding loop.
 
 \QuickQuiz{
 	\begin{fcvref}[ln:defer:rcu:synchronize:syn]
+	\Cref{lst:app:toyrcu:Free-Running Counter Using RCU}
+	의 \clnref{mb1,mb3} 의 메모리 배리어는 왜 필요하죠?
+	\Clnref{spinlock,spinunlock} 의 락킹 기능에 내재된 메모리 배리어로
+	충분하지 않나요?
+	\end{fcvref}
+
+	\iffalse
+
+	\begin{fcvref}[ln:defer:rcu:synchronize:syn]
 	Why are the memory barriers on \clnref{mb1,mb3} of
 	\cref{lst:app:toyrcu:Free-Running Counter Using RCU}
 	needed?
 	Aren't the memory barriers inherent in the locking
 	primitives on \clnref{spinlock,spinunlock} sufficient?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	락킹 기능은 크리티컬 섹션을 국한시키는 것만을 보장하기 때문에 이 메모리
+	배리어들이 필요합니다.
+	락킹 기능들은 다른 코드가 크리티컬 섹션 내로 새어들어오는 것을 막을
+	책임은 전혀 없습니다.
+	따라서 이런 류의 코드 움직임이 컴파일러에 의해서든 CPU 에 의해서든
+	일어나는 걸 방지하기 위해 이 한쌍의 메모리 배리어가 필요합니다.
+
+	\iffalse
+
 	These memory barriers are required because the locking
 	primitives are only guaranteed to confine the critical
 	section.
@@ -2128,7 +2149,17 @@ destruction will not be reordered into the preceding loop.
 	The pair of memory barriers are therefore requires to prevent
 	this sort of code motion, whether performed by the compiler
 	or by the CPU\@.
+
+	\fi
+
 }\QuickQuizEnd
+
+이 방법은 훨씬 나은 read-side 성능을 달성해서, \Power{5} CPU 의 갯수에 관계
+없이 약 63~나노세컨드의 오버헤드를 일으킵니다.
+업데이트는 더 큰 오버헤드를 일으키는데, 단일 \Power{5} CPU 에서의
+500~나노세컨드에서 64 개의 CPU 에서의 100~\emph{마이크로세컨드} 를 오갑니다.
+
+\iffalse
 
 This approach achieves much better read-side performance, incurring
 roughly 63~nanoseconds of overhead regardless of the number of
@@ -2137,15 +2168,52 @@ Updates incur more overhead, ranging from about 500~nanoseconds on
 a single \Power{5} CPU to more than 100~\emph{microseconds} on 64
 such CPUs.
 
+\fi
+
 \QuickQuiz{
+	\Cref{sec:app:toyrcu:Scalable Counter-Based RCU With Shared Grace Periods}
+	에 설명된 업데이트 쪽 batching 최적화는
+	\cref{lst:app:toyrcu:Free-Running Counter Using RCU}
+	에 보인 구현에 적용될 수 없나요?
+
+	\iffalse
+
 	Couldn't the update-side batching optimization described in
 	\cref{sec:app:toyrcu:Scalable Counter-Based RCU With Shared Grace Periods}
 	be applied to the implementation shown in
 	\cref{lst:app:toyrcu:Free-Running Counter Using RCU}?
+
+	\fi
+
 }\QuickQuizAnswer{
+	약간의 수정과 함께 실제로 그럴 수 있습니다.
+	이 일은 독자 여러분의 연습을 위해 남겨둡니다.
+
+	\iffalse
+
 	Indeed it could, with a few modifications.
 	This work is left as an exercise for the reader.
+
+	\fi
+
 }\QuickQuizEnd
+
+\begin{fcvref}[ln:defer:rcu:read_lock_unlock:lock]
+이 구현은 앞서 언급된 업데이트 쪽의 높은 오버헤드에 더해 일부 심각한 단점을
+가지고 있습니다.
+첫째, 더이상 RCU read-side 크리티컬 섹션의 중첩을 허용하지 않는데, 다음 섹션의
+주제입니다.
+둘째, 어떤 읽기 쓰레드가
+\cref{lst:app:toyrcu:Free-Running Counter Using RCU} 의 \clnref{gp1} 에서
+\co{rcu_gp_ctr} 에서 읽기를 했지만 \co{rcu_reader_gp} 에서 저장을 하기 전에
+preemption 당한다면, 그리고 \co{rcu_gp_ctr} 카운터가 그것의 가능한 값들의
+전부는 아니라도 절반 이상을 세어버린다면, \co{synchronize_rcu()} 는 뒤따르는
+RCU read-side 크리티컬 섹션을 무시할 겁니다.
+마지막이자 셋째, 이 구현은 소프트웨어 환경이 쓰레드를 순회할 수 있고 쓰레드별
+변수를 유지할 수 있게 해야 합니다.
+\end{fcvref}
+
+\iffalse
 
 \begin{fcvref}[ln:defer:rcu:read_lock_unlock:lock]
 This implementation suffers from some serious shortcomings in
@@ -2163,7 +2231,20 @@ environment be able to enumerate threads and maintain per-thread
 variables.
 \end{fcvref}
 
+\fi
+
 \QuickQuiz{
+	\begin{fcvref}[ln:defer:rcu:read_lock_unlock:lock]
+	\Cref{lst:app:toyrcu:Free-Running Counter Using RCU}
+	의 \clnrefrange{gp1}{gp2} 에서 읽기 쓰레드가 preemption 될 수 있다는
+	가능성이 잔짜로 문제인가요?  달리 말하자면, 문제를 일으킬 수 있는 실제
+	이벤트 순서가 존재합니까?
+	아니라면 왜 그렇습니까?
+	그렇다면 그 이벤트 순서는 무엇이며 어떻게 그 문제가 처리될 수 있습니까?
+	\end{fcvref}
+
+	\iffalse
+
 	\begin{fcvref}[ln:defer:rcu:read_lock_unlock:lock]
 	Is the possibility of readers being preempted in
 	\clnrefrange{gp1}{gp2} of
@@ -2174,7 +2255,21 @@ variables.
 	If so, what is the sequence of events, and how can the
 	failure be addressed?
 	\end{fcvref}
+
+	\fi
+
 }\QuickQuizAnswer{
+	이는 진짜 문제이고, 문제를 일으키는 이벤트의 순서가 존재하며, 이를
+	해결하기 위한 여러 가능한 방법들이 있습니다.
+	더 자세한 부분을 위해선,
+	\cref{sec:app:toyrcu:Nestable RCU Based on Free-Running Counter}
+	끝부분의 Quick Quizz 를 보시기 바랍니다.
+	그 논의를 거기에 두는 이유는 (1) 여러분에게 생각할 시간을 더 드리기
+	위해, 그리고 (2) 그 섹션에서 더해지는 중첩에 대한 지원이 카운터를
+	오버플로우 시키는데 걸리는 시간을 크게 줄이기 때문입니다.
+
+	\iffalse
+
 	It is a real problem, there is a sequence of events leading to
 	failure, and there are a number of possible ways of
 	addressing it.
@@ -2184,6 +2279,9 @@ variables.
 	more time to think about it, and (2) because the nesting support
 	added in that section greatly reduces the time required to
 	overflow the counter.
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Nestable RCU Based on Free-Running Counter}
