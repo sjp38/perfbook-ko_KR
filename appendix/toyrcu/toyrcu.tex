@@ -2586,15 +2586,50 @@ overhead.
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	다시,
+	\cref{lst:app:toyrcu:Nestable RCU Using a Free-Running Counter}
+	의 알고리즘에서 카운터 오버플로우는 치명적인가요?
+	왜 그렇죠?
+	그게 치명적이라면 이를 고치기 위해 뭘 할 수 있을까요?
+
+	\iffalse
+
 	Again, given the algorithm shown in
 	\cref{lst:app:toyrcu:Nestable RCU Using a Free-Running Counter},
 	is counter overflow fatal?
 	Why or why not?
 	If it is fatal, what can be done to fix it?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	이는 실제로 치명적일 수 있습니다.
+	이를 보기 위해, 다음 이벤트 순서를 생각해 봅시다:
+
+	\iffalse
+
 	It can indeed be fatal.
 	To see this, consider the following sequence of events:
+
+	\fi
+
 	\begin{enumerate}
+	\item	쓰레드~0 이 \co{rcu_read_lock()} 을 진입하고, 중첩되지 않았음을
+		파악한 후, 따라서 전역 \co{rcu_gp_ctr} 의 값을 가져옵니다.
+		쓰레드~0 은 이어서 굉장히 긴 시간 동안 preemption 됩니다
+		(자신의 쓰레드별 \co{rcu_reader_gp} 변수에 값을 저장하기 전).
+	\item	다른 쓰레드들이 반복적으로 \co{synchronize_rcu()} 를 호출하고,
+		따라서 전역 \co{rcu_gp_ctr} 의 새 값은 쓰레드~0 이 읽었을
+		때보다 \co{RCU_GP_CTR_BOTTOM_BIT} 만큼 작은 값이 됩니다.
+	\item	쓰레드~0 이 수행을 재개하고, 자신의 쓰레드별 \co{rcu_reader_gp}
+		변수에 값을 저장합니다.
+		이 때 저장되는 값은 전역 \co{rcu_gp_ctr} 보다
+		\co{RCU_GP_CTR_BOTTOM_BIT+1} 큰 값입니다.
+	\item	쓰레드~0 이 RCU 로 보호되는 데이터 원소~A 로의 참조를
+		획득합니다.
+
+	\iffalse
+
 	\item	Thread~0 enters \co{rcu_read_lock()}, determines
 		that it is not nested, and therefore fetches the
 		value of the global \co{rcu_gp_ctr}.
@@ -2612,6 +2647,24 @@ overhead.
 		greater than that of the global \co{rcu_gp_ctr}.
 	\item	Thread~0 acquires a reference to RCU-protected data
 		element~A.
+
+	\fi
+
+	\item	이제 쓰레드~1 이 쓰레드~0 이 막 참조를 획득한 데이터 원소~A 를
+		제거합니다.
+	\item	쓰레드~1 이 \co{synchronize_rcu()} 를 호출하는데, 이는 전역
+		\co{rcu_gp_ctr} 을 \co{RCU_GP_CTR_BOTTOM_BIT} 만큼
+		증가시킵니다.
+		이어서 이 쓰레드는 모든 쓰레드별 \co{rcu_reader_gp} 변수를
+		검사하지만, 쓰레드~0 의 값은 (잘못되게도) 자신이 쓰레드~1 의
+		\co{synchronize_rcu()} 호출 되에 시작했다고 이야기 하므로,
+		쓰레드~1 은 쓰레드~1 이 쓰레드~1 의 RCU read-side 크리티컬
+		섹션을 완료할 때까지 기다리지 않습니다.
+	\item	이제 쓰레드~1 은 쓰레드~0 이 여전히 참조하고 있는 데이터 원소~A
+		를 메모리 해제합니다.
+
+	\iffalse
+
 	\item	Thread~1 now removes the data element~A that thread~0
 		just acquired a reference to.
 	\item	Thread~1 invokes \co{synchronize_rcu()}, which
@@ -2625,7 +2678,21 @@ overhead.
 		section.
 	\item	Thread~1 then frees up data element~A, which thread~0
 		is still referencing.
+
+	\fi
+
 	\end{enumerate}
+
+	이 시나리오는
+	\cref{sec:app:toyrcu:RCU Based on Free-Running Counter}
+	에 보인 구현에서도 발생 가능함을 알아 두십시오.
+
+	이 문제를 해결하는 한가지 방법은 이를 오버플로우 시키는데 걸리는 시간이
+	컴퓨터 시스템의 유용한 수명을 넘기게끔 64-비트 카운터를 쓰는 겁니다.
+	골동품은 아닌 32-비트 x86 CPU 제품군의 멤버들은 \co{cmpxchg64b} 명령을
+	통해 64-비트 카운터를 어토믹하게 조정할 수 있음을 알아 두시기 바랍니다.
+
+	\iffalse
 
 	Note that scenario can also occur in the implementation presented in
 	\cref{sec:app:toyrcu:RCU Based on Free-Running Counter}.
@@ -2636,6 +2703,22 @@ overhead.
 	Note that non-antique members of the 32-bit x86 CPU family
 	allow atomic manipulation of 64-bit counters via the
 	\co{cmpxchg64b} instruction.
+
+	\fi
+
+	또다른 방법은 비슷한 효과를 위해 grace period 가 허용되는 일어날 수
+	있는 비율에 한계를 두는 겁니다.
+	예를 들어, \co{synchronize_rcu()} 가 자신이 호출된 마지막 시간을 기록할
+	수 있다면, 이를 뒤따르는 호출은 이 시간을 검사하고 필요한 기간을
+	강제하기 위해 블록될 수 있습니다.
+	예를 들어, 이 카운터의 아래쪽 네개 비트가 중첩을 위해 예약되었다면,
+	그리고 grace period 가 초당 최대 10번 발생하는게 허용되어 있다면, 이
+	카운터가 오버플로우 되기 위해선 300일이 넘게 걸릴 겁니다.
+	그러나, 이 방법은 시스템이 CPU 위주의 높은 우선순위 리얼타임 쓰레드로
+	인한 부하를 300일 동안 걸려 있을 수 있다면 도움이 되지 않습니다.
+	(희박한 확률이겠지만 미리 생각해 두는게 최선입니다.)
+
+	\iffalse
 
 	Another strategy is to limit the rate at which grace periods are
 	permitted to occur in order to achieve a similar effect.
@@ -2652,6 +2735,24 @@ overhead.
 	real-time threads for the full 300 days.
 	(A remote possibility, perhaps, but best to consider it ahead
 	of time.)
+
+	\fi
+
+	세번째 방법은 시스템에서 리얼타임 쓰레드를 없애버리는 겁니다.
+	이 경우, preemption 당한 프로세스는 시간에 따라 우선순위를 높이고,
+	따라서 카운터가 오버플로우 되기 한참 전에 수행을 재개합니다.
+	물론, 이 방법은 리얼타임 어플리케이션에는 만족스럽지 못할 겁니다.
+
+	마지막 방법은 \co{rcu_read_lock()} 이 전역 \co{rcu_gp_ctr} 의 값을
+	자신의 쓰레드별 \co{rcu_reader_gp} 카운터에 저장한 후 다시 검사하고,
+	전역 \co{rcu_gp_ctr} 의 새 값이 잘못되어 있다면 재시도 하는 겁니다.
+	이는 동작하지만, 비결정적인 수행 시간을 \co{rcu_read_lock()} 에
+	가져옵니다.
+	다른 한편, 여러분의 어플리케이션이 카운터가 오버플로우 되기 충분할
+	정도로 오래 preemption 당한다면, 어쨌든 결정적 수행 시간을 희망할 순
+	없을 겁니다!
+
+	\iffalse
 
 	A third approach is to administratively abolish real-time threads
 	from the system in question.
@@ -2672,6 +2773,9 @@ overhead.
 	deterministic execution time in any case!
 	%
 	% @@@ A fourth approach is rcu_nest32.[hc].
+
+	\fi
+
 }\QuickQuizEndE
 }
 
