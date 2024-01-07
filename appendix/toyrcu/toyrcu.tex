@@ -3236,6 +3236,19 @@ implementation based on this version of RCU\@.
 \section{Summary of Toy RCU Implementations}
 \label{sec:app:toyrcu:Summary of Toy RCU Implementations}
 
+여기까지 오셨다면, 축하합니다!
+여러분은 이제 RCU 자체만이 아니라 이를 둘러싼 소프트웨어 환경과
+어프리케이션들의 요구사항에 대해서도 훨씬 선명한 이해를 가졌을 겁니다.
+이보다도 깊은 이해를 원하는 분들은 제품 수준 RCU
+구현~\cite{MathieuDesnoyers2012URCU,PaulEMcKenney2007PreemptibleRCU,PaulEMcKenney2008HierarchicalRCU,PaulEMcKenney2009BloatwatchRCU}
+을 읽어보시기 바랍니다.
+
+앞의 섹션들은 다양한 RCU 기능의 요구되는 속성들을 나열했습니다.
+다음 리스트는 새로운 RCU 구현을 만들고자 하는 분들을 위한 쉬운 참고사항을
+제공합니다.
+
+\iffalse
+
 If you made it this far, congratulations!
 You should now have a much clearer understanding
 not only of RCU itself, but also of the requirements of enclosing
@@ -3249,7 +3262,28 @@ various RCU primitives.
 The following list is provided for easy reference for those wishing to
 create a new RCU implementation.
 
+\fi
+
 \begin{enumerate}
+\item	어떤 grace period 의 시작 시점에 존재했던 모든 RCU read-side 크리티컬
+	섹션은 이 grace period 의 종료 시점에는 완료되어 있어야 하는 read-side
+	기능들 (\co{rcu_read_lock()} 과 \co{rcu_read_unlock()} 같은) 그리고
+	grace-period 기능들 (\co{synchronize_rcu()} 과 \co{call_rcu()} 같은) 이
+	있어야만 합니다.
+\item	RCU read-side 기능들은 최소한의 오버헤드를 가져야만 합니다.
+	특히, 캐쉬 미스, 어토믹 명령, 메모리 배리어, 그리고 분기문은 회피되어야
+	합니다.
+\item	RCU read-side 기능은 리얼타임 사용을 가능하게 하기 위해 $\O{1}$ 계산
+	복잡도를 가져야 합니다.
+	(이는 읽기 쓰레드가 업데이트 스레드와 동시에 수행됨을 암시합니다.)
+\item	RCU read-side 기능은 모든 컨텍스트에서 사용이 가능해야 합니다 (리눅스
+	커널의 경우, idle loop 를 제외한 모든 곳에서 가능합니다).
+	한가지 중요한 특수 경우는 RCU read-side 기능이 RCU read-side 크리티컬
+	섹션 내에서 사용 가능한 경우로, 달리 말하자면, RCU read-side 크리티컬
+	섹션은 중첩될 수 있다는 겁니다.
+
+\iffalse
+
 \item	There must be read-side primitives (such as \co{rcu_read_lock()}
 	and \co{rcu_read_unlock()}) and grace-period primitives
 	(such as \co{synchronize_rcu()} and \co{call_rcu()}), such
@@ -3269,6 +3303,28 @@ create a new RCU implementation.
 	An important special case is that RCU read-side primitives be
 	usable within an RCU read-side critical section, in other words,
 	that it be possible to nest RCU read-side critical sections.
+
+\fi
+
+\item	RCU read-side 기능은 무조건적으로 실패하지 않아야 합니다.
+	이 속성은 무척 중요한데, 실패 검사는 복잡도를 높이고 테스트와 검증을
+	복잡하게 할 것이기 때문입니다.
+\item	Quiescent state (그리고 따라서 grace period) 외의 모든 오퍼레이션은 RCU
+	read-side 크리티컬 섹션 내에서 허용되어야 합니다.
+	특히, I/O 같은 취소 불가능한 오퍼레이션도 허용되어야 합니다.
+\item	RCU read-side 크리티컬 섹션 내에서 수행 중인 동안 RCU 로 보호되는
+	데이터 구조를 업데이트 할 수 있어야 합니다.
+\item	RCU read-side 와 update-side 기능들은 메모리 할당자 설계와 구현과
+	독립적이어야 하는데, 달리 말하자면 같은 RCU 구현이 어떤 데이터 구조를
+	보호하는데 있어 그 데이터 원소가 어떻게 할당되고 해제되는지는 관계
+	없어야 합니다.
+\item	RCU grace period 는 RCU read-side 크리티컬 섹션 밖에서 중단되는
+	쓰레드에 의해 블록되지 않아야 합니다.
+	(그러나 대부분의 quiescent-state 기반 구현은 이 요구사항을 위반함을
+	알아두시기 바랍니다.)
+
+\iffalse
+
 \item	RCU read-side primitives should be unconditional, with no
 	failure returns.
 	This property is extremely important, as failure checking
@@ -3288,13 +3344,36 @@ create a new RCU implementation.
 	halt outside of RCU read-side critical sections.
 	(But note that most quiescent-state-based implementations
 	violate this desideratum.)
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	RCU read-side 크리티컬 섹션 내에서 grace period 가 금지된다면, 어떻게
+	RCU 로 보호되는 데이터 구조가 RCU read-side 크리티컬 섹션 내에서
+	업데이트 될 수 있죠?
+
+	\iffalse
+
 	Given that grace periods are prohibited within RCU read-side
 	critical sections, how can an RCU data structure possibly be
 	updated while in an RCU read-side critical section?
+
+	\fi
+
 }\QuickQuizAnswer{
+	이 상황이 \co{call_rcu()} 같은 비동기적 grace-period 기능이 필요한
+	이유입니다.
+	이 기능은 RCU read-side 크리티컬 섹션 내에서 호출되고, 여기 명시된 RCU
+	콜백이 하나의 grace period 가 지난 후에 호출될 겁니다.
+
+	RCU read-side 크리티컬 섹션 내에서 RCU 업데이트를 수행할 수 있는 능력은
+	매우 편리할 수 있으며, reader-writer 락킹의 (실존하지 않는) 무조건적
+	read-to-write 업그레이드와 비슷합니다.
+
+	\iffalse
+
 	This situation is one reason for the existence of asynchronous
 	grace-period primitives such as \co{call_rcu()}.
 	This primitive may be invoked within an RCU read-side critical
@@ -3305,6 +3384,9 @@ create a new RCU implementation.
 	critical section can be extremely convenient, and is analogous
 	to a (mythical) unconditional read-to-write upgrade for
 	reader-writer locking.
+
+	\fi
+
 }\QuickQuizEnd
 
 \QuickQuizAnswersChp{qqztoyrcu}
