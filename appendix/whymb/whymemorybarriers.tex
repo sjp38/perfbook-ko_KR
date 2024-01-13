@@ -35,6 +35,22 @@ interconnects between them and the memory they are attempting to access.
 \section{Cache Structure}
 \label{sec:app:whymb:Cache Structure}
 
+현대의 CPU 는 현대의 메모리 시스템보다 훨씬 빠릅니다.
+2006년의 CPU 는 나노세컨드당 열개의 명령을 수행할 수도 있으나, 메인 메모리에서
+데이터 항목을 가져오는데에는 수십 나노세컨드를 필요로 합니다.
+이 속도에서의 괴리---수백배 이상의---는 현대 CPU 에서 찾아볼 수 있는 수백
+메가바이트 캐쉬를 초래했습니다.
+이 캐쉬들은
+\cref{fig:app:whymb:Modern Computer System Cache Structure}
+에 보인 것처럼 CPU 들과 연관되어지며, 보통 수 사이클만에 접근될 수
+있습니다.\footnote{
+	작은 레벨 1 의 캐쉬를 1 사이클 액세스 시간을 가질 만큼 CPU 에 가깝게,
+	더 큰 레벨 2 의 캐쉬를 더 긴 액세스 속도, 대략 10 클락 사이클로
+	위치하는 식의 다중 레벨의 캐쉬를 사용하는 것은 표준적인 방법입니다.
+	고성능 CPU 들은 종종 3 또는 4 레벨의 캐쉬조차 같습니다.}
+
+\iffalse
+
 Modern CPUs are much faster than are modern memory systems.
 A 2006 CPU might be capable of executing ten instructions per nanosecond,
 but will require many tens of nanoseconds to fetch a data item from
@@ -51,12 +67,38 @@ and can typically be accessed in a few cycles.\footnote{
 	Higher-performance CPUs often have three or even four levels
 	of cache.}
 
-\begin{figure}[htb]
+\fi
+
+\begin{figure}
 \centering
 \resizebox{3in}{!}{\includegraphics{appendix/whymb/cacheSC}}
 \caption{Modern Computer System Cache Structure}
 \label{fig:app:whymb:Modern Computer System Cache Structure}
 \end{figure}
+
+데이터는 ``캐쉬 라인'' 이라 불리는 고정 길이 블록으로 CPU 들의 캐쉬와
+메모리 사이를 떠다니는데, 그 크기는 보통 2 의 승수이며, 16 에서 256 바이트
+사이를 오갑니다.
+어떤 데이터 항목이 어떤 CPU 에 의해 처음 액세스 될 때, 이는 해당 CPU 의 캐쉬에
+존재하지 않을 텐데, 이는 ``캐쉬 미스 (cache miss)'' (또는, 더 구체적으로는
+``startup'' 또는 ``warmup'' 캐쉬 미스) 가 일어났음을 의미합니다.
+이 캐쉬 미스는 이 CPU 가 해당 항목이 메모리로부터 읽어들여지기까지 수백
+사이클을 기다려야 (또는 ``stall'' 되어야) 함을 의미합니다.
+그러나, 이 항목은 이 CPU 의 캐쉬로 읽혀들여질 것이므로, 뒤따르는 액세스들은 이
+항목을 캐쉬에서 발견하고 따라서 완전한 속도를 낼 수 있을 겁니다.
+
+어느정도 시간이 지나면 이 CPU 의 캐쉬는 가득찰 테고, 뒤따르는 미스들은 새로
+읽어온 항목을 위한 공간을 마련하기 위해 존재하는 항목을 내버려야 할 겁니다.
+이런 캐쉬 미스는 ``capacity miss'' 라고
+명명되는데, 캐쉬의 제한된 용량 때문에 일어났기 때문입니다.
+그러나, 대부분의 캐쉬는 완전히 가득 차지 않았을 때 조차도 새 항목을 위한 공간을
+위해 오래된 항목을 버려야 할 수 있습니다.
+이는 커다란 캐쉬는
+\cref{fig:app:whymb:CPU Cache Structure} 에 보인 것처럼
+고정 크기 해쉬 버킷과 (또는 CPU 설계자들이 부르는 대로라면 ``set'') 체이닝
+없는 하드웨어 해쉬 테이블로 구현되어있다는 사실 때문입니다.
+
+\iffalse
 
 Data flows among the CPUs' caches and memory in fixed-length blocks
 called ``cache lines'', which are normally a power of two in size,
@@ -84,6 +126,23 @@ hash tables with fixed-size hash buckets (or ``sets'', as CPU designers
 call them) and no chaining, as shown in
 \cref{fig:app:whymb:CPU Cache Structure}.
 
+\fi
+
+이 캐쉬는 16개의 ``set'' 과 두개의 ``way'' 를 가져 총 32 개의 ``라인'' 을
+가지며, 각 항목은 256 바이트의 정렬된 메모리 블록인 256-바이트 ``캐쉬 라인'' 을
+갖습니다.
+이 캐쉬 라인 크기는 약간 큰 크기이지만 16 진수 계산을 훨씬 간단하게 해줄
+겁니다.
+하드웨어 용어에서, 이는 2-way set-associative 캐쉬라 불리며, 16개의 버킷을 갖고
+각 버킷의 해쉬 체인은 최대 두개의 원소로 제한된 소프트웨어 해쉬 테이블과
+유사합니다.
+이 크기 (이 경우 32 캐쉬 라인) 와 associativity (이 경우 2) 는 합쳐져서 이
+캐쉬의 ``geometry'' 라고 불립니다.
+이 캐쉬는 하드웨어로 구현되었으므로, 그 해쉬 함수는 굉장히 간단합니다:
+메모리 주소에서 4개 비트를 꺼냅니다.
+
+\iffalse
+
 This cache has sixteen ``sets'' and two ``ways'' for a total of 32
 ``lines'', each entry containing a single 256-byte ``cache line'',
 which is a 256-byte-aligned block of memory.
@@ -98,7 +157,9 @@ this case) are collectively called the cache's ``geometry''.
 Since this cache is implemented in hardware, the hash function is
 extremely simple: extract four bits from the memory address.
 
-\begin{figure}[t]
+\fi
+
+\begin{figure}
 \centering
 \small
 \begin{picture}(170,170)(0,0)
@@ -167,6 +228,16 @@ extremely simple: extract four bits from the memory address.
 \label{fig:app:whymb:CPU Cache Structure}
 \end{figure}
 
+\Cref{fig:app:whymb:CPU Cache Structure} 에서, 각 상자는 256-바이트 캐쉬 라인을
+가질 수 있는 캐쉬 항목에 연관됩니다.
+그러나, 캐쉬 항목은 이 그림의 빈 상자로 표시되어 있듯 비어있을 수 있습니다.
+나머지 상자들은 그것들이 가진 캐쉬 라인의 메모리 주소로 표시되어 있습니다.
+캐쉬 라인은 256 바이트로 정렬되어 있어야 하므로, 각 주소의 아래쪽 8 비트는 0
+이며, 하드웨어 해쉬 함수는 그보다 높은 쪽 4개의 비트를 해쉬 라인 숫자와
+매치되게 합니다.
+
+\iffalse
+
 In \cref{fig:app:whymb:CPU Cache Structure},
 each box corresponds to a cache entry, which
 can contain a 256-byte cache line.
@@ -178,6 +249,25 @@ Since the cache lines must be 256-byte aligned, the low eight bits of
 each address are
 zero, and the choice of hardware hash function means that the next-higher
 four bits match the hash line number.
+
+\fi
+
+이 그림에 보여진 상황은 프로그램의 코드가 주소 0x43210E00 부터 0x43210EFF 에
+위치하고, 이 프로그램이 0x12345000 부터 0x12345EFF 의 데이터를 순차적으로
+액세스 했을 때 일어날 수도 있을 겁니다.
+이 프로그램이 이제 0x12345F00 을 액세스 하려 한다고 해봅시다.
+이 위치는 라인 0xF 로 해쉬 되며, 이 라인의 두 way 는 비어있으므로, 연관된
+256-바이트 라인이 수용될 수 있습니다.
+이 프로그램이 라인 0x0 으로 해쉬 되는 0x1233000 위치를 접근하려 한다면, 연관된
+256-바이트 캐쉬 라인이 way 1 에 수용될 수 있습니다.256-바이트 캐쉬 라인이 way 1
+에 수용될 수 있습니다.
+그러나, 프로그램이 라인 0xE 로 해쉬되는 0x1233E00 위치를 액세스 하려 하면, 이
+새로운 캐쉬 라인을 위한 고간을 만들기 위해 존재하는 라인 중 하나가 버려져야
+합니다.
+이 버려진 라인이 나중에 다시 액세스 된다면 캐쉬 미스가 일어날 겁니다.
+그런 캐쉬 미스는 ``associativity miss'' 라 불립니다.
+
+\iffalse
 
 The situation depicted in the figure might arise if the program's code
 were located at address 0x43210E00 through 0x43210EFF, and this program
@@ -194,6 +284,21 @@ to make room for the new cache line.
 If this ejected line were accessed later, a cache miss would result.
 Such a cache miss is termed an ``associativity miss''.
 
+\fi
+
+지금까지는 CPU 가 데이터를 읽는 경우만 생각해 봤습니다.
+쓰기를 할때는 무슨 일이 일어날까요?
+모든 CPU 가 어떤 데이터 항목의 값에 대해 동의한느 것은 중요하므로, 어떤 CPU 는
+어떤 데이터 항목에 쓰기를 하기 전에 먼저 그것이 다른 CPU 들의 캐쉬에서
+없어지거나 ``무효화 (invalidate)'' 되게 해야만 합니다.
+이 무효화가 완료되면, 이 CPU 는 안전하게 데이터 항목을 수정할 수 있습니다.
+이 데이터 항목이 이 CPU 의 캐쉬에 존재하지만 읽기 전용이었다면, 이 과정은
+``write miss'' 라고 불립니다.
+특정 CPU 가 다른 CPU 들의 캐쉬로부터 특정 데이터 항목을 완전히 무효화 하면,
+해당 CPU 는 이 데이터 ㅎ아목을 반복적으로 쓸 수 (그리고 읽을 수) 있을 겁니다.
+
+\iffalse
+
 Thus far, we have been considering only cases where a CPU reads
 a data item.
 What happens when it does a write?
@@ -206,6 +311,25 @@ If the data item was present in this CPU's cache, but was read-only,
 this process is termed a ``write miss''.
 Once a given CPU has completed invalidating a given data item from other
 CPUs' caches, that CPU may repeatedly write (and read) that data item.
+
+\fi
+
+나중에 다른 CPU 들 중 하나가 이 데이터 항목을 접근하려 하면 캐쉬 미스가 일어날
+텐데, 이번엔 이 앞의 CPU 가 그 항목에 쓰기를 하기 위해 무효화를 했기
+때문입니다.
+이런 종류의 캐쉬 미스는 ``communication miss'' 라 불리는데, 이는 보통 CPU 들이
+이 데이터 항목을 통신을 위해 사용하기 때문입니다 (예를 들면, 락은 CPU 들 사이에
+상호 배타 알고리즘을 통신하기 위해 사용되는 데이터 항목입니다).
+
+분명하게, 모든 CPU 가 데이터의 일관된 시선을 유지하게 보장하는 데에는 큰 주의가
+필요합니다.
+이 모든 읽기, 무효화, 그리고 쓰기를 놓고 볼 때, 데이터가 손실되거나 (아마도 더
+나쁘게도) 다른 CPU 들이 같은 데이터 항목에 대해 그들의 캐쉬에서는 다른 값을
+갖고 있는 경우를 상상하기는 쉽습니다.
+이 문제들은 ``캐쉬 일관성 프로토콜'' 에 의해 방지되는데, 다음 섹션에서
+설명합니다.
+
+\iffalse
 
 Later, if one of the other CPUs attempts to access the data item, it
 will incur a cache miss, this time because the first CPU invalidated
@@ -223,6 +347,8 @@ conflicting values for the same data item in their respective
 caches.
 These problems are prevented by ``cache-coherency protocols'',
 described in the next section.
+
+\fi
 
 \section{Cache-Coherence Protocols}
 \label{sec:app:whymb:Cache-Coherence Protocols}
