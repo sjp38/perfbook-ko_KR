@@ -410,6 +410,21 @@ four-state MESI cache-coherence protocol.
 \subsection{MESI States}
 \label{sec:app:whymb:MESI States}
 
+MESI 는 ``modified'', ``exclusive'', ``shared`, 그리고 ``invalid'' 라는 각 캐쉬
+라인이 이 프로토콜을 사용해 취할 수 있는 네개의 상태를 의미합니다.
+따라서 이 프로토콜을 사용하는 캐쉬는 각 캐쉬 라인에 해당 라인의 물리 주소와
+데이터에 더해 2 비트의 상태 ``tag'' 를 유지합니다.
+
+``modified'' 상태의 라인은 연관된 CPU 로부터의 최근의 메모리 스토어를 의미하며,
+이 연관된 메모리는 다른 CPU 의 캐쉬에는 보이지 않을 것이 보장됩니다.
+따라서 ``modified'' 상태의 캐쉬 라인은 이 CPU 에 ``owned (소유되어 있다)'' 라고
+말해집니다.
+이 캐쉬는 데이터의 최신 복사본만을 쥐고 있으므로, 이 캐쉬는 궁극적으로는 이를
+메모리에 다시 쓰거나 다른 캐쉬에게 넘겨줄 책임을 가지며, 이는 이 라인이 다른
+데이터를 잡아두기 위해 재사용되기 전에 행해져야만 합니다.
+
+\iffalse
+
 MESI stands for ``modified'', ``exclusive'', ``shared'', and ``invalid'',
 the four states a given cache line can take on using this
 protocol.
@@ -426,6 +441,26 @@ Because this cache holds the only up-to-date copy of the data, this
 cache is ultimately responsible for either writing it back to memory
 or handing it off to some other cache, and must do so before reusing
 this line to hold other data.
+
+\fi
+
+``exclusive'' 상태는 ``modified'' 상태와 매우 비슷한데, 한가지 예외는 이 캐쉬
+라인은 아직 연관된 CPU 에 의해 수정되지 않았다는 것으로, 이는 결국 메모리에
+위치해 있는 이 캐쉬 라인의 데이터의 복사본도 최신의 것이라는 겁니다.
+그러나, 이 CPU 는 언제든 이 라인에 스토어를 행할 수 있으므로, 다른 CPU 에게
+물어보지 않고서는 ``exclusive'' 상태의 라인은 연관된 CPU 에게 소유되어 있다고
+말해질 수 있습니다.
+그러나, 메모리의 연관된 값이 최신의 것이기 때문에, 이 캐쉬는 이 데이터를
+메모리에 다시 쓰거나 다른 CPU 에게 넘겨주지 않고도 버릴 수 있습니다.
+
+``shared'' 상태의 라인은 최소 하나의 다른 CPU 의 캐쉬에 복사되어 있을 수도
+있어서, 이 CPU 는 다른 CPU 에게 자문을 먼저 구하지 않고는 이 라인에 스토어를 할
+수 없습니다.
+``exclusive'' 상태에서와 마찬가지로, 메모리에 있는 이 연관된 값은 최신의
+것이어서, 이 캐쉬는 이 데이터를 메모리에 다시 쓰거나 다른 CPU 에게 넘겨주지
+않고도 버릴 수 있습니다.
+
+\iffalse
 
 The ``exclusive'' state is very similar to the ``modified'' state,
 the single exception being that the cache line has not yet been
@@ -446,6 +481,20 @@ in memory is up to date,
 this cache can discard this data without writing it back to memory
 or handing it off to some other CPU\@.
 
+\fi
+
+``invalid'' 상태의 라인은 비어 있는데, 달리 말해 데이터를 쥐고 있지 않습니다.
+캐쉬에 새 데이터가 들어오면, 이는 가능하다면 ``invalid'' 상태의 캐쉬 라인에
+위치하게 됩니다.
+다른 상태의 라인을 교체하는 것은 교체된 라인이 미래에 참조될 때 비용이 높은
+캐쉬 미스를 초래하기 때문에 이 방법이 선호됩니다.
+
+모든 CPU 는 캐쉬 라인들로 운반되는 데이터에 대해 일관된 모습을 봐야만 하므로,
+이 캐쉬 일관성 프로토콜은 시스템을 돌아다니는 캐쉬 라인들의 움직임을 조정하는
+메세지를 제공합니다.
+
+\iffalse
+
 A line in the ``invalid'' state is empty, in other words, it holds
 no data.
 When new data enters the cache, it is placed into a
@@ -457,6 +506,8 @@ line be referenced in the future.
 Since all CPUs must maintain a coherent view of the data carried in
 the cache lines, the cache-coherence protocol provides messages
 that coordinate the movement of cache lines through the system.
+
+\fi
 
 \subsection{MESI Protocol Messages}
 \label{sec:app:whymb:MESI Protocol Messages}
