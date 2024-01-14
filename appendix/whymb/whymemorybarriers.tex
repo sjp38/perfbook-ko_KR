@@ -512,10 +512,37 @@ that coordinate the movement of cache lines through the system.
 \subsection{MESI Protocol Messages}
 \label{sec:app:whymb:MESI Protocol Messages}
 
+앞의 섹션에 설명된 많은 변환은 CPU 들 사이의 통신을 필요로 합니다.
+CPU 들이 하나의 공유 버스에 있다면, 다음 메세지가 충분합니다:
+
+\iffalse
+
 Many of the transitions described in the previous section require
 communication among the CPUs.
 If the CPUs are on a single shared bus, the following messages suffice:
+
+\fi
+
 \begin{description}[style=nextline]
+\item	[Read:]
+	``Read'' 메세지는 읽혀질 캐쉬 라인의 물리 주소를 담습니다.
+\item	[Read Response:]
+	``Read response'' 메세지는 앞의 ``read'' 메세지에 의해 요청된 데이터를
+	담습니다.
+	이 ``read response'' 메세지는 메모리 또는 다른 캐쉬들 가운데 하나에
+	의해 제공될 수도 있습니다.
+	예를 들어, 캐쉬들 가운데 하나가 ``modified'' 상태로 해당 데이터를
+	가지고 있다면, 그 캐쉬는 ``read response'' 메세지를 제공해야만 합니다.
+\item	[Invalidate:]
+	``Invalidate'' 메세지는 무효화 될 캐쉬 라인의 물리 주소를 담습니다.
+	모든 다른 캐쉬들은 그들의 캐쉬에서 연관된 데이터를 제거하고 응답해야만
+	합니다.
+\item	[Invalidate Acknowledge:]
+	``Invalidate'' 메세지를 받는 CPU 는 자신의 캐쉬에서 명시된 데이터를
+	제거한 후 ``invalidate acknowledge'' 메세지를 가지고 응답해야만 합니다.
+
+\iffalse
+
 \item	[Read:]
 	The ``read'' message contains the physical address of the cache line
 	to be read.
@@ -536,6 +563,24 @@ If the CPUs are on a single shared bus, the following messages suffice:
 	A CPU receiving an ``invalidate'' message must respond with an
 	``invalidate acknowledge'' message after removing the specified
 	data from its cache.
+
+\fi
+
+\item	[Read Invalidate:]
+	``Read invalidate'' 메세지는 읽혀질 캐쉬 라인의 물리 주소를 담고
+	있으며, 동시에 다른 캐쉬들이 이 데이터를 제거하게 지시합니다.
+	따라서, 이는 그 이름이 암시하듯 ``read'' 와 ``invalidate'' 의
+	조합입니다.
+	``Read invalidate'' 메세지는 그에 대한 응답으로 ``read response'' 와
+	``invalidate acknowledge'' 메세지의 집합을 모두 요구합니다.
+\item	[Writeback:]
+	``Writeback'' 메세지는 메모리에 도로 쓰여질 (그리고 아마도 다른 CPU 의
+	캐쉬에도 기어들어가게 될--``snooped''--) 주소와 데이터를 포함합니다.
+	이 메세지는 캐쉬들이 다른 데이터를 위한 공간을 만들기 위해 ``modified''
+	상태의 라인을 제거하는 걸 가능하게 합니다.
+
+\iffalse
+
 \item	[Read Invalidate:]
 	The ``read invalidate'' message contains the physical address
 	of the cache line to be read, while at the same time directing
@@ -550,12 +595,37 @@ If the CPUs are on a single shared bus, the following messages suffice:
 	into other CPUs' caches along the way).
 	This message permits caches to eject lines in the ``modified''
 	state as needed to make room for other data.
+
+\fi
+
 \end{description}
 
 \QuickQuiz{
+	Writeback 메세지는 어디서 생겨나서 어디로 향하게 되나요?
+
+	\iffalse
+
 	Where does a writeback message originate from and where does
 	it go to?
+
+	\fi
+
 }\QuickQuizAnswer{
+	Writeback 메세지는 특정 CPU 에서, 어떤 설계에서는 특정 CPU 의 캐쉬의
+	특정 레벨에서---또는 심지어 여러 CPU 들에 공유되어 있는 캐쉬에서도---
+	생성됩니다.
+	핵심은 특정 캐쉬가 특정 데이터 항목을 위한 공간이 없으며, 따라서 공간을
+	만들기 위해 이 캐쉬에서 어떤 데이터 조각들이 제거되야 한다는 겁니다.
+	메모리나 다른 캐쉬에 복사되어 있는 데이터 조각이 존재한다면 그 조각은
+	writeback 메세지의 필요 없이 단순히 폐기될 수 있을 겁니다.
+
+	다른 한편, 만약 제거될 수 있는 모든 데이터 조각이 modified 상태여서
+	유일한 최신 상태의 데이터 복사본은 이 캐쉬에만 있다면, 이 데이터 항목들
+	가운데 하나는 어딘가 다른곳에 복사되어야만 합니다.
+	이 복사 오퍼레이션은 ``witeback message'' 를 사용해 취해집니다.
+
+	\iffalse
+
 	The writeback message originates from a given CPU, or in some
 	designs from a given level of a given CPU's cache---or even
 	from a cache that might be shared among several CPUs.
@@ -572,6 +642,23 @@ If the CPUs are on a single shared bus, the following messages suffice:
 	else.
 	This copy operation is undertaken using a ``writeback message''.
 
+	\fi
+
+	Writeback 메세지의 목적지는 이 새 값을 저장할 어딘가가 됩니다.
+	이는 메인 메모리일 수도 있으나, 다른 캐쉬일 수도 있습니다.
+	그게 캐쉬라면, 이는 보통 같은 CPU 를 위한 더 높은 레벨의 캐쉬인데, 예를
+	들어 level-1 캐쉬는 level-2 캐쉬로 도로 쓰기를 할수도 있습니다.
+	그러나, 어떤 하드웨어 설계는 CPU 간 writeback 을 허용해서 CPU~0 의
+	캐쉬는 writeback 메세지를 CPU~1 에게 보낼 수도 있습니다.
+	이는 일반적으로 예를 들면 최근에 read request 를 보냈다던지 하는 식으로
+	CPU~1 이 어떻게든 이 데이터에의 흥미를 알게 된 경우 행해질 겁니다.
+
+	요약하자면, writeback 메세지는 공간이 부족한 시스템의 어느 부분에서
+	보내어지며, 이 데이터를 수용할 수 있는 시스템의 어떤 다른 부분에서
+	받아지게 됩니다.
+
+	\iffalse
+
 	The destination of the writeback message has to be something
 	that is able to store the new value.
 	This might be main memory, but it also might be some other cache.
@@ -587,7 +674,18 @@ If the CPUs are on a single shared bus, the following messages suffice:
 	In short, a writeback message is sent from some part of the
 	system that is short of space, and is received by some other
 	part of the system that can accommodate the data.
+
+	\fi
+
 }\QuickQuizEnd
+
+흥미롭게도, 공유 메모리 멀티프로세서 시스템은 장막을 걷어보면 실제로
+메세지 전달 (message-passing) 컴퓨터입니다.
+이는 분산된 공유 메모리를 사용하는 SMP 머신들의 클러스터는 시스템 구조의 두개의
+다른 수준에서의 공유 메모리를 구현하기 위해 메세지 전달을 사용하고 있음을
+의미합니다.
+
+\iffalse
 
 Interestingly enough, a shared-memory multiprocessor system really
 is a message-passing computer under the covers.
@@ -595,11 +693,30 @@ This means that clusters of SMP machines that use distributed shared memory
 are using message passing to implement shared memory at two different
 levels of the system architecture.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	두개의 CPU 가 동시에 같은 캐쉬 라인을 무효화 하려 하면 어떻게 되나요?
+
+	\iffalse
+
 	What happens if two CPUs attempt to invalidate the
 	same cache line concurrently?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	해당 CPU 들 가운데 하나가 공유 버스에의 액세스를 먼저 얻고, 그 CPU 가
+	``승리'' 합니다.
+	다른 CPU 는 자신의 해당 캐쉬 라인 복사본을 무효화 하고 그 다른 CPU 에게
+	``invalidate acknowledge'' 메세지를 보내야만 합니다.
+
+	물론, 진 CPU 는 곧바로 ``read invalidate'' 트랜잭션을 요청할 것으로
+	예상될 수 있으며, 따라서 승리한 CPU 의 승리는 짧은 것일 겁니다.
+
+	\iffalse
+
 	One of the CPUs gains access
 	to the shared bus first,
 	and that CPU ``wins''.  The other CPU must invalidate its copy of the
@@ -609,24 +726,68 @@ levels of the system architecture.
 	Of course, the losing CPU can be expected to immediately issue a
 	``read invalidate'' transaction, so the winning CPU's victory will
 	be quite ephemeral.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizM{
+	거대 멀티프로세서에서 ``invalidate'' 메세지가 나타날 때, 모든 CPU 는
+	``invalidate acknowledge'' 응답을 보내야만 합니다.
+	이로 인한 ``invalidate acknowledge'' 응답의 ``폭풍'' 은 시스템 버스를
+	완전히 포화시키지 않을까요?
+
+	\iffalse
+
 	When an ``invalidate'' message appears in a large multiprocessor,
 	every CPU must give an ``invalidate acknowledge'' response.
 	Wouldn't the resulting ``storm'' of ``invalidate acknowledge''
 	responses totally saturate the system bus?
+
+	\fi
+
 }\QuickQuizAnswerM{
+	이 거대 규모 멀티프로세서가 실제로 그런 방식으로 구현되어 있다면 그럴
+	수도 있습니다.
+	특히 NUMA 머신 같은 거대한 멀티프로세서들은 이것을 포함한 문제들을 막기
+	위해 ``directory-based'' 캐쉬 일관성 프로토콜이라 불리는 것을
+	사용합니다.
+
+	\iffalse
+
 	It might, if large-scale multiprocessors were in fact implemented
 	that way.  Larger multiprocessors, particularly NUMA machines,
 	tend to use so-called ``directory-based'' cache-coherence
 	protocols to avoid this and other problems.
+
+	\fi
+
 }\QuickQuizEndM
 %
 \QuickQuizE{
+	SMP 머신이 정말로 메세지 전달을 어쨌든 사용한다면, 왜 SMP 를 신경쓰죠?
+
+	\iffalse
+
 	If SMP machines are really using message passing
 	anyway, why bother with SMP at all?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	과거의 수십년간 이 주제에 대한 상당한 논란이 있었습니다.
+	한가지 답은 캐쉬 일관성 프로토콜은 상당히 간단하며, 따라서 하드웨어에
+	직접 구현될 수 있어서 소프트웨어 메세지 전달로는 얻어질 수 없는
+	대역폭과 응답시간 향상을 얻는다는 겁니다.
+	또다른 답은 거대 SMP 머신과 작은 SMP 머신의 클러스터의 상대적 가격
+	때문에 경제로부터 진실을 찾을 수 있다는 겁니다.
+	세번째 답은 SMP 프로그래밍 모델은 분산 시스템의 그것보다 더 사용하기
+	쉽다는 것입니다만, 반박론자들은 HPC 클러스터와 MPI 의 등장을 이야기할
+	수도 있겠습니다.
+	그러므로 토론은 계속됩니다.
+
+	\iffalse
+
 	There has been quite a bit of controversy on this topic over
 	the past few decades.  One answer is that the cache-coherence
 	protocols are quite simple, and therefore can be implemented
@@ -638,6 +799,9 @@ levels of the system architecture.
 	model is easier to use than that of distributed systems, but
 	a rebuttal might note the appearance of HPC clusters and MPI\@.
 	And so the argument continues.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
