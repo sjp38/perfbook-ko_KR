@@ -1049,6 +1049,17 @@ The transition arcs in this figure are as follows:
 \subsection{MESI Protocol Example}
 \label{sec:app:whymb:MESI Protocol Example}
 
+이제 초기에는 메모리의 address~0 에 위치해 있는 데이터의 캐쉬 라인이 네개의 CPU
+시스템에서의 단일 캐쉬 라인만 갖는 여러 캐쉬들을 이동하는 모습을 캐쉬 라인의
+관점에서 봅시다.
+\Cref{tab:app:whymb:Cache Coherence Example}
+이 이 데이터의 흐름을 보이는데, 첫번째 열은 오퍼레이션의 순서를, 두번째 열은 그
+오퍼레이션을 행하는 CPU 를, 세번째 열은 수행되는 오퍼레이션을, 나머지 네개의
+열은 각 CPU 의 캐쉬 라인의 상태를 (메모리 주소에 이어 MESI 상태), 그리고 마지막
+두개의 열은 연관된 메모리 내용이 최신인지 (``V'') 아닌지 (``I'') 보입니다.
+
+\iffalse
+
 Let's now look at this from the perspective of a cache line's worth
 of data, initially residing in memory at address~0,
 as it travels through the various single-line direct-mapped caches
@@ -1060,6 +1071,32 @@ the third the operation being performed, the next four the state
 of each CPU's cache line (memory address followed by MESI state),
 and the final two columns whether the corresponding memory contents
 are up to date (``V'') or not (``I'').
+
+\fi
+
+처음에는 이 데이터가 위치해 있는 CPU 캐쉬 라인들은 ``invalid'' 상태에 있으며,
+그 데이터는 메모리에서 유효합니다.
+CPU~0 이 address~0 에서 데이터를 로드하면, 이는 CPU~0 의 캐쉬에 ``shared''
+상태로 들어가게 되며, 이는 여전히 메모리에서 유효합니다.
+CPU~3  역시 address~0 에서 이 데이터를 로드해서, 두 CPU 의 캐쉬에서 ``shared''
+상태로 있게 하며, 이 데이터는 여전히 메모리 상에서 유효합니다.
+이어서 CPU~0 이 다른 캐쉬 라인을 (address~8) 로드하는데, 이는 address~0 의
+데이터를 무효화를 통해 자신의 캐쉬에서 밖으로 내보내고 address~8 의 데이터로
+교체합니다.
+CPU~2 가 이제 address~0 으로부터의 로드를 합니다만, 이 CPU 는 자신이 곧 거기에
+스토어를 해야 할 것임을 깨달아 배타적 복사본을 얻기 위해 ``read invalidate''
+메세지를 사용하여 이를 CPU~3 의 캐쉬에서 무효화 시킵니다 (메모리의 복사본은
+여전히 최신의 것으로 남아있지만).
+이어서 CPU~2 는 예상된 스토어를 행하여 이 상태를 ``modified'' 로 바꿉니다.
+메모리에 있는 이 데이터의 사본은 이제 최신이 아닙니다.
+CPU~1 은 원자적 값 증가를 행하는데, CPU~2 의 캐쉬로부터 데이터를 얻고 이를
+무효화 하기 위해 ``read invalidate'' 메세지를 사용하며, 따라서 CPU~1 의 캐쉬는
+``modified'' 상태가 됩니다 (그리고 메모리의 복사본은 최신이 아닌 상태로
+유지됩니다).
+마지막으로, CPU~1 이 address~8 의 캐쉬 라인을 읽는데, address~0 의 데이터를
+메모리로 도로 내보내기 위해 ``writeback'' 메세지를 사용합니다.
+
+\iffalse
 
 Initially, the CPU cache lines in which the data would reside are
 in the ``invalid'' state, and the data is valid in memory.
@@ -1082,6 +1119,8 @@ and invalidate it, so that the copy in CPU~1's cache is in the ``modified''
 state (and the copy in memory remains out of date).
 Finally, CPU~1 reads the cache line at address~8, which uses a
 ``writeback'' message to push address~0's data back out to memory.
+
+\fi
 
 \begin{table*}
 \small
@@ -1110,15 +1149,39 @@ Finally, CPU~1 reads the cache line at address~8, which uses a
 \label{tab:app:whymb:Cache Coherence Example}
 \end{table*}
 
+우린 데이터가 이 CPU 의 캐쉬들 중 일부에 남겨져 있는채로 이를 끝냄을 알아두시기
+바랍니다.
+
+\iffalse
+
 Note that we end with data in some of the CPU's caches.
 
+\fi
+
 \QuickQuiz{
+	어떤 순서의 오퍼레이션들이 이 CPU 의 캐쉬들을 ``invalid'' 상태로
+	되돌릴까요?
+
+	\iffalse
+
 	What sequence of operations would put the CPUs' caches
 	all back into the ``invalid'' state?
+
+	\fi
+
 }\QuickQuizAnswer{
+	CPU 의 명령 집합에 특수한 ``내 캐쉬를 비워줘'' 명령이
+	없는한 그런 순서의 오퍼레이션 집합은 존재하지 않습니다.
+	대부분의 CPU 는 그런 명령을 갖습니다.
+
+	\iffalse
+
 	There is no such sequence, at least in absence of special
 	``flush my cache'' instructions in the CPU's instruction set.
 	Most CPUs do have such instructions.
+
+	\fi
+
 }\QuickQuizEnd
 
 \section{Stores Result in Unnecessary Stalls}
