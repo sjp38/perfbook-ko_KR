@@ -808,9 +808,17 @@ levels of the system architecture.
 \subsection{MESI State Diagram}
 \label{sec:app:whymb:MESI State Diagram}
 
+특정 캐쉬 라인의 상태는
+\cref{fig:app:whymb:MESI Cache-Coherency State Diagram} 에 보인 것처럼 프로토콜
+메세지가 보내지고 받아짐에 따라 바뀝니다.
+
+\iffalse
+
 A given cache line's state changes
 as protocol messages are sent and received, as
 shown in \cref{fig:app:whymb:MESI Cache-Coherency State Diagram}.
+
+\fi
 
 \begin{figure}[htb]
 \centering
@@ -820,8 +828,31 @@ shown in \cref{fig:app:whymb:MESI Cache-Coherency State Diagram}.
 \label{fig:app:whymb:MESI Cache-Coherency State Diagram}
 \end{figure}
 
+이 그림에서의 전환 움직임들은 다음과 같습니다:
+
+\iffalse
+
 The transition arcs in this figure are as follows:
+
+\fi
+
 \begin{description}[style=nextline]
+\item	[Transition (a):]
+	캐쉬 라인이 메모리에 도로 쓰여지나, 이 CPU 는 자신의 캐쉬에 이를
+	유지하며 더 나아가 이를 수정할 권리를 유지합니다.
+	이 전환은 ``writeback'' 메세지를 필요로 합니다.
+\item	[Transition (b):]
+	이 CPU 가 이미 배타적 액세스를 가지고 있는 캐쉬 라인에 쓰기를 합니다.
+	이 전환은 어떤 메세지도 보내지거나 받아질 필요를 갖지 않습니다.
+\item	[Transition (c):]
+	이 CPU 가 수정한 캐쉬 라인을 위한 ``read invalidate'' 메세지를
+	받습니다.
+	이 CPU 는 자신의 지역 복사본을 무효화 하고, 이 데이터를 요청한 CPU 에게
+	보내며 자신이 더이상 그 지역 복사본을 가지고 있지 않음을 알리는 ``read
+	response'' 와 ``invalidate acknowledge'' 메세지를 응답해야 합니다.
+
+\iffalse
+
 \item	[Transition (a):]
 	A cache line is written back to memory, but the CPU retains
 	it in its cache and further retains the right to modify it.
@@ -838,6 +869,30 @@ The transition arcs in this figure are as follows:
 	``read response'' and an ``invalidate acknowledge'' message,
 	both sending the data to the requesting CPU and indicating
 	that it no longer has a local copy.
+
+\fi
+
+\item	[Transition (d):]
+	이 CPU 가 자신의 캐쉬에 존재하지 않던 데이터 항목에 대해 어토믹
+	read-modify-write 오퍼레이션을 행합니다.
+	이는 ``read invalidate'' 를 보내고, ``read response'' 를 통해 그
+	데이터를 받습니다.
+	이 CPU 는 완전한 ``invalidate acknowledge'' 응답 집합을 받으면 이
+	전환을 완료할 수 있습니다.
+\item	[Transition (e):]
+	이 CPU 가 자신의 캐쉬에 read-only 로 가지고 있던 데이터 항목에 어토믹
+	read-modify-write 오퍼레이션을 행합니다.
+	이는 ``invalidate'' 메세지를 보내야 하며, 이 전환을 완료하기 전에
+	완전한 ``invalidate acknowledge'' 응답 집합을 기다려야 합니다.
+\item	[Transition (f):]
+	어떤 다른 CPU 가 이 캐쉬 라인을 읽고, 그 데이터가 이 CPU 의 캐쉬에서
+	제공되어서, 읽기 전용 복사본을 유지하며, 이를 메모리에 도로 쓰기 할
+	수도 있습니다.
+	이 전환은 ``read'' 메세지의 도착으로 시작되고, 이 CPU 는 요청된
+	데이터를 포함한 ``read response'' 메세지로 응답합니다.
+
+\iffalse
+
 \item	[Transition (d):]
 	The CPU does an atomic read-modify-write operation on a data item
 	that was not present in its cache.
@@ -858,6 +913,34 @@ The transition arcs in this figure are as follows:
 	This transition is initiated by the reception of a ``read''
 	message, and this CPU responds with a ``read response'' message
 	containing the requested data.
+
+\fi
+
+\item	[Transition (g):]
+	어떤 다른 CPU 가 이 캐쉬 라인의 데이터 항목을 읽고, 그 데이터가 이 CPU
+	의 캐쉬 또는 메모리에서 제공됩니다.
+	어느 경우든, 이 CPU 는 읽기 전용 복사본을 유지합니다.
+	이 전환은 ``read'' 메세지의 도착으로 시작되며, 이 CPU 는 요청된
+	데이터를 담은 ``read response'' 메세지를 응답합니다.
+\item	[Transition (h):]
+	이 CPU 는 이 캐쉬 라인에 어떤 데이터 항목을 곧 써야 할 것임을 깨닫고
+	따라서 ``invalidate'' 메세지를 보냅니다.
+	이 CPU 는 완전한 ``invalidate acknowledge'' 응답 집합을 받기 전까지는
+	이 전환을 끝내지 못합니다.
+	대안적으로, 모든 다른 CPU 들이 ``writeback'' 메세지를 통해 이 캐쉬
+	라인을 자신들의 캐쉬에서 제거하여 (아마도 다른 캐쉬 라인을 위한 공간을
+	만들기 위해) 이 CPU 가 이를 캐쉬에 두는 마지막 CPU 가 되게 할수도
+	있습니다.
+\item	[Transition (i):]
+	어떤 다른 CPU 가 이 CPU 의 캐쉬에만 있는 캐쉬라인의 데이터 항목에 대해
+	어토믹 read-modify-write 오퍼레이션을 수행해서, 이 CPU 는 자신의
+	캐쉬에서 이 라인을 무효화 합니다.
+	이 전환은 ``read invalidate'' 메세지의 도착으로 시작되며, 이 CPU 는
+	``read response'' 와 ``invalidate acknowledge'' 메세지를 모두
+	응답합니다.
+
+\iffalse
+
 \item	[Transition (g):]
 	Some other CPU reads a data item in this cache line,
 	and it is supplied either from this CPU's cache or from memory.
@@ -881,6 +964,27 @@ The transition arcs in this figure are as follows:
 	This transition is initiated by the reception of a ``read invalidate''
 	message, and this CPU responds with both a ``read response''
 	and an ``invalidate acknowledge'' message.
+
+\fi
+
+\item	[Transition (j):]
+	이 CPU 는 자신의 캐쉬에 있지 않던 캐쉬 라인의 데이터 항목에 스토어를
+	행하고, 따라서 ``read invalidte'' 메세지를 보냅니다.
+	이 CPU 는 ``read response'' 와 완전환 ``invalidate acknowledge'' 메세지
+	집합을 받기 전까지 이 전환을 완료할 수 없습니다.
+\item	[Transition (k):]
+	이 CPU 가 자신의 캐쉬에 없던 캐쉬 라인의 데이터 항목을 로드합니다.
+	이 CPU 는 ``read'' 메세지를 보내며, 연관된 ``read response'' 를 받으면
+	전환을 완료합니다.
+\item	[Transition (l):]
+	어떤 다른 CPU 가 이 캐쉬 라인의 데이터 항목으로 스토어를 하지만, 이
+	캐쉬 라인은 다른 CPU 의 캐쉬에 (이 현재 CPU 의 캐쉬 같은) 있으므로 이
+	캐쉬 라인을 읽기 전용 상태로 유지합니다.
+	이 전환은 ``invalidate'' 메세지의 수신으로 시작되며, 이 CPU 는
+	``invalidate acknowledge'' 메세지를 응답합니다.
+
+\iffalse
+
 \item	[Transition (j):]
 	This CPU does a store to a data item in a cache line that was not
 	in its cache, and thus transmits a ``read invalidate'' message.
@@ -902,12 +1006,33 @@ The transition arcs in this figure are as follows:
 	This transition is initiated by the reception of an ``invalidate''
 	message, and this CPU responds with
 	an ``invalidate acknowledge'' message.
+
+\fi
+
 \end{description}
 
 \QuickQuiz{
+	하드웨어는 앞서 설명된 지연된 전환을 어떻게 처리하나요?
+
+	\iffalse
+
 	How does the hardware handle the delayed transitions
 	described above?
+
+	\fi
+
 }\QuickQuizAnswer{
+	일반적으로 상태를 더함으로써 처리합니다만, 이 추가적인 상태는 이 캐쉬
+	라인에 정말로 저장될 필요는 없는데, 한번에 몇개의 라인만이 전환되고
+	있을 것이라는 사실 덕입니다.
+	하지만 전환을 지연해야 하는 필요는 실제 세계의 캐쉬 일관성 프로토콜이
+	이 부록에 묘사된 과하게 단순화된 MESI 프로토콜보다 훨씬 더 복잡해지게
+	만드는 하나의 문제입니다.
+	Hennessy 와 Patterson 의 고전적인 컴퓨터 구조 소개~\cite{Hennessy95a}
+	는 이 문제 여럿을 다룹니다.
+
+	\iffalse
+
 	Usually by adding additional states, though these additional
 	states need not be actually stored with the cache line, due to
 	the fact that only a few lines at a time will be transitioning.
@@ -916,6 +1041,9 @@ The transition arcs in this figure are as follows:
 	the over-simplified MESI protocol described in this appendix.
 	Hennessy and Patterson's classic introduction to computer
 	architecture~\cite{Hennessy95a} covers many of these issues.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{MESI Protocol Example}
