@@ -1334,10 +1334,18 @@ be addressed, which are covered in the next two sections.
 \subsection{Store Forwarding}
 \label{sec:app:whymb:Store Forwarding}
 
+첫번째 복잡성인 자기 일관성의 위배를 보기 위해 0으로 초기화 되는 변수 \qco{a}
+와 \qco{b} 를 갖고 변수 \qco{a} 를 담는 캐쉬 라인은 초기에 CPU~1 에 소유되며
+\qco{b} 를 담는 캐쉬라인은 초기에 CPU~0 에 소유되는 다음 코드를 생각해 봅시다:
+
+\iffalse
+
 To see the first complication, a violation of self-consistency,
 consider the following code with variables \qco{a} and \qco{b} both initially
 zero, and with the cache line containing variable \qco{a} initially
 owned by CPU~1 and that containing \qco{b} initially owned by CPU~0:
+
+\fi
 
 \begin{VerbatimN}[fontsize=\footnotesize,samepage=true]
 a = 1;
@@ -1345,13 +1353,44 @@ b = a + 1;
 assert(b == 2);
 \end{VerbatimN}
 
+이 단정은 실패할 거라 예상할 겁니다.
+그러나,
+\cref{fig:app:whymb:Caches With Store Buffers} 에 보인 매우 단순한 구조를
+사용할 만큼 어리석은 사람이 있다면 놀랄 겁니다.
+그런 시스템은 다음 이벤트 집합을 볼 잠재성이 있습니다:
+
+\iffalse
+
 One would not expect the assertion to fail.
 However, if one were foolish enough to use the very simple architecture
 shown in
 \cref{fig:app:whymb:Caches With Store Buffers},
 one would be surprised.
 Such a system could potentially see the following sequence of events:
+
+\fi
+
 \begin{sequence}
+\item	CPU~0 이 \co{a = 1} 을 수행합니다.
+\item	CPU~0 이 \qco{a} 가 캐쉬에 있는지 확인하고, 그렇지 않음을 발견합니다.
+\item	따라서 CPU~0 이 \qco{a} 를 담는 캐쉬 라인의 배타적 소유권을 갖기 위해
+	``read invalidate'' 메세지를 보냅니다.
+\item	CPU~0 이 \qco{a} 로의 스토어를 스토어 버퍼에 기록합니다.
+\item	CPU~1 이 ``read invalidate'' 메세지를 받고, 이 캐쉬 라인을 보내고
+	자신의 캐쉬로부터 이 캐쉬라인을 제거함으로써 응답합니다.
+\item	CPU~0 이 \co{b = a + 1} 을 수행합니다.
+\item	CPU~0 이 CPU~1 로부터 여전히 값이 0인 \qco{a} 를 담은 캐쉬 라인을
+	받습니다.
+\item	CPU~0 이 자신의 캐쉬에서 \qco{a} 를 로드하고 그 값이 0임을 보게 됩니다.
+	\label{item:app:whymb:Need Store Buffer}
+\item	CPU~0 이 자신의 스토어 버퍼로부터의 항목을 새로 도착한 캐쉬 라인에
+	적용해 자신의 캐쉬의 \qco{a} 의 값을 1 로 만듭니다.
+\item	CPU~0 이 앞의 \qco{a} 에서 로드한 값 0에 1 을 더하고 이를 \qco{b} 를
+	담는 캐쉬 라인에 (이미 CPU~0 에 소유되어 있다고 가정합니다) 저장합니다.
+\item	CPU~0 이 \co{assert(b == 2)} 를 수행하고, 실패합니다.
+
+\iffalse
+
 \item	CPU~0 starts executing the \co{a = 1}.
 \item	CPU~0 looks \qco{a} up in the cache, and finds that it is missing.
 \item	CPU~0 therefore sends a ``read invalidate'' message in order to
@@ -1372,7 +1411,25 @@ Such a system could potentially see the following sequence of events:
 	and stores it into the cache line containing \qco{b}
 	(which we will assume is already owned by CPU~0).
 \item	CPU~0 executes \co{assert(b == 2)}, which fails.
+
+\fi
+
 \end{sequence}
+
+문제는 우리가 하나는 캐쉬에 그리고 다른 하나는 스토어 버퍼에, \qco{a} 의 두
+복사본을 갖는다는 겁니다.
+
+이 예는 각 CPU 가 자신의 오퍼레이션들을 프로그램 순서대로 행해지는 것으로
+본다는 매우 중요한 보장을 깨버립니다.
+이 보장을 깨는 것은 소프트웨어 종류에 있어 강력한 반직관이어서 하드웨어
+사람들은 이에 공감하고
+\cref{fig:app:whymb:Caches With Store Forwarding} 에 보인 것처럼
+각 CPU 가 로드할 때 캐쉬만이 아니라 스토어 버퍼도 참조하는 (또는 ``snoop''
+하는) ``store forwarding'' 을 구현했습니다.
+달리 말하면, 특정 CPU 의 스토어는 뒤따르는 로드에 캐쉬를 거칠 필요 없이 곧바로
+전달됩니다.
+
+\iffalse
 
 The problem is that we have two copies of \qco{a}, one in the cache and
 the other in the store buffer.
@@ -1388,6 +1445,8 @@ as its cache when performing loads, as shown in
 In other words, a given CPU's stores are directly forwarded to its
 subsequent loads, without having to pass through the cache.
 
+\fi
+
 \begin{figure}[htb]
 \centering
 \resizebox{3in}{!}{\includegraphics{appendix/whymb/cacheSBf}}
@@ -1395,10 +1454,18 @@ subsequent loads, without having to pass through the cache.
 \label{fig:app:whymb:Caches With Store Forwarding}
 \end{figure}
 
+Store forwarding 이 있다면, 앞의 흐름에서의
+항목~\ref{item:app:whymb:Need Store Buffer} 은 스토어 버퍼 안의 \qco{a} 의 값 1
+을 보고, \qco{b} 의 마지막 값은 사람들이 바라는대로 2 가 될 겁니다.
+
+\iffalse
+
 With store forwarding in place, item~\ref{item:app:whymb:Need Store Buffer}
 in the above sequence would have found the correct value of 1 for \qco{a} in
 the store buffer, so that the final value of \qco{b} would have been 2,
 as one would hope.
+
+\fi
 
 \subsection{Store Buffers and Memory Barriers}
 \label{sec:app:whymb:Store Buffers and Memory Barriers}
