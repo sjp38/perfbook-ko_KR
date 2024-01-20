@@ -1470,9 +1470,16 @@ as one would hope.
 \subsection{Store Buffers and Memory Barriers}
 \label{sec:app:whymb:Store Buffers and Memory Barriers}
 
+두번째 복잡성인 전역 메모리 순서의 위배를 보기 위해 \qco{a} 와 \qco{b} 가 0
+으로 초기화된 다음 코드 흐름을 봅시다:
+
+\iffalse
+
 To see the second complication, a violation of global memory ordering,
 consider the following code sequences
 with variables \qco{a} and \qco{b} initially zero:
+
+\fi
 
 \begin{VerbatimN}[fontsize=\footnotesize,samepage=true]
 void foo(void)
@@ -1488,11 +1495,37 @@ void bar(void)
 }
 \end{VerbatimN}
 
+CPU~0 이 \co{foo()} 를, CPU~1 은 \co{bar()} 를 수행한다고 해봅시다.
+더 나아가 \qco{a} 를 담는 캐쉬 라인은 CPU~1 의 캐쉬에만 있고 \qco{b} 를 담는
+캐쉬 라인은 CPU~0 에 의해 소유되어 있다고 해봅시다.
+그러면 오퍼레이션들의 흐름은 다음과 같을 수도 있습니다:
+
+\iffalse
+
 Suppose CPU~0 executes \co{foo()} and CPU~1 executes \co{bar()}.
 Suppose further that the cache line containing \qco{a} resides only in CPU~1's
 cache, and that the cache line containing \qco{b} is owned by CPU~0.
 Then the sequence of operations might be as follows:
+
+\fi
+
 \begin{sequence}
+\item	CPU~0 이 \co{a = 1} 을 수행합니다.  이 캐쉬 라인은 CPU~0 의 캐쉬에
+	없으므로 CPU~0 은 \qco{a} 의 새 값을 자신의 스토어 버퍼에 저장하고
+	``read invalidate'' 메세지를 날립니다.
+	\label{seq:app:whymb:Store Buffers and Memory Barriers}
+\item	CPU~1 이 \co{while (b == 0) continue} 를 수행하지만, \qco{b} 를 담는
+	캐쉬라인은 자신의 캐쉬에 없습니다.
+	따라서 ``read'' 메세지를 보냅니다.
+\item	CPU~0 이 \co{b = 1} 을 수행합니다.
+	이 캐쉬 라인을 이미 소유하고 있으므로 (달리 말하면 이 캐쉬 라인은 이미
+	``modified'' 또는 ``exclusive'' 상태이므로), \qco{b} 의 새 값을 캐쉬
+	라인에 저장합니다.
+\item	CPU~0 이 ``read'' 메세지를 받고, 이제 업데이트된 \qco{b} 의 값을 CPU~1
+	에게 보내며, 자신의 캐쉬의 이 캐쉬 라인을 ``shared'' 상태로 만듭니다.
+
+\iffalse
+
 \item	CPU~0 executes \co{a = 1}.  The cache line is not in
 	CPU~0's cache, so CPU~0 places the new value of \qco{a} in its
 	store buffer and transmits a ``read invalidate'' message.
@@ -1507,6 +1540,23 @@ Then the sequence of operations might be as follows:
 \item	CPU~0 receives the ``read'' message, and transmits the
 	cache line containing the now-updated value of \qco{b}
 	to CPU~1, also marking the line as ``shared'' in its own cache.
+
+\fi
+
+\item	CPU~1 이 \qco{b} 를 담는 캐쉬 라인을 받고 자신의 캐쉬에 이를
+	설치합니다.
+\item	CPU~1 은 이제 \qco{b} 의 값이 1 임을 보게 되므로,
+	\co{while (b == 0) continue} 를 마치고 다음 명령으로 넘어갑니다.
+\item	CPU~1 이 \co{assert(a == 1)} 을 수행하고, CPU~1 은 \qco{a} 의 기존 값을
+	가지고 동작하고 있으므로 이 단정이 실패합니다.
+\item	CPU~1 이 ``read invalidate'' 메세지를 받고, \qco{a} 를 담는 캐쉬 라인을
+	CPU~0 에게 보내고 자신의 캐쉬에서 이 캐쉬 라인을 무효화 합니다.
+	하지만 너무 늦었습니다.
+\item	CPU~0 은 \qco{a} 를 담는 캐쉬 라인을 받고 버퍼에 저장된 스토어를 CPU~1
+	의 실패한 단정의 희생자가 되기 직전에 적용합니다.
+
+\iffalse
+
 \item	CPU~1 receives the cache line containing \qco{b} and installs
 	it in its cache.
 \item	CPU~1 can now finish executing \co{while (b == 0) continue},
@@ -1521,6 +1571,9 @@ Then the sequence of operations might be as follows:
 \item	CPU~0 receives the cache line containing \qco{a} and applies
 	the buffered store just in time to fall victim to CPU~1's
 	failed assertion.
+
+\fi
+
 \end{sequence}
 
 \QuickQuiz{
