@@ -1577,19 +1577,44 @@ Then the sequence of operations might be as follows:
 \end{sequence}
 
 \QuickQuiz{
+	앞의 \cref{seq:app:whymb:Store Buffers and Memory Barriers} 에서, CPU~0
+	는 왜 단순한 ``invalidate'' 가 아닌 ``read invalidate'' 를 보내야 하죠?
+
+	\iffalse
+
 	In \cref{seq:app:whymb:Store Buffers and Memory Barriers} above,
 	why does CPU~0 need to issue a ``read invalidate''
 	rather than a simple ``invalidate''?
+
+	\fi
+
 }\QuickQuizAnswer{
+	해당 캐쉬 라인은 변수 \co{a} 외에도 더 많은 것을 담고 있기 때문입니다.
+
+	\iffalse
+
 	Because the cache line in question contains more than just the
 	variable \co{a}.
+
+	\fi
+
 }\QuickQuizEnd
+
+하드웨어 설계자는 이를 직접적으로 도울수는 없는데, CPU 는 어떤 변수들이
+연관되어 있는지 알 수 없기 때문입니다.
+따라서, 하드웨어 설계자들은 소프트웨어가 CPU 에게 그런 관계를 말해줄 수 있도록
+메모리 배리어 명령을 제공합니다.
+이 프로그램은 메모리 배리어를 포함하게끔 업데이트 되어야만 합니다:
+
+\iffalse
 
 The hardware designers cannot help directly here, since the CPUs have
 no idea which variables are related, let alone how they might be related.
 Therefore, the hardware designers provide memory-barrier instructions
 to allow the software to tell the CPU about such relations.
 The program fragment must be updated to contain the memory barrier:
+
+\fi
 
 \begin{VerbatimN}[fontsize=\footnotesize,samepage=true]
 void foo(void)
@@ -1606,6 +1631,16 @@ void bar(void)
 }
 \end{VerbatimN}
 
+이 메모리 배리어 \co{smp_mb()} 는 CPU 가 뒤따르는 스토어를 그 변수의 캐쉬
+라인에 적용하기 전에 스토어 버퍼를 비우게 합니다.
+CPU 는 진행하기 전에 스토어 버퍼가 비워질 때까지 단순히 멈춰 있거나 스토어
+버퍼의 기존 항목들이 적용되기 전까지는 스토어 버퍼가 뒤따르는 스토어를
+중지시키게 할 수도 있습니다. 
+
+뒤의 방법의 경우 오퍼레이션들의 흐름은 다음과 같을 수도 있을 겁니다:
+
+\iffalse
+
 The memory barrier \co{smp_mb()} will cause the CPU to flush its store
 buffer before applying each subsequent store to its variable's cache line.
 The CPU could either simply stall until the store buffer was empty
@@ -1614,7 +1649,31 @@ stores until all of the prior entries in the store buffer had been
 applied.
 
 With this latter approach the sequence of operations might be as follows:
+
+\fi
+
 \begin{sequence}
+\item	CPU~0 가 \co{a = 1} 을 수행합니다.  이 캐쉬 라인은 CPU~0 의 캐쉬에
+	없으므로, CPU~0 는 \qco{a} 의 새 값을 자신의 스토어 버퍼에 넣고 ``read
+	invalidate'' 메세지를 보냅니다.
+\item	CPU~1 이 \co{while (b == 0) continue} 를 수행합니다만, \qco{b} 를 담는
+	캐쉬 라인은 자신의 캐쉬에 없습니다.
+	따라서 ``read'' 메세지를 보냅니다.
+\item	CPU~0 이 \co{smp_mb()} 를 수행하고, 모든 현재 스토어 버퍼 항목에
+	(구체적으로, \co{a = 1}) 표시를 합니다.
+\item	CPU~0 이 \co{b = 1} 을 수행합니다.
+	이는 자신의 캐쉬 라인에 이미 소유되어 있으나 (달리 말하면, 이 캐쉬
+	라인은 ``modified'' 또는 ``exclusive'' 상태이므로) 스토어 버퍼에 표시된
+	항목이 있습니다.
+	따라서, \qco{b} 의 새 값을 캐쉬라인에 저장하는 대신 이를 스토어 버퍼에
+	(그러나 \emph{표시 없는} 항목으로) 넣습니다.
+\item	CPU~0 이 ``read'' 메세지를 받고 \qco{b} 의 원래 값을 담는 캐쉬 라인을
+	CPU~1 에게 보냅니다.
+	이 CPU 는 또한 이 캐쉬 라인의 자신의 복사본을 ``shared'' 로 표시합니다.
+\item	CPU~1 이 \qco{b} 를 담는 캐쉬 라인을 받고 자신의 캐쉬라인에 설치합니다.
+
+\iffalse
+
 \item	CPU~0 executes \co{a = 1}.  The cache line is not in
 	CPU~0's cache, so CPU~0 places the new value of \qco{a} in its
 	store buffer and transmits a ``read invalidate'' message.
@@ -1636,6 +1695,27 @@ With this latter approach the sequence of operations might be as follows:
 	It also marks its own copy of this cache line as ``shared''.
 \item	CPU~1 receives the cache line containing \qco{b} and installs
 	it in its cache.
+
+\fi
+
+\item	CPU~1 은 이제 \qco{b} 의 값을 로드합니다만, \qco{b} 의 값이 여전히 0
+	임을 확인하고 \co{while} 문을 반복합니다.
+	\qco{b} 의 새 값은 CPU~0 의 스토어 버퍼 안에 안전히 감춰져 있습니다.
+\item	CPU~1 은 ``read invalidate'' 메세지를 받고, \qco{a} 를 담는 캐쉬 라인을
+	CPU~0 에게 보내고 자신의 캐쉬에서 이 캐쉬 라인을 무효화 합니다.
+\item	CPU~0 이 \qco{a} 를 담는 캐쉬 라인을 받고 버퍼링 된 스토어를 적용하고,
+	이 라인을 ``modified'' 상태로 전환합니다.
+\item	\qco{a} 로의 스토어가 이 스토어 버퍼 내의 \co{smp_mb()} 에 의해 표시된
+	유일한 항목이었으므로, CPU~0 은 \qco{b} 의 새 값도 저장할 수
+	있습니다---\qco{b} 를 담는 캐쉬 라인이 지금은 ``shared'' 상태라는
+	사실을 제외하면요.
+\item	따라서 CPU~0 은 ``invalidate'' 메세지를 CPU~1 에게 보냅니다.
+\item	CPU~1 은 ``invalidate'' 메세지를 받고 \qco{b} 를 담는 캐쉬라인을 자신의
+	캐쉬에서 무효화 시키고, CPU~0 에게 ``acknowledgement'' 메세지를
+	보냅니다.
+
+\iffalse
+
 \item	CPU~1 can now load the value of \qco{b},
 	but since it finds that the value of \qco{b} is still 0, it repeats
 	the \co{while} statement.
@@ -1655,6 +1735,29 @@ With this latter approach the sequence of operations might be as follows:
 \item	CPU~1 receives the ``invalidate'' message, invalidates the
 	cache line containing \qco{b} from its cache, and sends an
 	``acknowledgement'' message to CPU~0.
+
+\fi
+
+\item	CPU~1 이 \co{while (b == 0) continue} 를 수행합니다만, \qco{b} 를 담는
+	캐쉬 라인은 자신의 캐쉬에 없습니다.
+	따라서 CPU~0 에게 ``read'' 메세지를 보냅니다.
+\item	CPU~0 이 ``acknowledgement'' 메세지를 받고, \qco{b} 를 담는 캐쉬라인을
+	``exclusive'' 상태로 놓습니다.
+	CPU~0 은 이제 \qco{b} 의 새 값을 캐쉬 라인에 저장합니다.
+\item	CPU~0 이 ``read'' 메세지를 받고, \qco{b} 의 새 값을 담은 캐쉬 라인을
+	CPU~1 에게 보냅니다.
+	또한 이 캐쉬 라인의 자신의 복사본을 ``shared'' 로 표시합니다.
+	\label{seq:app:whymb:Store buffers: All copies shared}
+\item	CPU~1 이 \qco{b} 를 담는 캐쉬 라인을 받고 자신의 캐쉬에 설치합니다.
+\item	CPU~1 은 이제 \qco{b} 의 값을 로드할 수 있으며, \qco{b} 의 값이 1 임을
+	확인하므로, \co{while} 반복문을 종료하고 다음 문장으로 진행합니다.
+\item	CPU~1 은 \co{assert(a == 1)} 을 수행하지만, \qco{a} 를 담는 캐쉬라인은
+	자신의 캐쉬에 더이상 존재하지 않습니다.
+	이 캐쉬라인을 CPU~0 으로부터 받으면, 이는 최신의 \qco{a} 의 값을 가지고
+	있을 것이며, 따라서 이 단정은 통과됩니다.
+
+\iffalse
+
 \item	CPU~1 executes \co{while (b == 0) continue}, but the cache line
 	containing \qco{b} is not in its cache.
 	It therefore transmits a ``read'' message to CPU~0.
@@ -1677,16 +1780,43 @@ With this latter approach the sequence of operations might be as follows:
 	Once it gets this cache from CPU~0, it will be
 	working with the up-to-date value of \qco{a}, and the assertion
 	therefore passes.
+
+\fi
+
 \end{sequence}
 
 \QuickQuiz{
+	Page~\pageref{seq:app:whymb:Store buffers: All copies shared} 의
+	\cref{sec:app:whymb:Store Buffers and Memory Barriers} 의
+	\cref{seq:app:whymb:Store buffers: All copies shared} 뒤에, 두 CPU 가
+	\qco{b} 의 새 값을 담은 캐쉬라인을 버릴 수도 있을 겁니다.
+	이게 이 새로운 값을 잃어버리게 할 수 있을까요?
+
+	\iffalse
+
 	After \cref{seq:app:whymb:Store buffers: All copies shared}
 	in \cref{sec:app:whymb:Store Buffers and Memory Barriers} on
 	page~\pageref{seq:app:whymb:Store buffers: All copies shared},
 	both CPUs might drop the cache line containing the new value of
 	\qco{b}.
 	Wouldn't that cause this new value to be lost?
+
+	\fi
+
 }\QuickQuizAnswer{
+	그럴 수도 있고, 그것이 실제 하드웨어는 이 문제를 막기 위한 단계를
+	취하는 이유입니다.
+	Vasilevsky Alexander 에 의해 지적된 전통적은 접근법은 이 캐쉬 라인을
+	``shared'' 로 표시하기 전에 메인 메모리에 도로 쓰는 겁니다.
+	보다 효율적인 (더 복잡하지만) 방법은 이 캐쉬 라인이 ``dirty'' 한지를
+	가리키는 상태를 추가하여 writeback 이 일어나게 해주는 겁니다.
+	2000년대의 시스템은 더 나아가서 반복적인 writeback 을 막기 위해 훨씬
+	많은 상태를 사용합니다~\cite[Figure 8.42]{DavidECuller1999}.
+	그로부터의 시간 사이에 이 복잡성이 줄어들지는 않았다고 가정하는게
+	합리적일 겁니다.
+
+	\iffalse
+
 	It might, and that is why real hardware takes steps to avoid
 	this problem.
 	A traditional approach, pointed out by Vasilevsky Alexander,
@@ -1699,11 +1829,22 @@ With this latter approach the sequence of operations might be as follows:
 	avoid redundant writebacks~\cite[Figure 8.42]{DavidECuller1999}.
 	It would be reasonable to assume that complexity has not decreased
 	in the meantime.
+
+	\fi
+
 }\QuickQuizEnd
+
+이로써 알 수 있듯, 이 프로세스는 적지 않은 표시해두기를 필요로 합니다.
+어떤건 직관적으로 간단할지라도, ``a 의 값을 로드하라'' 같은게 실리콘 내에선
+복잡한 여러 단계를 필요로 할 수 있습니다.
+
+\iffalse
 
 As you can see, this process involves no small amount of bookkeeping.
 Even something intuitively simple, like ``load the value of a'' can
 involve lots of complex steps in silicon.
+
+\fi
 
 \section{Store Sequences Result in Unnecessary Stalls}
 \label{sec:app:whymb:Store Sequences Result in Unnecessary Stalls}
