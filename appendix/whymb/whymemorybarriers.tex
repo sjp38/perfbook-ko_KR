@@ -1918,6 +1918,18 @@ messages regarding that cache line.
 \label{sec:app:whymb:Invalidate Queues and Invalidate Acknowledge}
 
 \Cref{fig:app:whymb:Caches With Invalidate Queues}
+는 invalidate queue 를 갖는 시스템을 보입니다.
+Invalidate queue 를 갖는 CPU 는 invalidate 메세지에 그에 연관된 라인이 정말로
+무효화 되기를 기다리는 대신 그 메세지가 queue 에 들어가자마자 응답을 할 수
+있습니다.
+물론, 이 CPU 는 invalidate 메세지 송신을 준비할 때 자신의 invalidate queue 를
+참조해야만 합니다---만약 연관된 캐쉬 라인을 위한 항목이 invalidate queue 에
+있다면 그 CPU 는 이 invalidate message 를 즉각 보낼 수 없습니다; 그대신 이
+invalidate queue 항목이 처리될 때까지 기다려야만 합니다.
+
+\iffalse
+
+\Cref{fig:app:whymb:Caches With Invalidate Queues}
 shows a system with invalidate queues.
 A CPU with an invalidate queue may acknowledge an invalidate message
 as soon as it is placed in the queue, instead of having to wait until
@@ -1928,12 +1940,25 @@ cache line is in the invalidate queue, the CPU cannot immediately
 transmit the invalidate message; it must instead wait until the
 invalidate-queue entry has been processed.
 
+\fi
+
 \begin{figure}[htb]
 \centering
 \resizebox{3in}{!}{\includegraphics{appendix/whymb/cacheSBfIQ}}
 \caption{Caches With Invalidate Queues}
 \label{fig:app:whymb:Caches With Invalidate Queues}
 \end{figure}
+
+Invalidate queue 내에 항목을 넣는 것은 기본적으로 이 CPU 가 그 항목을 거기
+연관된 어떠한 MESI 프로토콜 메세지를 보내기 전에는 처리할 것이라는 약속입니다.
+연관된 데이터 구조에 대한 경쟁이 치열한 동안은 그 CPU 는 그런 약속으로 인한
+문제를 드물게만 겪을 겁니다.
+
+그러나, invalidate message 가 invalidate queue 내에 있을 수 있다는 사실은
+추가적인 메모리 순서 잘못 맞추기 기회를 자아내는데, 다음 섹션에서 이를
+다룹니다.
+
+\iffalse
 
 Placing an entry into the invalidate queue is essentially a promise
 by the CPU to process that entry before transmitting any MESI protocol
@@ -1944,6 +1969,8 @@ the CPU will rarely be inconvenienced by such a promise.
 However, the fact that invalidate messages can be buffered in the
 invalidate queue provides additional opportunity for memory-misordering,
 as discussed in the next section.
+
+\fi
 
 \subsection{Invalidate Queues and Memory Barriers}
 \label{sec:app:whymb:Invalidate Queues and Memory Barriers}
