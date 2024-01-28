@@ -2672,8 +2672,16 @@ as we will see.\footnote{
 \label{sec:app:whymb:Example 1}
 
 \Cref{lst:app:whymb:Memory Barrier Example 1}
+는 CPU~0, 1, 그리고 2 에 의해 동시에 수행되는 코드를 보입니다.
+\qco{a}, \qco{b}, 그리고 \qco{c} 는 초기에 0 값을 갖습니다.
+
+\iffalse
+
+\Cref{lst:app:whymb:Memory Barrier Example 1}
 shows three code fragments, executed concurrently by CPUs~0, 1, and 2.
 Each of \qco{a}, \qco{b}, and \qco{c} are initially zero.
+
+\fi
 
 \floatstyle{plaintop}
 \restylefloat{listing}
@@ -2698,6 +2706,20 @@ Each of \qco{a}, \qco{b}, and \qco{c} are initially zero.
 \label{lst:app:whymb:Memory Barrier Example 1}
 \end{listing}
 
+CPU~0 이 최근에 많은 캐쉬 미스를 경험했으며, 따라서 그것의 메세지 queue 는 꽉
+차 있지만, CPU~1 은 이 캐쉬에 배타적으로 동작했으며, 따라서 그것의 메세지 queue
+는 비어 있다고 해봅시다.
+그러면 CPU~0 의 \qco{a} 와 \qco{b} 에의 할당은 노드~0 의 캐쉬에 즉각적으로
+나타나지만 (그리고 따라서 CPU~1 에게 보이게 됨), CPU~0 의 앞의 교통량에 의해
+막혀있게 될 겁니다.
+따라서, CPU~2 는 CPU~1 의 \qco{c} 에의 할당을 CPU~0 의 \qco{a} 로의 할당 전에
+볼 수 있어서 메모리 배리어에도 불구하고 단정문이 격발되게 할 수 있습니다.
+
+따라서, 이식성 있는 코드는 이 단정문이 격발되지 않을 것이라 가정해선 안되는데
+컴파일러와 CPU 는 이 코드를 재배치 할 수 있기 때문입니다.
+
+\iffalse
+
 Suppose CPU~0 recently experienced many cache misses, so that its
 message queue is full, but that CPU~1 has been running exclusively within
 the cache, so that its message queue is empty.
@@ -2714,11 +2736,35 @@ Therefore, portable code cannot rely on this assertion not firing,
 as both the compiler and the CPU can reorder the code so as to trip
 the assertion.
 
+\fi
+
 \QuickQuiz{
+	이 코드는 CPU~1 의 \qco{while} 과 \qco{c} 에의 값 할당 사이에 메모리
+	배리어를 넣음으로써 고쳐질 수 있을까요?
+	왜죠?
+
+	\iffalse
+
 	Could this code be fixed by inserting a memory barrier
 	between CPU~1's \qco{while} and assignment to \qco{c}?
 	Why or why not?
+
+	\fi
+
 }\QuickQuizAnswer{
+	아니요.
+	그런 메모리 배리어는 CPU~1 에 지역적인 순서만을 강제합니다.
+	이는 CPU~0 과 CPU~1 의 액세스에의 상대적인 순서에는 영향을 끼치지
+	않아서, 이 할당은 여전히 실패할 수 있습니다.
+	그러나, 모든 주류 컴퓨터 시스템은 ``타동성 (transitivity)'' 를 제공하기
+	위한 메커니즘을 제공하는데, 이는 직관적인 인과 순서를 제공합니다: 만약
+	B 가 A 의 액세스의 효과를 봤다면, 그리고 C 가 B 의 액세스의 효과를
+	봤다면, C 는 A 의 액세스의 효과도 봐야만 합니다.
+	요약하자면, 하드웨어 설계자들은 소프트웨어 개발자들에게 약간의 동정은
+	가졌습니다.
+
+	\iffalse
+
 	No.  Such a memory barrier would only force ordering local to CPU~1.
 	It would have no effect on the relative ordering of CPU~0's and
 	CPU~1's accesses, so the assertion could still fail.
@@ -2729,6 +2775,9 @@ the assertion.
 	the effects of A's accesses.
 	In short, hardware designers have taken at least a little pity
 	on software developers.
+
+	\fi
+
 }\QuickQuizEnd
 
 \subsection{Example 2}
