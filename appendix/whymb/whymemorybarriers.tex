@@ -2505,6 +2505,21 @@ on an ordering-hostile architecture.
 \subsection{Ordering-Hostile Architecture}
 \label{sec:app:whymb:Ordering-Hostile Architecture}
 
+여러 순서잡기에 적대적인 컴퓨터 시스템들이 수십년간 만들어졌습니다만, 적대감의
+본질은 항상 극단적으로 교묘했고, 그것을 이해하는 데에는 특정 하드웨어에 대한
+자세한 이해가 필요했습니다.
+특정 하드웨어 벤더를 고르는 대신, 그리고 아마도 독자 여러분을 자세한 기술
+명세로 익사시키는 것에 대한 매력적인 대안으로써, 가상의 것이지만 최대한 메모리
+순서잡기에 적대적인 컴퓨터 구조를 설계합시다.\footnote{
+	실제 하드웨어 구조에 대한 자세한 이해를 선호하는 독자 여러분은 CPU
+	제조사의 매뉴얼들~\cite{ALPHA95,AMDOpteron02,IntelItanium02v2,PowerPC94,MichaelLyons05a,SPARC94,IntelXeonV3-96a,IntelXeonV2b-96a,IBMzSeries04a},
+	Gharachorloo 의 학위 논문~\cite{Gharachorloo95},
+	Peter Sewell 의 작업물~\cite{PeterSewell2021weakmemory}, 또는
+	Sorin, Hill, 그리고 Wood 에 의해 작성된 훌륭한 하드웨어 기반
+	입문서~\cite{DanielJSorin2011MemModel} 를 보시기 바랍니다.}
+
+\iffalse
+
 A number of ordering-hostile computer systems have been produced over
 the decades,
 but the nature of the hostility has always been extremely subtle,
@@ -2522,9 +2537,34 @@ memory-ordering-hostile computer architecture.\footnote{
 	the excellent hardware-oriented primer by
 	Sorin, Hill, and Wood~\cite{DanielJSorin2011MemModel}.}
 
+\fi
+
+이 하드웨어는 다음 순서잡기 제한을 따라야만
+합니다~\cite{PaulMcKenney2005i,PaulMcKenney2005j}:
+
+\iffalse
+
 This hardware must obey the following ordering
 constraints~\cite{PaulMcKenney2005i,PaulMcKenney2005j}:
+
+\fi
+
 \begin{enumerate}
+\item	각 CPU 는 자신의 메모리 액세스를 항상 프로그램 순서대로 인지합니다.
+\item	CPU 는 스토어와 어떤 오퍼레이션의 순서를 바꿀 수 있는데, 두
+	오퍼레이션이 다른 지역을 참조할 때만 그렇습니다.
+\item	특정 CPU 의 읽기 메모리 배리어 (\co{smp_rmb()} 를 앞서는 모든 로드는
+	모든 CPU 에게 이 읽기 메모리 배리어를 뒤따르는 로드를 앞서는 것으로
+	보이게 됩니다.
+\item	특정 CPU 의 쓰기 메모리 배리어 (\co{smp_wmb()} 를 앞서는 모든 스토어는
+	모든 CPU 에게 이 쓰기 메모리 배리어를 뒤따르는 스토어를 앞서는 것으로
+	보이게 됩니다.
+\item	특정 CPU 의 완전한 메모리 배리어 (\co{smp_mb()}) 를 앞서는 모든 액세스
+	(로드와 스토어) 는 모든 CPU 에게 이 메모리 배리어를 뒤따르는 모든
+	액세스를 앞서는 것으로 보이게 됩니다.
+
+\iffalse
+
 \item	Each CPU will always perceive its own memory accesses
 	as occurring in program order.
 \item	CPUs will reorder a given operation with a store only
@@ -2539,14 +2579,39 @@ constraints~\cite{PaulMcKenney2005i,PaulMcKenney2005j}:
 	full memory barrier
 	(\co{smp_mb()}) will be perceived by all CPUs to precede
 	any accesses following that memory barrier.
+
+\fi
+
 \end{enumerate}
 
 \QuickQuiz{
+	각 CPU 각 자신의 메모리 액세스를 순서대로 본다는 보장은 각 사용자 수준
+	쓰레드가 자신의 메모리 액세스를 순서대로 본다는 것을 보장하나요?
+	그 이유는요?
+
+	\iffalse
+
 	Does the guarantee that each CPU sees its own memory accesses
 	in order also guarantee that each user-level thread will see
 	its own memory accesses in order?
 	Why or why not?
+
+	\fi
+
 }\QuickQuizAnswer{
+	아니오.
+	쓰레드가 한 CPU 에서 다른 CPU 로 옮겨지며 그 목표 CPU 는 원천 CPU 의
+	최근의 메모리 오퍼레이션을 순서대로 보지 않는 경우를 생각해 봅시다.
+	사용자 모드의 정상성을 지키기 위해, 커널 해커들은 컨텍스트 스위치
+	경로에서 메모리 배리어를 사용해야만 합니다.
+	그러나, 컨텍스트 스위치를 안전하게 하기 위해 필요한 락킹은 사용자 수준
+	테스크가 자신의 액세스를 순서대로 보는데 필요한 메모리 배리어를
+	자동으로 제공합니다.
+	그렇다고는 하나, 여러분이 매우 최적화된 스케쥴러를 설계한다면, 그것이
+	커널 수준이든 사용자 수준이든, 이 시나리오를 명심하십시오!
+
+	\iffalse
+
 	No.  Consider the case where a thread migrates from one CPU to
 	another, and where the destination CPU perceives the source
 	CPU's recent memory operations out of order.  To preserve
@@ -2557,7 +2622,25 @@ constraints~\cite{PaulMcKenney2005i,PaulMcKenney2005j}:
 	its own accesses in order.  That said, if you are designing a
 	super-optimized scheduler, either in the kernel or at user level,
 	please keep this scenario in mind!
+
+	\fi
+
 }\QuickQuizEnd
+
+거대한 non-uniform cache architecture (NUCA) 시스템을 상상해 봅시다.
+이 시스템은 공정한 접합부 (interconnect) 대역폭을 동일 노드 내의 CPU 들에게
+공정하게 할당하기 위해서
+\cref{fig:app:whymb:Example Ordering-Hostile Architecture} 에 보인 것처럼 각
+노드의 접합부 인터페이스에 per-CPU queue 를 제공합니다.
+특정 CPU 의 액세스는 그 CPU 에 의해 수행된 메모리 배리어에 의해 명세된 순서대로
+일어나지만, CPU 들의 액세스들의 상대적인 순서는 상당히 재배치 될 수 있는데,
+곧이어 보게 될 겁니다.\footnote{
+	모든 실제 하드웨어 설계자는 필사적으로 이에 반발할 텐데, 어떤 queue 가
+	두 CPU 가 액세스 하는 캐쉬라인에 연관된 메세지를 처리해야 할지에 대한
+	가능성이 그들을 화나게 할 것이기 때문일 겁니다.
+	제가 말할 수 있는건 ``더 나은 예를 주세요'' 입니다.}
+
+\iffalse
 
 Imagine a large non-uniform cache architecture (NUCA) system that,
 in order to provide fair allocation
@@ -2575,6 +2658,8 @@ as we will see.\footnote{
 	that both CPUs accessed, to say nothing of the many races that
 	this example poses.
 	All I can say is ``Give me a better example''.}
+
+\fi
 
 \begin{figure}[htb]
 \centering
