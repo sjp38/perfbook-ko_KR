@@ -2852,8 +2852,16 @@ mainstream computer systems.
 \label{sec:app:whymb:Example 3}
 
 \Cref{lst:app:whymb:Memory Barrier Example 3}
+는 CPU~0, 1, 그리고 2 에 의해 동시에 수행되는 세개의 코드 조각을 보입니다.
+모든 변수는 초기에 0 입니다.
+
+\iffalse
+
+\Cref{lst:app:whymb:Memory Barrier Example 3}
 shows three code fragments, executed concurrently by CPUs~0, 1, and 2.
 All variables are initially zero.
+
+\fi
 
 \begin{listing*}
 \scriptsize
@@ -2881,6 +2889,17 @@ All variables are initially zero.
 \floatstyle{ruled}
 \restylefloat{listing}
 
+CPU~1 도 CPU~2 도 CPU~0 의 라인~3 에서의 \qco{b} 로의 값 할당을 보기 전까지는
+라인~5 로 진행하지 못합니다.
+일단 CPU~1 과~2 가 라인~4 에서 각자의 메모리 배리어를 수행하면, 그들은 라인~2
+에서의 매모리 배리어를 앞서는 CPU~0 에 의한 모든 값 할당을 볼 것이 보장됩니다.
+비슷하게, CPU~0 의 라인~8 에서의 메모리 배리어는 라인~4 의 CPU~1 과~2 의 것들과
+짝을 이루므로, CPU~0 은 라인~9 에서의 \qco{e} 로의 값 할당을 그것의 \qco{b}
+로의 값 할당이 다른 두 CPU 에게 보여지기 전까지는 수행하지 않을 겁니다.
+따라서, CPU~2 의 라인~9 에서의 단정문은 격발되지 \emph{않을} 것이 보장됩니다.
+
+\iffalse
+
 Note that neither CPU~1 nor CPU~2 can proceed to line~5 until they see
 CPU~0's assignment to \qco{b} on line~3.
 Once CPU~1 and~2 have executed their memory barriers on line~4, they
@@ -2892,8 +2911,22 @@ line~9 until after its assignment to \qco{b} is visible to both of the
 other CPUs.
 Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 
+\fi
+
 \QuickQuizSeries{%
 \QuickQuizB{
+	\Cref{lst:app:whymb:Memory Barrier Example 3}
+	의 CPU~1 과~2 에 의한 라인~3--5 가 인터럽트 핸들러이고, CPU~2 의 라인~9
+	는 프로세스 수준에서 수행된다고 해봅시다.
+	달리 말하자면, 이 표의 세 열의 코드는 같은 CPU 에서 수행되나, 첫번째 두
+	열은 인터럽트 핸들러에서, 그리고 세번째 열을 프로세스 수준에서
+	수행되므로, 세번째 열의 코드는 첫번째 열의 코드에 의해 인터럽트 당할 수
+	있습니다.
+	이 코드가 올바르게 동작하려면, 달리 말해 이 단정문이 격발되는 걸 막기
+	위해 무언가가 필요할까요?
+
+	\iffalse
+
 	Suppose that lines~3--5 for CPUs~1 and~2 in
 	\cref{lst:app:whymb:Memory Barrier Example 3}
 	are in an interrupt
@@ -2905,7 +2938,19 @@ Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 	by the code in the first two columns.
 	What changes, if any, are required to enable the code to work
 	correctly, in other words, to prevent the assertion from firing?
+
+	\fi
+
 }\QuickQuizAnswerB{
+	이 단정문은 \qco{e} 의 로드가 \qco{a} 의 것을 앞서는 것을 보장해야
+	합니다.
+	리눅스 커널에서, \co{barrier()} 기능은 앞의 예에서 메모리 배리어가
+	사용되었던 것과 상당히 같은 방식으로 이를 달성하기 위해 사용될 수
+	있습니다.
+	예를 들어, 이 단정문은 다음과 같이 수정될 수 있습니다:
+
+	\iffalse
+
 	The assertion must ensure that the load of
 	\qco{e} precedes that of \qco{a}.
 	In the Linux kernel, the \co{barrier()} primitive may be used to
@@ -2913,22 +2958,51 @@ Therefore, CPU~2's assertion on line~9 is guaranteed \emph{not} to fire.
 	used in the assertions in the previous examples.
 	For example, the assertion can be modified as follows:
 
+	\fi
+
 \begin{VerbatimU}[fontsize=\footnotesize]
 r1 = e;
 barrier();
 assert(r1 == 0 || a == 1);
 \end{VerbatimU}
 
+	첫번째 두 열의 코드에는 어떤 변경도 필요치 않은데, 인터럽트 핸들러는
+	인터럽트 당한 코드의 관점에서는 어토믹하게 수행되기 때문입니다.
+
+	\iffalse
+
 	No changes are needed to the code in the first two columns,
 	because interrupt handlers run atomically from the perspective
 	of the interrupted code.
+
+	\fi
+
 }\QuickQuizEndB
 %
 \QuickQuizE{
+	\Cref{lst:app:whymb:Memory Barrier Example 3} 의 예에서 CPU~2 가
+	\co{assert(e==0||c==1)} 를 수행했다면, 이 단정문은 격발될까요?
+
+	\iffalse
+
 	If CPU~2 executed an \co{assert(e==0||c==1)} in the example in
 	\cref{lst:app:whymb:Memory Barrier Example 3},
 	would this assert ever trigger?
+
+	\fi
+
 }\QuickQuizAnswerE{
+	결과는 그 CPU 가 ``transitivity'' 를 지원하느냐에 달렸습니다.
+	달리 말해서, CPU~0 는 CPU~1 의 \qco{c} 스토어를 본 후에 \qco{e} 를
+	저장했으며, CPU~0 의 \qco{c} 로드와 \qco{e} 스토어 사이에 메모리
+	배리어도 쳤습니다.
+	만약 다른 CPU 가 CPU~0 의 \qco{e} 로의 스토어를 봤다면, CPU~1 의
+	스토어도 볼 것이 보장될까요?
+
+	제가 아는 모든 CPU 는 transitivity 를 제공한다고 주장합니다.
+
+	\iffalse
+
 	The result depends on whether the CPU supports ``transitivity''.
 	In other words, CPU~0 stored to \qco{e} after seeing CPU~1's
 	store to \qco{c}, with a memory barrier between CPU~0's load
@@ -2937,11 +3011,21 @@ assert(r1 == 0 || a == 1);
 	guaranteed to see CPU~1's store?
 
 	All CPUs I am aware of claim to provide transitivity.
+
+	\fi
+
 }\QuickQuizEndE
 }
 
+리눅스 커널의 \co{synchronize_rcu()} 기능은 이 예에서 보인 것과 비슷한
+알고리즘을 사용합니다.
+
+\iffalse
+
 The Linux kernel's \co{synchronize_rcu()} primitive uses an algorithm
 similar to that shown in this example.
+
+\fi
 
 \section{Are Memory Barriers Forever?}
 \label{sec:app:whymb:Are Memory Barriers Forever?}
