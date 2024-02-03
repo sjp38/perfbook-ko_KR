@@ -3106,12 +3106,38 @@ We have no clue, so we are preparing to live with either scenario.
 \section{Advice to Hardware Designers}
 \label{sec:app:whymb:Advice to Hardware Designers}
 
+소프트웨어 사람들의 삶을 어렵게 하기 위해 하드웨어 설계자들이 할 수 있는 일들이
+여럿 있습니다.
+여기 우리가 과거에 마주한 그런 것들 일부를 미래에는 그런 문제를 방지하길 돕길
+바라는 마음으로 나열합니다:
+
+\iffalse
+
 There are any number of things that hardware designers can do
 to make the lives of software people difficult.
 Here is a list of a few such things that we have encountered in
 the past, presented here in the hope that it might help prevent
 future such problems:
+
+\fi
+
 \begin{enumerate}
+\item	캐쉬 일관성을 무시하는 I/O 기기들.
+
+	이 매력적인 잘못된 기능은 메모리로부터의 DMA 들이 출력 버퍼로의 최근의
+	변경을 놓치게 하거나 그만큼이나 나쁘게도 입력 버퍼가 DMA 완료 직후의
+	CPU 캐쉬의 내용으로 덮어써지게 할 수 있습니다.
+	여러분이 그런 잘못된 동작에서도 동작하게 하려면, 여러분은 주의 깊게 DMA
+	버퍼의 모든 위치에 대한 CPU 캐쉬를 그 버퍼를 I/O 기기에게 보여주기 전에
+	비워야만 합니다.
+	비슷하게, 모든 DMA 버퍼의 모든 위치에 대한 CPU 캐쉬를 그 버퍼로의 DMA
+	가 완료된 후에 비워내야 합니다.
+	심지어 그러고 나서도, 여러분은 포인터 버그를 \emph{매우} 조심해야
+	하는데, 잘못 위치된 입력 버퍼로의 읽기는 데이터 입력을 오염시키는
+	결과를 초래할 수 있기 때문입니다!
+
+\iffalse
+
 \item	I/O devices that ignore cache coherence.
 
 	This charming misfeature can result in DMAs from memory
@@ -3128,6 +3154,21 @@ future such problems:
 	pointer bugs, as even a misplaced read to an input buffer
 	can result in corrupting the data input!
 
+\fi
+
+\item	캐쉬 일관성 데이터를 전달하는데 실패하는 외부 버스들.
+
+	이는 앞의 문제보다도 더 고통스러운, 그러나 여러 기기들을---그리고
+	심지어 메모리 자체를---캐쉬 일관성을 무시하게 만들 수 있는 변종입니다.
+	임베디드 시스템들이 멀티코어 구조로 옮겨가고 있으므로 우리는 이런
+	문제들을 상당후 보게 될 것에 의심의 여지가 없음을 알리는 건 저의
+	고통스러운 의무입니다.
+	2021 년 기준, 이런 문제를 새로운 인터컨넥트 표준으로 해결하려는 노력이
+	일부 있었는데, 이 표준이 정말로 얼마나 효과적일지에 대해서는 일부
+	논란이 있습니다~\cite{WilliamGWong2019CCIX-CXL}.
+
+\iffalse
+
 \item	External busses that fail to transmit cache-coherence data.
 
 	This is an even more painful variant of the above problem,
@@ -3140,6 +3181,8 @@ future such problems:
 	these problems with new interconnect standards, with some
 	debate as to how effective these standards will really
 	be~\cite{WilliamGWong2019CCIX-CXL}.
+
+\fi
 
 \item	Device interrupts that ignore cache coherence.
 
