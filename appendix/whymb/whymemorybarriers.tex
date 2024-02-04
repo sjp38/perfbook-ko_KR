@@ -3184,6 +3184,20 @@ future such problems:
 
 \fi
 
+\item	캐쉬 일관성을 무시하는 기기 인터럽트.
+
+	이는 충분히 문제없는 듯 들릴 수도 있습니다---어쨌건, 인터럽트는 메모리
+	참조가 아닙니다, 안그래요?
+	하지만 분리된 캐쉬를 가지며 한쪽은 무척 바빠서 입력 버퍼의 마지막
+	캐쉬라인을 잡고 있는 CPU 를 떠올려 봅시다.
+	연관된 I/O-완료 인터럽트가 이 CPU 에 도착하면, 이 CPU 의 이 마지막
+	캐쉬라인으로의 메모리 참조는 예전 데이터를 반환할 수 있어서, 다시
+	데이터 오염을 초래하지만 뒤따르는 crash dump 에는 보이지 않을 겁니다.
+	시스템이 문제된 입력 버퍼를 덤핑할 시점에는 이 DMA 는 대부분의 경우
+	이미 완료되었을 겁니다.
+
+\iffalse
+
 \item	Device interrupts that ignore cache coherence.
 
 	This might sound innocent enough---after all, interrupts
@@ -3198,6 +3212,33 @@ future such problems:
 	in a later crash dump.
 	By the time the system gets around to dumping the offending
 	input buffer, the DMA will most likely have completed.
+
+\fi
+
+\item	캐쉬 일관성을 무시하는 프로세서간 인터럽트 (inter-processor interrupts:
+	IPIs).
+
+	이는 IPI 가 연관된 메세지 버퍼의 캐쉬 라인이 모두 메모리에 넘어가기
+	전에 목적지에 도착하면 문제가 될 수 있습니다.
+
+\item	캐쉬 일관성보다 먼저 이루어지는 컨텍스트 전환.
+
+	메모리 액세스가 지나치게 순서 없이 완료된다면, 컨텍스트 전환은 상당히
+	비참해질 수 있습니다.
+	태스크가 한 CPU 에서 다른 쪽으로 원천 CPU 에게 보이는 메모리 액세스가
+	목적 CPU 에도 보이게 하기 전에 옮겨간다면 이 태스크는 연관된 변수들이
+	이전 값으로 돌아간 것을 보게 될텐데, 이는 대부분의 알고리즘을 크게
+	혼란시킬 수 있습니다.
+
+\item	지나치게 친절한 시뮬레이터와 에뮬레이터.
+
+	메모리 재배치를 강제하는 시뮬레이터나 에뮬레이터를 작성하긴 어려우므로,
+	이 환경에서 그냥 잘 동작하는 소프트웨어는 실제 하드웨어에서 처음 수행될
+	때 불쾌한 놀람을 받을 수 있습니다.
+	불행히도, 하드웨어는 시뮬레이터나 에뮬레이터보다 더 일탈적인게
+	규칙입니다만, 이 상태가 바뀌길 바랍니다.
+
+\iffalse
 
 \item	Inter-processor interrupts (IPIs) that ignore cache coherence.
 
@@ -3224,8 +3265,17 @@ future such problems:
 	Unfortunately, it is still the rule that the hardware is more
 	devious than are the simulators and emulators, but we hope that
 	this situation changes.
+
+\fi
+
 \end{enumerate}
 
+반복합니다, 우린 하드웨어 설계자가 이런 일을 하지 않길 장려합니다!
+
+\iffalse
+
 Again, we encourage hardware designers to avoid these practices!
+
+\fi
 
 \QuickQuizAnswersChp{qqzwhymb}
