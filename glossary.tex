@@ -157,6 +157,21 @@
 \fi
 
 \item[Cache Coherence Protocol:]\index{Cache coherence protocol}
+	일반적으로 하드웨어로 구현되며 메모리 일관성과 순서를 강제하고 다른 CPU
+	들이 각자의 캐쉬에 있는 데이터에 대해 비일관된 시각을 갖는 것을
+	방지하는 통신 규약.
+\item[Cache Geometry:]\index{Cache geometry}
+	캐쉬의 용량과 associativity 는 geometry 라 명명됩니다.
+	각 캐쉬는 2차원 배열로 생각될 수 있는데, 같은 해쉬 값을 갖는 캐쉬
+	라인이 열들 (``set'') 을 구성하고 다른 해쉬 값을 갖는 캐쉬 라인들이 행
+	(``way'') 을 구성합니다. 
+	캐쉬의 associativity 는 행의 갯수이며 (따라서 ``way'' 라
+	불립니다--2- y set-associative 캐쉬는 두개의 ``way'' 를 갖습니다),
+	캐쉬의 용량은 열의 수에 행의 수를 곱한 값입니다.
+
+\iffalse
+
+\item[Cache Coherence Protocol:]\index{Cache coherence protocol}
 	A communications protocol, normally implemented in hardware,
 	that enforces memory consistency and ordering, preventing
 	different CPUs from seeing inconsistent views of data held
@@ -171,6 +186,21 @@
 	columns (hence the name ``way''---a two-way set-associative
 	cache has two ``ways''), and the size of the cache is its
 	number of rows multiplied by its number of columns.
+
+\fi
+
+\item[Cache Line:]\index{Cache line}
+	(1) CPU 와 메모리 사이를 순환하는 데이터의 단위로 일반적으로 크지 않은
+	2의 승수.
+	(2) 하나의 캐쉬 라인 단위의 데이터를 담아두는 게 가능한 CPU 캐쉬의
+	물리적 지역.
+	(3) 하나의 캐쉬 라인 단위의 데이터를 담아주는 게 가능한, 그러나 또한
+	캐쉬 라인 범위로 정렬된 메모리 상의 물리 지역.
+	예를 들어, 메모리 상의 캐쉬 라인의 첫번째 워드의 주소는 256-바이트
+	캐쉬라인의 시스템에서는 0x00 으로 끝날 겁니다.
+
+\iffalse
+
 \item[Cache Line:]\index{Cache line}
 	(1) The unit of data that circulates among the CPUs and memory,
 	usually a moderate power of two in size.
@@ -182,6 +212,30 @@
 	on a cache-line boundary.
 	For example, the address of the first word of a cache line
 	in memory will end in 0x00 on systems with 256-byte cache lines.
+
+\fi
+
+\item[Cache Miss:]\index{Cache miss}
+	캐쉬 미스는 CPU 에게 필요한 데이터가 해당 CPU 의 캐쉬에 없을 때
+	발생합니다.
+	그 데이터는 여러 이유로 없을 수 있는데, 그 이유들은 다음을 포함합니다:
+	(1) 이 CPU 는 이전에 해당 데이터에 액세스한 적이 없음 (``startup'' 또는
+	``warmup'' 미스),
+	(2) 이 CPU 는 최근에 캐쉬에 들어갈 수 있는 것보다 많은 데이터에 액세스
+	했으며, 따라서 기존의 데이터 일부는 제거되었음 (``capacity'' 미스),
+	(3) 이 CPU 는 최근에 해당 set 에\footnote{
+		하드웨어 캐쉬 명명법에서, ``set'' 은 소프트웨어 캐쉬를 논할 때
+		사용되는 ``bucket'' 이라는 용어와 같은 의미를 갖습니다.}
+	그 set 이 담아둘 수 있는 것보다 많은 데이터를 액세스 했음
+	(``associativity'' 미스),
+	(4) 이 CPU 의 해당 데이터로의 액세스 후에 다른 CPU 가 해당 데이터에
+	(또는 같은 캐쉬 라인의 다른 데이터에) 쓰기를 했음  (``communication
+	미스''), 또는
+	(5) 이 CPU 가 아마도 현재 해당 라인이 다른 CPU 의 캐쉬에 복사되어 있는
+	관계로 현재 read-only 인 캐쉬 라인에 쓰기를 시도했음.
+
+\iffalse
+
 \item[Cache Miss:]\index{Cache miss}
 	A cache miss occurs when data needed by the CPU is not in
 	that CPU's cache.
@@ -204,6 +258,28 @@
 	(5) this CPU attempted to write to a cache line that is
 	currently read-only, possibly due to that line being replicated
 	in other CPUs' caches.
+
+\fi
+
+\item[Capacity Miss:]\index{Capacity miss}
+	연관된 CPU 가 최근에 캐쉬에 들어갈 수 있는 것보다 많은 데이터를 액세스
+	했기 때문에 발생하는 캐쉬 미스.
+\item[Clash Free:]\index{Clash free}
+	경쟁이 없는 경우엔 최소한 한의 쓰레드가 유한한 시간 내에 진행을
+	만들어내는 진행 보장.
+\item[Code Locking:]\index{Code locking}
+	하나의 ``전역 락'' 이 크리티컬 섹션 집합을 보호하는 데 사용되어 해당
+	집합으로의 어떤 쓰레드의 액세스는 이 쓰레드가 어떤 데이터에 접근하려
+	하는가가 아니라 현재 그 크리티컬 섹션 집합을 지배하고 있는 쓰레드의
+	집합에 의해서만 허락되거나 거부되는 간단한 락킹 설계.
+	Code locking 이 사용되는 프로그램의 확장성은 해당 코드에 의해
+	제한됩니다; 이 데이터 집합의 크기를 늘리는 것은 일반적으로 확장성을
+	증가시키지 않습니다 (사실, ``락 경쟁'' 을 늘림으로써 확장성을
+	\emph{감소} 시킬 겁니다).
+	``Data locking'' 의 반대.
+
+\iffalse
+
 \item[Capacity Miss:]\index{Capacity miss}
 	A cache miss incurred because the corresponding CPU has recently
 	accessed more data than will fit into the cache.
@@ -223,6 +299,29 @@
 	scalability (in fact, will typically \emph{decrease} scalability
 	by increasing ``lock contention'').
 	Contrast with ``data locking''.
+
+\fi
+
+\item[Communication Miss:]\index{Communication miss}
+	이 CPU 가 어떤 캐쉬 라인에 마지막으로 액세스 한 후에 다른 CPU 가 그
+	캐쉬 라인에 쓰기를 했기 때문에 발생하는 캐쉬 미스.
+\item[Concurrent:]\index{Concurrent}
+	이 책에서는 병렬 (parallel) 의 유사어.
+	이 두 용어 사이의 최근의 구별에 대한 토론을 위해선
+	\cpageref{sec:app:questions:What is the Difference Between ``Concurrent'' and ``Parallel''?}
+	\cref{sec:app:questions:What is the Difference Between ``Concurrent'' and ``Parallel''?}
+	를 보시기 바랍니다.
+\item[Critical Section:]\index{Critical section}
+	어떤 동기화 메커니즘으로 보호되어 그 수행이 그 기능으로 제한되는 코드의
+	섹션.
+	예를 들어, 크리티컬 섹션들의 한 집합이 같은 전역 락으로 보호된다면,
+	한번에 이 크리티컬 섹션들 중 하나만이 수행될 겁니다.
+	어떤 쓰레드가 그런 크리티컬 섹션 중 하나에서 수행 중이라면 모든 다른
+	쓰레드는 해당 크리티컬 섹션 집합의 어떤 것이든 수행하기 전에 이 첫번째
+	쓰레드가 완료되길 기다려야만 합니다.
+
+\iffalse
+
 \item[Communication Miss:]\index{Communication miss}
 	A cache miss incurred because some other CPU has written to
 	the cache line since the last time this CPU accessed it.
@@ -241,6 +340,29 @@
 	If a thread is executing in one such critical section,
 	any other threads must wait until the first thread completes
 	before executing any of the critical sections in the set.
+
+\fi
+
+\item[Data Locking:]\index{Data locking}
+	데이터 구조의 각 인스턴스가 자신의 락을 갖는 확장 가능한 락킹 설계.
+	각 쓰레드가 이 데이터 구조의 다른 인스턴스를 사용한다면, 모든 쓰레드는
+	동시에 크리티컬 섹션의 집합에서 수행될 수 있습니다.
+	Data locking 은 CPU 의 수를 데이터의 인스턴스의 수가 증가하는만큼
+	늘리는 것으로 자동적으로 확장하는 장점을 갖습니다.
+	``Code locking'' 과 반대입니다.
+\item[Data Race:]\index{Data race}
+	여러 CPU 나 쓰레드가 한 변수에 동시에 접근하며 그 액세스들 중 최소
+	하나는 스토어이고 그것들 중 하나는 마크되지 않은 경우의 레이스 컨디션
+	(race condition).
+	Data race 의 존재는 종종 버그의 존재를 암시하지만 data race 의 부재는
+	버그의 부재를 암시하지 않음을 알아두는게 중요합니다.
+	(``Marked access'' 를 보세요.)
+\item[Deadlock Free:]\index{Deadlock free}
+	실패의 부재 시에는 최소 하나의 쓰레드가 유한시간 내에 진행을 만들어
+	낸다는 진행 보장.
+
+\iffalse
+
 \item[Data Locking:]\index{Data locking}
 	A scalable locking design in which each instance of a given
 	data structure has its own lock.
@@ -264,6 +386,28 @@
 	A forward-progress guarantee in which, in the absence of
 	failures, at least one thread makes progress within a finite
 	period of time.
+
+\fi
+
+\item[Direct-Mapped Cache:]\index{Direct-mapped cache}
+	하나의 way 만을 가지는 캐쉬.
+	따라서 특정 해쉬 값에 대해선 하나의 캐쉬 라인 만을 가질 수 있습니다.
+\item[Efficiency:]\index{Efficiency}
+	보통 어떤 최대값을 실제로 성취할 수 있는 어떤 수치의 비율로 표현되는
+	효과의 측정치.
+	이 최대 값은 이론적 최대값일 수도 있으나, 병렬 프로그래밍에서는 종종
+	연관된 단일 쓰레드에서의 수치 측정값에 기반하고는 합니다.
+\item[Embarrassingly Parallel:]\index{Embarrassingly parallel}
+	쓰레드를 더하는 것이 연산의 전체 비용을 크게 늘리지 않아서 쓰레드가
+	더해짐에 따라 (충분한 CPU 가 있다는 가정 하에) 선형적 속도 향상을
+	일으키게 하는 알고리즘 또는 문제.
+\item[Exclusive Lock:]\index{Exclusive lock}
+	Exclusive lock 은 한번에 하나의 쓰레드만이 이 락에 의해 보호되는
+	크리티컬 섹션의 집합에 들어갈 수 있게 허용하는 상호 배타
+	메커니즘입니다.
+
+\iffalse
+
 \item[Direct-Mapped Cache:]\index{Direct-mapped cache}
 	A cache with only one way, so that it may hold only one cache
 	line with a given hash value.
@@ -282,6 +426,31 @@
 	An exclusive lock is a mutual-exclusion mechanism that
 	permits only one thread at a time into the
 	set of critical sections guarded by that lock.
+
+\fi
+
+\item[False Sharing:]\index{False sharing}
+	두 CPU 가 각각 빈번하게 데이터 항목들 한쌍 중 하나에 쓰기를 하지만 이
+	데이터 항목 한쌍은 같은 캐쉬 라인에 위치해 있다면, 이 캐쉬 라인은
+	반복적으로 무효화 되어, 이 두 CPU 의 캐쉬들 사이를 왔다갔다 할 겁니다.
+	이는 ``cacheline bouncing'' 이라고도 불리는 ``cache thrashing'' 의
+	(앞의 것이 리눅스 커뮤니티에서는 가장 흔하게 사용됩니다) 흔한
+	이유입니다.
+	False sharing 은 성능과 확장성을 모두 극적으로 감소시킬 수 있습니다.
+\item[Fragmentation:]\index{Fragmentation}
+	사용되지 않은 많은 양의 메모리를 가졌지만 상대적으로 작은 할당 요청을
+	만족시킬 수 없는 형태로 배치된 메모리 풀은 fragment 되었다고
+	표현됩니다.
+	External fragmentation 은 공간이 할당된 메모리 블락들 사이에 놓인 작은
+	조각들로 분리되어 있을 때 발생하며, internal fragmentation 은 특정 요청
+	또는 요청의 종류가 실제로 요청된 것보다 많은 메모리를 가져갈 때
+	발생합니다.
+\item[Fully Associative Cache:]\index{Fully associative cache}
+	Fully associative cache 는 하나의 set 만을 가져서 용량에 맞는 한 어떤
+	메모리의 부분집합이든 담을 수 있습니다.
+
+\iffalse
+
 \item[False Sharing:]\index{False sharing}
 	If two CPUs each frequently write to one of a pair of data items,
 	but the pair of data items are located in the same cache line,
@@ -305,6 +474,25 @@
 	A fully associative cache contains only
 	one set, so that it can hold any subset of
 	memory that fits within its capacity.
+
+\fi
+
+\item[Grace Period:]\index{Grace period}
+	Grace period 는 연속적인 시간 구간으로 이 시간 구간의 시작 전에 시작된
+	모든 RCU read-side 크리티컬 섹션은 이 시간 구간의 종료 전에 완료됩니다.
+	많은 RCU 구현은 각 쓰레드가 최소 하나의 quiescent state 를 지나간
+	동안의 시간 간격으로 정의합니다.
+	RCU read-side 크리티컬 섹션은 정의상 quiescent state 를 포함할 수
+	없으므로, 이 두 정의는 거의 항상 상호교체 가능합니다.
+\item[Hazard Pointer:]\index{Hazard pointer}
+	레퍼런스 카운터의 확장성 있는 버전으로 객체의 레퍼런스 카운트는 이
+	객체를 참조하는 특수 해저드 포인터의 수로 묵시적으로 표현됩니다.
+\item[Heisenbug:]\index{Heisenbug}
+	그것을 추적하고자 print 문이나 tracing 을 시도하면 시야에서 사라지는
+	시간 관계에 민감한 버그.
+
+\iffalse
+
 \item[Grace Period:]\index{Grace period}
 	A grace period is any contiguous time interval such that
 	any RCU read-side critical section that began before the
@@ -324,6 +512,9 @@
 	A timing-sensitive bug that disappears from sight when you
 	add print statements or tracing in an attempt to track it
 	down.
+
+\fi
+
 \item[Hot Spot:]\index{Hot spot}
 	Data structure that is very heavily used, resulting in high
 	levels of contention on the corresponding lock.
