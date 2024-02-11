@@ -516,6 +516,29 @@
 \fi
 
 \item[Hot Spot:]\index{Hot spot}
+	매우 많이 사용되어서 연관된 락에 높은 수준의 경쟁을 유발시키는 데이터
+	구조.
+	이 상황의 한 예는 잘못 골라진 해쉬 함수를 사용하는 해쉬 테이블이
+	되겠습니다.
+\item[Humiliatingly Parallel:]\index{Humiliatingly parallel}
+	쓰레드를 더하는 것이 연산의 전체 비용을 심각하게 \emph{감소} 시켜서
+	쓰레드가 더해짐에 따라 상당한 (충분한 CPU 가 있다는 가정 하에) 초선형
+	속도향상을 이루는 문제 또는 알고리즘.
+\item[Invalidation:]\index{Invalidation}
+	어떤 CPU 가 어떤 데이터 항목에 쓰기를 하고자 할 때, 이 CPU 는 먼저 이
+	데이터 항목이 다른 CPU 의 캐쉬에 존재하지 않음을 보장해야 합니다.
+	필요하다면 이 항목은 쓰기를 하는 CPU 에서 그 복사본을 각자의 캐쉬에
+	가지고 있는 모든 CPU 에게 ``invalidation'' 메세지를 보냄으로써 다른 CPU
+	의 캐쉬들로부터 그 항목을 제거할 수 있습니다.
+\item[IPI:]\index{IPI}
+	한 CPU 에서 다른 CPU 로 보내어지는 인터럽트인 프로세서간 인터럽트
+	(inter-processor interrupt).
+	IPI 는 리눅스 커널에서 많이 사용되는데, 한 예로 스케쥴러에서 CPU 들에게
+	이제 높은 우선순위 프로세스가 수행 가능해 졌음을 알리는데 사용됩니다.
+
+\iffalse
+
+\item[Hot Spot:]\index{Hot spot}
 	Data structure that is very heavily used, resulting in high
 	levels of contention on the corresponding lock.
 	One example of this situation would be a hash table with
@@ -537,6 +560,32 @@
 	IPIs are used heavily in the Linux kernel, for example, within
 	the scheduler to alert CPUs that a high-priority process is now
 	runnable.
+
+\fi
+
+\item[IRQ:]\index{IRQ}
+	리눅스 커널 커뮤니티에서는 ``interrupt'' 의 약자로도 종종 사용되며
+	``irq handler'' 라고도 불리는 인터럽트 요청.
+\item[Latency:]\index{Latency}
+	특정 오퍼레이션이 완료되기까지 필요한 시간.
+\item[Linearizable:]\index{Linearizable}
+	어떤 오퍼레이션들의 흐름은 모든 CPU 그리고/또는 쓰레드들의 관측에
+	일관된 최소 하나의 전역적 순서를 가질 때 ``linearizable'' 합니다.
+	Linearizability 는 많은 연구자들에게 숭상받습니다만, 예상되는 것보다는
+	실전에선 덜 유용합니다~\cite{AndreasHaas2012FIFOisnt}.
+\item[Lock:]\index{Lock}
+	크리티컬 섹션을 보호하는데 사용될 수 있는 소프트웨어 추상화로, 한 예로
+	``상호 배타 메커니즘'' 이 있습니다.
+	``Exclusive lock'' 은 한번에 하나의 쓰레드만이 해당 락에 의해 보호되는
+	크리티컬 섹션 집합에 들어갈 수 있게 하며, ``reader-writer lock'' 은
+	읽기를 하는 쓰레드는 여럿을, 그러나 쓰기를 하는 쓰레드는 하나만 해당
+	락에 의해 보호되는 크리티컬 섹션 집합에 들어갈 수 있게 허용합니다.
+	(분명히 해두자면, reader-writer 락의 크리티컬 섹션에 어떤 쓰기 쓰레드가
+	존재한다면 그 락의 크리티컬 섹션에 읽기 쓰레드가 들어가는 걸 금지하며
+	그 반대도 마찬가지입니다.)
+
+\iffalse
+
 \item[IRQ:]\index{IRQ}
 	Interrupt request, often used as an abbreviation for ``interrupt''
 	within the Linux kernel community, as in ``irq handler''.
@@ -560,6 +609,29 @@
 	of a writer thread in any of a given reader-writer lock's
 	critical sections will prevent any reader from entering
 	any of that lock's critical sections and vice versa.)
+
+\fi
+
+\item[Lock Contention:]\index{Lock contention}
+	락은 기다리는 CPU 가 있는 경우에 많이 사용된다면 경쟁 (contention)으로
+	고통받는다고 이야기 됩니다.
+	Lock contention 을 줄이는 것은 병렬 알고맂므을 설계할 때와 병렬
+	프로그램을 구현할 때 종종 걱정거리입니다.
+\item[Lock Free:]\index{Lock free}
+	최소 하나의 쓰레드가 유한한 시간 내에 진행을 만들어 내는 진행 보장.
+\item[Marked Access:]\index{Marked access}
+	액세스가 컴파일러 그리고/또는 하드웨어에 의해 최적화 되는 걸 막기 위해
+	\co{READ_ONCE()}, \co{WRITE_ONCE()}, \co{atomic_inc()}, 그 외 기타
+	등등의 특수한 함수나 매크로를 사용하는 소스코드 상의 메모리 액세스.
+	반대로, 마크되지 않은 액세스는 액세스 되는 객체의 이름을 이야기할
+	뿐으로, 다음에서 라인~2 는 라인~1 과 같지만 마크되지 않은 것입니다:
+	\begin{VerbatimN}
+	WRITE_ONCE(a, READ_ONCE(b) + READ_ONCE(c));
+	a = b + c;
+	\end{VerbatimN}
+
+\iffalse
+
 \item[Lock Contention:]\index{Lock contention}
 	A lock is said to be suffering contention when it is being
 	used so heavily that there is often a CPU waiting on it.
@@ -580,6 +652,38 @@
 	WRITE_ONCE(a, READ_ONCE(b) + READ_ONCE(c));
 	a = b + c;
 	\end{VerbatimN}
+
+\fi
+
+\item[Memory:]\index{Memory}
+	메모리 모델의 시점에서는 값들이 저장되어 있을 수도 있는 메인 메모리,
+	캐쉬, 그리고 스토어 버퍼.
+	그러나, 이 용어는 캐쉬와 스토어 버퍼는 제외하고 메인 메모리만을
+	가리키는데 종종 사용됩니다.
+\item[Memory Consistency:]\index{Memory consistency}
+	여러 변수들로의 액세스가 어떤 순서로 일어나는 것으로 보일 것인지에 대한
+	제약을 발생시키는 속성들의 집합.
+	Memory consistency 모델은 학계에서 유명한 매우 제약적인 모델인
+	sequential consistency 부터 process conssitency, release consistency,
+	그리고 weak consistency 까지 다양합니다.
+\item[MESI Protocol:]\index{MESI protocol}
+	modified, exclusive, shared, 그리고 invalid (MESI) 상태들을 갖추는 캐쉬
+	일관성 프로토콜로, 따라서 이 프로토콜은 캐쉬 내의 캐쉬 라인들이 가질 수
+	있는 상태들로부터 이름지어졌습니다.
+	Modified 라인은 최근 이 CPU 에 의해 쓰기가 이루어졌고, 연관된 메모리
+	위치의 현재 값에 대한 유일한 표현입니다.
+	Exclusive 캐쉬 라인은 쓰기가 이루어지지 않았으나 이 CPU 는 언제든
+	여기에 쓰기를 할 권리를 가지는데, 이 라인은 다른 CPU 의 캐쉬에 복사본이
+	존재하지 않을 것이 (연관된 메인 메모리 위치의 값은 최신값이지만)
+	보장되어 있기 때문입니다.
+	Shared 캐쉬 라인은 다른 CPU 의 캐쉬에 복사본이 있을 수도 있는데, 이는
+	이 CPU 가 이 캐쉬 라인에 쓰기를 하기 전에 다른 CPU 와 상호작용을 해야만
+	함을 의미합니다.
+	Invalid 캐쉬 라인은 값을 담지 않으며, 대신 메모리부터의 데이터가 로드될
+	수 잇는 ``빈 공간'' 을 표현합니다.
+
+\iffalse
+
 \item[Memory:]\index{Memory}
 	From the viewpoint of memory models, the main memory,
 	caches, and store buffers in which values might be stored.
@@ -610,6 +714,29 @@
 	An invalid cache line contains no value, instead representing
 	``empty space'' in the cache into which data from memory might
 	be loaded.
+
+\fi
+
+\item[Mutual-Exclusion Mechanism:]\index{Mutual-exclusion mechanism}
+	쓰레드들의 ``크리티컬 섹션'' 과 연관된 데이터로의 액세스를 규약하는
+	소프트웨어 추상화.
+\item[NMI:]\index{NMI}
+	Non-maskable interrupt.
+	이름이 이야기 하듯, 이는 가려질 (mask) 수 없는 아주 높은 운선순위의
+	인터럽트입니다.
+	이것들은 프로파일링 같은 하드웨어 특수 목적으로 사용됩니다.
+	프로파일링에 NMI 를 사용하는 것의 장점은 이것이 인터럽트가 불능화 된
+	상태에서 동작하는 코드를 프로파일 할 수 있다는 겁니다.
+\item[NUCA:]\index{NUCA}
+	여러 CPU 의 그룹이 캐쉬 그리고/또는 스토어 버퍼를 공유하는 Non-uniform
+	cache architecture.
+	따라서 그룹 내의 CPU 들은 다른 그룹의 CPU 들과 할 수 있는 것보다 훨씬
+	빠르게 캐쉬 라인을 교환할수 있습니다.
+	하드웨어 쓰레드를 갖는 CPU 로 구성된 시스템은 일반적으로 NUCA 구조를
+	갖습니다.
+
+\iffalse
+
 \item[Mutual-Exclusion Mechanism:]\index{Mutual-exclusion mechanism}
 	A software abstraction that regulates threads' access to
 	``critical sections'' and corresponding data.
@@ -627,6 +754,24 @@
 	other much more quickly than they can with CPUs in other groups.
 	Systems comprised of CPUs with hardware threads will generally
 	have a NUCA architecture.
+
+\fi
+
+\item[NUMA:]\index{NUMA}
+	메모리가 여러 뱅크 (bank) 로 쪼개지며 각 뱅크는 ``NUMA node'' 라고
+	불리는 CPU 들의 그룹에 더 ``가까운'' non-uniform memory architecture.
+	NUMA 머신의 한 예는 Sequent 의 NUMA-Q 시스템으로 네개의 CPU 들이 근처의
+	메모리를 가졌습니다.
+	주어진 그룹 내의 CPU 는 그들의 메모리에 다른 그룹의 메모리보다 훨씬
+	빠르게 액세스 할 수 있습니다.
+\item[NUMA Node:]\index{NUMA node}
+	거대한 NUMA 머신 내에서 가깝게 위치한 CPU 그룹과 그들에 연관된 메모리.
+\item[Obstruction Free:]\index{Obstruction free}
+	경쟁의 부재 시, 모든 쓰레드가 유한 시간 내에 진행을 만들어내는 진행
+	보장.
+
+\iffalse
+
 \item[NUMA:]\index{NUMA}
 	Non-uniform memory architecture, where memory is split into
 	banks and each such bank is ``close'' to a group of CPUs,
@@ -642,6 +787,27 @@
 	A forward-progress guarantee in which, in the absence of
 	contention, every thread makes progress within a finite
 	period of time.
+
+\fi
+
+\item[Overhead:]\index{Overhead}
+	수행되어야만 하지만 달성되어야만 하는 일에 직접적인 기여를 하지는 않는
+	오퍼레이션들.
+	예를 들어, 락 획득과 해제는 일반적으로 오버헤드라 여겨지며, 구체적으론
+	동기화 오버헤드라 불립니다.
+\item[Parallel:]\index{Parallel}
+	이 책에서는 concurrent 의 유의어.
+	이 두 용어에 대한 최근의 구별에 대한 토론을 위해
+	\cpageref{sec:app:questions:What is the Difference Between ``Concurrent'' and ``Parallel''?} 의
+	\cref{sec:app:questions:What is the Difference Between ``Concurrent'' and ``Parallel''?}
+	를 보시기 바랍니다.
+\item[Performance:]\index{Performance}
+	일이 이루어지는 비율로 단위 시간 당 일로 표현됩니다.
+	이 일이 완전히 직렬화 가능하다면 그 성능은 이 일 항목의 중간 응답시간에
+	상응합니다.
+
+\iffalse
+
 \item[Overhead:]\index{Overhead}
 	Operations that must be executed, but which do not contribute
 	directly to the work that must be accomplished.
@@ -657,6 +823,32 @@
 	Rate at which work is done, expressed as work per unit time.
 	If this work is fully serialized, then the performance will
 	be the reciprocal of the mean latency of the work items.
+
+\fi
+
+\item[Pipelined CPU:]\index{Pipelined CPU}
+	조립 공정 라인과 어떤 면에서 유사하며 그와 같은 장점과 단점을 갖춘, CPU
+	내부의 명령의 흐름인 파이프라인을 가진 CPU.
+	1960 년대부터 1980 년대 초까지, pipelined CPU 는 슈퍼컴퓨터의
+	영역이었으나, 1980 년대 후반부터는 (80486 같은) 마이크로프로세서에서도
+	나타나기 시작했습니다.
+\item[Process Consistency:]\index{Process consistency}
+	각 CPU 의 스토어가 프로그램 순서대로 나타나지만 다른 CPU 들은 다른 CPU
+	로부터의 액세스들을 다른 순서로 일어난 것으로 볼 수도 있는 메모리
+	일관성 모델.
+\item[Program Order:]\index{Program order}
+	특정 쓰레드의 명령들이 이제는 가상의 것인, 다음 명령을 진행하기 전에 각
+	명령을 완전히 수행하는, ``순서를 지키는'' CPU 에 의해 수행되는 순서.
+	(그런 CPU 가 이제는 고대의 전설과 신화로 남게 된 이유는 그것들은
+	극단적으로 느렸기 때문입니다.
+	이 공룡들은 
+	\IXalt{Moore's-Law}{Moore's Law} 가 주도한 CPU 클락 주파수 증가의 많은
+	희생자 중 하나였습니다.
+	일부는 이 짐승들이 다시 한번 지구를 정복할 거라 주장하지만, 다른
+	살마들은 강력히 부정합니다.)
+
+\iffalse
+
 \item[Pipelined CPU:]\index{Pipelined CPU}
 	A CPU with a pipeline, which is
 	an internal flow of instructions internal to the CPU that
@@ -680,6 +872,30 @@
 	\IXalt{Moore's-Law}{Moore's Law}-driven increases in CPU clock frequency.
 	Some claim that these beasts will roam the earth once again,
 	others vehemently disagree.)
+
+\fi
+
+\item[Quiescent State:]\index{Quiescent state}
+	RCU 에서는 RCU 로 보호된 데이터 구조로 잡힌 참조가 존재할 수 없는
+	코드 상의 지점으로, 일반적으로는 RCU read-side 크리티컬 섹션 바깥의
+	모든 지점.
+	모든 쓰레드가 최소 하나의 quiescent state 를 지나가는 시간 기간을
+	``grace period'' 라 부릅니다.
+\item[Read-Copy Update (RCU):]\index{Read-copy update (RCU)}
+	Reader-writer 락킹이나 레퍼런스 카운팅의 대체제로 생각될 수 있는 동기화
+	메커니즘.
+	RCU 는 읽기 쓰레드에게 극단적으로 낮은 오버헤드의 액세스를 제공하며,
+	쓰기 쓰레드는 앞서서부터 존재해 온 읽기 쓰레드에게 이득을 제공하기 위해
+	오래된 버전의 데이터를 유지해야 하는 추가적 오버헤드를 일으킵니다.
+	읽기 쓰레드는 블록되지도 스핀하지도 않으며, 따라서 데드락에 참여될 수
+	없습니다만, 상해버린 데이터를 볼 수 있고 업데이트와 동시에 수행될 수
+	있습니다.
+	따라서 RCU 는 상한 데이터가 처리될 수 있거나 (라우팅 테이블처럼) 회피될
+	수 있는 (리눅스 커널의 System V IPC 구현처럼) 읽기가 대부분인 상황에
+	가장 잘 맞습니다.
+
+\iffalse
+
 \item[Quiescent State:]\index{Quiescent state}
 	In RCU, a point in the code where there can be no references held
 	to RCU-protected data structures, which is normally any point
@@ -698,6 +914,32 @@
 	RCU is thus best-suited for read-mostly situations where
 	stale data can either be tolerated (as in routing tables)
 	or avoided (as in the Linux kernel's System V IPC implementation).
+
+\fi
+
+\item[Read-Side Critical Section:]\index{Read-side critical section}
+	어떤 Reader-writer 동기화 메커니즘의 읽기-획득으로 보호되는 코드 섹션.
+	예를 들어, 크리티컬 섹션들의 한 집합이 특정 전역 reader-writer 락의
+	읽기-획득으로 보호되며 크리티컬 섹션의 다른 집합은 같은 reader-writer
+	락의 쓰기-획득으로 보호된다면, 첫번째 집합은 이 락의 read-side 크리티컬
+	섹션이 됩니다.
+	어떤 수의 쓰레드들이건 read-side 크리티컬 섹션을 동시에 수행할 수
+	있습니다만 어떤 쓰레드도 write-side 크리티컬 섹션을 수행하고 있지 않을
+	때만 그렇습니다.
+\item[Reader-Writer Lock:]\index{Reader-writer lock}
+	Reader-writer 락은 읽기를 하는 쓰레드는 수에 관계 없이, 그러나 쓰기를
+	하는 쓰레드는 하나만 그 락에 의해 보호되는 크리티컬 섹션에 허용하는
+	상호 배타 (mutual exclusive) 메커니즘입니다.
+	쓰기를 하고자 하는 쓰레드는 모든 앞서서부터 존재한 읽기를 하는 쓰레드가
+	락을 내려놓길 기다려야만 하며, 비슷하게 앞서서부터 존재한 쓰기 쓰레드가
+	있다면 쓰기를 하고자 하는 쓰레드는 그 쓰기 쓰레드가 락을 내려놓기를
+	기다려야만 합니다.
+	Reader-writer 락에의 핵심 걱정거리는 ``fairness (공정성)'' 입니다:
+	끝나지 않는 읽기 쓰레드의 흐름은 쓰기 쓰레드를 기아에 빠뜨릴 수 있고
+	반대도 마찬가지입니다.
+
+\iffalse
+
 \item[Read-Side Critical Section:]\index{Read-side critical section}
 	A section of code guarded by read-acquisition of
 	some reader-writer synchronization mechanism.
@@ -721,6 +963,9 @@
 	wait for the writer to release the lock.
 	A key concern for reader-writer locks is ``fairness'':
 	can an unending stream of readers starve a writer or vice versa.
+
+\fi
+
 \item[Real Time:]\index{Real time}
 	A situation in which getting the correct result is not sufficient,
 	but where this result must also be obtained within a given amount
